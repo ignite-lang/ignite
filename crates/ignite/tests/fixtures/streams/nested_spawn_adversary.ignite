@@ -1,0 +1,117 @@
+package tests.streams
+
+// Run on both targets by tests/stream_ownership.rs (adversary of story
+// spawn-moves-adversary-findings): further members of nested_spawn.ignite's
+// class. A pattern-bound pipe end whose last use is a spawn belongs to the
+// task, so the task's failure closes it while the test body still runs
+// (docs/slice.md 20.3.1).
+
+import std.net.{Pipe, PipeStream}
+import std.io.IoError
+
+type IoResult<T> = Result<T, IoError>
+
+fn fails(stream: PipeStream) -> IoResult<Unit> requires [stream.write] {
+  let values = [1, 2]
+  assert values.len() == 3
+  stream.write_all(b"never")?
+  Ok(())
+}
+
+fn fails_with(stream: PipeStream, first: Int, second: Text) -> IoResult<Unit> requires [stream.write] {
+  let values = [first, 2]
+  assert values.len() == 3
+  stream.write_all(second.to_bytes())?
+  Ok(())
+}
+
+test fn rest(client: PipeStream) -> IoResult<Bytes> {
+  var out = Bytes.empty()
+  loop {
+    match client.read(4096)? {
+      Eof => return Ok(out)
+      Data(bytes) => out.append(bytes)
+    }
+  }
+}
+
+test "adv1 a failing task closes a spawned end whose name only an inner block shadows" {
+  let (client, server) = Pipe.pair()
+  spawn fails(server)
+  if client.received_batches() == 0 {
+    let (other, server) = Pipe.pair()
+    server.write_all(b"x")?
+  }
+  assert rest(client)? == b""
+}
+
+test "adv3 a failing task closes a pipe end spawned in a branch that owns a pipe of its own" {
+  let (client, server) = Pipe.pair()
+  if client.received_batches() == 0 {
+    let (near, far) = Pipe.pair()
+    far.write_all(b"y")?
+    spawn fails(server)
+  }
+  assert rest(client)? == b""
+}
+
+test "adv4 a failing task closes a pipe end spawned in a match nested in an if" {
+  let (client, server) = Pipe.pair()
+  if client.received_batches() == 0 {
+    match client.received_batches() {
+      0 => spawn fails(server)
+      _ => {}
+    }
+  }
+  assert rest(client)? == b""
+}
+
+test "adv5 a failing task closes a UFCS receiver spawned inside a branch with named arguments" {
+  let (client, server) = Pipe.pair()
+  if client.received_batches() == 0 {
+    spawn server.fails_with(second = "z", first = 1)
+  }
+  assert rest(client)? == b""
+}
+
+test "adv6 a failing task closes a pipe end spawned in an else-if chain" {
+  let (client, server) = Pipe.pair()
+  if client.received_batches() > 5 {
+    server.write_all(b"a")?
+  } else if client.received_batches() > 2 {
+    server.write_all(b"b")?
+  } else {
+    spawn fails(server)
+  }
+  assert rest(client)? == b""
+}
+
+fn noted(log: PipeStream, word: Text) -> IoResult<Text> requires [log.write] {
+  log.write_all(word.to_bytes())?
+  Ok(word)
+}
+
+fn writes_two(out: PipeStream, a: Text, b: Text) -> IoResult<Unit> requires [out.write] {
+  out.write_all(a.to_bytes())?
+  out.write_all(b.to_bytes())?
+  Ok(())
+}
+
+test fn exactly(client: PipeStream, count: Int) -> IoResult<Bytes> {
+  var out = Bytes.empty()
+  while out.len() < count {
+    match client.read(count - out.len())? {
+      Eof => return Ok(out)
+      Data(bytes) => out.append(bytes)
+    }
+  }
+  Ok(out)
+}
+
+test "adv7 named spawn arguments run in source order and arrive in parameter order" {
+  let (log_in, log_out) = Pipe.pair()
+  let (client, server) = Pipe.pair()
+  spawn writes_two(b = noted(log_out, "b")?, out = server, a = noted(log_out, "a")?)
+  assert exactly(log_in, 2)? == b"ba"
+  assert exactly(client, 2)? == b"ab"
+}

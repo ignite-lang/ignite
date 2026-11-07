@@ -452,8 +452,12 @@ position, even with no buffer.
     the process exits. A callee that keeps a stream it was passed beyond its return other
     than through its result (in a `Store`) would see it closed; no std module or example
     does.
-  - At a `spawn` that is the last mention of an owned binding, the block releases its owner
-    right after the start, so the task holds the last one: the accept loop's `spawn
+  - At a `spawn` that is the last use of an owned binding (`own::handovers`: in the
+    binding's block or in an `if`, `else` or `match` arm nested in it that is itself the
+    last use, up to a binding that shadows the name; not in a loop body), the block releases
+    its owner right after the start, so the task holds the last one. The release leaves a
+    tombstone in the task's registration list, so the mark a block in between took before
+    the spawn still releases that block's own streams: the accept loop's `spawn
     Http.serve(stream, ..)` closes the connection when the session ends, and a pipe end
     bound by `let (client, server) = Pipe.pair()` and spawned into a task that fails is
     closed by the failure while the block still runs (story

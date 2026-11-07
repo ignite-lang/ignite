@@ -1,0 +1,104 @@
+package tests.streams
+
+// Run on both targets by tests/stream_ownership.rs: the rest of
+// nested_spawn.ignite's class. A pattern-bound pipe end whose last use is a
+// spawn inside a match arm or an else branch, or a named
+// spawn argument, belongs to the task, so the task's failure closes it
+// while the test body still runs (docs/slice.md 20.3.1).
+
+import std.net.{Pipe, PipeStream}
+import std.io.IoError
+
+type IoResult<T> = Result<T, IoError>
+
+fn fails(stream: PipeStream) -> IoResult<Unit> requires [stream.write] {
+  let values = [1, 2]
+  assert values.len() == 3
+  stream.write_all(b"never")?
+  Ok(())
+}
+
+fn fails_named(tag: Text, stream: PipeStream) -> IoResult<Unit> requires [stream.write] {
+  let values = [1, 2]
+  assert values.len() == 3
+  stream.write_all(tag.to_bytes())?
+  Ok(())
+}
+
+test fn rest(client: PipeStream) -> IoResult<Bytes> {
+  var out = Bytes.empty()
+  loop {
+    match client.read(4096)? {
+      Eof => return Ok(out)
+      Data(bytes) => out.append(bytes)
+    }
+  }
+}
+
+test "a failing task closes a pipe end spawned inside a match arm" {
+  let (client, server) = Pipe.pair()
+  match client.received_batches() {
+    0 => {
+      spawn fails(server)
+    }
+    _ => {}
+  }
+  assert rest(client)? == b""
+}
+
+test "a failing task closes a pipe end spawned inside an else branch" {
+  let (client, server) = Pipe.pair()
+  if client.received_batches() > 0 {
+    server.write_all(b"x")?
+  } else {
+    spawn fails(server)
+  }
+  assert rest(client)? == b""
+}
+
+test "a failing task closes a pipe end passed by name inside a branch" {
+  let (client, server) = Pipe.pair()
+  if client.received_batches() == 0 {
+    spawn fails_named(stream = server, tag = "x")
+  }
+  assert rest(client)? == b""
+}
+
+// Reads `stream` to its end, then writes `eof` to `report`.
+fn watch(stream: PipeStream, report: PipeStream) -> IoResult<Unit> requires [stream.read, report.write] {
+  loop {
+    match stream.read(4096)? {
+      Eof => {
+        report.write_all(b"eof")?
+        return Ok(())
+      }
+      Data(bytes) => {}
+    }
+  }
+}
+
+test fn exactly(client: PipeStream, count: Int) -> IoResult<Bytes> {
+  var out = Bytes.empty()
+  while out.len() < count {
+    match client.read(count - out.len())? {
+      Eof => return Ok(out)
+      Data(bytes) => out.append(bytes)
+    }
+  }
+  Ok(out)
+}
+
+// The branch owns `far` from before the spawns that hand `near`,
+// `report_out` and the outer `server` over; it still closes `far` when it
+// is left, so `watch` sees the end of `near` while the body runs.
+test "a branch that owns a pipe of its own closes it at its end after handing an outer end over" {
+  let (client, server) = Pipe.pair()
+  let (report_in, report_out) = Pipe.pair()
+  if client.received_batches() == 0 {
+    let (near, far) = Pipe.pair()
+    spawn watch(near, report_out)
+    spawn fails(server)
+  }
+  assert exactly(report_in, 3)? == b"eof"
+  assert rest(client)? == b""
+}

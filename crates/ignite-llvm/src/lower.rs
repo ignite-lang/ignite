@@ -168,10 +168,22 @@ pub struct Lower<'a, 'm, 'e> {
     /// stream handles move to the task (`region::moved_to_task`); set by
     /// [`Lower::block`] before the statement, taken by [`Lower::spawn`].
     moved_streams: Vec<String>,
-    /// The argument names of that `spawn` statement that no later
-    /// statement mentions (`own::last_use`); set and taken with
-    /// `moved_streams`.
-    last_streams: Vec<String>,
+    /// The `spawn` statements that hand an owned stream binding over to
+    /// their task (`own::handovers`); recorded at the binding's `let`,
+    /// taken by [`Lower::spawn`].
+    handovers: Vec<Handover>,
+}
+
+/// An owned stream binding `name` whose last use is the spawned call with
+/// the key `call` ([`expr_key`]).
+struct Handover {
+    call: usize,
+    name: String,
+}
+
+/// The identity of an expression of the AST being lowered.
+fn expr_key(e: &Expr) -> usize {
+    e as *const Expr as usize
 }
 
 /// The region of one loop (`docs/llvm.md` section 4): the arena mark taken
@@ -209,7 +221,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             nested: 0,
             subst: (Vec::new(), Vec::new()),
             moved_streams: Vec::new(),
-            last_streams: Vec::new(),
+            handovers: Vec::new(),
         }
     }
 
@@ -1063,7 +1075,6 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 && let ExprKind::Spawn(call) = &e.kind
             {
                 self.moved_streams = crate::region::moved_to_task(&block.stmts, i, call);
-                self.last_streams = crate::own::last_use(&block.stmts, i, call);
             }
             match &stmt.kind {
                 StmtKind::Expr(e) if last && want => value = self.expr(e, true),
@@ -1077,6 +1088,14 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 let owned = crate::own::owned(&block.stmts, i, self.cx.types);
                 if !owned.is_empty() {
                     self.own_streams(&owned);
+                    for name in owned {
+                        for call in crate::own::handovers(&block.stmts[i + 1..], &name) {
+                            self.handovers.push(Handover {
+                                call: expr_key(call),
+                                name: name.clone(),
+                            });
+                        }
+                    }
                 }
             }
             if let Some(previous) = previous {
@@ -5018,33 +5037,35 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             .as_ref()
             .and_then(|c| self.sig_of(c, call))
             .unwrap_or_else(|| panic!("spawn of an unresolved call at {:?}", call.span));
-        // A stream binding the block owns ([`crate::own`]) and that no later
-        // statement mentions is handed over: the task becomes an owner like
-        // for any other argument, and the block releases its own owner
-        // right after the spawn, so the task holds the last one. An unowned
-        // binding that `region::moved_to_task` names moves its handle to
-        // the task as before.
+        // A stream binding a block owns ([`crate::own`]) whose last use this
+        // spawn is (`own::handovers`: in the binding's block or in a branch
+        // nested in it) is handed over: the task becomes an owner like for
+        // any other argument, and the block releases its own owner right
+        // after the spawn, so the task holds the last one. The release
+        // leaves a tombstone in the task's owner list (`ignite-rt`'s
+        // `release`), so the mark a block between the binding's and this
+        // one took before the spawn still releases that block's own
+        // streams. An unowned binding that `region::moved_to_task` names
+        // moves its handle to the task as before.
         let moved = std::mem::take(&mut self.moved_streams);
-        let last = std::mem::take(&mut self.last_streams);
         let name_of = |arg: &Expr| match &arg.kind {
             ExprKind::Name(n) => Some(n.name.clone()),
+            ExprKind::NamedArg { value, .. } => match &value.kind {
+                ExprKind::Name(n) => Some(n.name.clone()),
+                _ => None,
+            },
             _ => None,
         };
-        let owned: Vec<String> = last
-            .into_iter()
-            .filter(|name| {
-                // Only in the binding's own block: a spawn inside a nested loop
-                // or branch runs again or is followed by later statements of
-                // the outer block.
-                self.scopes.last().is_some_and(|scope| {
-                    scope
-                        .iter()
-                        .rev()
-                        .find(|l| l.name == *name)
-                        .is_some_and(|l| l.owned)
-                })
-            })
-            .collect();
+        let key = expr_key(call);
+        let mut owned: Vec<String> = Vec::new();
+        for handover in self.handovers.iter().filter(|h| h.call == key) {
+            if self.lookup(&handover.name).is_some_and(|l| l.owned)
+                && !owned.contains(&handover.name)
+            {
+                owned.push(handover.name.clone());
+            }
+        }
+        self.handovers.retain(|h| h.call != key);
         let moves =
             |arg: &Expr| name_of(arg).is_some_and(|n| moved.contains(&n) && !owned.contains(&n));
         let hands_over = |arg: &Expr| name_of(arg).is_some_and(|n| owned.contains(&n));

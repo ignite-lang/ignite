@@ -6827,11 +6827,27 @@ moves.
   also moves as a `spawn` argument at its last use (above): the task holds the share from then
   on, so the stream closes when the task ends or fails, not when the spawning body ends
   (`stream_ownership::a_spawn_in_a_test_body_hands_the_pattern_bound_end_over`, both targets).
+  That holds for a spawn inside an `if` or `else` branch or a `match` arm that is the binding's
+  last use, also in a branch that owns streams of its own, and for a spawn followed by a binding
+  that shadows the name: a `let` in the same block or in a later branch, a later `match` arm,
+  `for` loop or closure parameter
+  (`stream_ownership::a_spawn_in_a_branch_or_before_a_shadowing_binding_closes_the_end_on_both_targets`,
+  `…_in_a_match_arm_or_else_branch_…`, `adversary_nested_spawns_close_the_end_on_both_targets`,
+  `adversary2_later_bindings_of_the_name_agree_on_both_targets`);
+  a spawn inside a loop body does not hand over. On LLVM both whether the block owns the binding
+  (`own::owned`) and where `own::handovers` finds these spawns count a mention only where the
+  name still denotes that binding; the
+  hand-over's release leaves a tombstone in the task's owner list, so the marks of the blocks
+  in between stay valid and each still closes its own streams when it is left. Named `spawn`
+  arguments are evaluated in source order and passed in parameter order on both targets
+  (`stream_ownership::named_spawn_arguments_in_another_order_build_and_pass_on_both_targets`).
   A handle parameter is never consumed by a move.
 
 Checks: `moves::owned_pattern_bindings_move`, `moves::owned_for_elements_move`,
 `moves::closure_parameters_move_when_consumed`, `moves::handles_move_only_at_their_scope_tail`,
-`moves::spawn_arguments_move_at_their_last_use`
+`moves::spawn_arguments_move_at_their_last_use`,
+`moves::a_spawned_ufcs_call_moves_its_receiver_at_its_last_use`,
+`moves::a_later_spawn_argument_does_not_move_a_place_an_earlier_one_reads`
 (`cargo test -p ignite-types --test main moves::`), and `slice16/moves_tails_owned.ignite`
 on both targets (`slice16::owned_binding_tails_move_on_both_targets` in `crates/ignite`,
 `slice16::fixtures_pass` in `ignite-rustgen`).

@@ -13,8 +13,10 @@
 //! whose result cannot hold a stream ([`may_hold_stream`]). Any other
 //! mention (a result, a field, an element, a capture, an assignment, a
 //! `copy()`) leaves the binding unowned, as before: never released, an
-//! extra open descriptor and never an early close. Shadowing is not
-//! resolved, so a mention of a shadowing binding counts too.
+//! extra open descriptor and never an early close. Only mentions that
+//! denote the binding count: a later `let` of the name ends its scope, and
+//! a `for`, `match` arm or closure that binds the name hides it in its body
+//! ([`referred`]).
 //!
 //! A callee that keeps the stream after it returns other than through its
 //! result (in a `Store`) would see it closed; no std module or example
@@ -55,33 +57,214 @@ pub fn owned(stmts: &[Stmt], index: usize, types: &TypedProgram) -> Vec<String> 
     };
     bound
         .into_iter()
-        .filter(|id| {
-            stmts[index + 1..]
-                .iter()
-                .all(|stmt| stmt_keeps(stmt, &id.name, types))
-        })
+        .filter(|id| block_keeps(&stmts[index + 1..], &id.name, types))
         .map(|id| id.name.clone())
         .collect()
 }
 
-/// The plain-name arguments of the `spawn f(args)` at `stmts[index]` that
-/// no later statement of the block mentions: an owned binding among them
-/// is handed over to the task there.
-pub fn last_use(stmts: &[Stmt], index: usize, call: &Expr) -> Vec<String> {
-    let args: Vec<&Expr> = match &call.kind {
+/// The calls of the `spawn` statements that hand the binding `name` over to
+/// their task: `stmts` are the statements after its `let`, and a spawn
+/// hands it over where it is the binding's last use. That is a `spawn`
+/// statement that takes `name` as an argument and after which nothing in
+/// the binding's scope mentions it, in the binding's own block or nested
+/// in blocks, `if` branches and `match` arms that are themselves the
+/// binding's last use (the other branches keep the binding, which the
+/// block releases when it is left). A later binding of the same name ends
+/// the scope: mentions after it are of the new binding. A spawn inside a
+/// loop runs again, so a loop body is not searched; a shadowing `let`
+/// inside a branch or a match arm that binds the name ends the search too.
+pub fn handovers<'s>(stmts: &'s [Stmt], name: &str) -> Vec<&'s Expr> {
+    let mut out = Vec::new();
+    block_handovers(stmts, name, &mut out);
+    out
+}
+
+fn block_handovers<'s>(stmts: &'s [Stmt], name: &str, out: &mut Vec<&'s Expr>) {
+    // The rebinding statement itself still reads the binding in its value.
+    let (scope, rebinding) = match stmts.iter().position(|stmt| rebinds(stmt, name)) {
+        Some(at) => (&stmts[..at], Some(&stmts[at])),
+        None => (stmts, None),
+    };
+    if rebinding.is_some_and(|stmt| match &stmt.kind {
+        StmtKind::Let { value, .. } | StmtKind::LetPattern { value, .. } => refers(value, name),
+        _ => false,
+    }) {
+        return;
+    }
+    let Some(last) = scope.iter().rposition(|stmt| stmt_refers(stmt, name)) else {
+        return;
+    };
+    if let StmtKind::Expr(e) = &scope[last].kind {
+        tail_handovers(e, name, out);
+    }
+}
+
+/// Whether `stmts`, a block's statements from some point on, refer to the
+/// binding `name` that is in scope before them: a mention counts up to a
+/// statement that binds the name anew (its value included), and not inside
+/// a `for`, a `match` arm or a closure whose own binding is `name`. Unlike
+/// `region::mentioned`, which counts every mention of the name.
+fn referred(stmts: &[Stmt], name: &str) -> bool {
+    for stmt in stmts {
+        if rebinds(stmt, name) {
+            return match &stmt.kind {
+                StmtKind::Let { value, .. } | StmtKind::LetPattern { value, .. } => {
+                    refers(value, name)
+                }
+                _ => false,
+            };
+        }
+        if stmt_refers(stmt, name) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Whether one statement refers to the binding `name` in scope before it
+/// (see [`referred`]); a `let` of `name` refers only through its value.
+fn stmt_refers(stmt: &Stmt, name: &str) -> bool {
+    use crate::region::pattern_binds;
+    match &stmt.kind {
+        StmtKind::Let { value, .. } | StmtKind::LetPattern { value, .. } => refers(value, name),
+        StmtKind::Assign { target, value } => target.base.name == name || refers(value, name),
+        StmtKind::Return(value) => value.as_ref().is_some_and(|v| refers(v, name)),
+        StmtKind::While { cond, body } => refers(cond, name) || referred(&body.stmts, name),
+        StmtKind::Loop { body } => referred(&body.stmts, name),
+        StmtKind::For {
+            name: bound,
+            iter,
+            body,
+        } => refers(iter, name) || (bound.name != name && referred(&body.stmts, name)),
+        StmtKind::ForPattern {
+            pattern,
+            iter,
+            body,
+        } => refers(iter, name) || (!pattern_binds(pattern, name) && referred(&body.stmts, name)),
+        StmtKind::Break | StmtKind::Continue => false,
+        StmtKind::Expr(e) => refers(e, name),
+        StmtKind::Assert { cond, message } => {
+            refers(cond, name) || message.as_ref().is_some_and(|m| refers(m, name))
+        }
+    }
+}
+
+/// Whether `e` refers to the binding `name` in scope around it (see
+/// [`referred`]).
+fn refers(e: &Expr, name: &str) -> bool {
+    let any = |items: &mut dyn Iterator<Item = &Expr>| {
+        for item in items {
+            if refers(item, name) {
+                return true;
+            }
+        }
+        false
+    };
+    match &e.kind {
+        ExprKind::Name(id) => id.name == name,
+        ExprKind::Int(_)
+        | ExprKind::Str(_)
+        | ExprKind::Bool(_)
+        | ExprKind::Quantity { .. }
+        | ExprKind::Break
+        | ExprKind::Continue => false,
+        ExprKind::NamedArg { value, .. } => refers(value, name),
+        ExprKind::Brace { entries } => any(&mut entries.iter().map(|entry| &entry.value)),
+        ExprKind::Closure(closure) => {
+            closure.params.iter().all(|p| p.name.name != name) && refers(&closure.body, name)
+        }
+        ExprKind::RecordUpdate { fields, base, .. } => {
+            any(&mut fields.iter().map(|init| &init.value)) || refers(base, name)
+        }
+        ExprKind::Record { fields, .. } => any(&mut fields.iter().map(|init| &init.value)),
+        ExprKind::TupleField { receiver, .. } | ExprKind::Field { receiver, .. } => {
+            refers(receiver, name)
+        }
+        ExprKind::Tuple(items) | ExprKind::List(items) => any(&mut items.iter()),
+        ExprKind::Return(value) => value.as_ref().is_some_and(|v| refers(v, name)),
+        ExprKind::Call { callee, args } => refers(callee, name) || any(&mut args.iter()),
+        ExprKind::Method { receiver, args, .. } => refers(receiver, name) || any(&mut args.iter()),
+        ExprKind::Index { receiver, index } => refers(receiver, name) || refers(index, name),
+        ExprKind::Try(inner)
+        | ExprKind::Await(inner)
+        | ExprKind::Spawn(inner)
+        | ExprKind::Unary { operand: inner, .. } => refers(inner, name),
+        ExprKind::Binary { .. } => {
+            let mut cur = e;
+            while let ExprKind::Binary { left, right, .. } = &cur.kind {
+                if refers(right, name) {
+                    return true;
+                }
+                cur = left;
+            }
+            refers(cur, name)
+        }
+        ExprKind::Match { scrutinee, arms } => {
+            refers(scrutinee, name)
+                || arms.iter().any(|arm| {
+                    !crate::region::pattern_binds(&arm.pattern, name) && refers(&arm.body, name)
+                })
+        }
+        ExprKind::If {
+            cond,
+            then,
+            otherwise,
+        } => {
+            refers(cond, name)
+                || referred(&then.stmts, name)
+                || otherwise.as_ref().is_some_and(|o| refers(o, name))
+        }
+        ExprKind::Block(body) => referred(&body.stmts, name),
+    }
+}
+
+fn tail_handovers<'s>(e: &'s Expr, name: &str, out: &mut Vec<&'s Expr>) {
+    let mentions = refers;
+    match &e.kind {
+        ExprKind::Spawn(call) if spawn_args(call).iter().any(|arg| is_name(arg, name)) => {
+            out.push(call);
+        }
+        ExprKind::Block(body) => block_handovers(&body.stmts, name, out),
+        ExprKind::If {
+            cond,
+            then,
+            otherwise,
+        } if !mentions(cond, name) => {
+            block_handovers(&then.stmts, name, out);
+            if let Some(otherwise) = otherwise {
+                tail_handovers(otherwise, name, out);
+            }
+        }
+        ExprKind::Match { scrutinee, arms } if !mentions(scrutinee, name) => {
+            for arm in arms {
+                if !crate::region::pattern_binds(&arm.pattern, name) {
+                    tail_handovers(&arm.body, name, out);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Whether `stmt` binds `name` anew in its block.
+fn rebinds(stmt: &Stmt, name: &str) -> bool {
+    match &stmt.kind {
+        StmtKind::Let { name: bound, .. } => bound.name == name,
+        StmtKind::LetPattern { pattern, .. } => crate::region::pattern_binds(pattern, name),
+        _ => false,
+    }
+}
+
+/// The arguments of a spawned call, the receiver of a method call first,
+/// as `Lower::spawn` reads them.
+pub fn spawn_args(call: &Expr) -> Vec<&Expr> {
+    match &call.kind {
         ExprKind::Call { args, .. } => args.iter().collect(),
         ExprKind::Method { receiver, args, .. } => {
             std::iter::once(&**receiver).chain(args).collect()
         }
         _ => Vec::new(),
-    };
-    args.iter()
-        .filter_map(|arg| match &arg.kind {
-            ExprKind::Name(id) => Some(id.name.clone()),
-            _ => None,
-        })
-        .filter(|name| !crate::region::mentioned(&stmts[index + 1..], name))
-        .collect()
+    }
 }
 
 /// Whether a result of type `ty` can hold a stream handle. Records, enums,
@@ -143,18 +326,47 @@ fn is_name(e: &Expr, name: &str) -> bool {
     }
 }
 
+/// Whether `stmts`, a block's statements from some point on, keep the
+/// binding `name` in scope before them inside the block: up to a statement
+/// that binds the name anew, whose value still counts (the scope rule of
+/// [`referred`]).
+fn block_keeps(stmts: &[Stmt], name: &str, types: &TypedProgram) -> bool {
+    for stmt in stmts {
+        if rebinds(stmt, name) {
+            return match &stmt.kind {
+                StmtKind::Let { value, .. } | StmtKind::LetPattern { value, .. } => {
+                    keeps(value, name, types)
+                }
+                _ => true,
+            };
+        }
+        if !stmt_keeps(stmt, name, types) {
+            return false;
+        }
+    }
+    true
+}
+
 fn stmt_keeps(stmt: &Stmt, name: &str, types: &TypedProgram) -> bool {
+    use crate::region::pattern_binds;
     let keeps = |e: &Expr| keeps(e, name, types);
-    let block = |b: &Block| b.stmts.iter().all(|s| stmt_keeps(s, name, types));
+    let block = |b: &Block| block_keeps(&b.stmts, name, types);
     match &stmt.kind {
         StmtKind::Let { value, .. } | StmtKind::LetPattern { value, .. } => keeps(value),
         StmtKind::Assign { target, value } => target.base.name != name && keeps(value),
         StmtKind::Return(value) => value.as_ref().is_none_or(keeps),
         StmtKind::While { cond, body } => keeps(cond) && block(body),
         StmtKind::Loop { body } => block(body),
-        StmtKind::For { iter, body, .. } | StmtKind::ForPattern { iter, body, .. } => {
-            keeps(iter) && block(body)
-        }
+        StmtKind::For {
+            name: bound,
+            iter,
+            body,
+        } => keeps(iter) && (bound.name == name || block(body)),
+        StmtKind::ForPattern {
+            pattern,
+            iter,
+            body,
+        } => keeps(iter) && (pattern_binds(pattern, name) || block(body)),
         StmtKind::Break | StmtKind::Continue => true,
         StmtKind::Expr(e) => keeps(e),
         StmtKind::Assert { cond, message } => keeps(cond) && message.as_ref().is_none_or(keeps),
@@ -186,7 +398,7 @@ fn all_keep<'x>(
 /// Whether every mention of `name` in `e` keeps the stream inside the
 /// block (see the module documentation).
 fn keeps(e: &Expr, name: &str, types: &TypedProgram) -> bool {
-    let block = |b: &Block| b.stmts.iter().all(|s| stmt_keeps(s, name, types));
+    let block = |b: &Block| block_keeps(&b.stmts, name, types);
     match &e.kind {
         ExprKind::Name(id) => id.name != name,
         ExprKind::Int(_)
@@ -195,7 +407,9 @@ fn keeps(e: &Expr, name: &str, types: &TypedProgram) -> bool {
         | ExprKind::Quantity { .. }
         | ExprKind::Break
         | ExprKind::Continue => true,
-        ExprKind::Closure(closure) => !crate::region::mentions(&closure.body, name),
+        ExprKind::Closure(closure) => {
+            closure.params.iter().any(|p| p.name.name == name) || !refers(&closure.body, name)
+        }
         ExprKind::Spawn(call) => {
             let args = call_args(call, types);
             let callee = match &call.kind {
@@ -273,7 +487,11 @@ fn keeps(e: &Expr, name: &str, types: &TypedProgram) -> bool {
             keeps(cur, name, types)
         }
         ExprKind::Match { scrutinee, arms } => {
-            keeps(scrutinee, name, types) && arms.iter().all(|arm| keeps(&arm.body, name, types))
+            keeps(scrutinee, name, types)
+                && arms.iter().all(|arm| {
+                    crate::region::pattern_binds(&arm.pattern, name)
+                        || keeps(&arm.body, name, types)
+                })
         }
         ExprKind::If {
             cond,

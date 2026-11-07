@@ -41,6 +41,10 @@ thread_local! {
     static OWNED: RefCell<Vec<i64>> = const { RefCell::new(Vec::new()) };
 }
 
+/// A released registration in `OWNED` below live ones ([`release`]); no
+/// handle decodes from it, so releasing it does nothing.
+const TOMBSTONE: i64 = 0;
+
 /// `void tcp_own(i64 handle)`: mark `handle`, any handle (a listener, a TCP
 /// stream or a pipe end), as the current task's, so a failure
 /// ([`crate::fail`]) releases it before the task ends.
@@ -561,11 +565,18 @@ pub(crate) fn waited_child_id(handle: i64) -> Option<i64> {
 }
 
 /// Drop the current task's newest registration of `handle`, then one owner.
+/// The registration becomes the tombstone `0` (no handle, [`decode`])
+/// instead of being removed, so the marks `own_mark` returned earlier keep
+/// pointing at the same registrations: a block nested in the one that owns
+/// a stream binding may take its mark before a `spawn` hands that binding
+/// over (`docs/slice.md` 20.3.1). A tombstone goes with the `own_release`
+/// of the block that registered the handle, or with the task. Not even a
+/// tombstone at the end is dropped: an open block's mark may lie above it.
 fn release(handle: i64, waited_child: Option<i64>) {
     let _ = OWNED.try_with(|owned| {
         let mut owned = owned.borrow_mut();
         if let Some(at) = owned.iter().rposition(|owned| *owned == handle) {
-            owned.remove(at);
+            owned[at] = TOMBSTONE;
         }
     });
     release_owner(handle, waited_child);
@@ -664,7 +675,36 @@ mod tests {
         ignite_rt_tcp_release(shared);
         ignite_rt_tcp_release(kept);
         assert!(lookup(shared).is_err() && lookup(kept).is_err());
+        // `kept`'s registration stays as a tombstone, so marks keep their place.
+        assert_eq!(ignite_rt_own_mark(), mark);
+        ignite_rt_own_release(mark - 1);
         assert_eq!(ignite_rt_own_mark(), mark - 1);
+    }
+
+    /// A spawn hands over a binding registered below a nested block's mark
+    /// (`docs/slice.md` 20.3.1): the release leaves a tombstone, so the
+    /// nested block's `own_release` still releases what it registered.
+    #[test]
+    fn a_release_below_a_mark_leaves_the_mark_valid() {
+        let listener = TcpListener::bind("127.0.0.1".to_string(), 0).unwrap();
+        let outer_mark = ignite_rt_own_mark();
+        let outer = register(Handle::Listener(listener.clone()));
+        ignite_rt_tcp_own(outer);
+        let inner_mark = ignite_rt_own_mark();
+        let first = register(Handle::Listener(listener.clone()));
+        ignite_rt_tcp_own(first);
+        let second = register(Handle::Listener(listener));
+        ignite_rt_tcp_own(second);
+        ignite_rt_tcp_release(outer);
+        assert!(lookup(outer).is_err());
+        ignite_rt_own_release(inner_mark);
+        assert!(
+            lookup(first).is_err() && lookup(second).is_err(),
+            "the inner block released both of its registrations"
+        );
+        assert_eq!(ignite_rt_own_mark(), inner_mark);
+        ignite_rt_own_release(outer_mark);
+        assert_eq!(ignite_rt_own_mark(), outer_mark);
     }
 
     #[test]

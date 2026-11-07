@@ -73,6 +73,43 @@ fn a_spawn_in_a_test_body_hands_the_pattern_bound_end_over() {
     ignite_test("test_body_spawn.ignite", "all", 2, 2);
 }
 
+#[test]
+fn a_spawn_in_a_branch_or_before_a_shadowing_binding_closes_the_end_on_both_targets() {
+    ignite_test("nested_spawn.ignite", "all", 2, 2);
+}
+
+/// The rest of the class of the test above: a spawn inside a `match` arm
+/// or an `else` branch, an end passed as a named argument, and a branch
+/// that owns a pipe of its own and still closes it at its end.
+#[test]
+fn a_spawn_in_a_match_arm_or_else_branch_closes_the_end_on_both_targets() {
+    ignite_test("nested_spawn_arms.ignite", "all", 4, 2);
+}
+
+/// Adversary of story spawn-moves-adversary-findings: a spawn before a
+/// binding that shadows the name in an inner block only, a spawn in a
+/// branch that owns a pipe of its own before it, a match nested in an
+/// `if`, a UFCS receiver with named arguments, an `else if` chain, and
+/// the evaluation and passing order of named spawn arguments.
+#[test]
+fn adversary_nested_spawns_close_the_end_on_both_targets() {
+    ignite_test("nested_spawn_adversary.ignite", "all", 6, 2);
+}
+
+/// Second adversary pass: the name bound again after the spawn by a match
+/// arm, a for loop or a closure parameter (the end is handed over on both
+/// targets), and the outer name used after an inner shadowing (the end
+/// stays the body's and writable on both targets).
+#[test]
+fn adversary2_later_bindings_of_the_name_agree_on_both_targets() {
+    ignite_test("nested_spawn_adversary2.ignite", "all", 5, 2);
+}
+
+#[test]
+fn named_spawn_arguments_in_another_order_build_and_pass_on_both_targets() {
+    ignite_test("named_spawn.ignite", "all", 1, 2);
+}
+
 /// A running `inlined`, killed on drop.
 struct Server {
     child: Child,

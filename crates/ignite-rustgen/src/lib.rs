@@ -3969,11 +3969,28 @@ impl<'a> Generator<'a> {
         };
         let callee = self.callee(operand);
         let mut out = String::from("{ ");
-        let mut names = Vec::new();
         for (index, arg) in args.iter().enumerate() {
             let value = self.value(arg);
             let _ = write!(out, "let __spawn_{index} = {value}; ");
-            let borrow = if by_ref && !self.consumes(callee, index) {
+        }
+        // Named arguments (`docs/slice.md` section 14.2) are evaluated in
+        // source order above and passed in parameter order, as `fn_call`
+        // does; a UFCS receiver chained in front stays first.
+        let lead = match &operand.kind {
+            ExprKind::Call { args: call, .. } | ExprKind::Method { args: call, .. } => {
+                args.len().saturating_sub(call.len())
+            }
+            _ => 0,
+        };
+        let order: Vec<usize> = match self.types.and_then(|t| t.named_args(operand)) {
+            Some(order) if order.len() + lead == args.len() => (0..lead)
+                .chain(order.iter().map(|index| index + lead))
+                .collect(),
+            _ => (0..args.len()).collect(),
+        };
+        let mut names = Vec::new();
+        for (param, index) in order.into_iter().enumerate() {
+            let borrow = if by_ref && !self.consumes(callee, param) {
                 "&"
             } else {
                 ""
