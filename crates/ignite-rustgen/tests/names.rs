@@ -548,3 +548,87 @@ system PortFn {\n\
     );
     cargo_build(&program, &std, "adv-names-portfn");
 }
+
+/// Adversary (story:rustgen-reserved-names, third pass): the executable's
+/// `use <crate>::*;` and its paths into sibling modules start at the
+/// program crate's bare name (`crt::other::seven`), the one crate root the
+/// generator does not write as `::<crate>`. A record named like the
+/// package's last segment is `pub struct crt` at that crate's root, which
+/// the glob brings into the bin beside the extern crate `crt` (E0659).
+/// `ignite check` accepts the program and `ignite build --target llvm`
+/// builds it.
+#[test]
+fn adversary_a_record_named_like_the_program_crate_builds() {
+    let main = "package examples.crt\n\
+\n\
+import examples.crt.other.{seven}\n\
+\n\
+type crt { v: Int }\n\
+\n\
+type Srv {\n\
+  listener: TcpListener\n\
+  n: Int\n\
+  executable: Text\n\
+}\n\
+\n\
+fn Srv.main(self: Srv) -> Result<Unit, IoError> {\n\
+  log(\"{self.listener.local_port()} {self.n}\")\n\
+  Ok(Unit)\n\
+}\n\
+\n\
+system Crt {\n\
+  resource l: TcpListener { address = \"127.0.0.1\", port = 0 }\n\
+  component srv: Srv { listener = l, n = seven(), executable = \"srv\" }\n\
+}\n";
+    let other = "package examples.crt.other\n\nfn seven() -> Int = 7\n";
+    let dir = adversary_sources(
+        "adv-names-rec-crate-src",
+        &[("crt.ignite", main), ("other.ignite", other)],
+    );
+    let (program, std) = common::lower_typed(
+        &dir.join("crt.ignite"),
+        &common::golden_std(),
+        &adversary_substrate(),
+    );
+    cargo_build(&program, &std, "adv-names-rec-crate");
+}
+
+/// Adversary (story:rustgen-reserved-names, third pass): `main` binds a
+/// resource as its `ident`, and a UFCS call `x.f()` in a component
+/// property is the bare call `f(&x)`. Ignite resolves `x.f()` to the fn
+/// `f` even beside a resource `f`, so `ignite check` accepts the program
+/// and `ignite build --target llvm` builds it; in Rust the local `f`
+/// shadows the fn (E0618), for a program fn and an imported std fn alike.
+#[test]
+fn adversary_a_resource_named_like_a_ufcs_callee_builds() {
+    let source = "package examples.ufcs\n\
+\n\
+import std.text.{to_upper}\n\
+\n\
+fn twice(n: Int) -> Int = n * 2\n\
+\n\
+type Srv {\n\
+  listener: TcpListener\n\
+  name: Text\n\
+  n: Int\n\
+  executable: Text\n\
+}\n\
+\n\
+fn Srv.main(self: Srv) -> Result<Unit, IoError> {\n\
+  log(\"{self.listener.local_port()} {self.name} {self.n}\")\n\
+  Ok(Unit)\n\
+}\n\
+\n\
+system Ufcs {\n\
+  resource to_upper: TcpListener { address = \"127.0.0.1\", port = 0 }\n\
+  resource twice: TcpListener { address = \"127.0.0.1\", port = 0 }\n\
+  component srv: Srv { listener = to_upper, name = \"abc\".to_upper(), n = 3.twice(), executable = \"srv\" }\n\
+}\n";
+    let dir = adversary_sources("adv-names-ufcs-src", &[("ufcs.ignite", source)]);
+    let (program, std) = common::lower_typed(
+        &dir.join("ufcs.ignite"),
+        &common::repository_std(),
+        &adversary_substrate(),
+    );
+    cargo_build(&program, &std, "adv-names-ufcs");
+}
