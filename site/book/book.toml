@@ -11,6 +11,7 @@ site-url = "/book/"
 git-repository-url = "https://github.com/ignite-lang/ignite"
 edit-url-template = "https://github.com/ignite-lang/ignite/edit/main/site/book/{path}"
 additional-css = ["theme/ignite.css"]
+additional-js = ["theme/ignite.js"]
 
 [output.html.fold]
 enable = true

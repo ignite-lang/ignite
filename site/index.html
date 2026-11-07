@@ -307,7 +307,7 @@ bye</code></pre>
         </div>
         <div class="stack">
           <div class="window">
-            <div class="window-bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="window-title">terminal.design.ignite (excerpt)</span></div>
+            <div class="window-bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="window-title" title="terminal.design.ignite (excerpt)">terminal.design.ignite (excerpt)</span></div>
 <pre><code class="language-ignite" data-fragment>component promptProbe: TelnetPrompt {
   target = server
   interval = 10 seconds
@@ -325,7 +325,7 @@ contract reachable: Availability {
 }</code></pre>
           </div>
           <div class="window">
-            <div class="window-bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="window-title">ignite explain terminal.design.ignite Terminal.reachable</span></div>
+            <div class="window-bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="window-title" title="ignite explain terminal.design.ignite Terminal.reachable">ignite explain terminal.design.ignite Terminal.reachable</span></div>
 <pre><code class="language-text">Terminal.reachable: contract std.contract.Availability (terminal.design.ignite:81:3)
   signal = Terminal.promptProbe.attempts
   good = prompt_received_before_timeout
@@ -350,7 +350,7 @@ standing: evaluated at run time (ignite run, ignite replay)</code></pre>
           <p>A failed <code>assert</code>, an integer overflow or an out-of-range index stops the one session that hit it and reports the file, line and column. Every other session carries on.</p>
         </div>
         <div class="window">
-          <div class="window-bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="window-title">terminald, stderr</span></div>
+          <div class="window-bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="window-title" title="terminald, stderr">terminald, stderr</span></div>
 <pre><code class="language-text">task ended with error: index failed at &lt;file&gt;:&lt;line&gt;:&lt;column&gt;: index 5 out of range for length 2
 task ended with error: + failed at &lt;file&gt;:&lt;line&gt;:&lt;column&gt;: 9223372036854775807 + 9</code></pre>
         </div>
@@ -429,18 +429,18 @@ ignite explain examples/terminal/terminal.design.ignite local</code></pre>
           <p class="more"><a href="book/roadmap.html">See the roadmap &rarr;</a></p>
         </div>
         <ul class="milestones">
-          <li><span class="tag">v0.1.0</span> language, two targets, protocols in Ignite, inline tests, plan, explain, run and replay</li>
-          <li><span class="tag">v0.2.0</span> <code>ignite apply</code>: local host, saved plans, durable receipts, crash recovery</li>
-          <li><span class="tag">v0.3.0</span> in-process streams and protocol roles generic over the byte stream</li>
-          <li><span class="tag">v0.4.0</span> RFC catalogues, protocol conformance claims, <code>ignite conformance</code></li>
-          <li><span class="tag">v0.5.0</span> last-use moves on both targets, calls of fn-typed values, rest patterns in lists, store <code>upsert</code></li>
-          <li><span class="tag">v0.6.0</span> processes, files, settings and random bytes for programs; LLVM as the default target</li>
-          <li><span class="tag">v0.7.0</span> one service operated: the todo service with its data, an HTTP probe, rollouts and <code>ignite recover</code></li>
-          <li><span class="tag">v0.8.0</span> static executables with <code>--static</code>, the typed program as JSON, <code>Text</code> order, wrapping <code>Int</code> arithmetic, list element assignment, sibling imports</li>
-          <li><span class="tag">v0.9.0</span> checked <code>Int</code> arithmetic, Telnet conforming to RFC 854, moves of pattern bindings, the language server in its own repository</li>
-          <li><span class="tag">v0.10.0</span> effectful <code>List.map</code>, a sharded <code>Store</code>, HTTP response headers and request head checked against RFC 9112 and 9110</li>
-          <li><span class="tag">v0.11.0</span> chunked HTTP request bodies, <code>spawn</code> arguments moved at their last use, generated Rust names that never collide with a program's</li>
-          <li><span class="tag">v0.12.0</span> streamed and binary HTTP responses, every RFC 9110 reason phrase, effectful fn values passed to <code>List.map</code>, <code>Bytes</code> set by index</li>
+          <li><span class="tag">v0.1.0</span> <span>language, two targets, protocols in Ignite, inline tests, plan, explain, run and replay</span></li>
+          <li><span class="tag">v0.2.0</span> <span><code>ignite apply</code>: local host, saved plans, durable receipts, crash recovery</span></li>
+          <li><span class="tag">v0.3.0</span> <span>in-process streams and protocol roles generic over the byte stream</span></li>
+          <li><span class="tag">v0.4.0</span> <span>RFC catalogues, protocol conformance claims, <code>ignite conformance</code></span></li>
+          <li><span class="tag">v0.5.0</span> <span>last-use moves on both targets, calls of fn-typed values, rest patterns in lists, store <code>upsert</code></span></li>
+          <li><span class="tag">v0.6.0</span> <span>processes, files, settings and random bytes for programs; LLVM as the default target</span></li>
+          <li><span class="tag">v0.7.0</span> <span>one service operated: the todo service with its data, an HTTP probe, rollouts and <code>ignite recover</code></span></li>
+          <li><span class="tag">v0.8.0</span> <span>static executables with <code>--static</code>, the typed program as JSON, <code>Text</code> order, wrapping <code>Int</code> arithmetic, list element assignment, sibling imports</span></li>
+          <li><span class="tag">v0.9.0</span> <span>checked <code>Int</code> arithmetic, Telnet conforming to RFC 854, moves of pattern bindings, the language server in its own repository</span></li>
+          <li><span class="tag">v0.10.0</span> <span>effectful <code>List.map</code>, a sharded <code>Store</code>, HTTP response headers and request head checked against RFC 9112 and 9110</span></li>
+          <li><span class="tag">v0.11.0</span> <span>chunked HTTP request bodies, <code>spawn</code> arguments moved at their last use, generated Rust names that never collide with a program's</span></li>
+          <li><span class="tag">v0.12.0</span> <span>streamed and binary HTTP responses, every RFC 9110 reason phrase, effectful fn values passed to <code>List.map</code>, <code>Bytes</code> set by index</span></li>
           <li><span class="tag tag-next">next</span> the designs on the roadmap, not released</li>
         </ul>
       </div>
