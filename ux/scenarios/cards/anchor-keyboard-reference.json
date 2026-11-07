@@ -1,0 +1,26 @@
+{
+  "id": "anchor-keyboard-reference",
+  "kind": "anchor",
+  "persona": "A developer writing an Ignite program who works by keyboard alone.",
+  "facts": "Needs the files API, an HTTP server example and the meaning of a diagnostic.",
+  "mode": "keyboard",
+  "tasks": ["std-fs", "http-example", "diagnostic-search"],
+  "between": [{ "click": { "role": "link", "name": "^Ignite home$" } }],
+  "twists": [
+    {
+      "id": "wrong-turn-design",
+      "before": "http-example",
+      "why": "Expects examples under Design first, then returns home.",
+      "route": [
+        { "click": { "role": "link", "name": "^Design$" } },
+        { "click": { "role": "link", "name": "^Ignite home$" } }
+      ]
+    },
+    {
+      "id": "switches-theme",
+      "before": "diagnostic-search",
+      "why": "Switches the theme by keyboard before searching.",
+      "route": [{ "click": { "role": "button", "name": "^Switch between dark and light theme$" } }]
+    }
+  ]
+}

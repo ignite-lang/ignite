@@ -1,0 +1,26 @@
+{
+  "id": "anchor-newcomer",
+  "kind": "anchor",
+  "persona": "A developer who heard of Ignite, uses a mouse, reads on whatever screen is at hand.",
+  "facts": "Wants to install it, understand the idea, and see what comes next.",
+  "mode": "pointer",
+  "tasks": ["install", "design", "roadmap"],
+  "between": [{ "click": { "role": "link", "name": "^Ignite home$" } }],
+  "twists": [
+    {
+      "id": "switches-to-dark",
+      "before": "design",
+      "why": "Reads at night: switches the landing page to the dark theme, which the book keeps.",
+      "route": [{ "click": { "role": "button", "name": "^Switch between dark and light theme$" } }]
+    },
+    {
+      "id": "wrong-turn-reference",
+      "before": "roadmap",
+      "why": "Looks for what comes next under Reference first, then returns home.",
+      "route": [
+        { "click": { "role": "link", "name": "^Reference$" } },
+        { "click": { "role": "link", "name": "^Ignite home$" } }
+      ]
+    }
+  ]
+}

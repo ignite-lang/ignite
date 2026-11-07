@@ -67,6 +67,45 @@ text it shows) and the route, the accessible role and name of each control a rea
 The screen-only user scrolls or opens the menu when a control is not in view, and counts
 every click, wheel turn and key press.
 
+## Rounds
+
+A round (SKILL.md section 3) starts with
+
+```sh
+task ux-round ROUND=R-01
+```
+
+It is not part of `task gate`, and it needs no network and no keys. It runs the gating suite
+(for `target/ux/metrics.json`; a failure there is reported, not fatal), then the trial
+`round/sessions.spec.ts` with `round.config.ts`, then `site::round::write`, and writes
+`rounds/R-nn/`:
+
+- `report.md`: the bars, the ratchet against `baseline.json` and the last round, the sessions,
+  the worst moments, the contact sheets and the missing inputs;
+- `round.json`: the same numbers;
+- `shots/`: the worst moments and one contact sheet per viewport;
+- `rounds/trend.md`: one row per round.
+
+The command replaces only `report.md`, `round.json` and `shots/`. Triage and the review
+agents' reports in the round directory stay.
+
+The trial has no person. The screen-only user of `lib/bot.ts` drives one session per
+scenario card and viewport. That covers every gating viewport and every measured-only one
+(reported, not gated). The cards are `scenarios/cards/<id>.json`:
+
+- two anchors (`"kind": "anchor"`), kept fixed from round to round;
+- one rotating card (`"kind": "rotating"`, `"round": "R-nn"`) per round.
+
+A card names a persona, a mode (`pointer` or `keyboard`) and its tasks in order. It also
+names the route home between tasks and its twists, each a route that runs before a named
+task (a wrong turn, a theme switch).
+
+Each moment is a frame taken 0.75 s after it. A moment is the start, or a click, wheel turn,
+opened menu, typed text or Enter. Each session is recorded as a Playwright trace in
+`target/ux/round/traces/`, because rrweb is not in the lockfile. Traces are not committed.
+`site::round::round_dirs_hold_what_they_name` checks that every committed round holds the
+files its `report.md` and `round.json` name.
+
 ## Findings
 
 `findings/UXF-nnn.md`, a `---` header with `id`, `title`, `class`, `severity`, `metric`,

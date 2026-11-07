@@ -36,6 +36,11 @@ async function ready(url: string, deadline: number) {
 // raw records of an earlier run, and hands the base URL to the workers.
 export default async function globalSetup() {
   fs.rmSync(path.join(REPO, OUT_DIR, "raw"), { recursive: true, force: true });
+  return serve();
+}
+
+// Serves the built site and sets UX_BASE_URL; returns the teardown.
+export async function serve() {
   const port = await freePort();
   const child = spawn(
     "miniserve",

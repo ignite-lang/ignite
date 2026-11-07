@@ -12,6 +12,18 @@ import type { Step, Task } from "./pages";
 const MAX_LOOKS = 40;
 const MAX_TABS = 400;
 
+// One step of a route as the user took it: the moment (frame) at which it
+// began to look, how many looks (pointer) or Tab presses (keyboard) it
+// took, its glance cost (pointer only, 0 for the keyboard) and its actions.
+export type StepRecord = {
+  label: string;
+  page: string;
+  frame: number;
+  looks: number;
+  glance: number;
+  actions: number;
+};
+
 export type Run = {
   actions: number;
   looks: number;
@@ -19,7 +31,24 @@ export type Run = {
   timeToAct: number[];
   glances: number[];
   log: string[];
+  // Moments: one after the start and after every action that changes the
+  // screen (a click, a wheel turn, an opened menu, typed text, an Enter).
+  // A Tab press only moves the focus and is no moment.
+  moments: number;
+  steps: StepRecord[];
+  observer?: (label: string, frame: number) => Promise<void>;
 };
+
+export function newRun(observer?: Run["observer"]): Run {
+  return { actions: 0, looks: 0, steers: 0, timeToAct: [], glances: [], log: [], moments: 0, steps: [], observer };
+}
+
+async function moment(run: Run, label: string) {
+  run.moments++;
+  if (run.observer) {
+    await run.observer(label, run.moments);
+  }
+}
 
 type Seen = { index: number; x: number; y: number; primary: boolean; href: string | null };
 
@@ -159,6 +188,7 @@ async function scrollToward(page: Page, all: Locator, run: Run): Promise<boolean
       run.steers++;
       run.log.push(`scroll ${plan.dy > 0 ? "down" : "up"}`);
       await quiet(page);
+      await moment(run, run.log[run.log.length - 1]);
       return true;
     }
   }
@@ -184,6 +214,7 @@ async function disclose(page: Page, run: Run): Promise<boolean> {
       run.steers++;
       run.log.push(`open ${disclosure.name}`);
       await quiet(page);
+      await moment(run, run.log[run.log.length - 1]);
       return true;
     }
   }
@@ -192,6 +223,8 @@ async function disclose(page: Page, run: Run): Promise<boolean> {
 
 async function pointerClick(page: Page, step: { role: "link" | "button"; name: string }, run: Run) {
   const all = candidates(page, step);
+  const frame = run.moments;
+  const before = run.actions;
   let looks = 0;
   let revealed = false;
   while (looks < MAX_LOOKS) {
@@ -200,11 +233,14 @@ async function pointerClick(page: Page, step: { role: "link" | "button"; name: s
     const kind = pageKind(currentPath(page));
     const seen = await usable(page, all, primaryRegions[kind]);
     if (seen) {
+      const page0 = currentPath(page);
       run.glances.push(revealed ? 3 : seen.primary ? 1 : 2);
       run.timeToAct.push(looks);
       run.actions++;
       run.log.push(`click ${step.role} /${step.name}/`);
       await act(page, seen.href, () => page.mouse.click(seen.x, seen.y));
+      await moment(run, run.log[run.log.length - 1]);
+      run.steps.push({ label: run.log[run.log.length - 1], page: page0, frame, looks, glance: revealed ? 3 : seen.primary ? 1 : 2, actions: run.actions - before });
       return;
     }
     revealed = true;
@@ -233,6 +269,7 @@ async function typeText(page: Page, text: string, run: Run) {
   }
   run.log.push(`type ${text}`);
   await quiet(page);
+  await moment(run, run.log[run.log.length - 1]);
 }
 
 // Whether one of `all` has the focus and is usable as the pointer user
@@ -255,15 +292,24 @@ async function rendered(all: Locator): Promise<boolean> {
 
 async function keyboardClick(page: Page, step: { role: "link" | "button"; name: string }, run: Run) {
   const all = candidates(page, step);
+  const frame = run.moments;
+  const before = run.actions;
   for (let tabs = 0; tabs <= MAX_TABS; tabs++) {
     if (await focused(page, all)) {
       const href = await page.evaluate(() => {
         const link = document.activeElement?.closest("a");
         return link ? link.href : null;
       });
+      const page0 = currentPath(page);
+      // For the keyboard user a look is a Tab press and the check of
+      // where the focus went.
+      run.looks += tabs;
+      run.timeToAct.push(tabs);
       run.actions++;
       run.log.push(`enter on ${step.role} /${step.name}/ after ${tabs} tabs`);
       await act(page, href, () => page.keyboard.press("Enter"));
+      await moment(run, run.log[run.log.length - 1]);
+      run.steps.push({ label: run.log[run.log.length - 1], page: page0, frame, looks: tabs, glance: 0, actions: run.actions - before });
       return;
     }
     if (!(await rendered(all))) {
@@ -276,6 +322,7 @@ async function keyboardClick(page: Page, step: { role: "link" | "button"; name: 
           run.steers++;
           run.log.push(`open ${disclosure.name}`);
           await quiet(page);
+          await moment(run, run.log[run.log.length - 1]);
         }
       }
     }
@@ -287,11 +334,9 @@ async function keyboardClick(page: Page, step: { role: "link" | "button"; name: 
 
 export type Mode = "pointer" | "keyboard";
 
-export async function play(page: Page, task: Task, mode: Mode): Promise<Run> {
-  const run: Run = { actions: 0, looks: 0, steers: 0, timeToAct: [], glances: [], log: [] };
-  await page.goto(baseUrl() + task.start, { waitUntil: "load" });
-  await quiet(page);
-  for (const step of task.route as Step[]) {
+// Takes `route` from where the page is, with the pointer or the keyboard.
+export async function follow(page: Page, route: Step[], mode: Mode, run: Run) {
+  for (const step of route) {
     if ("type" in step) {
       await typeText(page, step.type, run);
     } else if (mode === "pointer") {
@@ -300,6 +345,28 @@ export async function play(page: Page, task: Task, mode: Mode): Promise<Run> {
       await keyboardClick(page, step.click, run);
     }
   }
+}
+
+// Opens `path` by address: the start of a task or a session, no action.
+export async function start(page: Page, path: string, run: Run) {
+  await page.goto(baseUrl() + path, { waitUntil: "load" });
+  await quiet(page);
+  await moment(run, `open ${path}`);
+}
+
+// Plays `task`. With `fromHere` the user is already on the task's start
+// page (a session that walked there) and nothing is opened by address.
+export async function play(
+  page: Page,
+  task: Task,
+  mode: Mode,
+  options: { run?: Run; fromHere?: boolean } = {},
+): Promise<Run> {
+  const run = options.run ?? newRun();
+  if (!options.fromHere) {
+    await start(page, task.start, run);
+  }
+  await follow(page, task.route as Step[], mode, run);
   const at = currentPath(page);
   if (at !== task.truth.path) {
     throw new Error(`${task.id} (${mode}) ended on ${at}, not on its truth page ${task.truth.path}; ${run.log.join(", ")}`);
