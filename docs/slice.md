@@ -3647,7 +3647,12 @@ The drain on SIGTERM:
 - It shuts down the read side of every listener and prints `released <address>:<port>` on
   stderr for each one once it is closed (A5; as landed, P2: stderr, not stdout).
 - A pending `accept` fails with "draining".
-- After `K.main` returns, `run` waits for the live tasks to end, then exits 0.
+- After `K.main` returns, `run` sends what `main`'s task wrote, waits for the live tasks to
+  end, then exits 0.
+- `Process.exit(code)` during the drain sends what the calling task wrote and exits with
+  `code` at once; live tasks are not waited for (story `drain-exit`, the pusher's G16). On
+  the LLVM target it lowers to the runtime entry `ignite_rt_process_exit`, not to the
+  `ignite_rt_exit` the generated main calls when `K.main` returns.
 - A second SIGTERM exits at once.
 - As landed (P2): a SIGTERM's in-flight guard ends at `released`; a SIGTERM to a program
   without a listener (`tn`) drains too: it waits for `main`, and a second SIGTERM ends it.
