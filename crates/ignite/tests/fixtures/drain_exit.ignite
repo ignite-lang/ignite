@@ -1,0 +1,42 @@
+package tests.drain_exit
+
+// Built for both targets and run by tests/drain.rs (`docs/slice.md`
+// 16.13, story `drain-exit`, the pusher's G16): `Process.exit` during the
+// drain ends the process with its code at once, while one task waits in
+// `accept` on a listener bound after the drain began and another in an
+// idle read, and the write made before it reaches the peer.
+
+fn idle_accept(listener: TcpListener) -> Result<Unit, IoError> {
+  loop {
+    let stream = listener.accept()?
+  }
+}
+
+fn idle_read(stream: TcpStream) -> Result<Unit, IoError> requires [stream.read] {
+  let input = stream.read(64)?
+  return Ok(Unit)
+}
+
+type Server {
+  listener: TcpListener
+  executable: Text
+}
+
+fn Server.main(self: Server) -> Result<Unit, IoError> {
+  let reading = self.listener.accept()?
+  spawn idle_read(reading)
+  let peer = self.listener.accept()?
+  log("waiting")
+  let refused = self.listener.accept()
+  log("drain began")
+  let again = TcpListener.bind("127.0.0.1", 0)?
+  spawn idle_accept(again)
+  peer.write_all("bye\n".to_bytes())?
+  log("exiting")
+  Process.exit(3)
+}
+
+system DrainExit {
+  resource listener: TcpListener { address = "127.0.0.1", port = 0 }
+  component server: Server { listener = listener, executable = "drainexit" }
+}

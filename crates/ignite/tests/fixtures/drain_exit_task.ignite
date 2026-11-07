@@ -1,0 +1,40 @@
+package tests.drain_exit_task
+
+import std.process.Invocation
+
+// Adversary, story `drain-exit`: `Process.exit` called from a spawned task
+// during the drain, while `main` waits in an idle read and a child started
+// after the drain is live. 263 is 7 modulo 256 on both targets; the child
+// is killed by the `at_exit` hook.
+
+fn sleeper() -> Invocation = Invocation { program = "/bin/sleep", arguments = ["30"] }
+
+fn exit_on_input(stream: TcpStream) -> Result<Unit, IoError> requires [stream.read, process.exit] {
+  let input = stream.read(64)?
+  log("task exiting")
+  Process.exit(263)
+}
+
+type Server {
+  listener: TcpListener
+  tools: Launcher
+  executable: Text
+}
+
+fn Server.main(self: Server) -> Result<Unit, IoError> {
+  let reading = self.listener.accept()?
+  let trigger = self.listener.accept()?
+  spawn exit_on_input(trigger)
+  log("waiting")
+  let refused = self.listener.accept()
+  let child = self.tools.start(sleeper())?
+  log("child ".concat(child.id().to_text()))
+  let input = reading.read(64)?
+  return Ok(Unit)
+}
+
+system DrainExitTask {
+  resource listener: TcpListener { address = "127.0.0.1", port = 0 }
+  resource tools: Launcher
+  component server: Server { listener = listener, tools = tools, executable = "drainexittask" }
+}

@@ -1,0 +1,38 @@
+package tests.flood_return
+
+// Adversary, story `drain-exit`, pass 2: a task writes to a stream in a
+// loop while the peer reads everything; `main` writes `MARK` on the same
+// stream and then ends (return). The busy writer holds the write lock
+// only for an append at a time, so a flush that waits for the lock sends
+// `MARK`; one that skips a held lock may lose it.
+
+fn spin(limit: Duration) {
+  let started = Clock.monotonic()
+  while Clock.monotonic() - started < limit {
+  }
+}
+
+fn flood(stream: TcpStream) -> Result<Unit, IoError> {
+  loop {
+    stream.write_all(b"0123456789abcdef0123456789abcdef")?
+  }
+}
+
+type Server {
+  listener: TcpListener
+  executable: Text
+}
+
+fn Server.main(self: Server) -> Result<Unit, IoError> {
+  let peer = self.listener.accept()?
+  spawn flood(peer)
+  spin(200 ms)
+  peer.write_all(b"MARK\n")?
+  log("ending")
+  return Ok(Unit)
+}
+
+system FloodReturn {
+  resource listener: TcpListener { address = "127.0.0.1", port = 0 }
+  component server: Server { listener = listener, executable = "floodreturn" }
+}
