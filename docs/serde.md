@@ -29,7 +29,7 @@ slice §24 prints it), so it can write these functions.
 
 Goals:
 
-1. `encode(todo)` and `decode(value)` for every data type, with no code per type.
+1. `encode(codec, todo)` and `decode(codec, value)` for every data type: a codec built in std from combinators today, and written by the compiler (`codec()`) later, with no code per type.
 2. JSON, YAML and TOML read and written by `std`, in Ignite, on both targets and in the
    compile-time evaluator.
 3. Wire names that differ from field names (LSP's `languageId` for `language_id`) without
@@ -41,14 +41,12 @@ Non-goals for the first version:
 
 - Streaming (a decoder that never holds the whole document). Section 9.
 - Binary formats (CBOR, MessagePack) and CSV. They fit the value model; section 9.
-- Per-type hand-written codecs that replace the derived one. They need user `interface` and
-  `impl` (section 3.2); section 9.
 - YAML anchors, aliases and tags. Section 6.2.
 
 ## 3 The design in one page
 
 ```ignite
-import std.data.{encode, decode, Shape, Case}
+import std.data.{codec, decode, encode_with, Codec, Shape, Case}
 import std.yaml
 import std.json
 
@@ -63,22 +61,53 @@ enum Action { Allow, Deny(Text), Redirect { to: Text, status: Int } }
 
 fn load(text: Text) -> Result<List<Rule>, Text> {
   let value = yaml.parse(text).map_err(|e| e.message)?
-  decode(value).map_err(|e| e.describe())
+  let rules: Codec<List<Rule>> = codec()
+  decode(rules, value).map_err(|e| e.describe())
 }
 
 fn wire(rules: List<Rule>) -> Text =
-  json.emit(encode_with(rules, Shape { keys = Case.Camel, ..Shape.default() }))
+  json.emit(encode_with(codec(), rules, Shape { keys = Case.Camel, ..Shape.default() }))
 ```
 
 The block is a sketch: its syntax (closures, `..` record update, `yaml.parse` by module name) is not checked against the parser.
 
-Three layers, each usable alone:
+Everything a program calls lives in `std` and is written in Ignite (Timo, 2026-11-08: "in std").
+Four layers, each usable alone:
 
-| layer | module | what |
-|---|---|---|
-| value model | `std.data` | `Value`, the tree every format reads into and writes from; `Shape`; `DecodeError`; `DataLimits` |
-| codec | `std.data`, compiler-derived | `encode<T>(value: T) -> Value`, `decode<T>(value: Value) -> Result<T, DecodeError>`, `encode_with`, `decode_with` taking a `Shape` |
-| formats | `std.json`, `std.yaml`, `std.toml` | `parse(text) -> Result<Value, FormatError>`, `emit(value) -> Result<Text, FormatError>` |
+| layer | module | what | compiler change |
+|---|---|---|---|
+| value model | `std.data` | `Value`, the tree every format reads into and writes from; `Shape`; `DecodeError`; `DataLimits` | none |
+| codecs | `std.data` | `Codec<T>`, a record of two functions, and combinators that build one for any type by hand (section 3.3) | none |
+| formats | `std.json`, `std.yaml`, `std.toml` | `parse(text) -> Result<Value, FormatError>`, `emit(value) -> Result<Text, FormatError>` | none |
+| derivation | `std.data.codec<T>()`, written by the frontend | the `Codec<T>` a program would otherwise write with the combinators (section 3.2) | one frontend pass |
+
+The first three layers ship with no compiler change and work today; derivation removes the
+hand-written codec and comes after them.
+
+### 3.3 `Codec<T>`: the std surface
+
+```ignite
+type Codec<T> {
+  encode: fn(T, Shape) -> Value
+  decode: fn(Value, Shape, Text) -> Result<T, DecodeError>   // the Text is the path so far
+}
+
+fn encode<T>(codec: Codec<T>, value: T) -> Value
+fn decode<T>(codec: Codec<T>, value: Value) -> Result<T, DecodeError>
+fn encode_with<T>(codec: Codec<T>, value: T, shape: Shape) -> Value
+fn decode_with<T>(codec: Codec<T>, value: Value, shape: Shape) -> Result<T, DecodeError>
+```
+
+Combinators, all in `std.data`: `int()`, `text()`, `bool()`, `bytes()`, `duration()`,
+`list(c)`, `option(c)`, `text_map(c)`, `pair(a, b)`, `record2` to `record8`
+(`record3("Todo", field("id", int(), |t| t.id), field("title", text(), |t| t.title),
+field("done", bool(), |t| t.done), |id, title, done| Todo { id, title, done })`), and
+`variants(name, [variant(...)])` for enums. Function-typed fields in generic std records exist
+today (`std/contract.ignite:39` `good: fn(T) -> Bool`, `std/protocol/http.ignite:77`).
+
+A hand-written `Codec<T>` is also how one type overrides the derived mapping: derivation uses a
+`Codec` the program declares for a type instead of writing one (section 9's "hand-written
+codecs" without user `interface` and `impl`).
 
 ### 3.1 Why a value tree, not serde's visitors
 
@@ -107,11 +136,12 @@ Rejected: serde's visitor design (needs user interfaces with generic methods; P4
 
 Option A in detail:
 
-- `encode` and `decode` are builtin generic functions of `std.data`, the way `Pipe.pair()` is a
-  builtin of `std.net`.
+- `codec<T>()` is the one builtin generic function of `std.data`, the way `Pipe.pair()` is a
+  builtin of `std.net`. Everything else in section 3.3 is plain Ignite.
 - At each instantiation with a concrete `T`, `ignite-types` records `T`. After typing, one pass
-  writes, for every recorded type and every type reachable from its fields, two typed functions
-  (`encode` and `decode` of that type), shared by every instantiation.
+  writes, for every recorded type and every type reachable from its fields, one `Codec` value
+  built from the section 3.3 combinators, shared by every instantiation. A program-declared
+  `const` of type `Codec<T>` is used instead of writing one for `T`.
 - The written functions are ordinary typed items. Both backends and the evaluator compile them
   like any user function: no backend change and no runtime change. Once the mid-level IR
   (`story:mid-level-ir`) lands, the pass moves there.
@@ -242,20 +272,19 @@ file at `ignite check`. Declared build inputs do not exist yet (design §3.5); o
 | step | story (draft) | contents | needs |
 |---|---|---|---|
 | 1 | `data-value-model` | `std.data` `Value`, `Shape`, `DecodeError`, `DataLimits`; `std.json` bridge | |
-| 2 | `data-derived-codec` | `encode`, `decode`, `encode_with`, `decode_with`: the frontend pass, both targets, evaluator, the not-data diagnostic, `typed-json` listing | 1 |
+| 2 | `data-codec-combinators` | `Codec<T>`, `encode`, `decode`, `encode_with`, `decode_with` and the combinators of section 3.3, in std only | 1 |
 | 3 | `data-yaml` | `std.yaml` parse and emit, YAML test suite | 1 |
 | 4 | `data-toml` | `std.toml` parse and emit, toml-test | 1 |
-| 5 | `data-adopters` | todo's hand codecs replaced; ignite-lsp-types output measured against `Shape { keys = Camel }` | 2 |
+| 5 | `data-derived-codec` | `codec<T>()`: the frontend pass writing `Codec` values, both targets, evaluator, the not-data diagnostic, `typed-json` listing | 2 |
+| 6 | `data-adopters` | todo's hand codecs replaced; ignite-lsp-types output measured against `Shape { keys = Camel }` | 2, 5 |
 
-Steps 2, 3 and 4 can run in one wave after step 1: they touch disjoint files (`crates/ignite-types`
-and `std/data.ignite`; `std/yaml.ignite`; `std/toml.ignite`). Each step adds its rows to the
-quality ratchet (`docs/quality.md`): round-trip tests per format and target, the differential
+Steps 2, 3 and 4 can run in one wave after step 1. Their own files are disjoint (`std/data.ignite`, `std/yaml.ignite`, `std/toml.ignite`); they share `docs/slice.md`, the `AGENTS.md` layout table, `docs/layering.md`, `crates/ignite-check/tests/layering.rs` and `crates/ignite/tests/main.rs`, which the wave's integration branch merges. Step 5 is the only one in `crates/ignite-types`. Each step adds its rows to the
+quality ratchet (`docs/quality.md`, lands with `story:quality-ratchet`): round-trip tests per format and target, the differential
 over the evaluator and both targets.
 
 ## 9 Later
 
-- **Hand-written codecs** for one type (a `Duration` as seconds, a legacy wire form), once user
-  `interface` and `impl` exist: `impl Data for T` replaces the derived pair for `T`.
+- **Codecs through `impl`**: once user `interface` and `impl` exist, `impl Data for T` may replace the `const Codec<T>` override of section 3.3.
 - **Streaming**: `std.json.events(stream)` over a `ByteStream` for documents larger than memory.
 - **Binary formats**: CBOR (RFC 8949) and MessagePack map onto `Value` directly, `Bytes` native.
 - **CSV**: a `List` of records as rows, header from the field names.
@@ -264,7 +293,7 @@ over the evaluator and both targets.
 
 | id | question | default if not answered |
 |---|---|---|
-| O1 | `decode` with no expected type to fix `T` (`let r = decode(v)?`): explicit type arguments at calls are not in the language | require an annotated `let`; a diagnostic names it |
+| O1 | `codec()` with no expected type to fix `T`: explicit type arguments at calls are not in the language; `decode(codec, v)` is fixed by its codec | `let c: Codec<Todo> = codec()`; a diagnostic names a `codec()` with no fixed `T` |
 | O2 | declared build inputs for section 7 | section 7 waits for them |
 | O3 | `Json` as a name for `Value` | keep both; bridge functions |
 | O4 | collect every decode error, not only the first | first error only |
