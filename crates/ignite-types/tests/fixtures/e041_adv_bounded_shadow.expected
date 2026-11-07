@@ -1,2 +1,0 @@
-e041_adv_bounded_shadow.ignite:1:4: error[E041]: fn `read` takes a `S` first, and `S` has the builtin method `read`, so `x.read(..)` could never call it; rename it
-e041_adv_bounded_shadow.ignite:3:4: error[E041]: fn `received_batches` takes a `PipeStream` first, and `PipeStream` has the builtin method `received_batches`, so `x.received_batches(..)` could never call it; rename it

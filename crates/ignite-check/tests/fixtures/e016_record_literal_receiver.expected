@@ -1,0 +1,2 @@
+e016_record_literal_receiver.ignite:13:3: error[E016]: missing effect `s.write` for `put`; add it to the `requires` of `uncovered`
+e016_record_literal_receiver.ignite:22:54: error[E016]: missing effect `s.write` for `inferred`; add it to the `requires` of `caller`

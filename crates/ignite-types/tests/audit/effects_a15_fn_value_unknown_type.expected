@@ -1,1 +1,2 @@
+effects_a15_fn_value_unknown_type.ignite:28:10: error[E016]: missing effect `stream.read` for `run`; add it to the `requires` of `via_default`
 effects_a15_fn_value_unknown_type.ignite:34:10: error[E016]: missing effect `stream.read` for `g`; add it to the `requires` of `via_list`
