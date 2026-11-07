@@ -436,6 +436,25 @@ fn store_upsert_is_atomic_on_both_targets() {
     });
 }
 
+/// Two refusals the checker made from declared types alone, on both
+/// targets (`fixtures/tests/checker_names.ignite`, pusher gaps G14 and
+/// G15): a user fn named like a builtin `List` method is called by a plain
+/// call while method syntax keeps the builtin, and a `Store` field of an
+/// unannotated record-literal binding is changed and read.
+#[test]
+fn builtin_named_fns_and_record_literal_receivers_run_on_both_targets() {
+    let file = fixture("checker_names.ignite");
+    on_both_targets(|target| {
+        let run = ignite_test(Chain::Groups, target, &[&file]);
+        assert_eq!(run.status, 0, "{target}: {}\n{}", run.stdout, run.stderr);
+        assert!(
+            run.stdout.contains("test result: ok. 3 passed; 0 failed;"),
+            "{target}: {}",
+            run.stdout
+        );
+    });
+}
+
 /// `Store.values` while tasks update two ids of one shard, on both targets
 /// (`fixtures/tests/store_load.ignite`, story `store-adversary-findings`):
 /// every list holds every id, no value goes back, no list waits 500 ms

@@ -1,0 +1,22 @@
+type World {
+  numbers: Store<Int>
+}
+
+fn covered(s: Store<Int>) -> Option<Int> requires [s.read, s.write] {
+  let w = World { numbers = s }
+  w.numbers.put(1, 2)
+  return w.numbers.get(1)
+}
+
+fn uncovered(s: Store<Int>) -> Option<Int> requires [s.read] {
+  let w = World { numbers = s }
+  w.numbers.put(1, 2)
+  return w.numbers.get(1)
+}
+
+fn inferred(s: Store<Int>) -> Unit {
+  let w = World { numbers = s }
+  w.numbers.put(1, 2)
+}
+
+fn caller(s: Store<Int>) -> Unit requires [s.read] = inferred(s)

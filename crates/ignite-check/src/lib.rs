@@ -3114,7 +3114,8 @@ impl Checker {
     /// The declared type of the value of `expr`, where it follows from
     /// declarations alone (`docs/slice.md` section 11.7): a local with a
     /// known type, a field of a value of known record type, `copy()`, `e?`,
-    /// `l[i]` and the results of `Store` methods. `None` otherwise.
+    /// `l[i]`, the results of `Store` methods and a literal of a record
+    /// without type parameters. `None` otherwise.
     fn static_type(&self, expr: &Expr) -> Option<Type> {
         let named = |name: &str, args: Vec<Type>| {
             let ident = Ident {
@@ -3181,6 +3182,13 @@ impl Checker {
                 tuple.args.get(*index)?.clone()
             }
             ExprKind::Closure(closure) => return Some(self.closure_type(expr, closure)),
+            ExprKind::Record { name: record, .. }
+                if self.symbols.records.contains(&record.name)
+                    && !self.symbols.type_params.contains_key(&record.name)
+                    && !self.type_params.contains(&record.name) =>
+            {
+                Type::named(record.clone(), Vec::new(), record.span)
+            }
             ExprKind::Index { receiver, .. } => {
                 let list = self.static_type(receiver)?;
                 match list.name.name.as_str() {
@@ -4160,13 +4168,22 @@ fn is_stream_method(method: &str) -> bool {
 /// type `ty` (`docs/slice.md` sections 6, 7 and 13): the table of
 /// `ignite-types`' builtins by type name. A type parameter or a fn type
 /// takes none but `copy`; [`Checker::builtin_method`] gives a
-/// `ByteStream`-bounded one the stream methods.
-fn builtin_applies(ty: &Type, method: &str) -> bool {
+/// `ByteStream`-bounded one the stream methods. Public so that
+/// `ignite-types` can compare it with its own table
+/// (`builtins::tests::checker_table_matches_the_type_checker`).
+pub fn builtin_applies(ty: &Type, method: &str) -> bool {
     let name = ty.name.name.as_str();
     if method == "copy" || method == "debug" {
         return true;
     }
     let text = ty.args.first().is_some_and(|a| a.name.name == "Text");
+    let byte = ty.args.first().is_some_and(|a| a.name.name == "Byte");
+    if CAPABILITY_METHODS
+        .iter()
+        .any(|(owner, m, _)| *owner == name && *m == method)
+    {
+        return true;
+    }
     match name {
         "Text" => matches!(
             method,
@@ -4210,7 +4227,9 @@ fn builtin_applies(ty: &Type, method: &str) -> bool {
                 method,
                 "len" | "is_empty" | "at" | "slice" | "push" | "set" | "append" | "clear" | "map"
             ) || (method == "join" && text)
+                || (method == "to_text" && byte)
         }
+        "Ref" | "Signal" => method == "to_text",
         "Store" => matches!(
             method,
             "next_id" | "get" | "put" | "remove" | "values" | "update" | "upsert"
