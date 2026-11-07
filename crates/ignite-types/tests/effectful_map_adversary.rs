@@ -95,3 +95,31 @@ fn an_uncovered_effectful_fn_mapped_into_an_unannotated_let_is_e017() {
         "{text}"
     );
 }
+
+#[test]
+fn mapping_an_untyped_effectful_local_without_requires_names_the_binding_to_annotate() {
+    let text = frontend(
+        "fn hidden(ids: List<Int>) -> List<Int> {\n  let g = make()\n  return ids.map(g)\n}\n",
+    )
+    .unwrap_err();
+    assert!(
+        text.contains("error[E042]: cannot check the effects of `g` passed to `map`: its type is not declared; bind it with its type: `let g: fn(id: Int) -> Int requires [clock.read] = …`"),
+        "{text}"
+    );
+}
+
+#[test]
+fn an_untyped_effectful_local_mapped_under_a_covering_requires_checks_clean() {
+    frontend(
+        "fn covered(ids: List<Int>) -> List<Int> requires [clock.read] {\n  let g = make()\n  return ids.map(g)\n}\n",
+    )
+    .unwrap();
+}
+
+#[test]
+fn an_annotated_effectful_local_mapped_without_requires_is_an_effect_site() {
+    frontend(
+        "fn annotated(ids: List<Int>) -> List<Int> {\n  let g: fn(id: Int) -> Int requires [clock.read] = make()\n  return ids.map(g)\n}\n\nfn caller(ids: List<Int>) -> List<Int> requires [clock.read] = annotated(ids)\n",
+    )
+    .unwrap();
+}
