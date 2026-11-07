@@ -3,21 +3,29 @@
 //!
 //! A clone shares the map, like the other substrate handles. The map is
 //! split by a hash of the id into [`SHARDS`] shards, each a `BTreeMap`
-//! behind its own `Mutex`, so tasks working on ids of different shards do
-//! not wait for each other; ids come from a separate atomic counter, so
+//! behind its own `Mutex`; ids come from a separate atomic counter, so
 //! `next_id` never waits for a lock. Values have copy semantics: `get` and
 //! `values` return clones, `put` stores the value it is given.
 //!
 //! Every method is atomic for the ids it touches. `update` and `upsert`
 //! hold their shard's lock only to take the value out, leaving its slot
-//! marked taken, and to put the new value back: they copy the old value,
-//! apply `f` and drop the old value with no lock held. A task that reaches
-//! a taken slot (any method on that id; `len`, `is_empty` and `values` on
-//! its shard) waits until it is put back, so two updates or upserts of one
-//! id never lose a write. When `f` panics the old value is put back, and an
-//! upsert of an absent id leaves it absent. `len`, `is_empty` and `values`
-//! lock every shard in shard order and see one consistent map; `values`
-//! is in ascending id order across the shards.
+//! marked taken with the value shared, and to put the new value back: they
+//! copy the old value, apply `f` and drop the old value with no lock held.
+//! A task that reaches a taken id (any method on that id) waits until it is
+//! put back, so two updates or upserts of one id never lose a write. When
+//! `f` panics the old value is put back, and an upsert of an absent id
+//! leaves it absent.
+//!
+//! `len`, `is_empty` and `values` wait for no taken slot: they lock every
+//! shard in shard order and see one consistent map, in which an update or
+//! upsert in progress has not happened yet (a taken slot counts with the
+//! value it held; an absent id that an upsert took is absent), and release
+//! the locks when done; `values` is in ascending id order across the
+//! shards. So a task waits for another task's `f` only on the same id, and
+//! for another task's lock only while that task holds it: on the task's
+//! own shard, or on any shard while a `len`, `is_empty` or `values` reads
+//! the map. The value of a taken slot is read by two tasks at once, so a
+//! store is shared between tasks only when `T` is `Sync`.
 //!
 //! A task that panics while holding a lock does not make the store
 //! unusable: the next caller takes the shard as it is. A `put` that
@@ -69,30 +77,47 @@ struct Shard<T> {
 
 struct Map<T> {
     slots: BTreeMap<i64, Slot<T>>,
-    /// Slots an `update` or `upsert` has taken out.
-    taken: usize,
+    /// Slots an `upsert` has taken for an absent id: `Slot::Taken(None)`.
+    taken_absent: usize,
     /// Tasks waiting in [`Shard::returned`].
     waiting: usize,
 }
 
+impl<T> Map<T> {
+    /// The number of values held, a taken slot counting with its value.
+    fn len(&self) -> usize {
+        self.slots.len() - self.taken_absent
+    }
+}
+
 enum Slot<T> {
     Held(T),
-    /// Taken out by an `update` or `upsert` in progress.
-    Taken,
+    /// Taken out by an `update` or `upsert` in progress, with the value it
+    /// held, shared with the taker so that `len`, `is_empty` and `values`
+    /// need not wait for it; `None` for an absent id an `upsert` took.
+    Taken(Option<Arc<T>>),
 }
 
 impl<T> Slot<T> {
     fn value(&self) -> &T {
         match self {
             Slot::Held(value) => value,
-            Slot::Taken => unreachable!("a taken slot seen by a task that waited for it"),
+            Slot::Taken(_) => unreachable!("a taken slot seen by a task that waited for it"),
         }
     }
 
     fn value_mut(&mut self) -> &mut T {
         match self {
             Slot::Held(value) => value,
-            Slot::Taken => unreachable!("a taken slot seen by a task that waited for it"),
+            Slot::Taken(_) => unreachable!("a taken slot seen by a task that waited for it"),
+        }
+    }
+
+    /// The value held, or held before an `update` or `upsert` took it.
+    fn last(&self) -> Option<&T> {
+        match self {
+            Slot::Held(value) => Some(value),
+            Slot::Taken(old) => old.as_deref(),
         }
     }
 }
@@ -102,7 +127,7 @@ impl<T> Shard<T> {
         Shard {
             map: Mutex::new(Map {
                 slots: BTreeMap::new(),
-                taken: 0,
+                taken_absent: 0,
                 waiting: 0,
             }),
             returned: Condvar::new(),
@@ -129,23 +154,20 @@ impl<T> Shard<T> {
 
     /// The map once `id`'s slot is not taken.
     fn lock_id(&self, id: i64) -> MutexGuard<'_, Map<T>> {
-        self.lock_when(|map| !matches!(map.slots.get(&id), Some(Slot::Taken)))
+        self.lock_when(|map| !matches!(map.slots.get(&id), Some(Slot::Taken(_))))
     }
 
-    /// The map once no slot is taken.
-    fn lock_whole(&self) -> MutexGuard<'_, Map<T>> {
-        self.lock_when(|map| map.taken == 0)
-    }
-
-    /// Fill the taken slot of `id` with `value`, or remove it for `None`,
-    /// and wake the waiting tasks.
-    fn put_back(&self, id: i64, value: Option<T>) {
+    /// Fill the taken slot of `id` with `value()`, or remove it for `None`,
+    /// and wake the waiting tasks. `value` runs once the slot's share of
+    /// the taken value is dropped, so the taker's share is the only one.
+    fn put_back(&self, id: i64, value: impl FnOnce() -> Option<T>) {
         let mut map = self.lock();
-        match value {
-            Some(value) => map.slots.insert(id, Slot::Held(value)),
-            None => map.slots.remove(&id),
-        };
-        map.taken -= 1;
+        if let Some(Slot::Taken(None)) = map.slots.remove(&id) {
+            map.taken_absent -= 1;
+        }
+        if let Some(value) = value() {
+            map.slots.insert(id, Slot::Held(value));
+        }
         if map.waiting > 0 {
             self.returned.notify_all();
         }
@@ -158,7 +180,7 @@ impl<T> Shard<T> {
 struct Taken<'a, T> {
     shard: &'a Shard<T>,
     id: i64,
-    old: Option<T>,
+    old: Option<Arc<T>>,
     done: bool,
 }
 
@@ -169,17 +191,25 @@ impl<'a, T> Taken<'a, T> {
     fn take(shard: &'a Shard<T>, id: i64, absent: bool) -> Option<Taken<'a, T>> {
         let mut map = shard.lock_id(id);
         let old = match map.slots.entry(id) {
-            Entry::Occupied(mut slot) => match std::mem::replace(slot.get_mut(), Slot::Taken) {
-                Slot::Held(old) => Some(old),
-                Slot::Taken => unreachable!("a taken slot seen by a task that waited for it"),
-            },
+            Entry::Occupied(mut slot) => {
+                match std::mem::replace(slot.get_mut(), Slot::Taken(None)) {
+                    Slot::Held(old) => {
+                        let old = Arc::new(old);
+                        *slot.get_mut() = Slot::Taken(Some(Arc::clone(&old)));
+                        Some(old)
+                    }
+                    Slot::Taken(_) => {
+                        unreachable!("a taken slot seen by a task that waited for it")
+                    }
+                }
+            }
             Entry::Vacant(slot) if absent => {
-                slot.insert(Slot::Taken);
+                slot.insert(Slot::Taken(None));
+                map.taken_absent += 1;
                 None
             }
             Entry::Vacant(_) => return None,
         };
-        map.taken += 1;
         Some(Taken {
             shard,
             id,
@@ -190,17 +220,28 @@ impl<'a, T> Taken<'a, T> {
 
     /// Store `new` in the slot; the old value, for the caller to drop with
     /// no lock held.
-    fn put_back(mut self, new: T) -> Option<T> {
+    fn put_back(mut self, new: T) -> Option<Arc<T>> {
         self.done = true;
-        self.shard.put_back(self.id, Some(new));
+        self.shard.put_back(self.id, || Some(new));
         self.old.take()
+    }
+
+    /// A copy of the old value, made with no lock held.
+    fn copy(&self) -> Option<T>
+    where
+        T: Clone,
+    {
+        self.old.as_deref().cloned()
     }
 }
 
 impl<T> Drop for Taken<'_, T> {
     fn drop(&mut self) {
         if !self.done {
-            self.shard.put_back(self.id, self.old.take());
+            let old = self.old.take();
+            self.shard.put_back(self.id, || {
+                old.map(|old| Arc::into_inner(old).expect("the taker holds the last share"))
+            });
         }
     }
 }
@@ -216,7 +257,7 @@ impl<'a, T> Values<'a, T> {
     fn new(maps: &'a [MutexGuard<'_, Map<T>>; SHARDS]) -> Values<'a, T> {
         Values {
             shards: std::array::from_fn(|i| maps[i].slots.iter().peekable()),
-            left: maps.iter().map(|map| map.slots.len()).sum(),
+            left: maps.iter().map(|map| map.len()).sum(),
         }
     }
 }
@@ -227,6 +268,7 @@ impl<'a, T> Iterator for Values<'a, T> {
     fn next(&mut self) -> Option<&'a T> {
         let mut least: Option<(usize, i64)> = None;
         for (i, shard) in self.shards.iter_mut().enumerate() {
+            while shard.next_if(|(_, slot)| slot.last().is_none()).is_some() {}
             if let Some(&(&id, _)) = shard.peek()
                 && least.is_none_or(|(_, least)| id < least)
             {
@@ -235,7 +277,7 @@ impl<'a, T> Iterator for Values<'a, T> {
         }
         let (i, _) = least?;
         self.left -= 1;
-        self.shards[i].next().map(|(_, slot)| slot.value())
+        self.shards[i].next().and_then(|(_, slot)| slot.last())
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -280,10 +322,10 @@ impl<T> Store<T> {
         &self.inner.shards[shard_of(id)]
     }
 
-    /// Every shard's map, locked in shard order once none of its slots is
-    /// taken.
+    /// Every shard's map, locked in shard order; taken slots are read with
+    /// the value they held.
     fn lock_every(&self) -> [MutexGuard<'_, Map<T>>; SHARDS] {
-        std::array::from_fn(|i| self.inner.shards[i].lock_whole())
+        std::array::from_fn(|i| self.inner.shards[i].lock())
     }
 
     /// 1, 2, 3, … per store; never the same id twice, from any task.
@@ -310,19 +352,19 @@ impl<T> Store<T> {
                 crate::released_memory();
                 Some(old)
             }
-            Some(Slot::Taken) => unreachable!("a taken slot seen by a task that waited for it"),
+            Some(Slot::Taken(_)) => unreachable!("a taken slot seen by a task that waited for it"),
             None => None,
         }
     }
 
     /// The number of values held.
     pub fn len(&self) -> usize {
-        self.lock_every().iter().map(|map| map.slots.len()).sum()
+        self.lock_every().iter().map(|map| map.len()).sum()
     }
 
     /// Whether the store holds no value.
     pub fn is_empty(&self) -> bool {
-        self.lock_every().iter().all(|map| map.slots.is_empty())
+        self.lock_every().iter().all(|map| map.len() == 0)
     }
 
     /// `read` of the value under `id`, borrowed under the lock, or `None`
@@ -450,7 +492,7 @@ impl<T: Clone> Store<T> {
         read: impl FnOnce(&T) -> R,
     ) -> Option<R> {
         let taken = Taken::take(self.shard(id), id, false)?;
-        let new = f(taken.old.clone().expect("an update takes a held value"));
+        let new = f(taken.copy().expect("an update takes a held value"));
         let read = read(&new);
         drop(taken.put_back(new));
         crate::released_memory();
@@ -478,7 +520,7 @@ impl<T: Clone> Store<T> {
         read: impl FnOnce(&T) -> R,
     ) -> R {
         let taken = Taken::take(self.shard(id), id, true).expect("an upsert takes an absent id");
-        let new = f(taken.old.clone());
+        let new = f(taken.copy());
         let read = read(&new);
         if taken.put_back(new).is_some() {
             crate::released_memory();
@@ -744,39 +786,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn update_and_upsert_copy_no_value_while_holding_the_lock() {
-        let store: Store<Probed> = Store::new();
-        store.put(1, Probed(1));
-        store.put(2, Probed(2));
-        let prober = store.clone();
-        PROBE.with(|probe| {
-            *probe.borrow_mut() = Some(Box::new(move || {
-                let store = prober.clone();
-                let (done, finished) = std::sync::mpsc::channel();
-                std::thread::spawn(move || {
-                    let _ = done.send(store.read(2, |v| v.0));
-                });
-                finished
-                    .recv_timeout(std::time::Duration::from_millis(500))
-                    .is_ok()
-            }));
-        });
-        assert_eq!(store.update(1, |v| Probed(v.0 + 1)), Some(Probed(2)));
-        assert_eq!(
-            store.upsert(1, |v| Probed(v.map_or(0, |v| v.0) * 10)),
-            Probed(20)
-        );
-        assert_eq!(store.upsert(3, |v| Probed(v.map_or(7, |v| v.0))), Probed(7));
-        PROBE.with(|probe| *probe.borrow_mut() = None);
-        let (passed, blocked) = PROBED.with(std::cell::Cell::get);
-        assert_eq!(
-            (passed, blocked),
-            (5, 0),
-            "clones made while another task could read the store, and made while it could not"
-        );
-    }
-
     /// The load of `docs/performance/store-lock/README.md`: 8 threads,
     /// 100,000 upserts each, over 1,000 ids.
     #[test]
@@ -855,6 +864,205 @@ mod tests {
         }
         assert!(store.is_empty());
         assert_eq!(store.values(), Vec::<i64>::new());
+    }
+
+    fn ids_in_shard(shard: usize, count: usize) -> Vec<i64> {
+        (1..)
+            .filter(|&id| super::shard_of(id) == shard)
+            .take(count)
+            .collect()
+    }
+
+    fn overlapping_updates(
+        store: &Store<i64>,
+        ids: &[i64],
+        until: std::time::Instant,
+    ) -> Vec<std::thread::JoinHandle<()>> {
+        ids.iter()
+            .enumerate()
+            .map(|(i, &id)| {
+                let store = store.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(10 * i as u64));
+                    while std::time::Instant::now() < until {
+                        store.update(id, |v| {
+                            std::thread::sleep(std::time::Duration::from_millis(20));
+                            v + 1
+                        });
+                    }
+                })
+            })
+            .collect()
+    }
+
+    #[test]
+    fn values_returns_while_two_updates_of_one_shard_overlap() {
+        let store: Store<i64> = Store::new();
+        let hot = ids_in_shard(super::SHARDS - 1, 2);
+        for &id in &hot {
+            store.put(id, 0);
+        }
+        let until = std::time::Instant::now() + std::time::Duration::from_millis(2000);
+        let updaters = overlapping_updates(&store, &hot, until);
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let started = std::time::Instant::now();
+        let values = store.values();
+        let waited = started.elapsed();
+        for updater in updaters {
+            updater.join().unwrap();
+        }
+        assert_eq!(values.len(), 2);
+        assert!(
+            waited < std::time::Duration::from_millis(500),
+            "values waited {waited:?}: it returned only when the updates of its shard stopped"
+        );
+    }
+
+    #[test]
+    fn a_pending_values_does_not_stop_a_read_of_an_idle_shard() {
+        let store: Store<i64> = Store::new();
+        let hot = ids_in_shard(super::SHARDS - 1, 2);
+        let idle = ids_in_shard(0, 1)[0];
+        for &id in hot.iter().chain([&idle]) {
+            store.put(id, 0);
+        }
+        let until = std::time::Instant::now() + std::time::Duration::from_millis(2000);
+        let updaters = overlapping_updates(&store, &hot, until);
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let lister = store.clone();
+        let values = std::thread::spawn(move || lister.values().len());
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let started = std::time::Instant::now();
+        let read = store.get(idle);
+        let waited = started.elapsed();
+        for updater in updaters {
+            updater.join().unwrap();
+        }
+        assert_eq!(values.join().unwrap(), 3);
+        assert_eq!(read, Some(0));
+        assert!(
+            waited < std::time::Duration::from_millis(300),
+            "a get of shard 0 waited {waited:?} behind a values call waiting for shard {}",
+            super::SHARDS - 1
+        );
+    }
+
+    #[test]
+    fn update_and_upsert_copy_no_value_while_holding_the_lock_of_their_own_shard() {
+        let [id, neighbour] = ids_in_shard(super::shard_of(1), 2)[..] else {
+            unreachable!()
+        };
+        assert_ne!(super::shard_of(1), super::shard_of(2));
+        let store: Store<Probed> = Store::new();
+        store.put(id, Probed(1));
+        store.put(neighbour, Probed(2));
+        let prober = store.clone();
+        PROBE.with(|probe| {
+            *probe.borrow_mut() = Some(Box::new(move || {
+                let store = prober.clone();
+                let (done, finished) = std::sync::mpsc::channel();
+                std::thread::spawn(move || {
+                    let _ = done.send(store.read(neighbour, |v| v.0));
+                });
+                finished
+                    .recv_timeout(std::time::Duration::from_millis(500))
+                    .is_ok()
+            }));
+        });
+        PROBED.with(|n| n.set((0, 0)));
+        assert_eq!(store.update(id, |v| Probed(v.0 + 1)), Some(Probed(2)));
+        assert_eq!(
+            store.upsert(id, |v| Probed(v.map_or(0, |v| v.0) * 10)),
+            Probed(20)
+        );
+        PROBE.with(|probe| *probe.borrow_mut() = None);
+        assert_eq!(
+            PROBED.with(std::cell::Cell::get),
+            (4, 0),
+            "clones made while another task could read the shard, and made while it could not"
+        );
+    }
+
+    #[test]
+    fn a_put_back_wakes_the_task_waiting_for_its_id_when_another_id_of_the_shard_has_a_waiter() {
+        let store: Store<i64> = Store::new();
+        let [first, second] = ids_in_shard(3, 2)[..] else {
+            unreachable!()
+        };
+        let take = |id: i64| {
+            let (taken, started) = std::sync::mpsc::channel();
+            let (go, wait) = std::sync::mpsc::channel::<()>();
+            let taker = store.clone();
+            let upsert = std::thread::spawn(move || {
+                taker.upsert(id, |v| {
+                    taken.send(()).unwrap();
+                    wait.recv().unwrap();
+                    v.unwrap_or(0) + 1
+                })
+            });
+            started.recv().unwrap();
+            (go, upsert)
+        };
+        let get = |id: i64| {
+            let (got, result) = std::sync::mpsc::channel();
+            let reader = store.clone();
+            std::thread::spawn(move || got.send(reader.get(id)));
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            result
+        };
+        let (go_second, second_upsert) = take(second);
+        let (go_first, first_upsert) = take(first);
+        let got_second = get(second);
+        let got_first = get(first);
+        go_first.send(()).unwrap();
+        assert_eq!(first_upsert.join().unwrap(), 1);
+        let woken = got_first.recv_timeout(std::time::Duration::from_millis(1000));
+        go_second.send(()).unwrap();
+        assert_eq!(second_upsert.join().unwrap(), 1);
+        let _ = got_second.recv_timeout(std::time::Duration::from_millis(1000));
+        assert_eq!(
+            woken,
+            Ok(Some(1)),
+            "the get of the put-back id stayed asleep while the other id was taken"
+        );
+    }
+
+    #[test]
+    fn values_len_and_is_empty_see_the_map_before_the_updates_in_progress() {
+        let store: Store<i64> = Store::new();
+        let [absent, held] = ids_in_shard(5, 2)[..] else {
+            unreachable!()
+        };
+        store.put(held, 7);
+        let hold = |id: i64| {
+            let (taken, started) = std::sync::mpsc::channel();
+            let (go, wait) = std::sync::mpsc::channel::<()>();
+            let taker = store.clone();
+            let upsert = std::thread::spawn(move || {
+                taker.upsert(id, |v| {
+                    taken.send(()).unwrap();
+                    wait.recv().unwrap();
+                    v.unwrap_or(0) + 1
+                })
+            });
+            started.recv().unwrap();
+            (go, upsert)
+        };
+        let (go_absent, absent_upsert) = hold(absent);
+        let (go_held, held_upsert) = hold(held);
+        let (seen, snapshot) = std::sync::mpsc::channel();
+        let reader = store.clone();
+        std::thread::spawn(move || seen.send((reader.values(), reader.len(), reader.is_empty())));
+        let during = snapshot.recv_timeout(std::time::Duration::from_millis(1000));
+        for go in [go_absent, go_held] {
+            go.send(()).unwrap();
+        }
+        assert_eq!(
+            (absent_upsert.join().unwrap(), held_upsert.join().unwrap()),
+            (1, 8)
+        );
+        assert_eq!(during, Ok((vec![7], 1, false)));
+        assert_eq!((store.values(), store.len()), (vec![1, 8], 2));
     }
 
     #[test]
