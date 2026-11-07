@@ -7,7 +7,22 @@ title: 'std.toml: TOML 1.0.0'
 relations:
 - decomposes: epic:data-formats
 - depends_on: story:data-value-model
-revision: 2
+scope:
+- confidence: inferred
+  path: AGENTS.md
+- confidence: inferred
+  path: crates/ignite-check/tests/layering.rs
+- confidence: inferred
+  path: crates/ignite/tests/main.rs
+- confidence: inferred
+  path: docs/layering.md
+- confidence: inferred
+  path: docs/slice.md
+- confidence: inferred
+  path: docs/toml
+- confidence: inferred
+  path: std/toml.ignite
+revision: 3
 ---
 # Story: data-toml
 

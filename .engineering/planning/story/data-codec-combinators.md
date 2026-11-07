@@ -7,7 +7,16 @@ title: std.data Codec<T> and combinators, std only
 relations:
 - decomposes: epic:data-formats
 - depends_on: story:data-value-model
-revision: 1
+scope:
+- confidence: inferred
+  path: AGENTS.md
+- confidence: inferred
+  path: crates/ignite/tests/main.rs
+- confidence: inferred
+  path: docs/slice.md
+- confidence: inferred
+  path: std/data.ignite
+revision: 2
 ---
 # Story: data-codec-combinators
 

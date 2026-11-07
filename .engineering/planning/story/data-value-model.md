@@ -6,7 +6,22 @@ status: draft
 title: std.data value model and the Json bridge
 relations:
 - decomposes: epic:data-formats
-revision: 2
+scope:
+- confidence: inferred
+  path: AGENTS.md
+- confidence: inferred
+  path: crates/ignite-check/tests/layering.rs
+- confidence: inferred
+  path: crates/ignite/tests/main.rs
+- confidence: inferred
+  path: docs/layering.md
+- confidence: inferred
+  path: docs/slice.md
+- confidence: inferred
+  path: std/data.ignite
+- confidence: inferred
+  path: std/json.ignite
+revision: 3
 ---
 # Story: data-value-model
 

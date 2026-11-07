@@ -10,7 +10,14 @@ relations:
 - depends_on: story:data-yaml
 - depends_on: story:data-toml
 - depends_on: story:data-codec-combinators
-revision: 2
+scope:
+- confidence: inferred
+  path: crates/ignite/tests/main.rs
+- confidence: inferred
+  path: docs/research/lsp-derived-codec.md
+- confidence: inferred
+  path: examples/todo/todo.ignite
+revision: 4
 ---
 # Story: data-adopters
 
@@ -20,7 +27,7 @@ The todo example uses derived codecs instead of its hand-written ones, one typed
 
 ## Acceptance
 
-- `examples/todo/todo.ignite`: `to_json` becomes `encode(codec(), TodoView { id, title, done })` with a new record `TodoView`, and `to_record` becomes `encode(codec(), todo)` over `Todo`'s fields; the hand decoder becomes `decode`. The inline tests that call `to_json` and `to_record` (from `examples/todo/todo.ignite:355`) are rewritten to call the new functions and expect the same text as before. The end-to-end todo suites under `crates/ignite/tests/` pass with no change to their files, so HTTP bodies and data files are byte-equal.
+- `examples/todo/todo.ignite`: `to_json` becomes `encode(codec(), TodoView { id, title, done })` and `to_record` becomes `encode(codec(), TodoFile { id, title, done, version, deleted })`, two new records with the fields each writes today (`Todo.deleted_by` is in neither: memory only); `from_record` becomes `decode` into `TodoFile`. The inline tests that call `to_json` and `to_record` (from `examples/todo/todo.ignite:355`) are rewritten to call the new functions and expect the same text as before. A new inline test writes one todo through the new `to_record` and compares the text with the literal the old `to_record` gave for the same todo, so the data file bytes are checked. The end-to-end todo suites under `crates/ignite/tests/` pass with no change to their files.
 - A fixture record with an optional field, a list, a `Map<Text, _>` and a payload enum round-trips through `std.json`, `std.yaml` and `std.toml` with `codec()` on the evaluator, Rust and LLVM.
 - A report `docs/research/lsp-derived-codec.md` counts, for the types in `src/lsp_types.ignite` of the ignite-lsp repository at tag `v0.2.0` (`9b31d37`), how many encode to the same `Json` through `codec()` with `Shape { keys = Camel }` plus renames, and lists the others with the reason.
 - `task gate` green.
