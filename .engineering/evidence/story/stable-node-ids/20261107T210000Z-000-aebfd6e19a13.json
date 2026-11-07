@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-07T21:00:00Z",
+  "actor": "human:timo",
+  "artifact": "story:stable-node-ids",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 0fcf6805 (PR 93), exit 0",
+    "reference": "https://github.com/ignite-lang/ignite/pull/93"
+  }
+}
