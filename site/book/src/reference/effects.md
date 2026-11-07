@@ -22,7 +22,8 @@ An effect is a dotted name. It has one of two roots.
 | `process.args` | `Endpoint.of(ref)` |
 | `net.listen` | `TcpListener.bind(address, port)` |
 | `net.connect` | `TcpStream.connect(address, port)` |
-| `clock.read` | `Clock.monotonic()` |
+| `clock.read` | `Clock.monotonic()`, `Clock.now()` |
+| `clock.sleep` | `Clock.sleep(duration)` |
 
 **Parameter effects** act on a value the function was given. The root is the parameter's
 name:
@@ -35,7 +36,8 @@ name:
 | `x.*` | every effect on `x` |
 
 `log(text)` writes a line to stderr and returns `Unit`, but it is not a tracked effect: it
-needs no `requires` entry and may be called where only pure code is allowed.
+needs no `requires` entry and may be called where only pure code is allowed. `Process.flush()`,
+which sends what the calling task wrote, is pure in the same way.
 
 ## Declaring effects with `requires`
 

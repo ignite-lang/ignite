@@ -131,6 +131,7 @@ pub const BUILTIN_TYPES: &[&str] = &[
     "Entropy",
     "Setting",
     "CommandLine",
+    "Environment",
 ];
 
 /// Static builtin calls written `Type.name(...)`.
@@ -159,6 +160,10 @@ pub const BUILTIN_STATICS: &[(&str, &str)] = &[
     ("Entropy", "new"),
     ("Setting", "of"),
     ("CommandLine", "of"),
+    ("Environment", "of"),
+    ("Clock", "sleep"),
+    ("Clock", "now"),
+    ("Process", "flush"),
 ];
 
 /// Owners of [`BUILTIN_STATICS`] that are records of the standard library,
@@ -298,6 +303,10 @@ const BUILTIN_STATIC_ARITIES: &[(&str, &str, usize)] = &[
     ("Entropy", "new", 0),
     ("Setting", "of", 2),
     ("CommandLine", "of", 1),
+    ("Environment", "of", 1),
+    ("Clock", "sleep", 1),
+    ("Clock", "now", 0),
+    ("Process", "flush", 0),
 ];
 
 /// Builtin statics that are effectful substrate operations.
@@ -312,6 +321,8 @@ const EFFECTFUL_STATICS: &[(&str, &str)] = &[
     ("Process", "exit"),
     ("Clock", "monotonic"),
     ("Endpoint", "of"),
+    ("Clock", "sleep"),
+    ("Clock", "now"),
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -402,6 +413,7 @@ pub const CAPABILITY_METHODS: &[(&str, &str, Option<&str>)] = &[
     ("Entropy", "random_bytes", Some("draw")),
     ("Setting", "value", Some("argument")),
     ("CommandLine", "arguments", Some("argument")),
+    ("Environment", "get", Some("variable")),
 ];
 
 /// The capability types of `docs/slice.md` 21.3: handles a system declares
@@ -413,6 +425,7 @@ pub const CAPABILITY_TYPES: &[&str] = &[
     "Entropy",
     "Setting",
     "CommandLine",
+    "Environment",
 ];
 
 /// What an in-place builtin changes (`docs/slice.md` 20.3.3).
@@ -494,6 +507,8 @@ pub fn static_effect(owner: &str, name: &str) -> Option<&'static str> {
         ("TcpListener", "bind") => Some("net.listen"),
         ("TcpStream", "connect") => Some("net.connect"),
         ("Clock", "monotonic") => Some("clock.read"),
+        ("Clock", "sleep") => Some("clock.sleep"),
+        ("Clock", "now") => Some("clock.read"),
         ("Endpoint", "of") => Some("process.args"),
         _ => None,
     }
@@ -2227,7 +2242,8 @@ impl Checker {
 
     /// Whether a value of declared type `ty` may hold a `TcpStream`,
     /// `PipeStream`, `TcpListener`, `Store`, `Stdin`, `Stdout`, `Stderr` or a capability
-    /// (`Directory`, `Launcher`, `ChildProcess`, `Entropy`, `Setting`, `CommandLine`),
+    /// (`Directory`, `Launcher`, `ChildProcess`, `Entropy`, `Setting`, `CommandLine`,
+    /// `Environment`),
     /// directly or in a
     /// field, payload, element or type argument. Unknown types may.
     fn can_hold_handle(&self, ty: &Type, depth: usize) -> bool {
@@ -2245,7 +2261,7 @@ impl Checker {
             }
             "TcpStream" | "PipeStream" | "TcpListener" | "Store" | "Stdin" | "Stdout"
             | "Stderr" | "Directory" | "Launcher" | "ChildProcess" | "Entropy" | "Setting"
-            | "CommandLine" => {
+            | "CommandLine" | "Environment" => {
                 return true;
             }
             "List" | "Option" | "Result" | "Tuple" => {
@@ -3247,8 +3263,8 @@ impl Checker {
     /// The result type of a test-only capability constructor
     /// (`docs/slice.md` 21.3, 21.8): `Directory.temporary()` is a
     /// `Result<Directory, IoError>`, `Launcher.new()`, `Entropy.new()`,
-    /// `Setting.of(..)` and `CommandLine.of(..)` (21.19) the capability
-    /// itself. `None` for any other static
+    /// `Setting.of(..)`, `CommandLine.of(..)` (21.19) and `Environment.of(..)`
+    /// (21.20) the capability itself. `None` for any other static
     /// or when a declaration shadows the owner.
     fn constructor_type(&self, owner: &str, name: &str, span: Span) -> Option<Type> {
         if self.type_params.contains(owner) || self.symbols.records.contains(owner) {
@@ -3269,7 +3285,8 @@ impl Checker {
             ("Launcher", "new")
             | ("Entropy", "new")
             | ("Setting", "of")
-            | ("CommandLine", "of") => Some(named(owner, Vec::new())),
+            | ("CommandLine", "of")
+            | ("Environment", "of") => Some(named(owner, Vec::new())),
             _ => None,
         }
     }

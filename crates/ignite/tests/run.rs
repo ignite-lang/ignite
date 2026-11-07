@@ -801,6 +801,38 @@ fn exhausted_restarts_give_up_and_stop_exits_1() {
     run.replay();
 }
 
+/// 21.20: under `--clock manual` a member's `Clock.sleep` and `Clock.now`
+/// are real. The member of `run_clock.ignite` sleeps 400 ms of real time,
+/// reads a wall clock after 2026 although the run's epoch is 2000, and
+/// exits 7; the supervisor journals that exit at the manual instant 0,
+/// so the journal holds no program time and replays.
+#[test]
+fn a_member_sleeps_and_reads_the_wall_clock_in_real_time_under_the_manual_clock() {
+    let mut run = Run::start(
+        &fixture("run_clock.ignite"),
+        "clock",
+        "llvm",
+        "manual-clock",
+        &["--clock", "manual", "--epoch", "2000-01-01T00:00:00Z"],
+    );
+    run.wait_event("Started");
+    let started = Instant::now();
+    let exited = run.wait_event("Exited");
+    let took = started.elapsed();
+    assert_eq!(
+        event_fields(&exited).get(1).and_then(Json::as_i64),
+        Some(7),
+        "{}",
+        exited.compact()
+    );
+    assert_eq!(at_ns(&exited), 0, "{}", exited.compact());
+    assert!(took >= Duration::from_millis(300), "{took:?}");
+    run.wait_note("restart attempt 1 delay 100 ms");
+    let code = run.stop();
+    assert_eq!(code, 0, "stderr:\n{}", run.stderr());
+    run.replay();
+}
+
 /// 16.0 items 3 and 5, manual clock from 30 s before the Europe/Berlin
 /// month boundary of 2026-10-31T23:00Z: one good attempt; SIGSTOP makes
 /// the next attempt hang, and it ends as a bad attempt either way: the

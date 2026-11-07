@@ -1,0 +1,9 @@
+fn store_name() -> Text {
+  let environment = Environment.of(["PUSHER_SESSION_STORE=redis"])
+  return "redis"
+}
+
+test "a test may build an environment" {
+  let environment = Environment.of(["PUSHER_SESSION_STORE=redis"])
+  assert environment.get("PUSHER_SESSION_STORE") == Some("redis")
+}

@@ -1,0 +1,55 @@
+package pusher_gaps
+
+// The pusher case study's reproducers G2, G3, G8 and G13
+// (`docs/research/pusher-gaps.md`) in the names of `docs/slice.md` 21.20
+// (environment, sleep, wall clock, flush): each executable is one
+// reproducer, its output one line on stderr.
+//   g2  log(environment.get("PUSHER_SESSION_STORE").debug())
+//   g3  Clock.sleep(300 ms), then logs the monotonic time it took in ms
+//   g8  log(Clock.now().to_ms().to_text())
+// G13 was a test; it is the test at the end.
+
+type EnvironmentApp {
+  environment: Environment
+  executable: Text
+}
+
+fn EnvironmentApp.main(self: EnvironmentApp) -> Result<Unit, IoError> {
+  log(self.environment.get("PUSHER_SESSION_STORE").debug())
+  Ok(())
+}
+
+type SleepApp {
+  executable: Text
+}
+
+fn SleepApp.main(self: SleepApp) -> Result<Unit, IoError> {
+  let started = Clock.monotonic()
+  Clock.sleep(300 ms)
+  log("slept {(Clock.monotonic() - started).to_ms()}")
+  Ok(())
+}
+
+type WallClockApp {
+  executable: Text
+}
+
+fn WallClockApp.main(self: WallClockApp) -> Result<Unit, IoError> {
+  log(Clock.now().to_ms().to_text())
+  Ok(())
+}
+
+system PusherGaps {
+  resource environment: Environment
+
+  component g2: EnvironmentApp {
+    environment = environment
+    executable = "g2"
+  }
+  component g3: SleepApp { executable = "g3" }
+  component g8: WallClockApp { executable = "g8" }
+}
+
+test "flush is callable" {
+  Process.flush()
+}

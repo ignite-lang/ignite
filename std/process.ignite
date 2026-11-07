@@ -1,14 +1,16 @@
 package std.process
 
-// Child processes, random bytes and launch arguments (`docs/slice.md` 21.5
-// to 21.7, 21.19). The module is also the substrate's capabilities `Launcher`,
-// `ChildProcess`, `Entropy`, `Setting` and `CommandLine`, handles a system declares as
+// Child processes, random bytes, launch arguments and environment variables
+// (`docs/slice.md` 21.5 to 21.7, 21.19, 21.20). The module is also the substrate's
+// capabilities `Launcher`, `ChildProcess`, `Entropy`, `Setting`, `CommandLine` and
+// `Environment`, handles a system declares as
 // resources (all but `ChildProcess`) and passes in values (21.3):
 //
 //   resource tools: Launcher { maximum_children = 16 }
 //   resource entropy: Entropy
 //   resource tool: Setting { flag = "--tool", default = "/bin/sh" }
 //   resource command_line: CommandLine
+//   resource environment: Environment
 //
 // Builtins of the substrate (effects on the receiver's roots, 21.3):
 //
@@ -20,12 +22,22 @@ package std.process
 //   entropy.random_bytes(count: Int) -> Result<Bytes, IoError>     effect draw; count in 0..=65536
 //   setting.value() -> Text                                        effect argument
 //   command_line.arguments() -> List<Text>                         effect argument; after the executable's name
+//   environment.get(name: Text) -> Option<Text>                    effect variable; as at launch, None when unset
+//
+// Statics of the substrate (21.20), the process's own and no capability:
+//
+//   Clock.sleep(duration: Duration) -> Unit                        effect clock.sleep; flushes the task's writes first
+//   Clock.now() -> Duration                                        effect clock.read; since 1970-01-01T00:00:00Z (std.time)
+//   Process.flush() -> Unit                                        pure, as log; sends what the task wrote
+//
+// Under `ignite run --clock manual` both clocks stay real: the manual clock
+// times the driver's reducers only (21.20).
 //
 // A `ChildProcess` that `start` returned has no roots, so the fn that
 // started it waits for and kills it without further `requires`. Tests make
 // capabilities with the test-only `Launcher.new()` (`maximum_children`
-// 16), `Entropy.new()`, `Setting.of(flag, value)` and
-// `CommandLine.of(arguments)`.
+// 16), `Entropy.new()`, `Setting.of(flag, value)`,
+// `CommandLine.of(arguments)` and `Environment.of(entries)` (`NAME=value`).
 
 // What `Launcher.execute` and `Launcher.start` run: `program` is a bare name
 // looked up in the child's `PATH` or an absolute path; `arguments` are
@@ -340,4 +352,62 @@ test "every count of the bound is drawn, a count past it refused" {
     Err(error) => error.message
   }
   assert wrapped == "random_bytes: count must be in 0..=65536"
+}
+
+// ---- environment tests ----
+
+test "an environment gives a variable's value, the last entry of a name winning" {
+  let environment = Environment.of(["PUSHER_SESSION_STORE=redis", "EMPTY=", "A=b=c", "PUSHER_SESSION_STORE=nats", "NO_EQUALS"])
+  assert environment.get("PUSHER_SESSION_STORE") == Some("nats")
+  assert environment.get("EMPTY") == Some("")
+  assert environment.get("A") == Some("b=c")
+  assert environment.get("NO_EQUALS") == None
+  assert environment.get("UNSET") == None
+  assert environment.get("") == None
+  assert Environment.of([]).get("PATH") == None
+}
+
+// ---- clock and flush tests ----
+
+test "a sleep waits at least its duration, one of zero or less not at all" {
+  let started = Clock.monotonic()
+  Clock.sleep(30 ms)
+  assert Clock.monotonic() - started >= 30 ms
+  let again = Clock.monotonic()
+  Clock.sleep(0 ms)
+  Clock.sleep(0 ms - 5 seconds)
+  assert Clock.monotonic() - again < 1 seconds
+}
+
+test "the wall clock is an instant of std.time after 2026-01-01" {
+  let now = Clock.now()
+  assert now > 1767225600 seconds
+  assert now.to_ms() > 1767225600000
+  assert now - Clock.now() < 1 seconds
+}
+
+test "a flush sends what the task wrote before its next write" {
+  let (a, b) = Pipe.pair()
+  a.write_all(b"x")?
+  Process.flush()
+  a.write_all(b"y")?
+  b.set_idle_timeout(5000)?
+  assert b.read(10)? == Data(b"xy")
+  assert b.received_batches() == 2
+  let (c, d) = Pipe.pair()
+  c.write_all(b"x")?
+  c.write_all(b"y")?
+  d.set_idle_timeout(5000)?
+  assert d.read(10)? == Data(b"xy")
+  assert d.received_batches() == 1
+}
+
+test "a sleep sends what the task wrote first" {
+  let (a, b) = Pipe.pair()
+  a.write_all(b"x")?
+  Clock.sleep(1 ms)
+  a.write_all(b"y")?
+  b.set_idle_timeout(5000)?
+  assert b.read(10)? == Data(b"xy")
+  assert b.received_batches() == 2
 }

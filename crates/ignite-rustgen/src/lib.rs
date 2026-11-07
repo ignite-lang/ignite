@@ -114,6 +114,7 @@ const SUBSTRATE_NAMES: &[&str] = &[
     "Entropy",
     "Setting",
     "CommandLine",
+    "Environment",
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
@@ -1583,7 +1584,7 @@ fn rust_type_in(ty: &Type, params: &BTreeSet<String>) -> String {
         "List" => generic("Vec"),
         "TcpListener" | "TcpStream" | "PipeStream" | "Stdin" | "Stdout" | "Stderr" | "Input"
         | "IoError" | "Exposure" | "Directory" | "Launcher" | "ChildProcess" | "Entropy"
-        | "Setting" | "CommandLine" => {
+        | "Setting" | "CommandLine" | "Environment" => {
             format!("::ignite_io::{}", ty.name.name)
         }
         "Store" => generic("::ignite_io::Store"),
@@ -4096,6 +4097,12 @@ impl<'a> Generator<'a> {
             ("CommandLine", "of", [arguments]) => {
                 format!("::ignite_io::CommandLine::of({arguments})")
             }
+            ("Environment", "of", [entries]) => {
+                format!("::ignite_io::Environment::of({entries})")
+            }
+            ("Clock", "sleep", [duration]) => format!("::ignite_io::clock::sleep({duration})"),
+            ("Clock", "now", []) => "::ignite_io::clock::now()".to_string(),
+            ("Process", "flush", []) => "::ignite_io::flush()".to_string(),
             ("Int", "to_text", [value]) => {
                 format!("{}.to_string()", wrap(&args[0], value.clone()))
             }
@@ -5987,7 +5994,7 @@ struct Resources {
     listeners: BTreeMap<String, Option<Listener>>,
     /// `Store` resources: name and Rust type, in declaration order.
     stores: Vec<(String, String)>,
-    /// `Directory`, `Launcher`, `Entropy`, `Setting` and `CommandLine` resources
+    /// `Directory`, `Launcher`, `Entropy`, `Setting`, `CommandLine` and `Environment` resources
     /// (`docs/slice.md` 21.4 to 21.7) with their literal properties.
     capabilities: BTreeMap<String, CapabilityResource>,
 }
@@ -6005,6 +6012,7 @@ enum CapabilityResource {
     },
     Entropy,
     CommandLine,
+    Environment,
     Setting {
         flag: String,
         default: Option<String>,
@@ -6013,10 +6021,13 @@ enum CapabilityResource {
 
 impl CapabilityResource {
     /// The creation order of the generated `main` (`docs/slice.md` 21.8):
-    /// settings and command lines, directories, launchers, entropy.
+    /// settings, command lines and environments (21.19, 21.20), directories,
+    /// launchers, entropy.
     fn order(&self) -> u8 {
         match self {
-            CapabilityResource::Setting { .. } | CapabilityResource::CommandLine => 0,
+            CapabilityResource::Setting { .. }
+            | CapabilityResource::CommandLine
+            | CapabilityResource::Environment => 0,
             CapabilityResource::Directory { .. } => 1,
             CapabilityResource::Launcher { .. } => 2,
             CapabilityResource::Entropy => 3,
@@ -6047,6 +6058,7 @@ impl CapabilityResource {
             }
             CapabilityResource::Entropy => "::ignite_io::Entropy::open()?".to_string(),
             CapabilityResource::CommandLine => "::ignite_io::CommandLine::launch()?".to_string(),
+            CapabilityResource::Environment => "::ignite_io::Environment::launch()?".to_string(),
         }
     }
 }
@@ -6082,6 +6094,7 @@ fn lower_capability(resource: &ResourceDecl) -> Option<CapabilityResource> {
         },
         "Entropy" => CapabilityResource::Entropy,
         "CommandLine" => CapabilityResource::CommandLine,
+        "Environment" => CapabilityResource::Environment,
         "Setting" => CapabilityResource::Setting {
             flag: text("flag").unwrap_or_default(),
             default: text("default"),
@@ -6116,7 +6129,7 @@ fn lower_resources(system: &SystemDecl, diagnostics: &mut Vec<Diagnostic>) -> Re
                 None => diagnostics.push(e020(
                     resource.kind.span,
                     format!(
-                        "unsupported resource kind `{other}`; expected `TcpListener`, `Store`, `Directory`, `Launcher`, `Entropy`, `Setting` or `CommandLine`"
+                        "unsupported resource kind `{other}`; expected `TcpListener`, `Store`, `Directory`, `Launcher`, `Entropy`, `Setting`, `CommandLine` or `Environment`"
                     ),
                 )),
             },
