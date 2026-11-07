@@ -142,7 +142,7 @@ Option A in detail:
   builtin of `std.net`. Everything else in section 3.3 is plain Ignite.
 - At each instantiation with a concrete `T`, `ignite-types` records `T`. After typing, one pass
   writes, for every recorded type and every type reachable from its fields, one `Codec` value
-  built from the section 3.3 combinators, shared by every instantiation. A program-declared
+  built from the section 3.3 combinators where they reach, and written directly for a record of more than eight fields (`record8` is the largest), shared by every instantiation. A program-declared
   `const` of type `Codec<T>` is used instead of writing one for `T`.
 - The written functions are ordinary typed items. Both backends and the evaluator compile them
   like any user function: no backend change and no runtime change. Once the mid-level IR
