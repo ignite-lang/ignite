@@ -26,11 +26,11 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use ignite_syntax::ast::{
-    BinaryOp, Block, Decl, Expr, ExprKind, Ident, Param, Pattern, PatternKind, Place as Target,
-    Program, Span, Stmt, StmtKind,
+    BinaryOp, Block, Decl, Expr, ExprKind, Ident, NodeId, Param, Pattern, PatternKind,
+    Place as Target, Program, Span, Stmt, StmtKind,
 };
 
-use crate::address::AddressMap;
+use crate::ids::NodeMap;
 use crate::{BraceKind, Builtin, Callee, Ty, TypedModules, TypedProgram};
 
 /// Rounds a loop may take before the walk gives up and assumes every
@@ -38,14 +38,14 @@ use crate::{BraceKind, Builtin, Callee, Ty, TypedModules, TypedProgram};
 /// such bound: they iterate to the least fixpoint (20.3.3).
 const ROUNDS: usize = 64;
 
-/// The result of [`analyse`]: the addresses of the expressions that move,
+/// The result of [`analyse`]: the ids of the expressions that move,
 /// the consumed parameters of every fn, associated fn and role of the
 /// module, and those of every closure literal inside a body, by the
-/// closure's address.
+/// closure's id.
 pub(crate) struct Moves {
-    pub moves: AddressMap<()>,
+    pub moves: NodeMap<()>,
     pub consumed: BTreeMap<String, Vec<bool>>,
-    pub closures: AddressMap<Vec<bool>>,
+    pub closures: NodeMap<Vec<bool>>,
 }
 
 /// Analyse every fn, role, test and closure body of `program`, typed as
@@ -90,8 +90,8 @@ pub(crate) fn analyse(program: &Program, types: &TypedProgram, modules: &TypedMo
             break;
         }
     }
-    let mut marks: AddressMap<bool> = AddressMap::default();
-    let mut closures: AddressMap<Vec<bool>> = AddressMap::default();
+    let mut marks: NodeMap<bool> = NodeMap::default();
+    let mut closures: NodeMap<Vec<bool>> = NodeMap::default();
     for (body, res) in bodies.iter().zip(&resolved) {
         let own = match (&body.key, body.closure) {
             (Some(key), _) => consumed[key].clone(),
@@ -216,12 +216,12 @@ fn bodies<'p>(program: &'p Program, types: &TypedProgram) -> Vec<Body<'p>> {
     out
 }
 
-fn key(expr: &Expr) -> usize {
-    expr as *const Expr as usize
+fn key(expr: &Expr) -> NodeId {
+    expr.id
 }
 
-fn target_key(target: &Target) -> usize {
-    target as *const Target as usize
+fn target_key(target: &Target) -> NodeId {
+    target.id
 }
 
 /// Whether a value of `ty` is an aggregate the analysis tracks: not a
@@ -272,17 +272,17 @@ struct Var {
 struct Resolved {
     vars: Vec<Var>,
     /// `Name` expressions that name a binding of the body.
-    refs: AddressMap<usize>,
+    refs: NodeMap<usize>,
     /// Bindings by the span of their name (the key of
     /// [`TypedProgram::binding_type`] and of a closure capture).
     decls: HashMap<Span, usize>,
-    /// Assignment places by address.
-    targets: AddressMap<usize>,
+    /// Assignment places by id.
+    targets: NodeMap<usize>,
     /// `Name` expressions that are the value of the block or `match` arm
     /// that binds the name (directly, or through the branches of an `if`
     /// or the arms of a `match` that is that value): the binding's scope
     /// ends there.
-    tails: AddressMap<()>,
+    tails: NodeMap<()>,
 }
 
 struct Resolver<'a> {
@@ -957,7 +957,7 @@ struct Walk<'a> {
     loops: Vec<(State, State)>,
     /// Parameters some path moves, from the settled round of every loop.
     any_move: BTreeSet<usize>,
-    marks: Option<AddressMap<bool>>,
+    marks: Option<NodeMap<bool>>,
 }
 
 /// An operand of an enclosing call that the call holds while a later
@@ -981,7 +981,7 @@ fn walk<'a>(
     consumed: &'a BTreeMap<String, Vec<bool>>,
     own: &'a [bool],
     record: bool,
-) -> (BTreeSet<usize>, AddressMap<bool>) {
+) -> (BTreeSet<usize>, NodeMap<bool>) {
     let mut w = Walk {
         types,
         modules,
@@ -993,7 +993,7 @@ fn walk<'a>(
         held: Vec::new(),
         loops: Vec::new(),
         any_move: BTreeSet::new(),
-        marks: record.then(AddressMap::default),
+        marks: record.then(NodeMap::default),
     };
     let entry = match body.root {
         Root::Block(block) => w.block(block, body.used, State::exit()),

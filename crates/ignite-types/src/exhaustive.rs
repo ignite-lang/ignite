@@ -14,13 +14,18 @@
 //! `Int` or `Byte` without a range) is covered only by a `_` or a binding:
 //! a literal or constant pattern covers some values, never all.
 
-use ignite_syntax::ast::{Pattern, PatternKind, Span};
+use ignite_syntax::ast::{FileId, NodeId, Pattern, PatternKind, Span};
 
 use crate::{QualName, Ty, Variants};
 
 static WILDCARD: Pattern = Pattern {
     kind: PatternKind::Wildcard,
-    span: Span { start: 0, end: 0 },
+    span: Span {
+        start: 0,
+        end: 0,
+        file: FileId::NONE,
+    },
+    id: NodeId::DETACHED,
 };
 
 /// The most uncovered values one diagnostic lists.
