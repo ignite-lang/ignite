@@ -991,6 +991,14 @@ fn a_task_that_cannot_start_closes_only_its_connection(target: Target) {
 /// Idle timeout of the `terminald` built by [`short_idle_terminald`].
 const SHORT_IDLE_MS: u64 = 300;
 
+/// The latest the silent session of
+/// `a_silent_session_is_closed_after_the_idle_timeout` may close, from its
+/// connect: 10 times [`SHORT_IDLE_MS`], so an idle timeout 10 times too
+/// long fails, independent of [`TIMEOUT`]. Alone the close comes 300.9 to
+/// 316.6 ms after the connect (5 runs on each of the 4 builds, load 10 to
+/// 13, 2026-11-07).
+const IDLE_CLOSE: Duration = Duration::from_millis(10 * SHORT_IDLE_MS);
+
 /// `terminald` built against a copy of `std/` whose Telnet idle timeout is
 /// [`SHORT_IDLE_MS`], once per build of the matrix.
 fn short_idle_terminald(target: Target) -> &'static Path {
@@ -1040,8 +1048,8 @@ fn a_silent_session_is_closed_after_the_idle_timeout(target: Target) {
     assert_eq!(shown(&read_until_closed(&mut silent)), "");
     let waited = started.elapsed();
     assert!(
-        waited >= Duration::from_millis(SHORT_IDLE_MS),
-        "closed after {waited:?}"
+        waited >= Duration::from_millis(SHORT_IDLE_MS) && waited < IDLE_CLOSE,
+        "closed after {waited:?}, the idle timeout is {SHORT_IDLE_MS} ms"
     );
     server.assert_alive();
     let mut active = server.raw();

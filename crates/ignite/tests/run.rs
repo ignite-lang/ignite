@@ -23,6 +23,11 @@ use crate::common;
 
 /// The longest a test waits for one record or an exit.
 const TIMEOUT: Duration = Duration::from_secs(15);
+/// How long a process the run started may stay in `/proc` after the run
+/// ended before `assert_no_process_left` reads its state (16.0 item 1).
+const GONE: Duration = Duration::from_secs(2);
+/// The read timeout of the `echo hello` client.
+const ECHO: Duration = Duration::from_secs(5);
 const DESIGN: &str = "examples/terminal/terminal.design.ignite";
 /// The prompt as `std.protocol.telnet` sends it: the text, then IAC GA.
 const PROMPT: &[u8] = b"terminal> \xff\xf9";
@@ -350,7 +355,7 @@ fn assert_no_process_left(pids: &[i64]) {
     for pid in pids {
         let proc_dir = PathBuf::from(format!("/proc/{pid}"));
         let started = Instant::now();
-        while proc_dir.exists() && started.elapsed() < Duration::from_secs(2) {
+        while proc_dir.exists() && started.elapsed() < GONE {
             let status = std::fs::read_to_string(proc_dir.join("status")).unwrap_or_default();
             if status
                 .lines()
@@ -474,9 +479,7 @@ fn standing_contract(record: &Json) -> &str {
 /// `hello` (16.0 item 1).
 fn echo_hello(port: i64) {
     let mut stream = TcpStream::connect(("127.0.0.1", port as u16)).expect("connect");
-    stream
-        .set_read_timeout(Some(Duration::from_secs(5)))
-        .expect("read timeout");
+    stream.set_read_timeout(Some(ECHO)).expect("read timeout");
     let mut seen = Vec::new();
     let mut buffer = [0u8; 256];
     while !seen.ends_with(PROMPT) {

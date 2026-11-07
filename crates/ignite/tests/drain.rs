@@ -12,7 +12,7 @@
 //! what remains (`disconnect_remaining`, `retired forced`). No test
 //! sleeps for a policy duration: the deadline is `advance`d (item 9).
 
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
 use std::net::TcpStream;
 use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
@@ -191,7 +191,8 @@ impl Session {
         let _ = self.stream.write_all(b"quit\r\n");
     }
 
-    /// The session's peer is gone: the next read ends or fails.
+    /// The session's peer is gone: the next read ends or the connection
+    /// is reset; a read that times out with the connection open fails.
     fn assert_gone(&mut self) {
         self.stream
             .set_read_timeout(Some(TIMEOUT))
@@ -199,7 +200,9 @@ impl Session {
         let mut buffer = [0u8; 64];
         loop {
             match self.stream.read(&mut buffer) {
-                Ok(0) | Err(_) => return,
+                Ok(0) => return,
+                Err(e) if e.kind() == ErrorKind::ConnectionReset => return,
+                Err(e) => panic!("the session is not gone ({e}); seen {:?}", text(&self.seen)),
                 Ok(_) => continue,
             }
         }
@@ -703,4 +706,22 @@ fn rollout_drains_the_old_process_and_starts_the_new_rust() {
 #[test]
 fn rollout_drains_the_old_process_and_starts_the_new_llvm() {
     rollout_drains_and_restarts("llvm");
+}
+
+/// Adversary (story `apply-test-deadlines`): `Session::assert_gone` must
+/// fail when the peer keeps the connection open and silent, the state a
+/// session descriptor leaked into the new generation leaves behind. Its
+/// read timeout returns `Err`, which the helper takes for "gone".
+#[test]
+#[should_panic]
+fn assert_gone_fails_while_the_peer_holds_the_connection() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    let port = listener.local_addr().expect("port").port();
+    let stream = TcpStream::connect(("127.0.0.1", port)).expect("connect");
+    let (_peer, _) = listener.accept().expect("accept");
+    let mut session = Session {
+        stream,
+        seen: Vec::new(),
+    };
+    session.assert_gone();
 }

@@ -26,9 +26,18 @@ use crate::common::apply::{BUILD, LIVE};
 
 /// Row 17's bound on the restart after a SIGKILL of the server, which the
 /// test asserts and keeps; alone it takes 0.44 to 0.53 s (2 runs,
-/// 2026-11-07). The other deadlines of this file are [`LIVE`] and
-/// [`BUILD`].
+/// 2026-11-07). The other deadlines of this file are [`LIVE`],
+/// [`BUILD`], [`STOP_ON_DROP`] and [`REMAINING`].
 const RESTART: Duration = Duration::from_secs(10);
+/// How long a `Host` dropped without `stop` gets to stop before it is
+/// killed; cleanup, no assertion.
+const STOP_ON_DROP: Duration = Duration::from_secs(10);
+/// The longest gap between two records `Run::stop` drains after the run
+/// exited. The drain ends when the reader closes the channel at the end of
+/// stdout, so the ceiling only bounds a reader that lags; at the former
+/// 1 s a reader delayed under load cut the records the standings
+/// assertions read.
+const REMAINING: Duration = Duration::from_secs(30);
 
 const FAULT: &str = "IGNITE_DEBUG_HOST_FAULT";
 const SERVER: &str = "TodoService.server";
@@ -315,7 +324,7 @@ impl Run {
         self.send("stop");
         let status = wait(&mut self.child, LIVE)
             .unwrap_or_else(|| panic!("ignite run did not stop\nstderr:\n{}", self.stderr()));
-        while let Ok(line) = self.lines.recv_timeout(Duration::from_secs(1)) {
+        while let Ok(line) = self.lines.recv_timeout(REMAINING) {
             self.seen
                 .push(Json::parse(&line).unwrap_or_else(|e| panic!("{line}: {e}")));
         }
@@ -603,7 +612,7 @@ impl Drop for Host {
                 let _ = writeln!(stdin, "stop");
                 let _ = stdin.flush();
             }
-            if wait(&mut child, Duration::from_secs(10)).is_none() {
+            if wait(&mut child, STOP_ON_DROP).is_none() {
                 let _ = child.kill();
                 let _ = child.wait();
             }
