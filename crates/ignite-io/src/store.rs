@@ -1214,4 +1214,28 @@ mod tests {
         assert_eq!(upsert.join().unwrap(), 1);
         assert_eq!((len, yielded), (1, 1));
     }
+
+    /// The module doc: an absent id that an upsert took is absent, so a
+    /// store whose only slot is such an id is empty. Red against an
+    /// `is_empty` that asks the shard's `slots` instead of `Map::len`.
+    #[test]
+    fn is_empty_while_an_upsert_holds_only_an_absent_id() {
+        let store: Store<i64> = Store::new();
+        let (taken, started) = std::sync::mpsc::channel();
+        let (go, wait) = std::sync::mpsc::channel::<()>();
+        let taker = store.clone();
+        let upsert = std::thread::spawn(move || {
+            taker.upsert(9, |v| {
+                taken.send(()).unwrap();
+                wait.recv().unwrap();
+                v.unwrap_or(0) + 1
+            })
+        });
+        started.recv().unwrap();
+        let during = (store.is_empty(), store.len(), store.values());
+        go.send(()).unwrap();
+        assert_eq!(upsert.join().unwrap(), 1);
+        assert_eq!(during, (true, 0, Vec::<i64>::new()));
+        assert!(!store.is_empty());
+    }
 }
