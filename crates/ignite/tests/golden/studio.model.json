@@ -19,6 +19,10 @@
               "fn": "studio.handle",
               "type": "Fn"
             },
+            "piece": {
+              "fn": "std.protocol.http.no_piece",
+              "type": "Fn"
+            },
             "state": {
               "fields": {
                 "entropy": {
@@ -229,10 +233,10 @@
     "Studio.server": "studio.ignite:79:3",
     "Studio.server.application": "studio.ignite:81:19",
     "Studio.server.executable": "studio.ignite:82:18",
-    "Studio.server.limits": "std/protocol/http.ignite:128:24",
+    "Studio.server.limits": "std/protocol/http.ignite:142:24",
     "Studio.server.listener": "studio.ignite:80:16",
-    "Studio.server.recovery": "std/protocol/http.ignite:129:23",
-    "Studio.server.rollout": "std/protocol/http.ignite:130:27",
+    "Studio.server.recovery": "std/protocol/http.ignite:143:23",
+    "Studio.server.rollout": "std/protocol/http.ignite:144:27",
     "Studio.tool": "studio.ignite:77:3",
     "Studio.tool.flag": "studio.ignite:77:35",
     "Studio.tools": "studio.ignite:75:3",
