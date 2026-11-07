@@ -1,0 +1,47 @@
+// ignite run
+package fixture_run_clock
+
+import std.deploy.{Deployment, nativeProcess}
+import std.control.{Machine, Supervisor}
+import std.policy.{Restart, fixed}
+
+// `docs/slice.md` 21.20: the manual clock of `ignite run --clock manual`
+// is the driver's and does not reach a program. The member sleeps 400 ms
+// of real time and reads the real wall clock: it exits 7 when both are
+// real, 4 when the sleep was shorter, 3 when the wall clock read before
+// 2026-01-01 (the run's `--epoch` is 2000-01-01). The supervisor journals
+// the exit at the manual instant 0, as time moves only on `advance`.
+
+type Sleeper {
+  name: Text
+}
+
+fn Sleeper.main(self: Sleeper) -> Result<Unit, IoError> {
+  let started = Clock.monotonic()
+  Clock.sleep(400 ms)
+  if Clock.monotonic() - started < 400 ms {
+    return Process.exit(4)
+  }
+  if Clock.now() < 1767225600 seconds {
+    return Process.exit(3)
+  }
+  Process.exit(7)
+}
+
+fn Sleeper.machine(self: Sleeper, id: Text) -> Machine = Machine.Supervise(Supervisor {
+  id = "{id}.supervisor"
+  member = id
+  restart = Restart { backoff = fixed(100 ms), maximum_attempts = 2, interval = 1 minutes }
+  has_listener = false
+})
+
+system S {
+  component sleeper: Sleeper { name = "s" }
+}
+
+assembly local: Deployment {
+  system = S
+  bindings = {
+    S.sleeper = nativeProcess(includes = [])
+  }
+}

@@ -140,6 +140,11 @@ fn capability_method(kind: Capability, name: &str) -> Option<Sig> {
         (Capability::CommandLine, "arguments") => {
             sig(CommandLineArguments, vec![], Ty::List(Box::new(Ty::Text)))
         }
+        (Capability::Environment, "get") => sig(
+            EnvironmentGet,
+            vec![Ty::Text],
+            Ty::Option(Box::new(Ty::Text)),
+        ),
         _ => None,
     }
 }
@@ -345,6 +350,18 @@ pub(crate) fn static_fn(owner: &str, name: &str) -> Option<Sig> {
             vec![Ty::List(Box::new(Ty::Text))],
             Ty::Capability(Capability::CommandLine),
         ),
+        ("Environment", "of") => sig(
+            EnvironmentOf,
+            vec![Ty::List(Box::new(Ty::Text))],
+            Ty::Capability(Capability::Environment),
+        ),
+        ("Clock", "sleep") => sig(
+            ClockSleep,
+            vec![Ty::Quantity(QuantityKind::Duration)],
+            Ty::Unit,
+        ),
+        ("Clock", "now") => sig(ClockNow, vec![], Ty::Quantity(QuantityKind::Duration)),
+        ("Process", "flush") => sig(ProcessFlush, vec![], Ty::Unit),
         _ => None,
     }
 }

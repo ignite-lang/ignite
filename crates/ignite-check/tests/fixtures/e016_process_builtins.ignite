@@ -1,0 +1,24 @@
+fn variable(environment: Environment) -> Option<Text> requires [] {
+  return environment.get("PUSHER_SESSION_STORE")
+}
+
+fn pause() -> Unit requires [] {
+  Clock.sleep(5 ms)
+}
+
+fn stamp() -> Duration requires [] {
+  return Clock.now()
+}
+
+fn sent() -> Unit requires [] {
+  Process.flush()
+}
+
+fn declared(environment: Environment) -> Option<Text> requires [environment.variable, clock.sleep, clock.read] {
+  Clock.sleep(Clock.now() - Clock.now())
+  return environment.get("PUSHER_SESSION_STORE")
+}
+
+fn other_op(environment: Environment) -> Option<Text> requires [environment.argument] {
+  return environment.get("HOME")
+}

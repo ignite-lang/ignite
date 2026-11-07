@@ -4189,6 +4189,23 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 let c = handle(self);
                 self.rt_out("command_line_arguments", &texts, &[format!("i64 {c}")])
             }
+            EnvironmentOf => {
+                self.m.declare("ignite_rt_environment_of", "i64", &[ptr()]);
+                let entries = self.read_arg(&args[0]);
+                Val::Scalar(
+                    self.f
+                        .val(format!("call i64 @ignite_rt_environment_of(ptr {entries})")),
+                )
+            }
+            EnvironmentGet => {
+                self.m
+                    .declare("ignite_rt_environment_get", "i8", &[i64(), ptr(), ptr()]);
+                let e = handle(self);
+                let name = self.read_arg(&args[0]);
+                self.option_from("environment_get", &Ty::Text, |payload| {
+                    format!("i64 {e}, ptr {name}, ptr {payload}")
+                })
+            }
             other => unreachable!("`{other:?}` is no capability builtin"),
         }
     }
@@ -4473,7 +4490,26 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             | SettingOf
             | SettingValue
             | CommandLineOf
-            | CommandLineArguments => self.capability(b, receiver, args),
+            | CommandLineArguments
+            | EnvironmentOf
+            | EnvironmentGet => self.capability(b, receiver, args),
+            ClockSleep => {
+                self.m
+                    .declare("ignite_rt_clock_sleep", "void", &["i64".to_string()]);
+                let duration = self.scalar_arg(&args[0]);
+                self.f
+                    .ins(format!("call void @ignite_rt_clock_sleep(i64 {duration})"));
+                Val::Unit
+            }
+            ClockNow => {
+                self.m.declare("ignite_rt_clock_now", "i64", &[]);
+                Val::Scalar(self.f.val("call i64 @ignite_rt_clock_now()"))
+            }
+            ProcessFlush => {
+                self.m.declare("ignite_rt_flush", "void", &[]);
+                self.f.ins("call void @ignite_rt_flush()");
+                Val::Unit
+            }
             ClockMonotonic => {
                 self.m.declare("ignite_rt_clock_monotonic", "i64", &[]);
                 Val::Scalar(self.f.val("call i64 @ignite_rt_clock_monotonic()"))
