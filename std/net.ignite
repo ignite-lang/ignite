@@ -67,10 +67,12 @@ test "a read the idle timeout ended is told from a close" {
 test "connect_within gives up within its timeout" {
   let started = Clock.monotonic()
   let unreachable = TcpStream.connect_within("10.255.255.1", 80, 200 ms)
-  assert Clock.monotonic() - started < 300 ms
+  let waited = Clock.monotonic() - started
+  assert waited >= 180 ms
+  assert waited < 300 ms
   assert match unreachable {
     Ok(_) => false
-    Err(_) => true
+    Err(e) => e.message == "connect 10.255.255.1:80: connection timed out"
   }
   let listener = TcpListener.bind("127.0.0.1", 0)?
   let client = TcpStream.connect_within("127.0.0.1", listener.local_port(), 1 seconds)?

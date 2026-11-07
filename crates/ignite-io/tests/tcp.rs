@@ -313,3 +313,45 @@ fn connect_within_bounds_the_wait() {
         format!("connect {LOCALHOST}:{port}: the timeout must be positive")
     );
 }
+
+/// Adversary (26.2, "With two tasks reading one stream, `last` is the read
+/// that ended last"): a second reader that queued behind a read the idle
+/// timeout ended, and then received data, ended last; `timed_out` must be
+/// false after it.
+#[test]
+fn adv_timed_out_is_the_read_that_ended_last() {
+    let (client, server) = pair();
+    client.set_idle_timeout(400).unwrap();
+    let first = client.clone();
+    let a = std::thread::spawn(move || first.read(1).unwrap());
+    std::thread::sleep(Duration::from_millis(100));
+    let second = client.clone();
+    let b = std::thread::spawn(move || second.read(1).unwrap());
+    assert_eq!(a.join().unwrap(), Input::Eof, "the first read timed out");
+    server.write_all(b"x".to_vec()).unwrap();
+    server.close().unwrap();
+    assert_eq!(b.join().unwrap(), Input::Data(b"x".to_vec()));
+    assert!(
+        !client.timed_out(),
+        "the read that ended last returned data, yet timed_out is still true"
+    );
+}
+
+/// Adversary (26.3): past the deadline the error is the operating system's
+/// `connection timed out`, and the wait is the timeout, not shorter: a
+/// `connect_within` that gave up at once would pass every existing case.
+#[test]
+fn adv_connect_within_waits_its_timeout_and_says_timed_out() {
+    let started = std::time::Instant::now();
+    let error = TcpStream::connect_within("10.255.255.1".to_string(), 80, 300_000_000)
+        .expect_err("no answer from 10.255.255.1");
+    let waited = started.elapsed();
+    assert_eq!(
+        error.message,
+        "connect 10.255.255.1:80: connection timed out"
+    );
+    assert!(
+        waited >= Duration::from_millis(280),
+        "gave up after {waited:?}"
+    );
+}

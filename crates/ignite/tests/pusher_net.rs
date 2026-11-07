@@ -128,18 +128,52 @@ fn a_timeout_is_told_from_a_close(target: Target) {
     wait_success(&mut child);
 }
 
-/// G5: a connect to an address that never answers returns an error within
-/// its timeout of 500 ms plus 100 ms.
+/// G5: a connect to an address that never answers waits its timeout of
+/// 500 ms, not less and at most 100 ms more, and says it timed out.
 fn connect_within_gives_up_in_time(target: Target) {
     let executable = build("connect", target);
     let (mut child, lines) = start(&executable);
-    let line = wait_line(&lines, "connect failed after ");
-    let ms: i64 = line
-        .strip_suffix(" ms")
-        .and_then(|ms| ms.parse().ok())
-        .unwrap_or_else(|| panic!("{line}"));
-    assert!(ms < 600, "{line}");
+    let line = wait_line(&lines, "connect after ");
+    let (ms, outcome) = line.split_once(" ms ").unwrap_or_else(|| panic!("{line}"));
+    let ms: i64 = ms.parse().unwrap_or_else(|_| panic!("{line}"));
+    assert!((480..600).contains(&ms), "{line}");
+    assert_eq!(
+        outcome,
+        "failed: connect 10.255.255.1:80: connection timed out"
+    );
     wait_success(&mut child);
+}
+
+/// The adversary's edges (`fixtures/pusher_net/adversary.ignite`) as
+/// inline tests on both targets: a dual-stack listener's IPv4 peer, the
+/// flag before any read and after a partial read, a negative and a huge
+/// timeout, a refused port, a name with several addresses, IPv6.
+fn adversary_edges_pass(target: Target) {
+    let name = match target {
+        Target::Rust => "rust",
+        Target::Llvm => "llvm",
+    };
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join("pusher_net")
+        .join(format!("adversary-{name}"));
+    let output = Command::new(env!("CARGO_BIN_EXE_ignite"))
+        .arg("test")
+        .arg(fixture("adversary"))
+        .args(["--target", name, "--out"])
+        .arg(&dir)
+        .arg("--target-dir")
+        .arg(dir.join("cargo"))
+        .arg("--runtime")
+        .arg(common::runner_archive())
+        .output()
+        .expect("run ignite test");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(0), "{stdout}\n{stderr}");
+    assert!(
+        stdout.contains("test result: ok. 8 passed; 0 failed;"),
+        "{stdout}"
+    );
 }
 
 macro_rules! on_both_targets {
@@ -157,4 +191,5 @@ on_both_targets!(
     peer_is_the_connecting_end,
     a_timeout_is_told_from_a_close,
     connect_within_gives_up_in_time,
+    adversary_edges_pass,
 );
