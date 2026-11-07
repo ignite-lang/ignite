@@ -26,6 +26,7 @@ mod failover;
 mod file_ids;
 mod file_ids_adversary;
 mod generics;
+mod http_chunked_adversary;
 mod ignite_test;
 mod llvm;
 mod llvm_build;

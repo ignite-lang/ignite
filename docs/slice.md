@@ -6545,8 +6545,14 @@ the chunk. The test "one chunk of the whole body limit is decoded holding at mos
 besides the body" decodes one chunk of `HttpLimits.body` bytes and checks that the input kept
 after it is at most one read; "adversary: a chunk read whole but for its LF keeps less than
 three reads of input and the line" builds the worst case (196,598 bytes) and checks the bound.
-The input buffer is moved, never copied, from chunk to chunk: "adversary: the body limit in
-one-byte chunks is decoded in under 8 s". Not bounded beyond that: the extension bytes over a body's chunks together, at most
+The input buffer is moved, never copied, from chunk to chunk:
+`http_chunked_adversary::the_chunk_decoder_copies_no_bytes_parameter_on_either_target` reads the
+generated Rust and LLVM of the todo example and refuses a borrowed or copied input buffer, and
+"adversary: the body limit in one-byte chunks is decoded in under 8 s" catches the copy's cost
+on LLVM (on Rust the copy costs 2.4 to 3.8 s, under the bound). The bound counts values in use,
+not memory: on LLVM a loop's arena is released only once it has grown past four times what it
+keeps (`ignite.arena_due`), and Rust's `extend_from_slice` of a chunk slice builds a temporary
+of less than two reads. Not bounded beyond that: the extension bytes over a body's chunks together, at most
 `HttpLimits.head` per chunk, so a 1 MiB body in 1-byte chunks may carry up to 8 GiB of
 extensions under the default limits, each read still under `idle_timeout`. `todo.rs`'s
 `header_framing` case that expected 501 for a chunked POST now creates a todo from a chunked
