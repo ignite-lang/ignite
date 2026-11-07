@@ -16,6 +16,8 @@ scope:
 - confidence: inferred
   path: crates/ignite/tests/quality.rs
 - confidence: inferred
+  path: crates/ignite/tests/site.rs
+- confidence: inferred
   path: docs/quality.md
 - confidence: inferred
   path: quality/baseline.json
@@ -24,8 +26,12 @@ scope:
 - confidence: inferred
   path: quality/trend.md
 - confidence: inferred
+  path: site/book/src/SUMMARY.md
+- confidence: inferred
+  path: site/book/src/quality.md
+- confidence: inferred
   path: tools/ignite-perf/src
-revision: 6
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-07T19:49:39Z", actor: "human:timo", revision: 3}
 - {from: "proposed", to: "active", at: "2026-11-07T19:49:39Z", actor: "human:timo", revision: 4}
@@ -46,6 +52,7 @@ Ignite has a written set of quality metrics with today's values as the bar, and 
 ## Acceptance
 
 - `docs/quality.md` holds the metric list (from the file above), each row with its kind, instrument and bar; `AGENTS.md` names it.
+- The website documents them (Timo, 2026-11-07): a book page under `site/book/src/` (linked from `SUMMARY.md`) lists every metric per area and target with its bar, its current value and its trend, generated or checked from `quality/` so it cannot drift (a `site::` test), and passes `site::` and `task ux`.
 - A differential runner runs a corpus of programs (at least every `crates/ignite/tests/fixtures/**/*.ignite` with a `main` or tests the evaluator can run) on Rust, LLVM and the evaluator and compares exit, stdout and failure text; it reports per program and fails on a difference. Programs the evaluator cannot run are listed with the reason, and their count is a ratchet.
 - `quality/baseline.json` holds every ratchet row that has an instrument after this story (at least: differential corpus size and differences, diagnostic codes without a fixture, `#[ignore]` count, inline tests per target, conformance claims and gaps, rule implementation count for pattern matching and builtins, `unsafe` sites in `ignite-rt` and `ignite-io`), and a test in `crates/ignite` fails on a worse value, an untaken improvement or a missing value, as the UI ratchet does.
 - Every metric that differs by target is recorded per target: `rust`, `llvm` and, where it runs, `eval` (Timo, 2026-11-07: "per kind, the Rust variant and the pure LLVM variant").
