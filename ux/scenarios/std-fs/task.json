@@ -1,0 +1,11 @@
+{
+  "id": "std-fs",
+  "goal": "Find the reference page of std.fs.",
+  "start": "index.html",
+  "truth": { "path": "book/reference/std/fs.html", "text": "read_file" },
+  "route": [
+    { "click": { "role": "link", "name": "^Reference$" } },
+    { "click": { "role": "link", "name": "^Standard library$" } },
+    { "click": { "role": "link", "name": "^std\\.fs$" } }
+  ]
+}

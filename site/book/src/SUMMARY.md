@@ -39,6 +39,7 @@
   - [std.text](reference/std/text.md)
   - [std.option and std.result](reference/std/option-result.md)
   - [std.json](reference/std/json.md)
+  - [std.fs](reference/std/fs.md)
   - [std.net](reference/std/net.md)
   - [std.console](reference/std/console.md)
   - [std.protocol.telnet](reference/std/telnet.md)

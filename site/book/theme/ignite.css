@@ -176,6 +176,24 @@ body {
     font-weight: 650;
 }
 
+/* Every link of the sidebar and the menu bar is a target of at least
+   24 by 24 px (WCAG 2.2, 2.5.8; ux/findings/UXF-003.md). */
+
+.chapter .chapter-link-wrapper > a {
+    display: block;
+    min-height: 24px;
+    box-sizing: border-box;
+    padding-block: 1px;
+}
+
+.menu-bar .right-buttons a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    min-height: 24px;
+}
+
 /* Headings. */
 
 .content h1,

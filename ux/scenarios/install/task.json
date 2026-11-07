@@ -1,0 +1,9 @@
+{
+  "id": "install",
+  "goal": "Find the command that installs Ignite.",
+  "start": "index.html",
+  "truth": { "path": "book/guide/install.html", "text": "cargo install --locked --path crates/ignite" },
+  "route": [
+    { "click": { "role": "link", "name": "^Guide$" } }
+  ]
+}

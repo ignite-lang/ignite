@@ -355,3 +355,5 @@ fn pages_name_the_installed_command_not_a_build_path() {
         found.join("\n")
     );
 }
+
+mod ux;

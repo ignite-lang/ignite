@@ -56,6 +56,7 @@ tasks:
     cmds:
       - task: check
       - task: test
+      - task: ux
 
   compile:
     desc: Compile the terminal example with ignite --target rust into target/ignite/terminal
@@ -126,10 +127,45 @@ tasks:
   site:
     desc: Build the website into target/site, the landing page at the root and the book under book/
     cmds:
+      - rm -rf target/site
       - mkdir -p target/site
       - cp -R site/index.html site/assets target/site/
       - mdbook build site/book --dest-dir target/site/book
       - cp target/site/book/404.html target/site/404.html
+
+  ux-deps:
+    desc: Link ux/node_modules to the shared install for ux/package-lock.json, from the npm cache without network when it is missing
+    vars:
+      CACHE:
+        sh: echo "${XDG_CACHE_HOME:-$HOME/.cache}/ignite/ux/$(sha256sum ux/package-lock.json | cut -c1-16)"
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+    status:
+      - test -e ux/node_modules/.bin/playwright && { test ! -L ux/node_modules || { test "$(readlink ux/node_modules)" = "{{.CACHE}}/node_modules" && test -e {{.CACHE}}/ready; }; }
+    cmds:
+      - silent: true
+        cmd: 'test -e {{.CACHE}}/ready -a -e {{.CACHE}}/node_modules/.bin/playwright || (rm -f {{.CACHE}}/ready && mkdir -p {{.CACHE}} && cp ux/package.json ux/package-lock.json {{.CACHE}}/ && cd {{.CACHE}} && npm ci --offline --no-audit --no-fund --loglevel=error > npm-ci.log 2>&1 && touch ready) || (rm -rf {{.CACHE}}/node_modules; echo "ux: Playwright and axe-core for this lockfile are neither in {{.CACHE}} nor in the npm cache; run once, with network: task ux-install"; exit 1)'
+      - ln -sfn {{.CACHE}}/node_modules ux/node_modules
+
+  ux-install:
+    desc: Once per lockfile, with network, install the pinned Playwright and axe-core into the shared cache that task ux links
+    vars:
+      CACHE:
+        sh: echo "${XDG_CACHE_HOME:-$HOME/.cache}/ignite/ux/$(sha256sum ux/package-lock.json | cut -c1-16)"
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+    cmds:
+      - mkdir -p {{.CACHE}} && cp ux/package.json ux/package-lock.json {{.CACHE}}/
+      - cd {{.CACHE}} && npm ci --no-audit --no-fund && touch ready
+      - task: ux-deps
+
+  ux:
+    desc: Build the website, run the layout contract (L2) and the screen-only user (L3) on it, then the ratchet against ux/baseline.json
+    cmds:
+      - task: site
+      - task: ux-deps
+      - cd ux && npx --no-install playwright test
+      - cargo test -q -p ignite --test main -- --ignored --exact site::ux::ratchet || exit 1
 
   site-serve:
     desc: Build the website and serve target/site on http://127.0.0.1:8765/

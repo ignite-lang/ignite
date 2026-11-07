@@ -1,0 +1,9 @@
+{
+  "id": "faq-platforms",
+  "goal": "Find out which platforms Ignite runs on (the FAQ answers it).",
+  "start": "index.html",
+  "truth": { "path": "book/faq.html", "text": "Which platforms does it run on?" },
+  "route": [
+    { "click": { "role": "link", "name": "^FAQ$" } }
+  ]
+}

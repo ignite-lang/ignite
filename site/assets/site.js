@@ -100,6 +100,7 @@
       other.tabIndex = on ? 0 : -1;
       document.getElementById(other.getAttribute("aria-controls")).hidden = !on;
     });
+    focusable();
   }
   tabs.forEach(function (tab, index) {
     tab.addEventListener("click", function () { select(tab); });
@@ -113,6 +114,21 @@
       }
     });
   });
+
+  // A code block wider than its box scrolls; keyboard users reach it with
+  // Tab and scroll it with the arrow keys (ux/findings/UXF-001.md).
+  function focusable() {
+    document.querySelectorAll("pre, pre > code, table").forEach(function (box) {
+      var scrolls = /(auto|scroll)/.test(getComputedStyle(box).overflowX);
+      if (scrolls && box.scrollWidth > box.clientWidth) {
+        box.tabIndex = 0;
+      } else if (box.getAttribute("tabindex") === "0") {
+        box.removeAttribute("tabindex");
+      }
+    });
+  }
+  focusable();
+  window.addEventListener("resize", focusable);
 
   document.querySelectorAll("pre.copyable").forEach(function (pre) {
     var button = document.createElement("button");

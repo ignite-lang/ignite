@@ -21,6 +21,7 @@
   --border: #2d2135;
   --link: #ffa24c;
   --accent: #ff7a1a;
+  --accent-text: #ff7a1a;
   --glow: rgba(255, 106, 0, 0.32);
   --shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.9);
   --inline-code-bg: #241a2b;
@@ -38,6 +39,7 @@
   --border: #efdccb;
   --link: #b23c00;
   --accent: #e85d00;
+  --accent-text: #b23c00;
   --glow: rgba(255, 122, 26, 0.22);
   --shadow: 0 24px 60px -34px rgba(120, 40, 0, 0.35);
   --inline-code-bg: #f8e8da;
@@ -474,6 +476,8 @@ h1, h2, h3 {
 
 .tabs {
   display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
   gap: 0.25rem;
   overflow-x: auto;
   scrollbar-width: none;
@@ -565,7 +569,7 @@ section {
   font-weight: 800;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 section h2 {
@@ -871,7 +875,7 @@ section h2 {
   padding-top: 0.9rem;
   font-size: 0.8rem;
   font-weight: 700;
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .speed-table .n {
@@ -947,6 +951,7 @@ section h2 {
   list-style: none;
   counter-reset: qs;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1.1rem;
   max-width: 52rem;
 }
@@ -982,6 +987,7 @@ section h2 {
 }
 
 .steps p {
+  overflow-wrap: anywhere;
   margin: 0.7rem 0 0;
   color: var(--muted);
   font-size: 0.95rem;
@@ -1126,7 +1132,7 @@ section h2 {
 }
 
 .tag-next {
-  color: var(--accent);
+  color: var(--accent-text);
   border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
 }
 

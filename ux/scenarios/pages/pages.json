@@ -1,0 +1,5 @@
+{
+  "about": "Every page of the built site: the landing page and every book page, read from the HTML files under target/site at the start of each run. Excluded: the 404 pages, mdBook's print page (every chapter on one page) and its no-script table of contents.",
+  "root": "target/site",
+  "exclude": ["404.html", "book/404.html", "book/print.html", "book/toc.html"]
+}
