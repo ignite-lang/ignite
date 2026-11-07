@@ -159,6 +159,10 @@ pub struct Known {
     pub consumer: String,
     pub story: String,
     pub what: String,
+    /// A difference that depends on the machine's load (a timing assertion):
+    /// the unit may differ or agree in a run; it is not counted in 1.1 and
+    /// not refused as gone.
+    pub intermittent: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -292,6 +296,10 @@ pub fn read_baseline(json: &Json) -> Result<Baseline, String> {
             consumer: text(fields, "consumer", unit)?,
             story: text(fields, "story", unit)?,
             what: text(fields, "what", unit)?,
+            intermittent: fields
+                .get("intermittent")
+                .and_then(Json::as_bool)
+                .unwrap_or(false),
         };
         if !known.story.starts_with("story:") {
             return Err(format!(
@@ -364,14 +372,15 @@ pub fn write_baseline(baseline: &Baseline) -> String {
         .known_differences
         .iter()
         .map(|(unit, k)| {
-            (
-                unit.clone(),
-                Json::Object(BTreeMap::from([
-                    ("consumer".to_string(), s(&k.consumer)),
-                    ("story".to_string(), s(&k.story)),
-                    ("what".to_string(), s(&k.what)),
-                ])),
-            )
+            let mut fields = BTreeMap::from([
+                ("consumer".to_string(), s(&k.consumer)),
+                ("story".to_string(), s(&k.story)),
+                ("what".to_string(), s(&k.what)),
+            ]);
+            if k.intermittent {
+                fields.insert("intermittent".to_string(), Json::Bool(true));
+            }
+            (unit.clone(), Json::Object(fields))
         })
         .collect();
     let cannot = baseline
@@ -637,19 +646,49 @@ fn read_measured(path: &Path) -> Vec<Value> {
 /// it now runs), and its metrics.
 pub fn check_differential(outcome: &differential::Outcome) -> Vec<String> {
     let mut baseline = load_baseline();
+    let metrics = steady(&baseline, outcome);
     if blessing() {
         baseline.eval_cannot_run = outcome.eval_cannot.clone();
-        baseline = bless(&baseline, "differential", &outcome.metrics);
+        baseline = bless(&baseline, "differential", &metrics);
         save_baseline(&baseline);
     }
     let mut errors = differential_lists(&baseline, outcome);
     errors.extend(check(
         &baseline,
         "differential",
-        &outcome.metrics,
+        &metrics,
         main_baseline().as_ref(),
     ));
     errors
+}
+
+/// The runner's metrics with 1.1 counting only the steady differences: a
+/// known difference marked `intermittent` (a timing assertion under the
+/// machine's load) is left out whether or not it showed in this run.
+fn steady(baseline: &Baseline, outcome: &differential::Outcome) -> Measured {
+    let count = |consumer: &str, differs: &BTreeMap<String, String>| {
+        differs
+            .keys()
+            .filter(|unit| {
+                !baseline
+                    .known_differences
+                    .get(*unit)
+                    .is_some_and(|k| k.consumer == consumer && k.intermittent)
+            })
+            .count() as i64
+    };
+    outcome
+        .metrics
+        .iter()
+        .map(|(id, target, value)| {
+            let value = match (id.as_str(), target.as_str()) {
+                ("1.1", "llvm") => count("llvm", &outcome.llvm_differs),
+                ("1.1", "eval") => count("eval", &outcome.eval_differs),
+                _ => *value,
+            };
+            (id.clone(), target.clone(), value)
+        })
+        .collect()
 }
 
 fn differential_lists(baseline: &Baseline, outcome: &differential::Outcome) -> Vec<String> {
@@ -673,7 +712,7 @@ fn differential_lists(baseline: &Baseline, outcome: &differential::Outcome) -> V
             "eval" => outcome.eval_differs.contains_key(unit),
             _ => false,
         };
-        if !differs {
+        if !differs && !known.intermittent {
             errors.push(format!(
                 "{unit}: the known difference of {} ({}) is gone; remove it from quality/baseline.json",
                 known.consumer, known.story
@@ -1879,6 +1918,7 @@ fn the_differential_lists_refuse_unknown_gone_and_unlisted_units() {
             consumer: "eval".to_string(),
             story: "story:x".to_string(),
             what: "w".to_string(),
+            intermittent: false,
         },
     );
     baseline
@@ -1923,6 +1963,43 @@ fn the_differential_lists_refuse_unknown_gone_and_unlisted_units() {
         runs_now.len() == 1 && runs_now[0].contains("evaluator runs it"),
         "{runs_now:?}"
     );
+
+    baseline.known_differences.insert(
+        "load.ignite::timed".to_string(),
+        Known {
+            consumer: "llvm".to_string(),
+            story: "story:y".to_string(),
+            what: "a timing assertion".to_string(),
+            intermittent: true,
+        },
+    );
+    let mut flaky = outcome(&["a.ignite::t", "x::steady"], &["b.ignite::u"]);
+    flaky.metrics = vec![
+        ("1.1".to_string(), "llvm".to_string(), 1),
+        ("1.1".to_string(), "eval".to_string(), 2),
+        ("1.2".to_string(), "llvm".to_string(), 7),
+    ];
+    let quiet = flaky.clone();
+    flaky
+        .llvm_differs
+        .insert("load.ignite::timed".to_string(), "exit".to_string());
+    let shown = differential_lists(&baseline, &flaky);
+    assert!(
+        shown.iter().all(|e| !e.contains("load.ignite::timed")),
+        "{shown:?}"
+    );
+    let gone = differential_lists(&baseline, &quiet);
+    assert!(
+        gone.iter().all(|e| !e.contains("load.ignite::timed")),
+        "an intermittent difference absent from a run was refused as gone: {gone:?}"
+    );
+    let expected: Measured = vec![
+        ("1.1".to_string(), "llvm".to_string(), 0),
+        ("1.1".to_string(), "eval".to_string(), 2),
+        ("1.2".to_string(), "llvm".to_string(), 7),
+    ];
+    assert_eq!(steady(&baseline, &flaky), expected);
+    assert_eq!(steady(&baseline, &quiet), expected);
 }
 
 #[test]

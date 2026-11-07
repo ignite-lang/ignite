@@ -217,6 +217,12 @@
       "story": "story:eval-try-report",
       "what": "both targets report `? failed at basics.ignite:55:25: None`; the evaluator reports column 11 (differential::the_evaluator_reports_a_failed_try_as_the_targets_do)"
     },
+    "crates/ignite/tests/fixtures/tests/store_load.ignite::values under updates of one shard: every id, values grow, no long wait, no lost write": {
+      "consumer": "llvm",
+      "intermittent": true,
+      "story": "story:llvm-store-update-off-lock",
+      "what": "under load the LLVM target fails the 500 ms wait assertion and Rust passes, also when re-run alone (task gate at load 35 to 39, 2026-11-07); passes at lower load (ignite_test::store_values_under_updates_of_one_shard_on_both_targets, ignored for the same story)"
+    },
     "std/text.ignite::a later bound that changes the bytes leaves the slice before it as it was": {
       "consumer": "eval",
       "story": "story:eval-receiver-order",

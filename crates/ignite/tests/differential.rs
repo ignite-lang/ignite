@@ -644,6 +644,7 @@ fn eval_agrees(evaluated: &Evaluated, rust: &Run) -> bool {
 }
 
 /// The result of one run of the corpus.
+#[derive(Clone)]
 pub struct Outcome {
     /// Unit key to its JSON record.
     pub units: BTreeMap<String, Json>,

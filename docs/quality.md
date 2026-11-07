@@ -57,7 +57,9 @@ when it passes where Rust exits 0 or fails with the report Rust prints where Rus
 
 A difference fails the gate unless `known_differences` lists it with its consumer and the story
 that fixes it (and a failing test committed `#[ignore = "story:<id>: …"]`); a listed difference
-that is gone fails too. The units the evaluator cannot run are listed in `eval_cannot_run` with
+that is gone fails too. A difference that depends on the machine's load (a timing assertion) is
+listed with `"intermittent": true`: it may show or not in a run, is not refused as gone and is
+not counted in 1.1, which counts the steady differences. The units the evaluator cannot run are listed in `eval_cannot_run` with
 the reason, exactly; their count is metric 1.6. Every outcome of a run is in
 `target/quality/differential.json`.
 
