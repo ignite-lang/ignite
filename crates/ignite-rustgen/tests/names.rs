@@ -460,3 +460,91 @@ test \"bindings spelled like protocols\" {\n\
 }\n";
     adversary_tests_pass("names-protocol-bindings", source, &common::golden_std(), 1);
 }
+
+/// Adversary (story:rustgen-reserved-names, second pass): the generator
+/// writes the builtin enums as the bare prelude names `Option<..>` and
+/// `Result<..>` (`builtin_enum_path` takes the `::std` path only for a
+/// type parameter of that name). E004 refuses a type, enum or protocol
+/// named `Option` or `Result`, but not a sibling module: `pub mod Option`
+/// at the program crate's root is in the type namespace there, and the
+/// bin's `use <crate>::*` brings it in too, so every bare `Option<i64>`
+/// names the module. `ignite build --target llvm` builds the same program.
+fn sibling_module_named_like_a_builtin_enum_builds(module: &str) {
+    let lower = module.to_lowercase();
+    let main = format!(
+        "package examples.sib{lower}\n\
+\n\
+import examples.sib{lower}.{module}.{{code}}\n\
+\n\
+fn half(n: Int) -> Option<Int> = if n > 0 {{ Some(n / 2) }} else {{ None }}\n\
+\n\
+fn checked(n: Int) -> Result<Int, Text> = if n > 0 {{ Ok(n) }} else {{ Err(\"negative\") }}\n\
+\n\
+fn both() -> Int = match (half(code()), checked(code())) {{\n\
+  (Some(h), Ok(c)) => h + c\n\
+  _ => 0\n\
+}}\n"
+    );
+    let other = format!("package examples.sib{lower}.{module}\n\nfn code() -> Int = 7\n");
+    let dir = adversary_sources(
+        &format!("adv-names-sibling-{lower}-src"),
+        &[
+            (format!("sib{lower}.ignite").as_str(), main.as_str()),
+            (format!("{module}.ignite").as_str(), other.as_str()),
+        ],
+    );
+    let (program, std) = common::lower_typed(
+        &dir.join(format!("sib{lower}.ignite")),
+        &common::golden_std(),
+        &adversary_substrate(),
+    );
+    cargo_build(&program, &std, &format!("adv-names-sibling-{lower}"));
+}
+
+#[test]
+fn adversary_a_sibling_module_named_option_builds() {
+    sibling_module_named_like_a_builtin_enum_builds("Option");
+}
+
+#[test]
+fn adversary_a_sibling_module_named_result_builds() {
+    sibling_module_named_like_a_builtin_enum_builds("Result");
+}
+
+/// Adversary (story:rustgen-reserved-names, second pass): `main` binds a
+/// resource through `resource_variable`, which writes `port`,
+/// `application`, `stream`, `error` and names ending in `_endpoint` with a
+/// trailing `_`, while `ident` leaves a program fn `port_` as `port_`. The
+/// listener `port` is then the local `port_`, and a component property
+/// that calls the program's `port_()` calls the `TcpListener` (E0618).
+/// The names differ in Ignite, so `ignite check` accepts the program and
+/// `ignite build --target llvm` builds it.
+#[test]
+fn adversary_a_listener_named_port_beside_a_fn_named_port_underscore_builds() {
+    let source = "package examples.portfn\n\
+\n\
+fn port_() -> Int = 7\n\
+\n\
+type Srv {\n\
+  listener: TcpListener\n\
+  n: Int\n\
+  executable: Text\n\
+}\n\
+\n\
+fn Srv.main(self: Srv) -> Result<Unit, IoError> {\n\
+  log(\"{self.listener.local_port()} {self.n}\")\n\
+  Ok(Unit)\n\
+}\n\
+\n\
+system PortFn {\n\
+  resource port: TcpListener { address = \"127.0.0.1\", port = 0 }\n\
+  component srv: Srv { listener = port, n = port_(), executable = \"srv\" }\n\
+}\n";
+    let dir = adversary_sources("adv-names-portfn-src", &[("portfn.ignite", source)]);
+    let (program, std) = common::lower_typed(
+        &dir.join("portfn.ignite"),
+        &common::golden_std(),
+        &adversary_substrate(),
+    );
+    cargo_build(&program, &std, "adv-names-portfn");
+}
