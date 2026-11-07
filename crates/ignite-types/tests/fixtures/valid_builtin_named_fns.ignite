@@ -1,0 +1,20 @@
+fn set(o: List<(Text, Text)>, key: Text, raw: Text) -> List<(Text, Text)> {
+  var out = o
+  out.push((key, raw))
+  out
+}
+
+fn len(items: List<Int>) -> Int = 0
+
+fn read<S: ByteStream>(stream: S, maximum: Int) -> Int = maximum
+
+fn received_batches(end: PipeStream) -> Int = 0
+
+fn plain() -> List<(Text, Text)> = set([], "a", "1")
+
+fn builtin(items: List<Int>) -> Int {
+  var out = items
+  out.set(0, 5)
+  out[1] = 6
+  return out.len() + len(out)
+}

@@ -3114,7 +3114,8 @@ impl Checker {
     /// The declared type of the value of `expr`, where it follows from
     /// declarations alone (`docs/slice.md` section 11.7): a local with a
     /// known type, a field of a value of known record type, `copy()`, `e?`,
-    /// `l[i]` and the results of `Store` methods. `None` otherwise.
+    /// `l[i]`, the results of `Store` methods and a literal of a record
+    /// without type parameters. `None` otherwise.
     fn static_type(&self, expr: &Expr) -> Option<Type> {
         let named = |name: &str, args: Vec<Type>| {
             let ident = Ident {
@@ -3181,6 +3182,13 @@ impl Checker {
                 tuple.args.get(*index)?.clone()
             }
             ExprKind::Closure(closure) => return Some(self.closure_type(expr, closure)),
+            ExprKind::Record { name: record, .. }
+                if self.symbols.records.contains(&record.name)
+                    && !self.symbols.type_params.contains_key(&record.name)
+                    && !self.type_params.contains(&record.name) =>
+            {
+                Type::named(record.clone(), Vec::new(), record.span)
+            }
             ExprKind::Index { receiver, .. } => {
                 let list = self.static_type(receiver)?;
                 match list.name.name.as_str() {
