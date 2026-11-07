@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-07T00:00:00Z",
+  "actor": "human:timo",
+  "artifact": "story:store-adversary-findings",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on wave/4 dc820070: 1396 cargo passed, 0 failed, 18 ignored; 309 inline per target; 279 Playwright",
+    "reference": "https://github.com/ignite-lang/ignite/pull/96"
+  }
+}
