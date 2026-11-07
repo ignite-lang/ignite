@@ -47,6 +47,7 @@ the IO substrate (Rust) that compiled programs link.
 | `examples/todo/health.ignite` | `examples.todo.health`, the HTTP probe kind `HttpHealth` declared outside `std/` (22.6): its outcome type `HealthCheck { answered, status, latency }`, the predicate `healthy` a contract names in `good`, `encode_check` (one line per attempt in the model encoding); the request is written by hand (D13) |
 | `github.com/ignite-lang/ignite-lsp` | the language server `ignite-lsp` (written in Ignite), its generated LSP types, their generator `ignite-lsp-types`, the vendored LSP `metaModel.json` and its end-to-end test live there since story:lsp-repository; it builds against a released `ignite` |
 | `examples/typed/` | `sample.ignite`, a small program, and `reader.ignite`, which reads the typed document of `sample.ignite` (`ignite emit --typed-json`, `docs/slice.md` 24) with `std.json` in an inline test; the document is checked in as the raw string `SAMPLE`, kept equal to the compiler's output by `typed_json::the_reader_fixture_is_the_sample_document` (`IGNITE_BLESS=1` rewrites it) |
+| `dist/toolchain/` | `Dockerfile` of the toolchain image `ghcr.io/ignite-lang/ignite-toolchain:<version>`, one per release (AGENTS.md § Releases) |
 | `docs/rfc/` | the RFCXML sources of RFC 9110 and RFC 9112, vendored unmodified for `ignite rfc check` in the gate; `README.md` states their licence (`docs/slice.md` 19.9, D5) |
 | `docs/vision.md` | direction: target architecture, sequencing of waves and slices, contradictions between documents, open and taken decisions |
 | `PLAN.md` | the roadmap in outline: slices, waves, state; reasoning stays in `docs/vision.md` |
@@ -84,6 +85,7 @@ Rules of the layout:
 | format and lint | `task check` |
 | merge gate | `task gate` |
 | pack the release binary | `task dist` (release `ignite` for Linux x86_64, glibc linked statically, with `std/` as `target/dist/ignite-VERSION-x86_64-linux.tar.gz`: `bin/ignite`, `share/ignite/std`; a driver at `<prefix>/bin/ignite` reads `<prefix>/share/ignite/std` first when it exists) |
+| build and check the toolchain image | `task image VERSION=X.Y.Z` (`dist/toolchain/Dockerfile`, tags `ghcr.io/ignite-lang/ignite-toolchain:X.Y.Z` from release vX.Y.Z's archive and the tag's source), `task image-check VERSION=X.Y.Z [IMAGE=REF]` (`image::` in `crates/ignite/tests/image.rs`, ignored elsewhere: needs docker) |
 | compile the example | `task compile` (`ignite build --target rust`; writes `target/ignite/terminal/`, prints `built …/terminald` and `built …/tn`) |
 | run the compiled server | `task server` |
 | run the compiled client | `task client` |
@@ -481,6 +483,15 @@ without waiting for a person.
   with `share/ignite/std`, the standard library a driver at `<prefix>/bin/ignite` reads first;
   the Rust target still needs a clone (`--substrate`). The VS Code extension of `ignite-lsp`
   downloads it.
+- Image (story `toolchain-image`), after the archive is uploaded: `task image VERSION=X.Y.Z`
+  (`dist/toolchain/Dockerfile`: `rust:1.98-trixie`, clang, lld, the release archive checked
+  against its `.sha256`, the tag's source in `/usr/local/src/ignite` with its crates fetched,
+  `CARGO_NET_OFFLINE=true`), `task image-check VERSION=X.Y.Z` (the todo example built on both
+  targets with no network, each `todod` answers), `docker push
+  ghcr.io/ignite-lang/ignite-toolchain:X.Y.Z` (login: `gh auth token | docker login ghcr.io -u
+  <gh user> --password-stdin`; the package is public), then add the reference with its
+  `@sha256:` digest (`docker inspect --format '{{index .RepoDigests 0}}'`) to the release notes
+  with `gh release edit`.
 - Announce: send the release's tag, URL and notes to the `brain` session (Claude session named
   `brain`, `SendMessage`), asking it to forward the announcement to AI autodev. Send the path of
   a ready file, not the text: Slack mrkdwn (`<url|label>` links), every line at most 200
