@@ -656,8 +656,9 @@ struct Checker {
     /// open outside it. A binding of a scope below that is a capture.
     closure_scopes: Vec<usize>,
     /// The span of the closure literal that is the argument of the
-    /// `List.map` call being walked, set until that closure is entered.
-    map_argument: Option<Span>,
+    /// `List.map` call being walked, set until that closure is entered,
+    /// with the list's element type where `static_type` knows it.
+    map_argument: Option<(Span, Option<Type>)>,
 }
 
 fn is_static_owner(name: &str) -> bool {
@@ -2605,9 +2606,13 @@ impl Checker {
             && self
                 .static_type(receiver)
                 .is_none_or(|ty| matches!(ty.name.name.as_str(), "List" | "Bytes"));
+        let element = self
+            .static_type(receiver)
+            .filter(|ty| ty.name.name == "List")
+            .and_then(|ty| ty.args.first().map(|t| self.expand(t)));
         for arg in args {
             if list_map && matches!(arg.kind, ExprKind::Closure(_)) {
-                self.map_argument = Some(arg.span);
+                self.map_argument = Some((arg.span, element.clone()));
             }
             self.expr(arg);
             if list_map {
@@ -2729,9 +2734,15 @@ impl Checker {
     ///
     /// The argument of a `List.map` call inside a fn with `requires` is
     /// the exception: the type checker checks its effects against that
-    /// `requires` (E017, `docs/slice.md` 20.4.3).
+    /// `requires` (E017, `docs/slice.md` 20.4.3). Its one parameter, when
+    /// unannotated, has the list's element type, as in the type checker,
+    /// so a `Store` method on it is an effect on the parameter.
     fn closure(&mut self, expr: &Expr, closure: &Closure) {
-        let map_argument = self.map_argument.take() == Some(expr.span);
+        let (map_argument, element) = match self.map_argument.take() {
+            Some((span, element)) if span == expr.span => (true, element),
+            _ => (false, None),
+        };
+        let element = element.filter(|_| closure.params.len() == 1);
         let ctx = std::mem::replace(&mut self.ctx, Ctx::Inferred);
         let inferred = std::mem::take(&mut self.inferred);
         let performs = std::mem::replace(&mut self.performs, false);
@@ -2751,7 +2762,10 @@ impl Checker {
             if let Some(ty) = &param.ty {
                 self.check_type(ty);
             }
-            let declared = param.ty.as_ref().map(|t| self.expand(t));
+            let declared = match &param.ty {
+                Some(t) => Some(self.expand(t)),
+                None => element.clone(),
+            };
             let roots = BTreeSet::from([param.name.name.clone()]);
             self.bind_typed(&param.name, Binding::Param, roots, declared);
         }
@@ -2790,13 +2804,24 @@ impl Checker {
     /// fn: `map` calls it, so a fn without `requires` performs its effects
     /// that are not on its own parameter (an effect on the parameter is
     /// E017, the type checker's, as is an uncovered one in a fn with
-    /// `requires`; `docs/slice.md` 20.4.3).
+    /// `requires`; `docs/slice.md` 20.4.3). A local names an effectful fn
+    /// when its declared type is an effectful fn type (a parameter, a
+    /// let-bound closure), as for a call of it.
     fn map_fn_value(&mut self, arg: &Expr) {
         let ExprKind::Name(name) = &arg.kind else {
             return;
         };
-        if !matches!(self.ctx, Ctx::Inferred)
-            || self.lookup(&name.name).is_some()
+        if !matches!(self.ctx, Ctx::Inferred) {
+            return;
+        }
+        if let Some(local) = self.local(&name.name) {
+            let ty = local.ty.as_ref().map(|ty| self.expand(ty));
+            if let Some(needed) = ty.and_then(|ty| self.fn_value_effects(&ty, &[])) {
+                self.effectful_op(needed, arg.span, &name.name);
+            }
+            return;
+        }
+        if self.lookup(&name.name).is_some()
             || !self
                 .symbols
                 .functions

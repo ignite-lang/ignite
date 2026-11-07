@@ -1,7 +1,8 @@
 // `List.map` takes a fn with effects when the caller has them: a closure
-// over a captured store and a named effectful fn, inside a fn whose
-// `requires` covers their effects, inside a fn whose effects are inferred,
-// and nested in another closure.
+// over a captured store, a named effectful fn and a local holding either
+// (a let-bound closure, a parameter of effectful fn type), inside a fn
+// whose `requires` covers their effects, inside a fn whose effects are
+// inferred, and nested in another closure.
 fn names(store: Store<Text>, ids: List<Int>) -> List<Option<Text>> requires [store.read] {
   return ids.map(|id| store.get(id))
 }
@@ -39,8 +40,30 @@ fn annotated(store: Store<Text>, ids: List<Int>) -> List<Option<Text>> requires 
   return found
 }
 
+fn local(store: Store<Text>, ids: List<Int>) -> List<Option<Text>> requires [store.read] {
+  let g = |id: Int| store.get(id)
+  return ids.map(g)
+}
+
+fn local_annotated(store: Store<Text>, ids: List<Int>) -> List<Option<Text>> requires [store.read] {
+  let g = |id: Int| store.get(id)
+  let found: List<Option<Text>> = ids.map(g)
+  return found
+}
+
+fn local_inferred(store: Store<Text>, ids: List<Int>) -> List<Option<Text>> {
+  let g = |id: Int| store.get(id)
+  return ids.map(g)
+}
+
+fn apply(g: fn(id: Int) -> Int requires [clock.read], ids: List<Int>) -> List<Int> requires [clock.read] = ids.map(g)
+
+fn apply_inferred(g: fn(id: Int) -> Int requires [clock.read], ids: List<Int>) -> List<Int> = ids.map(g)
+
 test "an effectful closure maps in a test" {
   let store: Store<Text> = Store.new()
   let found = [1].map(|id| store.get(id))
   let stamped = [2].map(stamp)
+  let g = |id: Int| store.get(id)
+  let local = [1].map(g)
 }

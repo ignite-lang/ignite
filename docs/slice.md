@@ -6972,30 +6972,38 @@ fn type, works today (p04b, row 8). Wave C does not need more: actors P1 says "N
 `List.map` is the exception since story `effectful-list-map` (20.13 row 1): its fn may have the
 effects of the code that calls `map`. The rule, as landed:
 
-- `xs.map(f)`, `xs` a `List` (`Bytes` included), `f` a closure literal or the name of a
-  module-level fn (not a local binding), may be effectful where `map` is called inside a fn
-  body, a role body, a test body or a closure body. In a constant, a field default or a
-  property `map` takes a pure fn, as before.
+- `xs.map(f)`, `xs` a `List` (`Bytes` included), `f` a closure literal, the name of a
+  module-level fn or, since story `effectful-fn-in-local`, a local of effectful fn type (a
+  let-bound closure, a parameter `g: fn(id: Int) -> T requires [..]`), may be effectful where
+  `map` is called inside a fn body, a role body, a test body or a closure body. In a constant, a
+  field default or a property `map` takes a pure fn, as before.
 - An effect of `f` on its own parameter (the element: `|s| s.get(1)` over a `List<Store<T>>`,
   or a named fn with `requires [s.read]` on its parameter `s`) is E017 everywhere: ``effectful
   closure passed to `map` needs `s.read` on its parameter `s`, the list's element; `map` passes
-  on only its caller's effects``.
+  on only its caller's effects`` (for a local, ``effectful fn value `g` passed to …``). The
+  one parameter of a closure literal passed to `map` has the list's element type in
+  `ignite-check` too when it is unannotated and the receiver's type is declared, so
+  `stores.map(|s| s.get(1))` is this E017 and no E042.
 - Every other effect (on a capture's roots, or ambient) must be covered by the `requires` of the
   fn or role that calls `map`, when it has one; otherwise E017 at `f`: ``effectful closure passed
   to `map` needs `store.read`, which the `requires` of `names` does not cover`` (for a named fn,
   ``effectful function `stamp` passed to …``). The type checker reports it; `ignite-check` does
-  not charge such a closure where it is created, so no E016 comes beside the E017.
+  not charge such a closure where it is created, so no E016 comes beside the E017. A let-bound
+  closure is charged where it is created (13.3), as before: under a `requires` that lacks its
+  effects that is one E016 at the literal, and the type checker, which does not run then, adds
+  no E017 at `map` (fixture `e016_list_map_local_fn`, `ignite-check`).
 - In a fn without `requires`, `ignite-check` adds those effects to the inferred set: a closure's
-  where it is created (13.3), a named fn's at the `map` call, so a caller whose `requires` lacks
-  them is E016 (fixture `e016_list_map_fn_value`). A test body and a closure body accept them as
-  they accept any effect.
+  where it is created (13.3), a named fn's and a local's (those of its declared fn type not on
+  its parameters) at the `map` call, so a caller whose `requires` lacks them is E016 (fixtures
+  `e016_list_map_fn_value`, `e016_list_map_local_fn`). A test body and a closure body accept
+  them as they accept any effect.
 - Both backends and the evaluator lower an effectful fn value as a pure one; nothing changes
   there. Tests: fixtures `valid_effectful_list_map` and `e017_effectful_list_map`
-  (`ignite-types`), the inline test "List.map takes a fn with the effects of its caller" in
-  `std/text.ignite` (both targets).
-- Not covered: a local binding of effectful fn type passed to `map` (E040, `map` takes a pure fn
-  there), and `Option.map`, `and_then`, `Result.map`, `map_err` and every other higher-order fn,
-  which take a pure fn (E017).
+  (`ignite-types`), the inline tests "List.map takes a fn with the effects of its caller" and
+  "List.map takes a local holding an effectful fn" in `std/text.ignite` (both targets).
+- Not covered: `Option.map`, `and_then`, `Result.map`, `map_err` and every other higher-order
+  fn, which take a pure fn (E017); an unannotated closure parameter over a receiver whose type
+  `ignite-check` cannot tell (a call's result) that calls a `Store` method stays E042.
 
 ### 20.5 Rest patterns (D6)
 

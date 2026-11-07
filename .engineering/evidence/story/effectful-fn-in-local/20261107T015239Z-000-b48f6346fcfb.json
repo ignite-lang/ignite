@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-07T01:52:39Z",
+  "actor": "human:timo",
+  "artifact": "story:effectful-fn-in-local",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 85309b98: 1307 passed, 0 failed, 11 ignored; 296 inline per target; EXIT=0 (E016 fixture lives in ignite-check, not ignite-types)",
+    "reference": "https://github.com/ignite-lang/ignite/pull/83"
+  }
+}

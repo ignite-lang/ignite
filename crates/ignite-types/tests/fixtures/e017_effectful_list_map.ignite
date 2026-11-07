@@ -22,3 +22,12 @@ fn first(s: Store<Text>) -> Option<Text> requires [s.read] = s.get(1)
 fn firsts_named(stores: List<Store<Text>>) -> List<Option<Text>> requires [stores.read] = stores.map(first)
 
 fn firsts_inferred(stores: List<Store<Text>>) -> List<Option<Text>> = stores.map(|s: Store<Text>| s.get(1))
+
+fn firsts_unannotated(stores: List<Store<Text>>) -> List<Option<Text>> requires [stores.read] = stores.map(|s| s.get(1))
+
+fn apply(g: fn(id: Int) -> Int requires [clock.read], ids: List<Int>) -> List<Int> requires [stdout.write] = ids.map(g)
+
+fn firsts_local(stores: List<Store<Text>>) -> List<Option<Text>> requires [stores.read] {
+  let g = |s: Store<Text>| s.get(1)
+  return stores.map(g)
+}
