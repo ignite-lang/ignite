@@ -284,6 +284,15 @@ pub fn builtin_std_modules() -> BTreeMap<&'static str, std::collections::BTreeSe
         .collect()
 }
 
+/// Whether `receiver.name(..)` on a receiver of type `receiver` resolves to
+/// a builtin method (`docs/slice.md` 4.8 rule 1), as the type checker and
+/// both backends resolve it; a `ByteStream`-bounded parameter is not
+/// covered. `ignite_check::builtin_applies` must agree by type name
+/// (`builtin_tables::` in this crate's tests).
+pub fn is_builtin_method(receiver: &Ty, name: &str) -> bool {
+    builtins::method(receiver, name).is_some() || (matches!(receiver, Ty::List(_)) && name == "map")
+}
+
 /// The three quantity types of `docs/slice.md` section 14.1.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum QuantityKind {

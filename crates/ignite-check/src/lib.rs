@@ -4168,13 +4168,22 @@ fn is_stream_method(method: &str) -> bool {
 /// type `ty` (`docs/slice.md` sections 6, 7 and 13): the table of
 /// `ignite-types`' builtins by type name. A type parameter or a fn type
 /// takes none but `copy`; [`Checker::builtin_method`] gives a
-/// `ByteStream`-bounded one the stream methods.
-fn builtin_applies(ty: &Type, method: &str) -> bool {
+/// `ByteStream`-bounded one the stream methods. Public so that
+/// `ignite-types` can compare it with its own table
+/// (`builtins::tests::checker_table_matches_the_type_checker`).
+pub fn builtin_applies(ty: &Type, method: &str) -> bool {
     let name = ty.name.name.as_str();
     if method == "copy" || method == "debug" {
         return true;
     }
     let text = ty.args.first().is_some_and(|a| a.name.name == "Text");
+    let byte = ty.args.first().is_some_and(|a| a.name.name == "Byte");
+    if CAPABILITY_METHODS
+        .iter()
+        .any(|(owner, m, _)| *owner == name && *m == method)
+    {
+        return true;
+    }
     match name {
         "Text" => matches!(
             method,
@@ -4218,7 +4227,9 @@ fn builtin_applies(ty: &Type, method: &str) -> bool {
                 method,
                 "len" | "is_empty" | "at" | "slice" | "push" | "set" | "append" | "clear" | "map"
             ) || (method == "join" && text)
+                || (method == "to_text" && byte)
         }
+        "Ref" | "Signal" => method == "to_text",
         "Store" => matches!(
             method,
             "next_id" | "get" | "put" | "remove" | "values" | "update" | "upsert"

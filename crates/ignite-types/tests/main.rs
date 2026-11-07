@@ -5,6 +5,7 @@
 
 mod adversary_bounds;
 mod audit;
+mod builtin_tables;
 mod clone;
 mod common;
 mod effectful_map_adversary;
