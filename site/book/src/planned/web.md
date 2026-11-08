@@ -1,185 +1,149 @@
-# x.web: a web framework <span class="badge design">design</span>
+# x.web: the web app is part of the system <span class="badge design">design</span>
 
-`x.web` is a planned web framework for HTTP JSON services. It will ship with Ignite, in a
-second module root `x` next to `std`, and be versioned with the compiler. Nothing on this page
-is implemented yet; the code below is a sketch and does not compile today. The full design,
-with every decision, its measurements and the planned steps, is
-[`docs/web.md`](https://github.com/ignite-lang/ignite/blob/main/docs/web.md).
+`x.web` is a planned web framework. It will ship with Ignite, in a second module root `x` next
+to `std`, and be versioned with the compiler. Nothing on this page is implemented yet: the code
+below is the language as it is planned to grow for the framework, and it does not compile
+today. The full design, with its measurements, the language extensions and the planned steps,
+is [`docs/web.md`](https://github.com/ignite-lang/ignite/blob/main/docs/web.md).
 
-The aim: a typical web service in as few source tokens as possible, written by a person or an
-agent, while the compiler still catches the errors and the service stays explicit about its
-effects, its limits and its wire format.
+The idea: you declare your data and what you expose. Ignite derives the routes, the JSON, the
+OpenAPI document, the caching, the live updates and the health checks, and checks your pages
+against your routes. You write only the exceptions.
 
-## The todo service in 30 seconds
+## A JSON API and a live page
 
 ```ignite,fragment
-package bench
+package todo
 
-import x.web.{web, get, post, patch, delete, alive, found, existed, Reply}
+import x.web.{Web, Html, collection, page}
 
 type Todo { id: Int, title: Text, done: Bool = false }
-type NewTodo { title: Text, done: Bool = false }
-type Change { title: Option<Text> = None, done: Option<Bool> = None }
 
-fn list_todos(todos: Store<Todo>, _: Unit) -> Reply<List<Todo>> = Ok(todos.values())
-
-fn create(todos: Store<Todo>, _: Unit, new: NewTodo) -> Reply<Todo> {
-  let todo = Todo { id = todos.next_id(), title = new.title, done = new.done }
-  todos.put(todo.id, todo)
-  Ok(todo)
-}
-
-fn show(todos: Store<Todo>, id: Int) -> Reply<Todo> = todos.get(id).found()
-
-fn change(todos: Store<Todo>, id: Int, c: Change) -> Reply<Todo> =
-  todos.update(id, |t| Todo { title = c.title.unwrap_or(t.title), done = c.done.unwrap_or(t.done), ..t }).found()
-
-fn remove(todos: Store<Todo>, id: Int) -> Reply<Unit> = todos.remove(id).existed()
+fn board(todos: Store<Todo>) -> Html =
+  <main>
+    <h1>Todos</h1>
+    <ul>{todos.values().map(|t| <li class={t.done.then("done")}>{t.title}</li>)}</ul>
+    <form action="/todos" method="post">
+      <input name="title" required/>
+      <button>Add</button>
+    </form>
+  </main>
 
 system TodoService {
   resource ingress: TcpListener { address = "127.0.0.1", port = 8080 }
   resource todos: Store<Todo>
 
-  component server: HttpServer {
+  component server: Web {
     listener = ingress
-    application = web(todos, [
-      alive("/health"),
-      get("/todos", list_todos),
-      post("/todos", create),
-      get("/todos/:id", show),
-      patch("/todos/:id", change),
-      delete("/todos/:id", remove)
-    ])
+    routes = {
+      "/todos" = collection(todos)
+      "/" = page(board)
+    }
+    availability = 99%
     executable = "todod"
   }
 }
 ```
 
-What this checks with no line written for it:
+That is the whole program. It serves:
 
-| case | answer |
+| what | where it comes from |
 |---|---|
-| a body that is not a `NewTodo` | 400, a problem naming the member, before `create` runs |
-| `/todos/abc` | 404: `id` is an `Int`, so no route matches |
-| `PUT /todos` | 405 with `Allow: GET, POST`, taken from the table |
-| two routes for `GET /todos/:id` | an error at `ignite check` |
-| `show` writing to the store | an error at `ignite check`: a GET handler may only read |
-| a handler reading the clock | an error at `ignite check`: a handler has only the authority its state holds |
+| `GET` and `POST /todos`, `GET`, `PATCH` and `DELETE /todos/{id}` with JSON bodies | `collection(todos)` and the type `Todo` |
+| 400 naming the bad member, 404, 405 with `Allow`, all as `application/problem+json` | the route table |
+| an HTML page at `/` that updates in every open browser when a todo is added | `page(board)`, because `board` reads `todos` |
+| `ETag` headers and `304 Not Modified` | the stores each route reads |
+| a `/health` route, a probe and an availability contract that `ignite run` evaluates | `availability = 99%` |
+| an OpenAPI 3.1 document | the route table, printed at check time |
 
-## Routes are data
+## Why only Ignite can do this
 
-The second argument of `web` is a list of routes, one value per endpoint. `get`, `post`, `put`,
-`patch` and `delete` build a route from a path pattern and a handler; `:name` marks a path
-parameter. Because the table is a value, `ignite check` reads it: a duplicate route, a route an
-earlier one hides, a malformed pattern or a path parameter the handler does not take is a
-diagnostic, not a surprise at run time. `scope("/admin", layers, routes)` groups routes under a
-prefix with their own middleware.
+Ignite tracks effects. A function that reads a store says so in its type, and a handler can
+only reach what it is given: no clock, no global, no file it was not handed. That has three
+consequences no other web framework can rely on.
 
-## Handlers are plain functions
+- **Live pages without subscriptions.** The compiler knows that `board` reads `todos`. After
+  any write to `todos`, from any route, the server renders `board` again and sends it to every
+  open page. There is no subscribe and no broadcast to write, and none to forget.
+- **Caching that is correct by construction.** The answer to a GET depends only on the request
+  and the stores it reads, so each store's version is the ETag.
+- **The app is a system member.** `ignite plan` shows the routes and the derived probe and
+  contract, `ignite run` probes the service and reports whether it meets 99 %, and
+  `ignite apply` rolls it out ([Plan, explain, run and replay](../guide/operate.md)).
 
-A handler takes the state first, then its parameters, then the body for `post`, `put` and
-`patch`, and returns `Reply<T>`, which is `Result<T, Fail>`. Nothing marks a function as a
-handler, so a test can call it directly.
+## Markup is checked
 
-| route | handler type | success |
-|---|---|---|
-| `get(path, h)` | `fn(state: S, params: P) -> Reply<O>`, read-only | 200 |
-| `post(path, h)` | `fn(state: S, params: P, body: B) -> Reply<O>` | 201 |
-| `put`, `patch` | as `post` | 200 |
-| `delete(path, h)` | `fn(state: S, params: P) -> Reply<O>` | 200, or 204 when `O` is `Unit` |
+Markup is part of the language: elements, attributes, children and `{expressions}`. Text is
+escaped unless you say otherwise, a capitalised tag such as `<Card title="x"/>` calls the
+function `Card`, and every element and attribute name is checked against the HTML vocabulary.
+The page is also checked against the routes: `<input name="titel">` or `action="/todo"` is a
+compile error, because no route takes them.
 
-`status = 202` on the route changes the success status. Parameters come from the path and the
-query by name; a route lists the headers it reads (`headers = ["if-none-match"]`), so a query
-parameter can never stand in for a header.
+## Exceptions are plain functions
 
-## Effects stay visible
+When a route is more than a collection, write it. A validation rule and a custom action:
 
-A handler states what it touches by what its state holds. The state above is a
-`Store<Todo>`; a larger service passes a record of its resources, such as a store, a
-`Directory` and a `Launcher`. These are the same effect rules as everywhere in Ignite
-([Effects and capabilities](../design/effects.md)): no handler reaches the clock, standard
-output or a file it was not given. GET handlers are typed read-only, so writing from one is a
-compile error.
+```ignite,fragment
+given todos: Store<Todo>
 
-## Bodies use std.data codecs
+fn titled(new: New<Todo>) = if new.title.is_empty() { Err(bad_request("title is empty")) } else { Ok(()) }
+fn complete(id: Int) = todos.update(id, |t| Todo { done = true, ..t })?
+```
 
-Request and response bodies go through the codecs of the planned `std.data` module: one value
-model for JSON, YAML and TOML, and a codec the compiler derives for each type. A field with a
-default is optional on input, an `Option` field may be absent, and a decoding error names the
-path (`$.title`) and what was expected. The body size is bounded by the server's `HttpLimits`
-before the framework sees it.
+with the routes
 
-## One error shape
+```ignite,fragment
+routes = {
+  "/todos" = collection(todos, check = titled)
+  "/todos/{id}/done" = post(complete)
+}
+```
 
-Every error is `application/problem+json` (RFC 9457): `type`, `title`, `status`, `detail`,
-and for a body that does not decode, the list of invalid members. The framework writes 404,
-405, 400, 413 and 415 itself. A handler returns `Err(not_found())`, `Err(conflict("…"))` or
-`Err(fail(500, "…"))`; `found()` turns a missing value into a 404.
+`given` makes `todos` a parameter of every function that uses it, so its effects stay visible.
+Path parameters bind by name (`{id}` to `id: Int`), the body and query decode into typed
+parameters, `?` on a missing value answers 404, and a GET handler that writes is a compile
+error. A service with no collection at all is written as annotated functions:
 
-## Middleware is a value
-
-A layer is a record of two functions, `before` and `after`, that get the state, so it has the
-same authority as the handlers and no more. `bearer(valid)` checks a token, `max_body(16 KiB)`
-narrows the body limit, `before(f)` runs a check first. Access logging is a property of the
-`HttpServer` component, because writing to standard error is not an effect a handler holds.
+```ignite,fragment
+@get("/todos/{id}") fn show(id: Int) = todos.get(id)?
+@patch("/todos/{id}") fn change(id: Int, c: Patch<NewTodo>) = todos.update(id, |t| t.with(c))?
+```
 
 ## Testing without a socket
 
 ```ignite,fragment
-import x.web.client.{client}
-
 test "create and read" {
-  let api = client(web(Store.new(), routes()), Pipe.pair())
-  assert api.post("/todos", r#"{"title":"milk"}"#).status == 201
-  assert api.get("/todos/1").body == r#"{"id":1,"title":"milk","done":false}"#
+  let api = client(TodoService.server, Pipe.pair())
+  let made: Todo = api.post("/todos", New<Todo> { title = "milk" })?
+  assert api.get("/todos/{made.id}").status == 200
+  assert api.get("/").body.contains("milk")
 }
 ```
 
-The test client speaks HTTP/1.1 over an in-memory pipe, so a test runs through the same
-parser, framing and limits as a real connection, with no port and no network.
-
-## OpenAPI from the table
-
-The framework writes an OpenAPI 3.1 document from the route table at check time, with no build
-and no running server:
-
-```text
-ignite explain todo.ignite TodoService.server.application.description --raw > openapi.json
-```
-
-## Static files and streaming
-
-`files("/assets", |s| s.assets)` serves a `Directory`; paths that leave it, absolute paths and
-symbolic links are refused by the directory itself. `stream(path, start, next)` sends a body in
-pieces as they come, chunked, for long responses and server-sent events.
-
-## Still an HttpServer
-
-`web(state, routes)` returns an ordinary `HttpApp`, and the component stays `HttpServer`. So
-`ignite plan`, `ignite explain`, `ignite run` and `ignite apply` work as they do for any HTTP
-service ([Plan, explain, run and replay](../guide/operate.md)).
+The test client speaks HTTP/1.1 over an in-memory pipe through the same parser, framing and
+limits as a real connection.
 
 ## How many tokens
 
-The same in-memory todo service in four frameworks and in Ignite, counted with the
-`cl100k_base` tokenizer, imports included, comments and indentation not. The other programs
-are written from their documentation's idioms; all of them are in the design document.
+The same todo JSON service in four frameworks and in `x.web`, counted with the `cl100k_base`
+tokenizer, imports included, comments and indentation not. The other programs are written from
+their documentation's idioms; all are in the design document.
 
-| | Ignite today | FastAPI | Hono | Axum | Go `net/http` | `x.web` |
+| | FastAPI | Hono | Axum | Go `net/http` | `x.web`, handlers written | `x.web`, declared |
 |---|---|---|---|---|---|---|
-| tokens | 592 | 296 | 348 | 563 | 620 | 362 |
-| lines | 68 | 44 | 38 | 77 | 102 | 31 |
+| tokens | 296 | 348 | 563 | 620 | 230 | 89 |
+| lines | 44 | 38 | 77 | 102 | 20 | 12 |
 
-The `x.web` column needs two compiler features beyond the framework: codecs derived by the
-compiler, and parameter defaults. With the framework alone and hand-written codecs the service
-is 639 tokens, longer than today but fully checked; derived codecs bring it to 444. Ignite
-writes a few tokens the others leave to a command line: the listener's address and port, the
-store and the executable's name.
+The live page: the whole Ignite program above, API included, is 176 tokens; the Phoenix
+LiveView module for the same page alone is 214. The durable todo example of this repository,
+with its health probe and contract, goes from 1,883 tokens to 179.
 
 ## Plan
 
-The framework comes after three smaller steps: the module root `x` in the compiler and the
-release archive, the value model and codecs of `std.data`, and two fields on `HttpApp` for the
-route checks and the OpenAPI document. The order and the open questions are in
-[`docs/web.md`](https://github.com/ignite-lang/ignite/blob/main/docs/web.md) sections 11 and 12;
-the [roadmap](../roadmap.md) lists it with the other designs.
+The framework needs language extensions: derived codecs, record types derived from others
+(`New<T>`, `Patch<T>`), members a component derives into the system model, markup literals,
+effect sets readable at check time, `given`, route annotations and pattern literals. A first
+version ships on today's language with hand-built routes, and each extension shortens it. The
+order and the open questions are in
+[`docs/web.md`](https://github.com/ignite-lang/ignite/blob/main/docs/web.md) sections 5, 8 and
+10; the [roadmap](../roadmap.md) lists it with the other designs.
