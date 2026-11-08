@@ -22,7 +22,7 @@ scope:
   path: docs/yaml
 - confidence: inferred
   path: std/yaml.ignite
-revision: 4
+revision: 5
 ---
 # Story: data-yaml
 
@@ -32,7 +32,7 @@ revision: 4
 
 ## Context
 
-- Pusher case study G9, `docs/friction.md` row 68: rules written as Ignite data for lack of YAML.
+- case-study case study G9, `docs/friction.md` row 68: rules written as Ignite data for lack of YAML.
 
 ## Acceptance
 

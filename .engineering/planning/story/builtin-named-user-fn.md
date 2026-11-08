@@ -9,7 +9,7 @@ scope:
   path: crates/ignite-check/src/lib.rs
 - confidence: inferred
   path: crates/ignite-types/src
-revision: 5
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-07T22:06:09Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-07T22:06:09Z", actor: "human:timo", revision: 3}
@@ -22,7 +22,7 @@ A user fn whose name equals a builtin method of its first parameter's type (`set
 
 ## Context
 
-- Found by the pusher case study (session `pusher-2b`, G14 in `docs/research/pusher-gaps.md`), ignite v0.13.0; reproducer `docs/research/pusher-gaps/G14.ignite`: `error[E041]: fn `set` takes a `List<(Text, Text)>` first, and `List<(Text, Text)>` has the builtin method `set`, so `x.set(..)` could never call it; rename it`.
+- Found by the case-study case study (session `a case-study session`, G14 in `docs/research/case-study-gaps.md`), ignite v0.13.0; reproducer `docs/research/case-study-gaps/G14.ignite`: `error[E041]: fn `set` takes a `List<(Text, Text)>` first, and `List<(Text, Text)>` has the builtin method `set`, so `x.set(..)` could never call it; rename it`.
 - Related: `story:immutable-binding-e006` (a user fn `push` by UFCS refused with E006) and `docs/friction.md` row 54 (`to_text` reserved): the same name collision between user fns and builtins.
 
 ## Acceptance
