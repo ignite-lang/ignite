@@ -105,7 +105,7 @@ metric, the target, the value before and after, and the run of `task quality` th
 | # | metric | kind | better | instrument | bar | target |
 |---|---|---|---|---|---|---|
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | lower | `differential::corpus_agrees_across_rust_llvm_and_the_evaluator` (every merge): units of the corpus whose exit, stdout or failure text differs from the Rust target's | eval 4, llvm 0 |  |
-| 1.2 | differential corpus size | ratchet | higher | the differential runner: units (inline tests and executables) each consumer ran | eval 423, llvm 643, rust 643 |  |
+| 1.2 | differential corpus size | ratchet | higher | the differential runner: units (inline tests and executables) each consumer ran | eval 425, llvm 645, rust 645 |  |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | lower | `quality::static_metrics_hold_the_bar`: per consumer crate, `PatternKind::` mentions (patterns) and distinct `Builtin::` variants named (builtins) | eval/builtins 112, eval/patterns 13, llvm/builtins 12, llvm/patterns 30, rust/builtins 43, rust/patterns 71 | one implementation per rule: after story:mid-level-ir the backends name no `PatternKind` and no `Builtin` the IR lowers |
 | 1.4 | generated-code goldens changed without a `CODEGEN_REVISION` bump | gate | lower | `quality::static_metrics_hold_the_bar`: golden `.rs` and `.ll` outputs changed against the merge base with main while `CODEGEN_REVISION` is unchanged | all 0 |  |
 | 1.5 | random programs on which the consumers disagree | gate | lower | a typed program generator, N seeds per gate | unmeasured: no program generator yet (out of scope of story:quality-ratchet) |  |
@@ -132,7 +132,7 @@ metric, the target, the value before and after, and the run of `task quality` th
 | 3.3 | throughput and p99 latency of terminald and todod | ratchet | higher | `ignite-load matrix` (`task bench-throughput`) | unmeasured: no load baseline yet (out of scope of story:quality-ratchet) |  |
 | 3.4 | peak RSS, leaked handles and threads after a load run | gate | lower | `llvm_memory::` and `terminal::idle_terminald_runs_one_thread` (every merge) | unmeasured: no number: the named tests gate it in task gate |  |
 | 3.5 | runtime entries that can unwind a panic across `extern "C"` | gate | lower | `quality::static_metrics_hold_the_bar`, the rule of `contain::tests::every_entry_is_guarded`: `extern "C"` entries of `ignite-rt` not run through `crate::entry` | llvm 0 |  |
-| 3.6 | `unsafe` sites in the substrate a target links | ratchet | lower | `quality::static_metrics_hold_the_bar`: `unsafe` blocks, fns, impls and extern blocks; rust counts `ignite-io`, llvm `ignite-io` and `ignite-rt` | llvm 76, rust 9 |  |
+| 3.6 | `unsafe` sites in the substrate a target links | ratchet | lower | `quality::static_metrics_hold_the_bar`: `unsafe` blocks, fns, impls and extern blocks; rust counts `ignite-io`, llvm `ignite-io` and `ignite-rt` | llvm 78, rust 10 |  |
 
 ### 4 Standard library and protocols
 
@@ -140,7 +140,7 @@ metric, the target, the value before and after, and the run of `task quality` th
 |---|---|---|---|---|---|---|
 | 4.1 | conformance claims that hold | ratchet | higher | `quality::conformance_claims_hold_the_bar` (every merge): claim lines `yes` of `ignite conformance` over std/protocol/telnet, http and jsonrpc | llvm 3, rust 3 |  |
 | 4.2 | gaps per claimed spec | ratchet | lower | same: the gap count of each claim line, per claimed spec | llvm/jsonrpc-2.0 0, llvm/rfc854 0, llvm/rfc855 0, llvm/rfc9110 2, llvm/rfc9112 1, rust/jsonrpc-2.0 0, rust/rfc854 0, rust/rfc855 0, rust/rfc9110 2, rust/rfc9112 1 |  |
-| 4.3 | inline tests per target | ratchet | higher | the differential runner: inline tests of std/ and examples/ each consumer ran | eval 191, llvm 322, rust 322 |  |
+| 4.3 | inline tests per target | ratchet | higher | the differential runner: inline tests of std/ and examples/ each consumer ran | eval 193, llvm 324, rust 324 |  |
 | 4.4 | std functions with no inline test | ratchet | lower | typed program against the test bodies | unmeasured: no instrument yet: needs the call graph of the test bodies |  |
 
 ### 5 Operations: run, apply, host

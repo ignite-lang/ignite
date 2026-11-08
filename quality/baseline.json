@@ -290,13 +290,13 @@
       "area": "Semantics: one meaning across the three consumers",
       "bars": {
         "eval": {
-          "value": 423
+          "value": 425
         },
         "llvm": {
-          "value": 643
+          "value": 645
         },
         "rust": {
-          "value": 643
+          "value": 645
         }
       },
       "direction": "higher",
@@ -570,12 +570,12 @@
       "area": "Generated code and runtime behaviour",
       "bars": {
         "llvm": {
-          "decision": "wave 5 integration (2026-11-08): the substrate entries of wave 6 (story process-builtins: environment, sleep, clocks, flush; story net-builtins: peer address, timed-out reads, connect timeout) add unsafe sites in ignite-io and ignite-rt",
-          "value": 76
+          "decision": "wave 5 integration (2026-11-08): the substrate entries of wave 6 (story process-builtins: environment, sleep, clocks, flush; story net-builtins: peer address, timed-out reads, connect timeout) add unsafe sites in ignite-io and ignite-rt; story text-fast-search (2026-11-08, pending the integrator): one unsafe block calling memchr/memmem in ignite_io::text and one writing the pieces list in ignite-rt",
+          "value": 78
         },
         "rust": {
-          "decision": "wave 5 integration (2026-11-08): the substrate entries of wave 6 (story process-builtins: environment, sleep, clocks, flush; story net-builtins: peer address, timed-out reads, connect timeout) add unsafe sites in ignite-io and ignite-rt",
-          "value": 9
+          "decision": "wave 5 integration (2026-11-08): the substrate entries of wave 6 (story process-builtins: environment, sleep, clocks, flush; story net-builtins: peer address, timed-out reads, connect timeout) add unsafe sites in ignite-io and ignite-rt; story text-fast-search (2026-11-08, pending the integrator): one unsafe block calling memchr/memmem in ignite_io::text",
+          "value": 10
         }
       },
       "direction": "lower",
@@ -652,13 +652,13 @@
       "area": "Standard library and protocols",
       "bars": {
         "eval": {
-          "value": 191
+          "value": 193
         },
         "llvm": {
-          "value": 322
+          "value": 324
         },
         "rust": {
-          "value": 322
+          "value": 324
         }
       },
       "direction": "higher",

@@ -28,9 +28,9 @@ Current values: run `bar` on 2026-11-07, commit `9a775116`.
 |---|---|---|---|---|---|---|
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | eval | 4 | 4 |  |
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | llvm | 0 | 0 |  |
-| 1.2 | differential corpus size | ratchet | eval | 423 | 420 |  |
-| 1.2 | differential corpus size | ratchet | llvm | 643 | 614 |  |
-| 1.2 | differential corpus size | ratchet | rust | 643 | 614 |  |
+| 1.2 | differential corpus size | ratchet | eval | 425 | 420 |  |
+| 1.2 | differential corpus size | ratchet | llvm | 645 | 614 |  |
+| 1.2 | differential corpus size | ratchet | rust | 645 | 614 |  |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/builtins | 112 | 112 |  |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/patterns | 13 | 13 |  |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | llvm/builtins | 12 | 12 |  |
@@ -71,8 +71,8 @@ Current values: run `bar` on 2026-11-07, commit `9a775116`.
 | 3.3 | throughput and p99 latency of terminald and todod | ratchet | | unmeasured: no load baseline yet (out of scope of story:quality-ratchet) | | |
 | 3.4 | peak RSS, leaked handles and threads after a load run | gate | | unmeasured: no number: the named tests gate it in task gate | | |
 | 3.5 | runtime entries that can unwind a panic across `extern "C"` | gate | llvm | 0 | 0 |  |
-| 3.6 | `unsafe` sites in the substrate a target links | ratchet | llvm | 76 | 73 |  |
-| 3.6 | `unsafe` sites in the substrate a target links | ratchet | rust | 9 | 7 |  |
+| 3.6 | `unsafe` sites in the substrate a target links | ratchet | llvm | 78 | 73 |  |
+| 3.6 | `unsafe` sites in the substrate a target links | ratchet | rust | 10 | 7 |  |
 
 ## 4 Standard library and protocols
 
@@ -90,9 +90,9 @@ Current values: run `bar` on 2026-11-07, commit `9a775116`.
 | 4.2 | gaps per claimed spec | ratchet | rust/rfc855 | 0 | 0 |  |
 | 4.2 | gaps per claimed spec | ratchet | rust/rfc9110 | 2 | 1 |  |
 | 4.2 | gaps per claimed spec | ratchet | rust/rfc9112 | 1 | 1 |  |
-| 4.3 | inline tests per target | ratchet | eval | 191 | 191 |  |
-| 4.3 | inline tests per target | ratchet | llvm | 322 | 309 |  |
-| 4.3 | inline tests per target | ratchet | rust | 322 | 309 |  |
+| 4.3 | inline tests per target | ratchet | eval | 193 | 191 |  |
+| 4.3 | inline tests per target | ratchet | llvm | 324 | 309 |  |
+| 4.3 | inline tests per target | ratchet | rust | 324 | 309 |  |
 | 4.4 | std functions with no inline test | ratchet | | unmeasured: no instrument yet: needs the call graph of the test bodies | | |
 
 ## 5 Operations: run, apply, host

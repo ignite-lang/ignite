@@ -12,26 +12,26 @@ pub fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     if needle.len() > haystack.len() {
         return None;
     }
-    let found = match needle {
-        [] => return Some(0),
-        // SAFETY: the pointers and lengths are those of two live slices;
-        // `memchr` reads at most `haystack.len()` bytes.
-        [byte] => unsafe {
-            libc::memchr(
+    if needle.is_empty() {
+        return Some(0);
+    }
+    // SAFETY: the pointers and lengths are those of two live slices;
+    // `memchr` reads at most `haystack.len()` bytes and `memmem` reads
+    // within both slices.
+    let found = unsafe {
+        match needle {
+            [byte] => libc::memchr(
                 haystack.as_ptr().cast(),
                 libc::c_int::from(*byte),
                 haystack.len(),
-            )
-        },
-        // SAFETY: as above; `memmem` reads within both slices.
-        _ => unsafe {
-            libc::memmem(
+            ),
+            _ => libc::memmem(
                 haystack.as_ptr().cast(),
                 haystack.len(),
                 needle.as_ptr().cast(),
                 needle.len(),
-            )
-        },
+            ),
+        }
     };
     if found.is_null() {
         return None;
