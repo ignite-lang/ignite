@@ -5132,7 +5132,8 @@ impl<'a> Generator<'a> {
     }
 
     /// A Rust `bool` expression: whether the values behind the references
-    /// `a` and `b` of type `ty` are equal (`docs/slice.md` section 13.5).
+    /// `a` and `b` of type `ty` are equal (`docs/slice.md` section 13.5); an
+    /// `IoError` (only inside an `assert`, 12.3) by its message.
     fn eq_test(&mut self, ty: &Ty, a: &str, b: &str) -> String {
         match ty {
             Ty::Int | Ty::Byte | Ty::Bool | Ty::Quantity(_) => format!("(*{a} == *{b})"),
@@ -5140,6 +5141,7 @@ impl<'a> Generator<'a> {
             Ty::Text | Ty::Ref(_) | Ty::Signal(_) | Ty::SystemRef | Ty::Protocol => {
                 format!("({a} == {b})")
             }
+            Ty::IoError => format!("(({a}).message == ({b}).message)"),
             _ => format!("{}({a}, {b})", self.glue_fn(Glue::Eq, ty)),
         }
     }
