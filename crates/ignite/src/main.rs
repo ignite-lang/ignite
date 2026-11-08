@@ -46,7 +46,7 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(
     name = "ignite",
-    version,
+    version = ignite::version::VERSION,
     about = "Check, build, plan and operate Ignite programs"
 )]
 struct Cli {

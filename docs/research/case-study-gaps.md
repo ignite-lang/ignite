@@ -304,6 +304,7 @@
 - What happens: `ignite --version` prints `0.13.0` with no commit, so a build from source cannot be told apart from the release.
 - Story: `story:version-names-commit`.
 - Blocks: no.
+- Closed in wave 8 by story `version-names-commit`: a build from a checkout prints `ignite X.Y.Z+g<12 hex>` (`.dirty` for a modified tree), a clean build of the tag `vX.Y.Z` prints `ignite X.Y.Z`, a build from an archive names its `COMMIT` file's commit or `+unknown`.
 
 ## G27 A static build from source needs the musl target and the network
 

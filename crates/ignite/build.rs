@@ -25,6 +25,14 @@
 //! version of the rustc that built it, which the driver compares with
 //! clang's; when that build fails the file says `None` and release builds
 //! link the native archive.
+//!
+//! It also sets `IGNITE_VERSION`, the version `ignite --version` prints
+//! (`src/version.rs`): the package version, with the
+//! commit the driver was built from unless it is a clean build of the
+//! release tag.
+
+#[path = "src/version/describe.rs"]
+mod version;
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -56,6 +64,7 @@ fn main() {
     ] {
         println!("cargo::rerun-if-changed={}", path.display());
     }
+    version(workspace);
 
     let out = PathBuf::from(env("OUT_DIR"));
     let target_dir = runtime_target_dir(&out);
@@ -255,4 +264,101 @@ fn fnv1a(mut hash: u64, bytes: &[u8]) -> u64 {
         hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
     }
     hash
+}
+
+/// The sources whose change reruns this script for the version's `.dirty`,
+/// beside the runtime's: the crates the driver is compiled from. Edits
+/// elsewhere (std, docs, tests) are seen at the next rerun only, so they do
+/// not cost a rebuild of the driver.
+const COMPILER_SOURCES: &[&str] = &[
+    "crates/ignite/src",
+    "crates/ignite-syntax/src",
+    "crates/ignite-check/src",
+    "crates/ignite-types/src",
+    "crates/ignite-rustgen/src",
+    "crates/ignite-llvm/src",
+    "crates/ignite-eval/src",
+];
+
+/// Sets `IGNITE_VERSION`, what `ignite --version` prints after `ignite `
+/// (`src/version/describe.rs`): the commit of the git checkout that is the
+/// workspace, else the one its `COMMIT` file records (written beside the
+/// source of an archive, `dist/toolchain/Dockerfile`), else `+unknown`.
+fn version(workspace: &Path) {
+    let (source, inputs) = match git_source(workspace) {
+        Some(found) => found,
+        None => {
+            let file = workspace.join("COMMIT");
+            match std::fs::read_to_string(&file) {
+                Ok(text) => (version::Source::recorded(&text), vec![file]),
+                Err(_) => (version::Source::Unknown, Vec::new()),
+            }
+        }
+    };
+    for path in COMPILER_SOURCES
+        .iter()
+        .map(|path| workspace.join(path))
+        .chain(inputs)
+        .filter(|path| path.exists())
+    {
+        println!("cargo::rerun-if-changed={}", path.display());
+    }
+    println!(
+        "cargo::rustc-env=IGNITE_VERSION={}",
+        version::describe(&env("CARGO_PKG_VERSION"), &source)
+    );
+}
+
+/// The checkout's source and the git files whose change moves it (`HEAD`,
+/// the index, the branch, the tags), when `workspace` is a checkout's top
+/// level; `None` without git or inside another repository.
+fn git_source(workspace: &Path) -> Option<(version::Source, Vec<PathBuf>)> {
+    let git = |args: &[&str]| {
+        let output = Command::new("git")
+            .arg("--no-optional-locks")
+            .arg("-C")
+            .arg(workspace)
+            .args(args)
+            .output()
+            .ok()?;
+        output
+            .status
+            .success()
+            .then(|| String::from_utf8(output.stdout).ok())
+            .flatten()
+            .map(|text| text.trim().to_string())
+    };
+    let top = PathBuf::from(git(&["rev-parse", "--show-toplevel"])?);
+    if top.canonicalize().ok()? != workspace.canonicalize().ok()? {
+        return None;
+    }
+    let commit = git(&["rev-parse", "HEAD"])?;
+    let dirty = !git(&["status", "--porcelain", "--untracked-files=no"])?.is_empty();
+    let tags = git(&["tag", "--points-at", "HEAD"])?
+        .lines()
+        .map(str::to_string)
+        .collect();
+    let dir = PathBuf::from(git(&["rev-parse", "--absolute-git-dir"])?);
+    let common = PathBuf::from(git(&[
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-common-dir",
+    ])?);
+    let mut inputs = vec![
+        dir.join("HEAD"),
+        dir.join("index"),
+        common.join("packed-refs"),
+        common.join("refs/tags"),
+    ];
+    if let Some(branch) = git(&["symbolic-ref", "-q", "HEAD"]) {
+        inputs.push(common.join(branch));
+    }
+    Some((
+        version::Source::Git {
+            commit,
+            dirty,
+            tags,
+        },
+        inputs,
+    ))
 }

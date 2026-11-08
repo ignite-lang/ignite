@@ -65,8 +65,12 @@ ignite --version
 ```
 
 ```text
-ignite 0.15.0
+ignite 0.15.0+g91fa0a25740a
 ```
+
+A build from a clone names the commit it was built from after `+g`, with `.dirty` when a
+tracked file was modified; only a clean build of a release tag, such as the release archive,
+prints the bare version (`ignite 0.15.0`).
 
 `ignite --help` lists the commands: `check`, `emit`, `build`, `test`, `plan`, `host`,
 `apply`, `inspect`, `explain`, `run` and `replay`. The

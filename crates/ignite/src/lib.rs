@@ -21,6 +21,7 @@ pub mod rfc;
 pub mod run;
 mod test_build;
 pub mod typed_json;
+pub mod version;
 
 pub use llvm_build::{COMPILE_FLAGS, LINK_FLAGS, RELEASE_LINK_FLAGS};
 pub use run::Standing;
