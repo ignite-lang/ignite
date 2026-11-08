@@ -1,7 +1,7 @@
 package data_json
 
 import std.data.{FormatError, Value}
-import std.json.{read, write, write_pretty}
+import std.json.{encode, get, get_all, parse, read, write, write_pretty, Json}
 
 // docs/slice.md 27: std.json reads ten documents into std.data values and
 // writes them back. Every fn without parameters below is evaluated by
@@ -52,6 +52,16 @@ fn round_trips() -> List<Bool> = values().map(|v| match v {
   Err(_) => true
 })
 
+// docs/slice.md 19.20: of a repeated member, `get` gives the last, as
+// ECMAScript's `JSON.parse` does, `get_all` every one in document order,
+// and `encode` writes every one back.
+fn duplicates() -> (Option<Json>, List<Json>, Text) = match parse(G29) {
+  Ok(message) => (message.get("channel"), message.get_all("channel"), encode(message))
+  Err(e) => (None, [], "parse error: " + e.message)
+}
+
+const G29: Text = r#"{"channel":"/a","channel":"/meta/handshake"}"#
+
 // The printer of tests/data_json.rs: every fn above without parameters, in
 // declaration order, one debug text per line, on both targets.
 fn show(text: Text) -> Result<Unit, IoError> requires [stdout.write] {
@@ -70,6 +80,7 @@ fn Printer.main(self: Printer) -> Result<Unit, IoError> {
   show(compact().debug())?
   show(pretty().debug())?
   show(round_trips().debug())?
+  show(duplicates().debug())?
   Ok(Unit)
 }
 
