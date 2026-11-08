@@ -2,9 +2,9 @@
 //! tasks, TCP over loopback and the text helpers.
 
 use std::ffi::c_void;
-use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
-use std::sync::mpsc;
-use std::time::Duration;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Mutex, mpsc};
+use std::time::{Duration, Instant};
 
 use ignite_rt::*;
 
@@ -39,66 +39,107 @@ fn no_input() -> IgniteInput {
     }
 }
 
-struct Environment {
+/// What a test and the task it spawned share: the task waits for `hold`
+/// before it copies its environment, then sends the copy on `done`.
+struct Shared {
+    hold: AtomicBool,
+    done: Mutex<mpsc::Sender<String>>,
+}
+
+/// A spawned task's environment, as generated code lays it out.
+#[repr(C)]
+struct Held {
     value: IgniteList,
-    copied: AtomicBool,
-    received: AtomicI64,
-    task_arena: AtomicI64,
-    done: mpsc::Sender<String>,
+    shared: *const Shared,
 }
 
-extern "C" fn slow_child(env: *mut c_void) {
-    // SAFETY: the parent keeps `Environment` alive until `spawn_ready`.
-    let env = unsafe { &*env.cast::<Environment>() };
-    std::thread::sleep(Duration::from_millis(100));
+fn shared() -> (&'static Shared, mpsc::Receiver<String>) {
+    let (done, copies) = mpsc::channel();
+    let shared = Box::leak(Box::new(Shared {
+        hold: AtomicBool::new(false),
+        done: Mutex::new(done),
+    }));
+    (shared, copies)
+}
+
+extern "C" fn held_child(env: *mut c_void) {
+    // SAFETY: the environment stays valid until `spawn_ready`.
+    let env = unsafe { &*env.cast::<Held>() };
+    // SAFETY: `shared` is leaked by the test.
+    let shared = unsafe { &*env.shared };
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !shared.hold.load(Ordering::SeqCst) && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(1));
+    }
     let copy = IgniteList::from_bytes(unsafe { env.value.as_bytes() });
-    env.task_arena
-        .store(arena_reserved() as i64, Ordering::SeqCst);
-    let done = env.done.clone();
-    env.copied.store(true, Ordering::SeqCst);
     ignite_rt_spawn_ready();
-    std::thread::sleep(Duration::from_millis(50));
-    done.send(read_text(&copy)).unwrap();
+    let _ = shared.done.lock().unwrap().send(read_text(&copy));
     ignite_rt_task_end();
 }
 
+/// `spawn` does not wait for the task to copy its environment
+/// (story spawn-without-handshake): it returns 1 while the task still
+/// waits, before its `spawn_ready`.
 #[test]
-fn spawn_blocks_until_the_child_is_ready() {
-    let (done, finished) = mpsc::channel();
-    let mut env = Environment {
-        value: text("hello task"),
-        copied: AtomicBool::new(false),
-        received: AtomicI64::new(0),
-        task_arena: AtomicI64::new(-1),
-        done,
-    };
-    ignite_rt_spawn(Some(slow_child), (&raw mut env).cast());
-    assert!(env.copied.load(Ordering::SeqCst));
-    assert!(env.task_arena.load(Ordering::SeqCst) > 0);
-    env.value = text("overwritten after spawn_ready");
-    let copied = finished.recv_timeout(Duration::from_secs(10)).unwrap();
-    assert_eq!(copied, "hello task");
-    ignite_rt_task_end();
+fn spawn_returns_before_the_task_copied_its_environment() {
+    let (shared, copies) = shared();
+    let words: &'static [u8] = b"held";
+    let env = Box::leak(Box::new(Held {
+        value: IgniteList {
+            ptr: words.as_ptr().cast_mut(),
+            len: 4,
+            cap: 4,
+        },
+        shared,
+    }));
+    let env = (&raw mut *env) as usize;
+    let (returned, started) = mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = returned.send(ignite_rt_spawn(Some(held_child), env as *mut c_void));
+    });
+    let result = started.recv_timeout(Duration::from_secs(5));
+    shared.hold.store(true, Ordering::SeqCst);
+    assert_eq!(result, Ok(1), "spawn waited for the task's spawn_ready");
+    let copy = copies.recv_timeout(Duration::from_secs(10)).unwrap();
+    assert_eq!(copy, "held");
 }
 
-extern "C" fn child_without_ready(env: *mut c_void) {
-    // SAFETY: the parent waits until this function returns.
-    let env = unsafe { &*env.cast::<Environment>() };
-    env.received.store(42, Ordering::SeqCst);
-}
-
+/// Between `spawn_begin` and `spawn` the parent's allocations go to
+/// transfer memory that the task owns: the parent may free and reuse its
+/// own arena at once, and the task still reads its environment (a debug
+/// build overwrites freed arena memory). After `spawn` the parent
+/// allocates in its own arena again.
 #[test]
-fn spawn_returns_when_the_child_ends_without_ready() {
-    let (done, _finished) = mpsc::channel();
-    let mut env = Environment {
-        value: empty(),
-        copied: AtomicBool::new(false),
-        received: AtomicI64::new(0),
-        task_arena: AtomicI64::new(-1),
-        done,
-    };
-    ignite_rt_spawn(Some(child_without_ready), (&raw mut env).cast());
-    assert_eq!(env.received.load(Ordering::SeqCst), 42);
+fn the_environment_outlives_the_parents_arena() {
+    let (shared, copies) = shared();
+    let parent = std::thread::spawn(move || {
+        let before = text("a");
+        ignite_rt_spawn_begin();
+        let env = ignite_rt_alloc(
+            std::mem::size_of::<Held>() as i64,
+            std::mem::align_of::<Held>() as i64,
+        )
+        .cast::<Held>();
+        // SAFETY: a fresh block of the environment's size and alignment.
+        unsafe {
+            env.write(Held {
+                value: text("hello task"),
+                shared,
+            })
+        };
+        assert_eq!(ignite_rt_spawn(Some(held_child), env.cast()), 1);
+        let after = text("b");
+        assert_eq!(after.ptr, before.ptr.wrapping_add(1), "back in the arena");
+        ignite_rt_task_end();
+        for _ in 0..64 {
+            let _ = text(&"x".repeat(1000));
+        }
+        ignite_rt_task_end();
+    });
+    parent.join().unwrap();
+    shared.hold.store(true, Ordering::SeqCst);
+    let copy = copies.recv_timeout(Duration::from_secs(10)).unwrap();
+    assert_eq!(copy, "hello task");
 }
 
 fn bind() -> i64 {

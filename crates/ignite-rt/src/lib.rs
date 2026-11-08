@@ -3,8 +3,8 @@
 //! into every executable the LLVM target produces. It converts section-3
 //! layouts and handles to and from `ignite-io` values and owns what only the
 //! LLVM target needs: the arenas and loop regions, the handle table and the
-//! spawn handshake. Every socket, standard input, standard output, terminal
-//! and thread operation is a call into `ignite-io`.
+//! transfer memory of a spawn. Every socket, standard input, standard
+//! output, terminal and thread operation is a call into `ignite-io`.
 //!
 //! Frozen skeleton: the `#[repr(C)]` layouts below are the contract with the
 //! generator.
@@ -65,7 +65,7 @@ pub use store::{
     ignite_rt_store_new, ignite_rt_store_next_id, ignite_rt_store_put, ignite_rt_store_remove,
     ignite_rt_store_update, ignite_rt_store_upsert, ignite_rt_store_values,
 };
-pub use task::{TaskFn, ignite_rt_spawn, ignite_rt_spawn_ready};
+pub use task::{TaskFn, ignite_rt_spawn, ignite_rt_spawn_begin, ignite_rt_spawn_ready};
 pub use text::{
     ignite_rt_int_parse, ignite_rt_int_to_text, ignite_rt_quantity_debug, ignite_rt_text_cmp,
     ignite_rt_text_concat, ignite_rt_text_debug, ignite_rt_text_eq,

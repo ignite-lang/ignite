@@ -78,6 +78,7 @@ declare i32 @ignite_rt_pipe_read(i64, i64, ptr, ptr)
 declare i64 @ignite_rt_pipe_received_batches(i64)
 declare i32 @ignite_rt_pipe_set_idle_timeout(i64, i64, ptr)
 declare i32 @ignite_rt_pipe_write_all(i64, ptr, ptr)
+declare void @"ignite_rt_spawn_begin"()
 declare void @"ignite_rt_tcp_own"(i64)
 declare void @"ignite_rt_tcp_retain"(i64)
 
@@ -223,7 +224,6 @@ L4:
   call void @ignite_rt_guard_push(ptr %t1)
   %t6 = load i64, ptr %env, align 8
   call void @ignite_rt_tcp_own(i64 %t6)
-  call void @ignite_rt_spawn_ready()
   call void @"tests.bounds.relay<PipeStream>"(ptr %t7, i64 %t6)
   %t8 = load i32, ptr %t7, align 4
   %t9 = icmp eq i32 %t8, 1
@@ -260,7 +260,6 @@ entry:
   %t15 = alloca [24 x i8], align 8
   %t16 = alloca [40 x i8], align 8
   %t26 = alloca [8 x i8], align 8
-  %t28 = alloca [8 x i8], align 8
   %t35 = alloca [40 x i8], align 8
   store i64 %p0, ptr %t1, align 8, !dbg !10
   %t2 = load i64, ptr %t1, align 8, !dbg !12
@@ -299,6 +298,8 @@ L20:
   %t25 = call i64 @"tests.bounds.same"(i64 %t24), !dbg !17
   store i64 %t25, ptr %t26, align 8, !dbg !16
   %t27 = load i64, ptr %t26, align 8, !dbg !20
+  call void @ignite_rt_spawn_begin(), !dbg !19
+  %t28 = call ptr @ignite.alloc(i64 8, i64 8), !dbg !19
   store i64 %t27, ptr %t28, align 8, !dbg !19
   %t29 = call i8 @ignite_rt_spawn(ptr @"spawn.tests.bounds.relay<PipeStream>.1", ptr %t28), !dbg !19
   %t30 = icmp eq i8 %t29, 0, !dbg !19
@@ -319,9 +320,8 @@ L32:
 define internal void @"spawn.tests.bounds.Echo.serve<TcpStream>.2"(ptr %env) {
 entry:
   %t1 = alloca [256 x i8], align 16
-  %t9 = alloca [24 x i8], align 8
-  %t10 = alloca [40 x i8], align 8
-  %t19 = alloca [24 x i8], align 8
+  %t8 = alloca [40 x i8], align 8
+  %t17 = alloca [24 x i8], align 8
   %t2 = call i32 @_setjmp(ptr %t1)
   %t3 = icmp eq i32 %t2, 0
   br i1 %t3, label %L4, label %L5
@@ -332,32 +332,29 @@ L4:
   call void @ignite_rt_guard_push(ptr %t1)
   %t6 = load i64, ptr %env, align 8
   %t7 = getelementptr inbounds i8, ptr %env, i64 8
-  %t8 = load ptr, ptr %t7, align 8
-  call void @"copy.Text"(ptr %t9, ptr %t8)
   call void @ignite_rt_tcp_own(i64 %t6)
-  call void @ignite_rt_spawn_ready()
-  call void @"tests.bounds.Echo.serve<TcpStream>"(ptr %t10, i64 %t6, ptr %t9)
-  %t11 = load i32, ptr %t10, align 4
-  %t12 = icmp eq i32 %t11, 1
-  br i1 %t12, label %L13, label %L14
-L13:
-  %t15 = getelementptr inbounds i8, ptr %t10, i64 8
-  %t16 = load ptr, ptr %t15, align 8
-  %t17 = getelementptr inbounds i8, ptr %t15, i64 8
-  %t18 = load i64, ptr %t17, align 8
-  %t20 = add i64 %t18, 23
-  %t21 = call ptr @ignite.alloc(i64 %t20, i64 1)
-  store ptr %t21, ptr %t19, align 8
-  call void @llvm.memcpy.p0.p0.i64(ptr %t21, ptr @.str.1, i64 23, i1 false)
-  %t22 = getelementptr inbounds i8, ptr %t21, i64 23
-  call void @llvm.memcpy.p0.p0.i64(ptr %t22, ptr %t16, i64 %t18, i1 false)
-  %t23 = getelementptr inbounds i8, ptr %t19, i64 8
-  store i64 %t20, ptr %t23, align 8
-  %t24 = getelementptr inbounds i8, ptr %t19, i64 16
-  store i64 %t20, ptr %t24, align 8
-  call void @ignite_rt_log(ptr %t19)
-  br label %L14
-L14:
+  call void @"tests.bounds.Echo.serve<TcpStream>"(ptr %t8, i64 %t6, ptr %t7)
+  %t9 = load i32, ptr %t8, align 4
+  %t10 = icmp eq i32 %t9, 1
+  br i1 %t10, label %L11, label %L12
+L11:
+  %t13 = getelementptr inbounds i8, ptr %t8, i64 8
+  %t14 = load ptr, ptr %t13, align 8
+  %t15 = getelementptr inbounds i8, ptr %t13, i64 8
+  %t16 = load i64, ptr %t15, align 8
+  %t18 = add i64 %t16, 23
+  %t19 = call ptr @ignite.alloc(i64 %t18, i64 1)
+  store ptr %t19, ptr %t17, align 8
+  call void @llvm.memcpy.p0.p0.i64(ptr %t19, ptr @.str.1, i64 23, i1 false)
+  %t20 = getelementptr inbounds i8, ptr %t19, i64 23
+  call void @llvm.memcpy.p0.p0.i64(ptr %t20, ptr %t14, i64 %t16, i1 false)
+  %t21 = getelementptr inbounds i8, ptr %t17, i64 8
+  store i64 %t18, ptr %t21, align 8
+  %t22 = getelementptr inbounds i8, ptr %t17, i64 16
+  store i64 %t18, ptr %t22, align 8
+  call void @ignite_rt_log(ptr %t17)
+  br label %L12
+L12:
   call void @ignite_rt_guard_pop()
   call void @ignite_rt_tcp_release(i64 %t6)
   call void @ignite_rt_task_end()
@@ -370,7 +367,6 @@ entry:
   %t7 = alloca [8 x i8], align 8
   %t8 = alloca [32 x i8], align 8
   %t24 = alloca [8 x i8], align 8
-  %t29 = alloca [16 x i8], align 8
   %t1 = call i64 @ignite.arena_mark(), !dbg !26
   br label %L2
 L2:
@@ -407,10 +403,12 @@ L19:
   call void @ignite_rt_tcp_own(i64 %t26), !dbg !27
   %t27 = load i64, ptr %t24, align 8, !dbg !30
   %t28 = getelementptr inbounds i8, ptr %p0, i64 8, !dbg !31
+  call void @ignite_rt_tcp_retain(i64 %t27), !dbg !29
+  call void @ignite_rt_spawn_begin(), !dbg !29
+  %t29 = call ptr @ignite.alloc(i64 32, i64 8), !dbg !29
   store i64 %t27, ptr %t29, align 8, !dbg !29
   %t30 = getelementptr inbounds i8, ptr %t29, i64 8, !dbg !29
-  store ptr %t28, ptr %t30, align 8, !dbg !29
-  call void @ignite_rt_tcp_retain(i64 %t27), !dbg !29
+  call void @"copy.Text"(ptr %t30, ptr %t28), !dbg !29
   %t31 = call i8 @ignite_rt_spawn(ptr @"spawn.tests.bounds.Echo.serve<TcpStream>.2", ptr %t29), !dbg !29
   %t32 = icmp eq i8 %t31, 0, !dbg !29
   br i1 %t32, label %L33, label %L34, !dbg !29

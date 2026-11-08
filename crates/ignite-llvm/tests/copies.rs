@@ -69,9 +69,11 @@ fn text_keys_compare_inline() {
 }
 
 /// P3 and P5: `list.map` with a closure literal or a named fn that only
-/// reads its parameter, a call through a `let` bound to such a closure,
-/// and a `spawn` of a borrowed list copy no list in the caller (the
-/// spawned task copies its arguments in its own thunk).
+/// reads its parameter, and a call through a `let` bound to such a
+/// closure, copy no list in the caller. A `spawn` of a borrowed list
+/// copies it once: since story spawn-without-handshake the caller copies
+/// it into the transfer memory the task owns (between `spawn_begin` and
+/// `spawn`), and the task's thunk passes that copy on in place.
 #[test]
 fn readers_and_spawns_take_places() {
     let (generated, _) = lower_with("copies", true);
@@ -80,7 +82,6 @@ fn readers_and_spawns_take_places() {
         "tests.copies.lengths",
         "tests.copies.sums",
         "tests.copies.measured",
-        "tests.copies.start",
     ] {
         let body = function(program, symbol);
         assert!(
@@ -88,11 +89,25 @@ fn readers_and_spawns_take_places() {
             "{symbol}:\n{body}"
         );
     }
+    let start = function(program, "tests.copies.start");
+    assert_eq!(
+        start.matches("call void @\"copy.List").count(),
+        1,
+        "{start}"
+    );
+    let (before, after) = start
+        .split_once("call void @ignite_rt_spawn_begin()")
+        .expect("a transfer begun");
+    assert!(!before.contains("call void @\"copy.List"), "{start}");
+    let (between, _) = after
+        .split_once("call i8 @ignite_rt_spawn(")
+        .expect("the spawn after the transfer");
+    assert!(between.contains("call void @\"copy.List"), "{start}");
     let thunk = program
         .split("\ndefine ")
         .find(|f| f.starts_with("internal void @\"spawn.tests.copies.report."))
         .expect("the spawn thunk of report");
-    assert!(thunk.contains("call void @\"copy.List"), "{thunk}");
+    assert!(!thunk.contains("call void @\"copy.List"), "{thunk}");
 }
 
 #[test]
