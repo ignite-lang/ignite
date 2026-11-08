@@ -2,14 +2,15 @@
 format: aep.planning-md/3
 id: story:fs-resolve-beneath
 kind: story
-status: active
+status: implemented
 title: Directory operations resolve a path in one syscall
 relations:
 - decomposes: epic:native-parity
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T03:59:05Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-08T03:59:07Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-08T08:52:48Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: fs-resolve-beneath
 
