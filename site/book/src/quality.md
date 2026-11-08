@@ -28,9 +28,9 @@ Current values: run `bar` on 2026-11-07, commit `9a775116`.
 |---|---|---|---|---|---|---|
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | eval | 4 | 4 |  |
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | llvm | 0 | 0 |  |
-| 1.2 | differential corpus size | ratchet | eval | 423 | 420 |  |
-| 1.2 | differential corpus size | ratchet | llvm | 643 | 614 |  |
-| 1.2 | differential corpus size | ratchet | rust | 643 | 614 |  |
+| 1.2 | differential corpus size | ratchet | eval | 445 | 420 |  |
+| 1.2 | differential corpus size | ratchet | llvm | 680 | 614 |  |
+| 1.2 | differential corpus size | ratchet | rust | 680 | 614 |  |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/builtins | 112 | 112 |  |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/patterns | 13 | 13 |  |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | llvm/builtins | 12 | 12 |  |
@@ -51,7 +51,7 @@ Current values: run `bar` on 2026-11-07, commit `9a775116`.
 | 2.2 | accepted programs that fail in a backend | gate | rust | 0 | 0 |  |
 | 2.3 | soundness holes open (effects, ownership, exhaustiveness) | ratchet | | unmeasured: the planning store tags no story as a soundness hole; known open: story:map-put-handle-roots, story:immutable-binding-e006 | | |
 | 2.4 | compiler panics on any input | gate | | unmeasured: no fuzzer yet (out of scope of story:quality-ratchet) | | |
-| 2.5 | diagnostic fixtures (one diagnostic per error site, its span) | ratchet | all | 323 | 319 |  |
+| 2.5 | diagnostic fixtures (one diagnostic per error site, its span) | ratchet | all | 328 | 319 |  |
 | 2.6 | checking time stays linear (limit tests) | gate | all | 5 | 5 |  |
 
 ## 3 Generated code and runtime behaviour
@@ -90,9 +90,9 @@ Current values: run `bar` on 2026-11-07, commit `9a775116`.
 | 4.2 | gaps per claimed spec | ratchet | rust/rfc855 | 0 | 0 |  |
 | 4.2 | gaps per claimed spec | ratchet | rust/rfc9110 | 2 | 1 |  |
 | 4.2 | gaps per claimed spec | ratchet | rust/rfc9112 | 1 | 1 |  |
-| 4.3 | inline tests per target | ratchet | eval | 191 | 191 |  |
-| 4.3 | inline tests per target | ratchet | llvm | 322 | 309 |  |
-| 4.3 | inline tests per target | ratchet | rust | 322 | 309 |  |
+| 4.3 | inline tests per target | ratchet | eval | 206 | 191 |  |
+| 4.3 | inline tests per target | ratchet | llvm | 346 | 309 |  |
+| 4.3 | inline tests per target | ratchet | rust | 346 | 309 |  |
 | 4.4 | std functions with no inline test | ratchet | | unmeasured: no instrument yet: needs the call graph of the test bodies | | |
 
 ## 5 Operations: run, apply, host
@@ -121,7 +121,7 @@ Current values: run `bar` on 2026-11-07, commit `9a775116`.
 | 7.1 | flaky tests per gate | ratchet | | unmeasured: no instrument reads the gate logs; known: apply_transition::a_failed_start_first_replacement, slice10::executable_component_main | | |
 | 7.2 | ignored tests | ratchet | all | 24 | 21 |  |
 | 7.3 | source files over 3,000 lines | ratchet | all | 4 | 4 |  |
-| 7.4 | language friction rows open | ratchet | all | 43 | 34 |  |
+| 7.4 | language friction rows open | ratchet | all | 38 | 34 |  |
 | 7.5 | mutants that survive the suite on the compiler crates | ratchet | | unmeasured: no mutation testing yet (out of scope of story:quality-ratchet) | | |
 
 ## 8 Documentation and users
