@@ -4864,6 +4864,25 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 };
                 self.rt_result(name, &[format!("ptr {address}"), format!("i64 {port}")], ok)
             }
+            TcpListenerBindKept => {
+                let (ptr, i64) = ("ptr".to_string(), "i64".to_string());
+                self.m.declare(
+                    "ignite_rt_tcp_bind_kept",
+                    "i32",
+                    &[ptr.clone(), i64.clone(), i64, ptr.clone(), ptr],
+                );
+                let address = self.read_arg(&args[0]);
+                let port = self.scalar_arg(&args[1]);
+                self.rt_result(
+                    "tcp_bind_kept",
+                    &[
+                        format!("ptr {address}"),
+                        format!("i64 {port}"),
+                        "i64 1".to_string(),
+                    ],
+                    Ty::TcpListener,
+                )
+            }
             TcpListenerAccept => {
                 let r = recv(self);
                 let l = self.scalar(&r);

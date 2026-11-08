@@ -1,0 +1,79 @@
+package tests.drain_bind_kept_many
+
+// Built for both targets and run by tests/drain.rs (adversary of story
+// `drain-keeps-bound-listeners`, `docs/slice.md` 16.13): several
+// listeners at once. `plain_a` and `plain_b` are bound with
+// `TcpListener.bind`, `kept_a` and `kept_b` with `TcpListener.bind_kept`,
+// all on ports read from the environment; `admin` is a resource with
+// `keep_through_drain = true`; `late` is bound with `bind_kept` after the
+// drain began. At SIGTERM both plain listeners are released and every
+// kept one answers until the process exits 0.
+
+fn answer(stream: TcpStream) -> Result<Unit, IoError> requires [stream.read, stream.write] {
+  stream.write_all("internal\n".to_bytes())?
+  let input = stream.read(64)?
+  return Ok(Unit)
+}
+
+fn serve_internal(listener: TcpListener) -> Result<Unit, IoError> {
+  loop {
+    let stream = listener.accept()?
+    spawn answer(stream)
+  }
+}
+
+fn hold(stream: TcpStream) -> Result<Unit, IoError> requires [stream.read] {
+  let input = stream.read(64)?
+  return Ok(Unit)
+}
+
+fn port_of(environment: Environment, name: Text) -> Result<Int, IoError> {
+  match environment.get(name) {
+    Some(text) => match Int.parse(text) {
+      Some(port) => Ok(port)
+      None => Err(IoError.new("{name} is no port: {text}"))
+    }
+    None => Err(IoError.new("{name} is unset"))
+  }
+}
+
+type App {
+  environment: Environment
+  admin: TcpListener
+  executable: Text
+}
+
+fn App.main(self: App) -> Result<Unit, IoError> {
+  let plain_a = TcpListener.bind("127.0.0.1", port_of(self.environment, "PLAIN_A_PORT")?)?
+  let kept_a = TcpListener.bind_kept("127.0.0.1", port_of(self.environment, "KEPT_A_PORT")?)?
+  let plain_b = TcpListener.bind("127.0.0.1", port_of(self.environment, "PLAIN_B_PORT")?)?
+  let kept_b = TcpListener.bind_kept("127.0.0.1", port_of(self.environment, "KEPT_B_PORT")?)?
+  log("plain_a on {plain_a.local_port()}")
+  log("kept_a on {kept_a.local_port()}")
+  log("plain_b on {plain_b.local_port()}")
+  log("kept_b on {kept_b.local_port()}")
+  spawn serve_internal(self.admin)
+  spawn serve_internal(kept_a)
+  spawn serve_internal(kept_b)
+  let held = plain_a.accept()?
+  spawn hold(held)
+  log("waiting")
+  match plain_a.accept() {
+    Ok(_) => log("plain_a accepted")
+    Err(e) => log("plain_a accept: {e.message}")
+  }
+  match plain_b.accept() {
+    Ok(_) => log("plain_b accepted")
+    Err(e) => log("plain_b accept: {e.message}")
+  }
+  let late = TcpListener.bind_kept("127.0.0.1", 0)?
+  log("late on {late.local_port()}")
+  spawn serve_internal(late)
+  Ok(())
+}
+
+system DrainBindKeptMany {
+  resource environment: Environment
+  resource admin: TcpListener { address = "127.0.0.1", port = 0, keep_through_drain = true }
+  component app: App { environment = environment, admin = admin, executable = "drainbindkeptmany" }
+}

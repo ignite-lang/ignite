@@ -172,6 +172,7 @@ pub fn change(builtin: Builtin) -> Option<Change> {
         | StreamWriteUrgent
         | TcpListenerAccept
         | TcpListenerBind
+        | TcpListenerBindKept
         | TcpListenerLocalPort
         | TcpStreamClose
         | TcpStreamConnect

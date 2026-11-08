@@ -418,7 +418,7 @@ A function without `requires` gets it added to its inferred set.
 | `Stdin.is_terminal()`, `Stdin.set_raw(on)` | `stdin.mode` |
 | `Stdout.write_all(b)` | `stdout.write` |
 | `Process.exit(code)` | `process.exit` |
-| `TcpListener.bind(a, p)` | `net.listen` |
+| `TcpListener.bind(a, p)`, `TcpListener.bind_kept(a, p)` | `net.listen` |
 | `TcpStream.connect(a, p)` | `net.connect` |
 | `f(a, ..)`, `a.f(..)`, `P.role(a, ..)`, called or spawned | each entry `q.op` of the callee's declared or inferred set whose `q` is a parameter of the callee becomes `r.op` for each root `r` of the argument passed for `q` (the receiver of `a.f(..)` is the first argument); every other entry (`stdin.read`) is needed unchanged |
 | `TcpStream.connect_within(a, p, t)` (26.3) | `net.connect` |
@@ -3751,6 +3751,13 @@ The drain on SIGTERM:
   as a literal (E020 otherwise, as for `address` and `port`); the generated main binds it with `ignite_io::TcpListener::bind_kept`, on the LLVM target through the runtime
   entry `ignite_rt_tcp_bind_kept(address, port, kept, out, err)`, declared only in a main that
   binds a listener with the property, so other programs' IR is unchanged.
+- A listener bound at run time is kept the same way with the static `TcpListener.bind_kept(address:
+  Text, port: Int) -> Result<TcpListener, IoError>` (story `drain-keeps-bound-listeners`, the
+  case study's G31), effect `net.listen` as `bind`: its address and port are any values, read from
+  the environment or configuration, not literals. Rust lowers it to
+  `ignite_io::TcpListener::bind_kept`, LLVM to `ignite_rt_tcp_bind_kept(address, port, 1, out,
+  err)`, declared only in a module that calls it. `TcpListener.bind` is released as before. Test:
+  `drain::a_listener_bound_kept_at_run_time_accepts_through_the_drain`, both targets.
 - The wait for live tasks after `K.main` returns does not wait for a task that is blocked in
   `accept` on a kept listener or in a read of a stream a kept listener accepted: the process
   exits 0 once every other task has ended, so a kept admin or internal listener never holds

@@ -2376,6 +2376,7 @@ fn is_static(builtin: Builtin) -> bool {
             | Builtin::IoErrorNew
             | Builtin::StoreNew
             | Builtin::TcpListenerBind
+            | Builtin::TcpListenerBindKept
             | Builtin::TcpStreamConnect
             | Builtin::StdinRead
             | Builtin::StdinIsTerminal

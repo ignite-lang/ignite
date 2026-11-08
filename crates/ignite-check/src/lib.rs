@@ -146,6 +146,7 @@ pub const BUILTIN_STATICS: &[(&str, &str)] = &[
     ("List", "with_capacity"),
     ("Int", "to_text"),
     ("TcpListener", "bind"),
+    ("TcpListener", "bind_kept"),
     ("TcpStream", "connect"),
     ("Stdin", "read"),
     ("Stdin", "is_terminal"),
@@ -306,6 +307,7 @@ const BUILTIN_STATIC_ARITIES: &[(&str, &str, usize)] = &[
     ("List", "with_capacity", 1),
     ("Int", "to_text", 1),
     ("TcpListener", "bind", 2),
+    ("TcpListener", "bind_kept", 2),
     ("TcpStream", "connect", 2),
     ("Stdin", "read", 1),
     ("Stdin", "is_terminal", 0),
@@ -339,6 +341,7 @@ const BUILTIN_STATIC_ARITIES: &[(&str, &str, usize)] = &[
 /// Builtin statics that are effectful substrate operations.
 const EFFECTFUL_STATICS: &[(&str, &str)] = &[
     ("TcpListener", "bind"),
+    ("TcpListener", "bind_kept"),
     ("TcpStream", "connect"),
     ("Stdin", "read"),
     ("Stdin", "is_terminal"),
@@ -557,7 +560,7 @@ pub fn static_effect(owner: &str, name: &str) -> Option<&'static str> {
         ("Stdout", "write_all") => Some("stdout.write"),
         ("Stderr", "write_all") => Some("stderr.write"),
         ("Process", "exit") => Some("process.exit"),
-        ("TcpListener", "bind") => Some("net.listen"),
+        ("TcpListener", "bind" | "bind_kept") => Some("net.listen"),
         ("TcpStream", "connect") => Some("net.connect"),
         ("Clock", "monotonic") => Some("clock.read"),
         ("Clock", "sleep") => Some("clock.sleep"),

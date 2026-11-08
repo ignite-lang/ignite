@@ -27,7 +27,7 @@ Operations on streams and listeners need effects on the value they are called on
 
 | operation | effect it needs |
 |---|---|
-| `TcpListener.bind(a, p)` | `net.listen` |
+| `TcpListener.bind(a, p)`, `TcpListener.bind_kept(a, p)` | `net.listen` |
 | `TcpStream.connect(a, p)` | `net.connect` |
 | `x.accept()` | `x.accept` |
 | `x.read(n)`, `x.received_batches()`, `x.urgent_pending()` | `x.read` |
@@ -42,6 +42,7 @@ Operations on streams and listeners need effects on the value they are called on
 
 ```ignite,fragment
 TcpListener.bind(address: Text, port: Int) -> Result<TcpListener, IoError>
+TcpListener.bind_kept(address: Text, port: Int) -> Result<TcpListener, IoError>
 fn accept(listener: TcpListener) -> Result<TcpStream, IoError>
 fn local_port(listener: TcpListener) -> Int
 ```
@@ -49,6 +50,7 @@ fn local_port(listener: TcpListener) -> Int
 | operation | what it does |
 |---|---|
 | `TcpListener.bind` | listen on `address` and `port`; port 0 picks a free port |
+| `TcpListener.bind_kept` | as `bind`, for a listener the SIGTERM drain keeps open (below) |
 | `accept` | the next connection; retries failures that pass with time (out of descriptors, buffers or memory, a connection aborted before it was accepted), pausing 10 ms, doubling up to 1 s |
 | `local_port` | the port the listener is bound to |
 
@@ -67,6 +69,9 @@ resource ingress: TcpListener {
 A fifth property, `keep_through_drain = true`, keeps the listener open through the SIGTERM
 drain: it is not released and accepts until the process exits, so an admin or internal port
 keeps answering while the others drain, and a task waiting on it does not hold up the exit.
+A listener whose address or port the program reads at run time, from its environment or
+configuration, is kept the same way when it is bound with `TcpListener.bind_kept`; one bound
+with `TcpListener.bind` is released.
 The generated `main` binds every listener a component uses before it calls the component's
 `main`, with the `--port` override and the `listening on` log line.
 
