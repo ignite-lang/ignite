@@ -33,9 +33,9 @@ Current values: run `v0.15.0` on 2026-11-08, commit `6e144f76`.
 |---|---|---|---|---|---|---|
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | eval | 4 | 4 | = |
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | llvm | 0 | 0 | = |
-| 1.2 | differential corpus size | ratchet | eval | 452 | 452 | +29 better |
-| 1.2 | differential corpus size | ratchet | llvm | 688 | 688 | +45 better |
-| 1.2 | differential corpus size | ratchet | rust | 688 | 688 | +45 better |
+| 1.2 | differential corpus size | ratchet | eval | 465 | 452 | +29 better |
+| 1.2 | differential corpus size | ratchet | llvm | 701 | 688 | +45 better |
+| 1.2 | differential corpus size | ratchet | rust | 701 | 688 | +45 better |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/builtins | 112 | 133 | +13 worse |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/patterns | 13 | 13 | = |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | llvm/builtins | 12 | 14 | +1 worse |
