@@ -29,17 +29,20 @@ thread_local! {
 
 /// The environment pointer, moved to the new task with the transfer memory
 /// it points into.
-struct Environment(*mut c_void);
+struct Environment {
+    env: *mut c_void,
+    transfer: Option<Transfer>,
+}
 
-// SAFETY: the environment lies in the transfer memory the task receives
-// with it (or, for a caller that began no transfer, in memory that caller
-// keeps alive and unchanged until the task's `spawn_ready`); the spawning
-// task does not touch it after `spawn`.
+// SAFETY: the environment lies in the transfer memory moved with it (or,
+// for a caller that began no transfer, in memory that caller keeps alive
+// and unchanged until the task's `spawn_ready`); the spawning task gave
+// that arena up at `transfer_end` and touches neither after `spawn`.
 unsafe impl Send for Environment {}
 
 impl Environment {
-    fn into_inner(self) -> *mut c_void {
-        self.0
+    fn into_parts(self) -> (*mut c_void, Option<Transfer>) {
+        (self.env, self.transfer)
     }
 }
 
@@ -67,11 +70,12 @@ pub extern "C" fn ignite_rt_spawn(function: Option<TaskFn>, env: *mut c_void) ->
         let Some(function) = function else {
             crate::process::die("spawn of a null function");
         };
-        let env = Environment(env);
+        let environment = Environment { env, transfer };
         let result = ignite_io::try_spawn(move || {
+            let (env, transfer) = environment.into_parts();
             let kept = transfer.and_then(adopt);
             READY.with(|slot| *slot.borrow_mut() = kept);
-            function(env.into_inner());
+            function(env);
             spawn_ready();
             task_end();
             crate::net::task_ended();

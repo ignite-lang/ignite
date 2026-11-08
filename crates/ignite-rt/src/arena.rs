@@ -429,29 +429,22 @@ impl Task {
 /// its transfer gives the chunk its thread kept here in exchange
 /// ([`adopt`]): a server's accept loop takes one per connection and the
 /// starting sessions return as many, with no `mmap` or `munmap` in steady
-/// state.
-static TRANSFER_SPARE: Mutex<Vec<Chunk>> = Mutex::new(Vec::new());
+/// state. A chunk no arena holds is kept as its address, with its
+/// provenance exposed ([`keep_for_transfers`]).
+static TRANSFER_SPARE: Mutex<Vec<usize>> = Mutex::new(Vec::new());
 
 /// Chunks [`TRANSFER_SPARE`] keeps; a transfer touches a page or two of
 /// its chunk, and a burst of spawns beyond this many maps new ones.
 const TRANSFER_KEPT: usize = 16;
 
-/// A chunk from [`chunk_new`] that no arena holds.
-struct Chunk(NonNull<u8>);
-
-// SAFETY: a chunk no arena holds is plain memory that nothing points into.
-unsafe impl Send for Chunk {}
-
 /// The memory of a `spawn`'s environment (`docs/llvm.md` section 4): an
 /// arena the spawning task filled between [`transfer_begin`] and
 /// [`transfer_end`], then owned by the spawned task, which reads its
 /// arguments there until it ends. Dropping it returns its chunks to
-/// [`TRANSFER_SPARE`] and its large blocks to `malloc`.
+/// [`TRANSFER_SPARE`] and its large blocks to `malloc`. Not `Send`: it
+/// moves to the task's thread inside `task::Environment`, whose pointer
+/// points into it.
 pub(crate) struct Transfer(Arena);
-
-// SAFETY: the spawning task gave the arena up at `transfer_end` and keeps
-// no pointer into it; only its new owner reads it.
-unsafe impl Send for Transfer {}
 
 impl Drop for Transfer {
     fn drop(&mut self) {
@@ -475,7 +468,7 @@ fn keep_for_transfers(chunks: Vec<NonNull<u8>>) {
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     for pointer in chunks {
         if kept.len() < TRANSFER_KEPT {
-            kept.push(Chunk(pointer));
+            kept.push(pointer.as_ptr().expose_provenance());
         } else {
             chunk_drop(pointer);
         }
@@ -523,8 +516,9 @@ pub(crate) fn transfer_begin() {
             let kept = TRANSFER_SPARE
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .pop();
-            if let Some(Chunk(pointer)) = kept {
+                .pop()
+                .and_then(|address| NonNull::new(std::ptr::with_exposed_provenance_mut(address)));
+            if let Some(pointer) = kept {
                 transfer.spare.push(pointer);
                 transfer.reserved += CHUNK;
             }
@@ -817,37 +811,25 @@ mod tests {
         a_spawned_task_adopts_its_transfer_and_gives_its_spare_chunk();
     }
 
-    /// Part of the test above: the kept chunks are global.
+    /// Part of the test above: the kept chunks are global. `abi::` checks
+    /// the environment's bytes across threads.
     fn a_spawned_task_adopts_its_transfer_and_gives_its_spare_chunk() {
+        let _ = alloc(8, 8);
+        ignite_rt_task_end();
+        assert_eq!(arena_reserved(), CHUNK, "the thread keeps one chunk");
         transfer_begin();
         let env = alloc(16, 8);
-        // SAFETY: a fresh block of 16 bytes.
-        unsafe { std::ptr::write_bytes(env, 7, 16) };
         let transfer = transfer_end().expect("a transfer");
-        let env = env as usize;
-        let child = std::thread::spawn(move || {
-            let _ = alloc(8, 8);
-            ignite_rt_task_end();
-            assert_eq!(arena_reserved(), CHUNK, "the thread keeps one chunk");
-            let kept = TRANSFER_SPARE.lock().unwrap().len();
-            assert!(adopt(transfer).is_none(), "an empty arena adopts");
-            assert_eq!(TRANSFER_SPARE.lock().unwrap().len(), kept + 1);
-            assert_eq!(arena_reserved(), CHUNK, "only the adopted chunk");
-            let env = env as *mut u8;
-            // SAFETY: the environment's 16 bytes, now in this arena.
-            assert!(
-                unsafe { std::slice::from_raw_parts(env, 16) }
-                    .iter()
-                    .all(|b| *b == 7)
-            );
-            assert_eq!(alloc(8, 8), env.wrapping_add(16), "allocated after it");
-            let _ = alloc(8, 8);
-            transfer_begin();
-            let another = transfer_end().expect("a transfer");
-            assert!(adopt(another).is_some(), "a used arena does not adopt");
-            ignite_rt_task_end();
-        });
-        child.join().unwrap();
+        let kept = TRANSFER_SPARE.lock().unwrap().len();
+        assert!(adopt(transfer).is_none(), "an empty arena adopts");
+        assert_eq!(TRANSFER_SPARE.lock().unwrap().len(), kept + 1);
+        assert_eq!(arena_reserved(), CHUNK, "only the adopted chunk");
+        assert_eq!(alloc(8, 8), env.wrapping_add(16), "allocated after it");
+        let _ = alloc(8, 8);
+        transfer_begin();
+        let another = transfer_end().expect("a transfer");
+        assert!(adopt(another).is_some(), "a used arena does not adopt");
+        ignite_rt_task_end();
     }
 
     #[test]

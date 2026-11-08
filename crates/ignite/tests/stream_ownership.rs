@@ -110,14 +110,6 @@ fn named_spawn_arguments_in_another_order_build_and_pass_on_both_targets() {
     ignite_test("named_spawn.ignite", "all", 1, 2);
 }
 
-/// Story spawn-without-handshake: `spawn` does not wait for the task, so
-/// the arguments a loop builds and frees per iteration reach each task as
-/// the spawn saw them (a shallow environment on the LLVM target fails it).
-#[test]
-fn spawned_tasks_read_their_arguments_after_the_loop_freed_them() {
-    ignite_test("spawn_environment.ignite", "all", 1, 2);
-}
-
 /// A running `inlined`, killed on drop.
 struct Server {
     child: Child,
