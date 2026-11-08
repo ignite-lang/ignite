@@ -18,6 +18,7 @@ mod cli;
 mod common;
 mod conformance;
 mod control_trace;
+mod data_json;
 mod decode;
 mod default_target;
 mod differential;

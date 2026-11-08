@@ -2,6 +2,7 @@ package std.json
 
 import std.text.{digit_value, is_digit, repeat}
 import std.option.{and_then, unwrap_or}
+import std.data.{base64, format_error, DataLimits, FormatError, Value}
 
 // JSON values (RFC 8259): `encode` writes the compact form, `parse` reads
 // one value surrounded by optional whitespace, and the accessors read
@@ -14,6 +15,11 @@ import std.option.{and_then, unwrap_or}
 // `Number(1)` nor `Decimal("1.00")`. Strings
 // are decoded completely, `\uXXXX` with surrogate pairs included; a lone
 // surrogate is an error.
+//
+// The bridge to `std.data` (`docs/slice.md` 27): `to_data` and `of_data`
+// convert `Json` and `Value` both ways, `read` and `read_with` read a
+// document into a `Value` within `DataLimits` (a repeated member name is
+// refused there, `parse` keeps it), `write` and `write_pretty` write one.
 
 enum Json {
   Null,
@@ -38,6 +44,18 @@ type Parsed = Result<(Json, Int), JsonError>
 // a `Decimal`; one of exactly this many is a `Number` when it fits `Int`.
 const MAXIMUM_DIGITS: Int = 19
 const MAXIMUM_DEPTH: Int = 64
+
+// What one parse refuses: arrays and objects nested deeper than `depth`,
+// more than `entries` items or members in one of them, and, when `unique`,
+// a member name repeated in one object.
+type Bounds {
+  depth: Int
+  entries: Int
+  unique: Bool
+}
+
+// `parse`'s bounds: 64 levels, no entry bound, repeated names kept.
+const PARSE_BOUNDS: Bounds = Bounds { depth = MAXIMUM_DEPTH, entries = 9223372036854775807, unique = false }
 
 // ---- encoding ---------------------------------------------------------------
 
@@ -123,9 +141,12 @@ fn skip_space(bytes: Bytes, at: Int) -> Int {
 }
 
 // The one JSON value of `text`, with whitespace allowed around it.
-fn parse(text: Text) -> Result<Json, JsonError> {
+fn parse(text: Text) -> Result<Json, JsonError> = parse_bounded(text, PARSE_BOUNDS)
+
+// The one JSON value of `text` within `bounds`.
+fn parse_bounded(text: Text, bounds: Bounds) -> Result<Json, JsonError> {
   let bytes = text.to_bytes()
-  let (value, end) = parse_value(bytes, skip_space(bytes, 0), 0)?
+  let (value, end) = parse_value(bytes, skip_space(bytes, 0), 0, bounds)?
   let rest = skip_space(bytes, end)
   if rest < bytes.len() {
     return Err(error("unexpected character after the value", rest))
@@ -135,7 +156,7 @@ fn parse(text: Text) -> Result<Json, JsonError> {
 
 // The value starting at `at`, which is not whitespace; `depth` counts the
 // arrays and objects around it.
-fn parse_value(bytes: Bytes, at: Int, depth: Int) -> Parsed {
+fn parse_value(bytes: Bytes, at: Int, depth: Int, bounds: Bounds) -> Parsed {
   if at >= bytes.len() {
     return Err(error("unexpected end of input", at))
   }
@@ -147,8 +168,8 @@ fn parse_value(bytes: Bytes, at: Int, depth: Int) -> Parsed {
       let (text, end) = parse_string(bytes, at)?
       Ok((Str(text), end))
     }
-    b'[' => parse_array(bytes, at, depth + 1)
-    b'{' => parse_object(bytes, at, depth + 1)
+    b'[' => parse_array(bytes, at, depth + 1, bounds)
+    b'{' => parse_object(bytes, at, depth + 1, bounds)
     b'-' | b'0'..=b'9' => parse_number(bytes, at)
     _ => Err(error("unexpected character", at))
   }
@@ -373,9 +394,9 @@ fn surrogate_pair(a: Byte, b: Byte, c: Byte, d: Byte, e: Byte, f: Byte) -> Bytes
   ]
 }
 
-fn parse_array(bytes: Bytes, at: Int, depth: Int) -> Parsed {
-  if depth > MAXIMUM_DEPTH {
-    return Err(error("nested deeper than {MAXIMUM_DEPTH}", at))
+fn parse_array(bytes: Bytes, at: Int, depth: Int, bounds: Bounds) -> Parsed {
+  if depth > bounds.depth {
+    return Err(error("nested deeper than {bounds.depth}", at))
   }
   var items = []
   var i = skip_space(bytes, at + 1)
@@ -383,7 +404,10 @@ fn parse_array(bytes: Bytes, at: Int, depth: Int) -> Parsed {
     return Ok((Array(items), i + 1))
   }
   loop {
-    let (item, end) = parse_value(bytes, i, depth)?
+    if items.len() == bounds.entries {
+      return Err(error("more than {bounds.entries} entries", i))
+    }
+    let (item, end) = parse_value(bytes, i, depth, bounds)?
     items.push(item)
     i = skip_space(bytes, end)
     if i >= bytes.len() {
@@ -399,25 +423,35 @@ fn parse_array(bytes: Bytes, at: Int, depth: Int) -> Parsed {
   }
 }
 
-fn parse_object(bytes: Bytes, at: Int, depth: Int) -> Parsed {
-  if depth > MAXIMUM_DEPTH {
-    return Err(error("nested deeper than {MAXIMUM_DEPTH}", at))
+fn parse_object(bytes: Bytes, at: Int, depth: Int, bounds: Bounds) -> Parsed {
+  if depth > bounds.depth {
+    return Err(error("nested deeper than {bounds.depth}", at))
   }
   var members = []
+  var names: Map<Text, Bool> = Map.empty()
   var i = skip_space(bytes, at + 1)
   if i < bytes.len() && bytes.at(i) == b'}' {
     return Ok((Object(members), i + 1))
   }
   loop {
+    if members.len() == bounds.entries {
+      return Err(error("more than {bounds.entries} entries", i))
+    }
     if i >= bytes.len() || bytes.at(i) != b'"' {
       return Err(error("expected a member name", i))
     }
     let (name, after_name) = parse_string(bytes, i)?
+    if bounds.unique {
+      if names.contains(name) {
+        return Err(error("duplicate member `{name}`", i))
+      }
+      names.put(name, true)
+    }
     i = skip_space(bytes, after_name)
     if i >= bytes.len() || bytes.at(i) != b':' {
       return Err(error("expected `:`", i))
     }
-    let (item, end) = parse_value(bytes, skip_space(bytes, i + 1), depth)?
+    let (item, end) = parse_value(bytes, skip_space(bytes, i + 1), depth, bounds)?
     members.push((name, item))
     i = skip_space(bytes, end)
     if i >= bytes.len() {
@@ -542,8 +576,8 @@ test "an invalid number token is still an error" {
 
 test "numbers compare by their structure, not their value" {
   assert Number(1) != Decimal("1.0")
-  assert Decimal("1.0") != Decimal("1.00")
-  assert Decimal("1e2") == Decimal("1e2")
+  assert Json.Decimal("1.0") != Decimal("1.00")
+  assert Json.Decimal("1e2") == Decimal("1e2")
   assert parse("1")? != parse("1.0")?
   assert parse("1e2")? == parse("1e2")?
 }
@@ -705,4 +739,250 @@ test "encode and parse round trip" {
     assert encode(parse(compact)?) == compact
   }
   assert encode(parse(r#""Aé€😀""#)?) == r#""Aé€😀""#
+}
+
+// ---- the data bridge --------------------------------------------------------
+
+// `json` as a data value: `Number` is `Int`, `Str` is `Text`, `Array` is
+// `List`, `Object` is `Map`.
+fn to_data(json: Json) -> Value = match json {
+  Null => Value.Null
+  Bool(b) => Value.Bool(b)
+  Number(n) => Value.Int(n)
+  Decimal(text) => Value.Decimal(text)
+  Str(text) => Value.Text(text)
+  Array(items) => Value.List(items.map(to_data))
+  Object(members) => Value.Map(members.map(|m| (m.0, to_data(m.1))))
+}
+
+// `value` as JSON: `Bytes` as its base64 text, a `Moment` as its text.
+fn of_data(value: Value) -> Json = match value {
+  Value.Null => Null
+  Value.Bool(b) => Bool(b)
+  Value.Int(n) => Number(n)
+  Value.Decimal(text) => Decimal(text)
+  Value.Text(text) => Str(text)
+  Value.Bytes(bytes) => Str(base64(bytes))
+  Value.Moment(text) => Str(text)
+  Value.List(items) => Array(items.map(of_data))
+  Value.Map(members) => Object(members.map(|m| (m.0, of_data(m.1))))
+}
+
+// The one JSON value of `text` as a data value, within the default
+// `DataLimits`.
+fn read(text: Text) -> Result<Value, FormatError> = read_with(text, DataLimits {})
+
+// The one JSON value of `text` as a data value: at most `limits.size`
+// bytes, arrays and objects nested at most `limits.depth` deep with at most
+// `limits.entries` items or members each, no member name twice in one
+// object. An error names the first byte that broke a rule.
+fn read_with(text: Text, limits: DataLimits) -> Result<Value, FormatError> {
+  let size = limits.size.to_int()
+  if text.len() > size {
+    return Err(format_error(text, "document larger than {size} bytes", size))
+  }
+  match parse_bounded(text, Bounds { depth = limits.depth, entries = limits.entries, unique = true }) {
+    Ok(json) => Ok(to_data(json))
+    Err(e) => Err(format_error(text, e.message, e.offset))
+  }
+}
+
+// The first `Decimal` in `value` whose text is no JSON number token, as
+// the error of a write.
+fn number_error(value: Value) -> Option<FormatError> {
+  match value {
+    Value.Decimal(text) => match decimal(text) {
+      Ok(_) => None
+      Err(_) => Some(FormatError { message = "decimal `{text}` is not a JSON number", line = 0, column = 0, offset = 0 })
+    }
+    Value.List(items) => {
+      for item in items {
+        match number_error(item) {
+          Some(e) => return Some(e)
+          None => {}
+        }
+      }
+      None
+    }
+    Value.Map(members) => {
+      for member in members {
+        match number_error(member.1) {
+          Some(e) => return Some(e)
+          None => {}
+        }
+      }
+      None
+    }
+    _ => None
+  }
+}
+
+// The compact JSON text of `value`, as `encode` writes it.
+fn write(value: Value) -> Result<Text, FormatError> = match number_error(value) {
+  Some(e) => Err(e)
+  None => Ok(encode(of_data(value)))
+}
+
+// The JSON text of `value` with one item or member per line, indented by
+// two spaces per level; empty arrays and objects stay `[]` and `{}`.
+fn write_pretty(value: Value) -> Result<Text, FormatError> = match number_error(value) {
+  Some(e) => Err(e)
+  None => Ok(pretty(of_data(value), ""))
+}
+
+fn pretty(value: Json, indent: Text) -> Text {
+  let inner = indent + "  "
+  match value {
+    Array(items) => if items.is_empty() {
+      "[]"
+    } else {
+      "[\n" + items.map(|item| inner + pretty(item, inner)).join(",\n") + "\n" + indent + "]"
+    }
+    Object(members) => if members.is_empty() {
+      "{{}}"
+    } else {
+      "{{\n" + members.map(|m| inner + quote(m.0) + ": " + pretty(m.1, inner)).join(",\n") + "\n" + indent + "}}"
+    }
+    other => encode(other)
+  }
+}
+
+test "of_data inverts to_data for every kind, nested" {
+  let every: List<Json> = [
+    Null,
+    Bool(true),
+    Bool(false),
+    Number(-7),
+    Decimal("6.02e23"),
+    Str("é \"q\""),
+    Array([]),
+    Object([]),
+    Array([Null, Number(1), Array([Str("x")]), Object([("a", Decimal("-0"))])]),
+    Object([("id", Number(1)), ("tags", Array([Str("a"), Bool(true)])), ("x", Object([("y", Null)]))])
+  ]
+  for j in every {
+    assert of_data(to_data(j)) == j
+  }
+  assert to_data(Object([("n", Number(2)), ("s", Str("t"))])) == Value.Map([("n", Value.Int(2)), ("s", Value.Text("t"))])
+  assert to_data(Array([Null, Decimal("1.5"), Bool(false)])) == Value.List([Value.Null, Value.Decimal("1.5"), Value.Bool(false)])
+}
+
+test "of_data writes bytes as base64 text and a moment as its text" {
+  assert of_data(Value.Bytes(b"foobar")) == Str("Zm9vYmFy")
+  assert of_data(Value.Bytes(b"")) == Str("")
+  assert of_data(Value.Moment("1979-05-27T07:32:00Z")) == Str("1979-05-27T07:32:00Z")
+  assert of_data(Value.List([Value.Bytes(b"f"), Value.Moment("07:32:00")])) == Array([Str("Zg=="), Str("07:32:00")])
+}
+
+// The error of `read(input)`, `None` when it reads.
+test fn read_failure(input: Text) -> Option<FormatError> = match read(input) {
+  Ok(_) => None
+  Err(e) => Some(e)
+}
+
+// The error of `read_with(input, limits)`, `None` when it reads.
+test fn bounded_failure(input: Text, limits: DataLimits) -> Option<FormatError> = match read_with(input, limits) {
+  Ok(_) => None
+  Err(e) => Some(e)
+}
+
+test fn located(message: Text, line: Int, column: Int, offset: Int) -> Option<FormatError> =
+  Some(FormatError { message, line, column, offset })
+
+test "read gives a value of every kind" {
+  let document = r#"{"a": null, "b": [true, false], "n": -3, "d": 1.25, "s": "x\ty", "o": {}}"#
+  let expected = Value.Map([
+    ("a", Value.Null),
+    ("b", Value.List([Value.Bool(true), Value.Bool(false)])),
+    ("n", Value.Int(-3)),
+    ("d", Value.Decimal("1.25")),
+    ("s", Value.Text("x\ty")),
+    ("o", Value.Map([]))
+  ])
+  assert read(document)? == expected
+  assert read(" 7 ")? == Value.Int(7)
+}
+
+test "a format error names line, column and offset of the first bad byte" {
+  assert read_failure("[1,]") == located("unexpected character", 1, 4, 3)
+  assert read_failure("{{\n  \"a\": 1,\n  \"b\" 2\n}}") == located("expected `:`", 3, 7, 18)
+  assert read_failure("[\"é\", x]") == located("unexpected character", 1, 7, 7)
+  assert read_failure("\n\n") == located("unexpected end of input", 3, 1, 2)
+  assert read_failure("") == located("unexpected end of input", 1, 1, 0)
+}
+
+test "read refuses a duplicate member name, parse keeps it" {
+  assert read_failure(r#"{"a": 1, "b": 2, "a": 3}"#) == located("duplicate member `a`", 1, 18, 17)
+  assert read_failure(r#"[{"a": 1}, {"a": 2}]"#) == None
+  assert parse(r#"{"a": 1, "a": 3}"#)? == Object([("a", Number(1)), ("a", Number(3))])
+}
+
+test "read_with bounds the nesting depth" {
+  let limits = DataLimits { depth = 3 }
+  assert bounded_failure("[[[1]]]", limits) == None
+  assert bounded_failure("[[[[1]]]]", limits) == located("nested deeper than 3", 1, 4, 3)
+  assert bounded_failure(r#"{"a": {"b": {"c": {}}}}"#, limits) == located("nested deeper than 3", 1, 19, 18)
+  assert read_failure("[".repeat(64) + "]".repeat(64)) == None
+  assert read_failure("[".repeat(65) + "]".repeat(65)) == located("nested deeper than 64", 1, 65, 64)
+}
+
+test "read_with bounds the document size" {
+  let limits = DataLimits { size = 8 bytes }
+  assert bounded_failure("[1, 2]  ", limits) == None
+  assert bounded_failure("[1, 2, 3]", limits) == located("document larger than 8 bytes", 1, 9, 8)
+  assert bounded_failure("\"ééééé\"", DataLimits { size = 11 bytes }) == located("document larger than 11 bytes", 1, 7, 11)
+}
+
+test "read_with bounds the entries of one list or map" {
+  let limits = DataLimits { entries = 2 }
+  assert bounded_failure(r#"[[1, 2], {"a": 1, "b": 2}]"#, limits) == None
+  assert bounded_failure("[1, 2, 3]", limits) == located("more than 2 entries", 1, 8, 7)
+  assert bounded_failure(r#"{"a": 1, "b": 2, "c": 3}"#, limits) == located("more than 2 entries", 1, 18, 17)
+}
+
+test "write gives the compact text and read gives the value back" {
+  let value = Value.Map([
+    ("id", Value.Int(1)),
+    ("title", Value.Text("say \"hi\"")),
+    ("tags", Value.List([])),
+    ("at", Value.Moment("2026-11-08")),
+    ("raw", Value.Bytes(b"fo")),
+    ("ratio", Value.Decimal("0.5")),
+    ("none", Value.Null)
+  ])
+  let text = write(value)?
+  assert text == r#"{"id":1,"title":"say \"hi\"","tags":[],"at":"2026-11-08","raw":"Zm8=","ratio":0.5,"none":null}"#
+  assert read(text)? == Value.Map([
+    ("id", Value.Int(1)),
+    ("title", Value.Text("say \"hi\"")),
+    ("tags", Value.List([])),
+    ("at", Value.Text("2026-11-08")),
+    ("raw", Value.Text("Zm8=")),
+    ("ratio", Value.Decimal("0.5")),
+    ("none", Value.Null)
+  ])
+}
+
+test "write refuses a decimal that is no JSON number" {
+  assert write_failure(Value.List([Value.Decimal("1.5"), Value.Decimal("NaN")])) == Some("decimal `NaN` is not a JSON number")
+  assert write_failure(Value.Map([("p", Value.Decimal("1.5"))])) == None
+}
+
+// The message of `write(value)`'s error, `None` when it writes.
+test fn write_failure(value: Value) -> Option<Text> = match write(value) {
+  Ok(_) => None
+  Err(e) => Some(e.message)
+}
+
+test "write_pretty indents by two spaces, one member or item per line" {
+  let value = Value.Map([
+    ("a", Value.List([Value.Int(1), Value.Map([("b", Value.Null)])])),
+    ("e", Value.List([])),
+    ("o", Value.Map([])),
+    ("s", Value.Text("x"))
+  ])
+  let expected = "{{\n  \"a\": [\n    1,\n    {{\n      \"b\": null\n    }}\n  ],\n  \"e\": [],\n  \"o\": {{}},\n  \"s\": \"x\"\n}}"
+  assert write_pretty(value)? == expected
+  assert read(write_pretty(value)?)? == value
+  assert write_pretty(Value.Int(3))? == "3"
 }
