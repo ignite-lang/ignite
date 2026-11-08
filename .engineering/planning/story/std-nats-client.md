@@ -4,7 +4,7 @@ id: story:std-nats-client
 kind: story
 status: proposed
 title: 'std.protocol.nats: NATS core client'
-revision: 2
+revision: 3
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T01:26:00Z", actor: "human:timo", revision: 2}
 ---
@@ -21,6 +21,7 @@ transitions:
 ## Acceptance
 
 - INFO/CONNECT handshake (user/password, token), PUB, HPUB, SUB, UNSUB, MSG, HMSG, PING/PONG, -ERR handling, limits (`NatsLimits`); subjects with wildcards matched as the server does.
+- Reconnect with a bounded outgoing buffer: messages older than a configured age are dropped and counted instead of sent late (the spec of the case study: drop and count after 1 s); a reconnect never replays stale messages.
 - Request/reply with an inbox and a deadline (uses story channels-and-timers when landed, a read timeout before).
 - Tests over `Pipe.pair()` with a scripted server; one test against a real `nats-server` when present (ignored elsewhere).
 - Layering rule kept; `task gate` green.

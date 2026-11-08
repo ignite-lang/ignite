@@ -1,0 +1,32 @@
+---
+format: aep.planning-md/3
+id: story:std-digest
+kind: story
+status: proposed
+title: SHA-1, SHA-256 and base64 in std
+relations:
+- depends_on: story:bitwise-operators
+revision: 2
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-08T03:04:57Z", actor: "human:timo", revision: 2}
+---
+# Story: std-digest
+
+## Outcome
+
+std has SHA-1, SHA-256, base64 and base64url as Ignite modules, so a WebSocket handshake, a token check or a content hash needs no hand-written bit arithmetic.
+
+## Context
+
+- Case study gap G22: hand-written with bit arithmetic in a 288-line module.
+- Depends on `story:bitwise-operators`; `std.data` already has a `base64` helper (`story:data-value-model`), which moves here or calls this.
+
+## Acceptance
+
+- `std.digest.sha1(Bytes) -> Bytes`, `sha256`, and an incremental form for large inputs; `std.encoding.base64` encode and decode, standard and url-safe, padding rules of RFC 4648.
+- Test vectors of RFC 3174, FIPS 180-4 (the NIST examples) and RFC 4648 on both targets; a 1 MiB input within 3x of the Rust target's hand-written equivalent (recorded).
+- Layering rule kept; `task gate` green.
+
+## Scope
+
+- `std/digest.ignite`, `std/encoding.ignite` (new), `std/data.ignite`, `docs/layering.md`, `crates/ignite-check/tests/layering.rs`, `docs/slice.md`. Inferred.
