@@ -69,10 +69,13 @@ Rules of the layout:
   not in how it does IO. State since slice 4: `crates/ignite-io` is the only substrate, blocking
   (`std::net`, one OS thread per task, no tokio anywhere in the workspace); the Rust target
   calls it directly with synchronous generated code, and `crates/ignite-rt` is only its C ABI
-  adapter (no socket, stdin or stdout code of its own). Slice 5 makes it async:
-  tokio is the event loop inside `crates/ignite-io`, Rust-target futures run on it directly,
-  LLVM-target coroutines run on it as tokio tasks (Timo, 2026-11-01; replaces the libuv
-  candidate of design section 8.6).
+  adapter (no socket, stdin or stdout code of its own). Readiness IO makes it non-blocking:
+  spawned tasks become stackful tasks on a few worker threads, one epoll loop per worker inside
+  `crates/ignite-io`, behind one reactor interface a tokio-driven reactor could later implement;
+  neither backend changes its lowering, and stackless lowering stays a later option per target
+  once failure ends by return instead of `longjmp` (Timo, 2026-11-08, `docs/readiness-io.md`
+  3.3, 3.4; replaces slice 5's tokio, futures and coroutines of 2026-11-01, which replaced the
+  libuv candidate of design section 8.6).
 - `examples/` holds `.ignite` files only.
 - Nothing named telnet lives under `crates/`.
 - A general layer knows no application protocol: the layers of std and the rule for
