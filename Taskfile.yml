@@ -107,6 +107,25 @@ tasks:
       - '''{{.DIR}}/bin/ignite'' --version'
       - echo 'built {{.DIR}}.tar.gz'
 
+  image:
+    desc: Build the toolchain image ghcr.io/ignite-lang/ignite-toolchain:VERSION from release vVERSION's archive and the tag's source
+    requires:
+      vars: [VERSION]
+    cmds:
+      - docker build --build-arg VERSION={{.VERSION}} -t ghcr.io/ignite-lang/ignite-toolchain:{{.VERSION}} dist/toolchain
+
+  image-check:
+    desc: Check the toolchain image of VERSION (IMAGE overrides the reference) builds and serves the todo example on both targets, offline
+    requires:
+      vars: [VERSION]
+    vars:
+      IMAGE: '{{.IMAGE | default (print "ghcr.io/ignite-lang/ignite-toolchain:" .VERSION)}}'
+    env:
+      IGNITE_IMAGE: '{{.IMAGE}}'
+      IGNITE_VERSION: '{{.VERSION}}'
+    cmds:
+      - 'cargo test -p ignite --test main image:: -- --ignored --exact image::the_image_builds_and_serves_the_todo_example_on_both_targets'
+
   todo-server:
     desc: Run the compiled todod on 127.0.0.1:8080 (PORT=n to override, TARGET=llvm for the LLVM build)
     vars:

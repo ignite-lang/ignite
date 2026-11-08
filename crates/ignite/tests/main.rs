@@ -27,6 +27,7 @@ mod file_ids;
 mod file_ids_adversary;
 mod generics;
 mod ignite_test;
+mod image;
 mod llvm;
 mod llvm_build;
 mod llvm_memory;

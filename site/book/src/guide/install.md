@@ -22,6 +22,20 @@ runtime archive of the LLVM target, so `check`, `build` and `test` on the defaul
 only clang. The Rust target (`--target rust`) also needs the IO substrate crate of a clone,
 `--substrate CLONE/crates/ignite-io`.
 
+## Container image
+
+Each release from v0.13.0 on also has a public image,
+`ghcr.io/ignite-lang/ignite-toolchain:X.Y.Z`, with everything `ignite build` needs on both
+targets: the pre-built `ignite` and its standard library, clang and lld, Rust 1.98, and the
+release's source in `/usr/local/src/ignite`, so `--target rust` needs no `--substrate`. The
+substrate's crates are fetched into the image and `CARGO_NET_OFFLINE=true` is set, so builds
+need no network. The release notes give the image's `@sha256:` digest; pin that.
+
+```sh
+docker run --rm -v "$PWD:/work" ghcr.io/ignite-lang/ignite-toolchain:0.13.0 \
+  ignite build hello.ignite --target rust
+```
+
 ## Install from source
 
 The releases are also tags of the repository (v0.1.0 to v0.13.0).
