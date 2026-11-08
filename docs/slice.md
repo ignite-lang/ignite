@@ -3668,6 +3668,20 @@ The drain on SIGTERM:
   skipped, and what a socket still has no room for is lost. When `K.main` returns, `Ok` or
   `Err`, both targets send `main`'s writes without that bound, as before.
 - A second SIGTERM exits at once.
+- A listener kept through the drain (story `drain-keeps-listeners`, the case study's G6): a
+  `TcpListener` resource with the optional fifth property `keep_through_drain: Bool` (no
+  default; the model shows it only where it is given) set to `true`. The drain does not
+  release it and prints no `released` line for it; its `accept` keeps accepting until the
+  process exits. Every other listener is released as above. The Rust target needs the value
+  as a literal (E020 otherwise, as for `address` and `port`); the generated main binds it with `ignite_io::TcpListener::bind_kept`, on the LLVM target through the runtime
+  entry `ignite_rt_tcp_bind_kept(address, port, kept, out, err)`, declared only in a main that
+  binds a listener with the property, so other programs' IR is unchanged.
+- The wait for live tasks after `K.main` returns does not wait for a task that is blocked in
+  `accept` on a kept listener or in a read of a stream a kept listener accepted: the process
+  exits 0 once every other task has ended, so a kept admin or internal listener never holds
+  up the drain's end. A task that is serving a kept connection (not blocked in its read) is
+  waited for as any other. `main` itself is no task: `main` blocked in a kept `accept` never
+  returns, as before.
 - As landed (P2): a SIGTERM's in-flight guard ends at `released`; a SIGTERM to a program
   without a listener (`tn`) drains too: it waits for `main`, and a second SIGTERM ends it.
 - Outside `ignite run`, the wait for live tasks has no bound. Only the driver's deadline

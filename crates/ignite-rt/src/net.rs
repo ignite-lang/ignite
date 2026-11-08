@@ -327,6 +327,24 @@ pub extern "C" fn ignite_rt_tcp_bind(
     })
 }
 
+/// `i32 tcp_bind_kept(Text* address, i64 port, i64 kept, i64* out,
+/// IoError* err)`: `tcp_bind` of a listener resource that says
+/// `keep_through_drain`; kept through the drain when `kept` is not 0
+/// (`docs/slice.md` 16.13, story `drain-keeps-listeners`).
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_tcp_bind_kept(
+    address: *const IgniteList,
+    port: i64,
+    kept: i64,
+    out: *mut i64,
+    err: *mut IgniteIoError,
+) -> i32 {
+    crate::entry(move || {
+        let bound = TcpListener::bind_with(text(address), port, kept != 0);
+        status(bound.map(|l| register(Handle::Listener(l))), out, err)
+    })
+}
+
 /// `i32 tcp_accept(i64 listener, i64* out, IoError* err)`.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_tcp_accept(handle: i64, out: *mut i64, err: *mut IgniteIoError) -> i32 {
