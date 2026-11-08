@@ -6510,8 +6510,10 @@ ECMAScript's `JSON.parse` keeps the last member, so a server that read the first
 with its JavaScript clients: `{"channel":"/a","channel":"/meta/handshake"}` was `/a` in std and
 `/meta/handshake` in JavaScript (case study gap G29). The rule now:
 
-- `parse` keeps every member in document order and `encode` writes every one back, so
-  `encode(parse(t)?) == t` holds for an object with a repeated name too.
+- `parse` keeps every member in document order and `encode` writes every one back, in that
+  order: for compact `t` (no whitespace between tokens, as `encode` writes) `encode(parse(t)?)
+  == t` holds for an object with a repeated name too; for any other `t` the members come back
+  in order, compacted (`{"a": 1, "a": 2}` encodes as `{"a":1,"a":2}`).
 - `get(value, name)` returns the last member `name`; `text`, `int` and `bool` read through it.
   It returned the first before this story.
 - `get_all(value, name) -> List<Json>` returns every member `name` in document order, empty
