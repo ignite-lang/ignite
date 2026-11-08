@@ -7,6 +7,7 @@ title: 'std.protocol.websocket: RFC 6455 server and client'
 relations:
 - depends_on: story:bitwise-operators
 - depends_on: story:std-digest
+- depends_on: story:http-app-connection
 revision: 2
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T01:25:59Z", actor: "human:timo", revision: 2}
