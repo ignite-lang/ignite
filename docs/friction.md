@@ -44,7 +44,6 @@ names the row in its contract.
 | 59 | A sibling module needs the main file's package as its prefix (`import codespec.cir.{…}` in package `codespec`) | ignite-codespec story cir-model (`src/cir_json.ignite:7`), 2026-11-06; `story:codespec-friction`, recorded only | each sibling import names the full path |
 | 62 | No timer, condition variable or channel (`Clock.sleep` exists since `docs/slice.md` 21.20) | case study G3, 2026-11-07 | a waiter that must wake on a message, not only after a time, still reads a loopback TCP pair with an idle timeout ("bells"): two fds and a connect each |
 | 65 | The SIGTERM drain releases every listener, internal ones included (`crates/ignite-io/src/drain.rs`) | case study G6, 2026-11-07 | rebind the admin, ingress and internal ports after "draining" |
-| 66 | No bitwise operators: and, or, xor, shifts (`^` is E001) | case study G7 (SHA-1, base64, WebSocket masking), 2026-11-07 | bit-by-bit Int arithmetic, slow per frame |
 | 68 | No YAML or regex in std; no WebSocket, NATS or Redis client | case study G9, 2026-11-07 | rules as Ignite data, a hand-written URL matcher, the three protocols over `TcpStream` |
 | 69 | No `setrlimit` (`RLIMIT_NOFILE`) | case study G10, 2026-11-07 | none: the container default caps connections |
 | 70 | No FFI | case study G11, 2026-11-07 | none of rows 60 to 69 can be closed by a thin binding |

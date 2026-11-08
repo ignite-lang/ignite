@@ -154,10 +154,14 @@ expr       := or
 or         := and ('||' and)*
 and        := equality ('&&' equality)*
 equality   := compare (('==' | '!=') compare)?
-compare    := additive (('<' | '>' | '<=' | '>=') additive)?
+compare    := bitor (('<' | '>' | '<=' | '>=') bitor)?
+bitor      := bitxor ('|' bitxor)*                  section 27
+bitxor     := bitand ('^' bitand)*
+bitand     := shift ('&' shift)*
+shift      := additive (('<<' | '>>') additive)*    `<<`, `>>`: two touching `<` or `>`
 additive   := multiplicative (('+' | '-') multiplicative)*
 multiplicative := unary (('*' | '/' | '%') unary)*
-unary      := ('!' | '-') unary | 'await' unary | 'spawn' unary | postfix
+unary      := ('!' | '-' | '~') unary | 'await' unary | 'spawn' unary | postfix
 postfix    := primary ( '(' args ')' | '.' ident ('(' args ')')? | '[' expr ']' | '?' )*
 args       := (expr (',' expr)*)?
 primary    := INT | STRING | BYTE | BYTES | 'true' | 'false'
@@ -9216,7 +9220,7 @@ signal, system or protocol value (14.4), `reference` (its text). By `kind`:
 | `tupleField` | `receiver`, `index` |
 | `index` | `receiver`, `index` |
 | `try`, `spawn`, `await` | `operand` |
-| `unary` | `op` (`!` or `-`), `operand` |
+| `unary` | `op` (`!`, `-` or `~`), `operand` |
 | `binary` | `op` (the operator's symbol), `left`, `right` |
 | `match` | `scrutinee`, `arms` (`{pattern, body, span}`) |
 | `if` | `cond`, `then` (a block), `else` (an expression index or `null`) |
@@ -9533,3 +9537,124 @@ positive`. `connect(address, port)` keeps waiting for the kernel's retries.
   `tcp::timed_out_tells_an_idle_timeout_from_a_close`, `tcp::connect_within_bounds_the_wait`;
   `ignite-rt` `abi::peer_timed_out_and_connect_within`; `ignite-types`
   `builtins::tests::substrate_methods_name_net_for_peer`.
+
+## 27 Bitwise operators on `Int`
+
+**Status: implemented on `story:bitwise-operators`.**
+
+Sources: the case study's G7 (SHA-1, base64 and WebSocket masking written bit by bit with `/`
+and `%`); `docs/friction.md` row 66, removed by this section.
+
+### 27.1 Syntax and precedence
+
+Five binary operators and one prefix operator, all on `Int`:
+
+| operator | meaning | AST |
+|---|---|---|
+| `a & b` | and | `BinaryOp::BitAnd` |
+| `a \| b` | or | `BinaryOp::BitOr` |
+| `a ^ b` | exclusive or | `BinaryOp::BitXor` |
+| `a << n` | shift left | `BinaryOp::Shl` |
+| `a >> n` | arithmetic shift right | `BinaryOp::Shr` |
+| `~a` | not (every bit flipped, `-a - 1`) | `UnaryOp::BitNot` |
+
+The lexer has three new tokens, `&` (`Amp`), `^` (`Caret`) and `~` (`Tilde`); `|` stays `Pipe`
+and `&&`, `||` are unchanged. `<<` and `>>` are no tokens: the parser reads two `<` or two `>`
+whose spans touch (`Parser::shift_op`), so `List<List<Int>>` still closes two type argument
+lists and `a > > b` is E001. The levels of section 3, from tight to loose: prefix (`!`, `-`,
+`~`), `* / %`, `+ -`, `<< >>`, `&`, `^`, `|`, the comparisons, `==` `!=`, `&&`, `||`. This is
+Rust's order: `a & b == c` is `(a & b) == c`, `1 << n + 1` is `1 << (n + 1)`. The new levels are
+left-associative. A `|` in operator position is bitwise or; a `|` that starts an operand still
+starts a closure, and between patterns it still separates alternatives:
+`match x { 1 | 2 => a | b }`. Line breaks after the new operators are skipped as after any
+binary operator. The book's grammar page (`site/book/src/reference/grammar.md`) has the table
+and an `ignite` block that runs these rules.
+
+### 27.2 Types and the shift rule
+
+Both operands and the result are `Int`; any other operand type, `Byte` included, is E040
+(`expected Int`), from `Typer::binary` and `Typer::binary_rest` checking each operand against
+`Int`, and `~` checks its operand the same way. None of them fails: no failure site is recorded
+and no backend emits a check. `&`, `|`, `^` and `~` act on the 64-bit two's complement.
+
+A shift amount outside `0..64` is defined, compared as unsigned so a negative amount counts as
+too large:
+
+| | amount `n` in `0..64` | any other `n` (negative, 64 or more) |
+|---|---|---|
+| `a << n` | `a` shifted left, bits shifted out dropped (no overflow failure) | 0 |
+| `a >> n` | `a` shifted right, copies of the sign bit shifted in | 0 for `a >= 0`, -1 for `a < 0` (the shift by 63) |
+
+There is no logical shift right; `(a >> n) & mask` gives one for a known width.
+
+### 27.3 Lowering
+
+| layer | lowering |
+|---|---|
+| evaluator | `eval::bitwise`: `&`, `\|`, `^` on `i64`; `<<` by `n` when `n` is in `0..64`, else 0; `>>` by `n` when in `0..64`, else by 63; `~` is `!n` |
+| Rust target | `a & b`, `a \| b`, `a ^ b`, `!a`; `i64::checked_shl(a, u64::min((n) as u64, 64) as u32).unwrap_or(0)` and `i64::wrapping_shr(a, u64::min((n) as u64, 63) as u32)` |
+| LLVM target | `and`, `or`, `xor` on `i64`, `xor i64 a, -1` for `~`; `<<` as `shl` and a `select` of 0 when `icmp ult n, 64` fails (the unselected poison of an oversized `shl` does not propagate); `>>` as `ashr` by `select(icmp ult n, 64; n; 63)` |
+| typed JSON (24) | `binary` with `op` the symbol (`&`, `\|`, `^`, `<<`, `>>`); `unary` with `op` `~` |
+| apply identity | the canonical form tags `~` as `bitnot`; binary operators by their symbol, as before |
+
+`apply::plan::CODEGEN_REVISION` is bumped: both backends generate code for the new operators.
+
+### 27.4 Agreement across the evaluator and both targets
+
+`bitwise::operators_agree_across_the_evaluator_and_both_targets`
+(`crates/ignite/tests/bitwise.rs`) writes a program from random operands (xorshift, a fixed
+seed, `IGNITE_BITWISE_SEED` to change it): per binary operator 36 edge pairs (0, 1, -1,
+`i64::MIN`, `i64::MAX`, `0x5555…`; for the shifts the amounts 0, 1, 31, 32, 63, 64, 65, 100, -1,
+-64, `i64::MIN`, `i64::MAX` against the same six left operands, 72 pairs) and 48 random pairs
+whose shift amounts are mostly in `0..64` with some negative and some of 64 or more; `~` over the
+edges and 48 random values; one fn that mixes the levels without parentheses. The operands are
+list literals read in a loop, so no compiler folds them. The evaluator, a Rust-target build and
+an LLVM-target build must each print the values Rust's `i64` gives under 27.2, fn by fn.
+
+### 27.5 SHA-1 and base64, timed against hand-written Rust
+
+`crates/ignite/tests/fixtures/bitwise/codecs.ignite` holds SHA-1 (RFC 3174) and base64 with
+padding (RFC 4648 section 4) written with the operators, `wrapping_add` (25.2) for the
+32-bit sums and `Bytes` read by index and built by `push`. Its four inline tests are RFC 3174's
+tests 1 to 4 (test 3 is a million `a`; plus the empty message) and the seven vectors of RFC 4648
+section 10; `bitwise::sha1_and_base64_vectors_on_both_targets` runs them with `ignite test` on
+both targets. Reading a byte by index and `push` lower to an inline load or store behind a
+bounds check on both targets (no call), so the story's "byte get/set cheaply" needs no new
+builtin.
+
+The file's executable `codecs` builds 1 MiB (`byte i = (31 i + 7) mod 256`) and runs 16 rounds
+of SHA-1 and base64 over it, changing the first byte each round; it prints the last digest and
+the total base64 length. `fixtures/bitwise/codecs.rs` is the same program in hand-written Rust
+(`u32`, `rotate_left`, `chunks_exact`), built with `rustc -O`; the two print the same lines.
+`bitwise::codecs_within_3x_of_hand_written_rust` (`#[ignore]`: it builds a release runtime and
+times programs) builds `codecs` with `--release` on both targets, the LLVM one against
+`ignite-rt` built `--release`, runs the three executables 9 times interleaved and requires each
+target's median within 3 times the hand-written Rust's.
+
+Recorded 2026-11-08, 20 cores shared with other sessions, base `419c69861` plus this story:
+
+| executable | median of 9 | ratio | 1-minute load |
+|---|---|---|---|
+| hand-written Rust, `rustc -O` | 164.9 ms | 1 | 56 |
+| `codecs`, Rust target, `--release` | 258.3 ms | 1.57 | 56 |
+| `codecs`, LLVM target, `--release`, release runtime | 484.2 ms | 2.94 | 56 |
+
+- The LLVM target holds with little margin. Its profile (`perf record`, same binary): `sha1`
+  64 %, `base64` 20 %, kernel 10 % (page faults of the 1 MiB copies). The hot loops reload a
+  list's data pointer from the stack at each `w[t]` and keep spilled locals in memory where the
+  Rust target's build keeps them in registers; that is the LLVM backend's code quality, not
+  the operators, and is not changed here. An earlier run with the test binary's debug runtime
+  and `+` instead of `wrapping_add` in the SHA-1 sums gave 4.66 at load 69: the checked `+`
+  costs an overflow branch per term, and the debug runtime's `ub_checks` showed in the profile.
+- The Ignite code uses `wrapping_add` where the hand-written Rust uses `wrapping_add`; with `+`
+  each sum is checked, as 25.2 keeps it.
+
+### 27.6 Tests
+
+- `ignite-syntax` `grammar::precedence_bitwise_ladder`, `bitwise_operators_are_left_associative`,
+  `bitwise_not_is_a_prefix_operator`, `shifts_need_touching_angles`,
+  `pipe_stays_a_closure_and_a_pattern_separator`, `newline_after_a_bitwise_operator_continues`.
+- `ignite-types` fixture `e040_bitwise_operand.ignite`: a `Bool`, a `Byte` and a `Text` operand
+  and a `Bool` under `~` are E040; an `Int` result where `Byte` is expected is E040.
+- `crates/ignite/tests/bitwise.rs`: 27.4 and 27.5 above.
+- `site/book/src/reference/grammar.md`'s `precedence` block (checked by `site::`).

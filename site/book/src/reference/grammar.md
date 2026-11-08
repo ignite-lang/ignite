@@ -86,10 +86,14 @@ expr         := or
 or           := and ('||' and)*
 and          := equality ('&&' equality)*
 equality     := compare (('==' | '!=') compare)?
-compare      := additive (('<' | '>' | '<=' | '>=') additive)?
+compare      := bitor (('<' | '>' | '<=' | '>=') bitor)?
+bitor        := bitxor ('|' bitxor)*
+bitxor       := bitand ('^' bitand)*
+bitand       := shift ('&' shift)*
+shift        := additive (('<<' | '>>') additive)*
 additive     := multiplicative (('+' | '-') multiplicative)*
 multiplicative := unary (('*' | '/' | '%') unary)*
-unary        := ('!' | '-' | 'spawn') unary | postfix
+unary        := ('!' | '-' | '~' | 'spawn') unary | postfix
 postfix      := primary ( '(' args ')'                        call
                         | '.' name ('(' args ')')?            field or method call
                         | '.' INT                             tuple field
@@ -252,16 +256,27 @@ From the tightest binding to the loosest:
 |---|---|---|
 | 1 | quantity literal `200 ms`, `99.9%` | (one token pair) |
 | 2 | postfix: call `f(x)`, field `x.f`, method `x.m()`, tuple field `t.0`, index `l[i]`, `?` | left |
-| 3 | prefix: `!`, `-`, `spawn` | right |
+| 3 | prefix: `!`, `-`, `~`, `spawn` | right |
 | 4 | `*` `/` `%` | left |
 | 5 | `+` `-` | left |
-| 6 | `<` `>` `<=` `>=` | none: `a < b < c` is E001 |
-| 7 | `==` `!=` | none: `a == b == c` is E001 |
-| 8 | `&&` | left |
-| 9 | `\|\|` | left |
+| 6 | `<<` `>>` | left |
+| 7 | `&` | left |
+| 8 | `^` | left |
+| 9 | `\|` | left |
+| 10 | `<` `>` `<=` `>=` | none: `a < b < c` is E001 |
+| 11 | `==` `!=` | none: `a == b == c` is E001 |
+| 12 | `&&` | left |
+| 13 | `\|\|` | left |
 
 - Postfix binds tighter than prefix: `-x.len()` is `-(x.len())`, and `!s.is_empty()` is
   `!(s.is_empty())`.
+- The bitwise operators `&`, `|`, `^`, `<<`, `>>` and `~` take `Int` only (E040 for any other
+  type) and never fail. They bind as in Rust: tighter than the comparisons, so
+  `flags & MASK == 0` is `(flags & MASK) == 0`, and looser than `+`, so `1 << n + 1` is
+  `1 << (n + 1)`.
+- `>>` is arithmetic: it copies the sign bit. A shift by an amount outside 0 to 63 is
+  defined: `a << n` is 0 and `a >> n` is 0 for a non-negative `a` and -1 for a negative one.
+- `<<` and `>>` are two `<` or two `>` that touch; `a > > b` is E001.
 - A closure body, a `return` value and an `assert` condition extend as far to the right as
   an expression can.
 - Assignment `=` is a statement, not an operator.
@@ -275,5 +290,12 @@ test "precedence" {
   assert 1 < 2 == true
   assert true || false && false
   assert 2 seconds * 3 == 6 seconds
+  assert 6 & 3 == 2
+  assert 1 | 2 ^ 3 & 1 == 3
+  assert 1 << 2 + 1 == 8
+  assert -16 >> 2 == -4
+  assert ~0 == -1
+  assert 1 << 64 == 0
+  assert -1 >> 100 == -1
 }
 ```
