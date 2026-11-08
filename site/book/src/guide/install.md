@@ -10,11 +10,11 @@ and `share/ignite/std`, the standard library it reads. Unpack it into a prefix w
 your `PATH`, here `~/.local`:
 
 ```sh
-curl -LO https://github.com/ignite-lang/ignite/releases/download/v0.13.0/ignite-0.13.0-x86_64-linux.tar.gz
-tar -xzf ignite-0.13.0-x86_64-linux.tar.gz
-cp ignite-0.13.0-x86_64-linux/bin/ignite ~/.local/bin/
+curl -LO https://github.com/ignite-lang/ignite/releases/download/v0.14.0/ignite-0.14.0-x86_64-linux.tar.gz
+tar -xzf ignite-0.14.0-x86_64-linux.tar.gz
+cp ignite-0.14.0-x86_64-linux/bin/ignite ~/.local/bin/
 mkdir -p ~/.local/share/ignite
-cp -R ignite-0.13.0-x86_64-linux/share/ignite/std ~/.local/share/ignite/
+cp -R ignite-0.14.0-x86_64-linux/share/ignite/std ~/.local/share/ignite/
 ```
 
 A driver at `PREFIX/bin/ignite` reads `PREFIX/share/ignite/std` when it exists. It carries the
@@ -32,13 +32,13 @@ substrate's crates are fetched into the image and `CARGO_NET_OFFLINE=true` is se
 need no network. The release notes give the image's `@sha256:` digest; pin that.
 
 ```sh
-docker run --rm -v "$PWD:/work" ghcr.io/ignite-lang/ignite-toolchain:0.13.0 \
+docker run --rm -v "$PWD:/work" ghcr.io/ignite-lang/ignite-toolchain:0.14.0 \
   ignite build hello.ignite --target rust
 ```
 
 ## Install from source
 
-The releases are also tags of the repository (v0.1.0 to v0.13.0).
+The releases are also tags of the repository (v0.1.0 to v0.14.0).
 
 ### What you need
 
@@ -65,7 +65,7 @@ ignite --version
 ```
 
 ```text
-ignite 0.13.0
+ignite 0.14.0
 ```
 
 `ignite --help` lists the commands: `check`, `emit`, `build`, `test`, `plan`, `host`,
