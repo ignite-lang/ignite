@@ -385,6 +385,11 @@ pub(crate) fn static_fn(owner: &str, name: &str) -> Option<Sig> {
             vec![Ty::Text, Ty::Int],
             io(Ty::TcpListener),
         ),
+        ("TcpListener", "bind_kept") => sig(
+            TcpListenerBindKept,
+            vec![Ty::Text, Ty::Int],
+            io(Ty::TcpListener),
+        ),
         ("TcpStream", "connect") => {
             sig(TcpStreamConnect, vec![Ty::Text, Ty::Int], io(Ty::TcpStream))
         }

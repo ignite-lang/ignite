@@ -48,6 +48,17 @@ test "the peer of a stream is the other end, in both families" {
   assert far.peer().address == "::1"
 }
 
+// `TcpListener.bind_kept(address, port)`, effect `net.listen`, binds as
+// `bind` a listener the SIGTERM drain keeps open (16.13, story
+// `drain-keeps-bound-listeners`); the drain itself is tested end to end.
+test "a listener bound kept accepts as one bound plainly" {
+  let listener = TcpListener.bind_kept("127.0.0.1", 0)?
+  let client = TcpStream.connect("127.0.0.1", listener.local_port())?
+  let server = listener.accept()?
+  server.write_all(b"kept")?
+  assert client.read(4)? == Data(b"kept")
+}
+
 test "a read the idle timeout ended is told from a close" {
   let listener = TcpListener.bind("127.0.0.1", 0)?
   let client = TcpStream.connect("127.0.0.1", listener.local_port())?

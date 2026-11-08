@@ -1,0 +1,65 @@
+package tests.drain_bind_kept
+
+// Built for both targets and run by tests/drain.rs (`docs/slice.md`
+// 16.13, story `drain-keeps-bound-listeners`, the case study's G31): both
+// listeners are bound at run time on ports read from the environment
+// (`PUBLIC_PORT`, `INTERNAL_PORT`). `public`, bound with
+// `TcpListener.bind`, is released at SIGTERM; `internal`, bound with
+// `TcpListener.bind_kept`, answers every connection until the process
+// exits. The process exits 0 once the public connection is done, while a
+// task still waits in `internal`'s accept and another in an idle read of a
+// connection `internal` accepted.
+
+fn answer(stream: TcpStream) -> Result<Unit, IoError> requires [stream.read, stream.write] {
+  stream.write_all("internal\n".to_bytes())?
+  let input = stream.read(64)?
+  return Ok(Unit)
+}
+
+fn serve_internal(listener: TcpListener) -> Result<Unit, IoError> {
+  loop {
+    let stream = listener.accept()?
+    spawn answer(stream)
+  }
+}
+
+fn hold(stream: TcpStream) -> Result<Unit, IoError> requires [stream.read] {
+  let input = stream.read(64)?
+  return Ok(Unit)
+}
+
+fn port_of(environment: Environment, name: Text) -> Result<Int, IoError> {
+  match environment.get(name) {
+    Some(text) => match Int.parse(text) {
+      Some(port) => Ok(port)
+      None => Err(IoError.new("{name} is no port: {text}"))
+    }
+    None => Err(IoError.new("{name} is unset"))
+  }
+}
+
+type App {
+  environment: Environment
+  executable: Text
+}
+
+fn App.main(self: App) -> Result<Unit, IoError> {
+  let public = TcpListener.bind("127.0.0.1", port_of(self.environment, "PUBLIC_PORT")?)?
+  let internal = TcpListener.bind_kept("127.0.0.1", port_of(self.environment, "INTERNAL_PORT")?)?
+  log("public on {public.local_port()}")
+  log("internal on {internal.local_port()}")
+  spawn serve_internal(internal)
+  let held = public.accept()?
+  spawn hold(held)
+  log("waiting")
+  match public.accept() {
+    Ok(_) => log("public accepted")
+    Err(e) => log("public accept: {e.message}")
+  }
+  Ok(())
+}
+
+system DrainBindKept {
+  resource environment: Environment
+  component app: App { environment = environment, executable = "drainbindkept" }
+}

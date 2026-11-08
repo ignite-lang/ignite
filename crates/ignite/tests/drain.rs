@@ -626,6 +626,88 @@ fn a_kept_listener_accepts_through_the_drain_and_the_others_are_released() {
     });
 }
 
+/// The port of the `<name> on <port>` line of `stderr`.
+fn bound_port(stderr: &Receiver<String>, name: &str, skipped: &mut Vec<String>) -> u16 {
+    let prefix = format!("{name} on ");
+    let line = wait_line(stderr, &prefix, skipped, |l| l.starts_with(&prefix));
+    line[prefix.len()..]
+        .parse()
+        .unwrap_or_else(|e| panic!("{line}: {e}"))
+}
+
+/// Story `drain-keeps-bound-listeners` (the case study's G31): of two
+/// listeners bound at run time on ports read from the environment, the one
+/// bound with `TcpListener.bind` is released at SIGTERM and the one bound
+/// with `TcpListener.bind_kept` prints no `released` line and still
+/// accepts and answers. The process exits 0 once the one public connection
+/// is done, although a task waits in the kept listener's `accept` and
+/// another in an idle read of a kept connection.
+#[test]
+fn a_listener_bound_kept_at_run_time_accepts_through_the_drain() {
+    on_both_targets(|target| {
+        let binary = build_fixture("drain_bind_kept", "drainbindkept", target);
+        let mut child = Command::new(&binary)
+            .env("PUBLIC_PORT", "0")
+            .env("INTERNAL_PORT", "0")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap_or_else(|e| panic!("start {}: {e}", binary.display()));
+        let stderr = lines_of(child.stderr.take().expect("stderr"));
+        let mut server = Server {
+            child,
+            stderr,
+            skipped: Vec::new(),
+            port: 0,
+        };
+        server.port = bound_port(&server.stderr, "public", &mut server.skipped);
+        let public = server.port;
+        let internal = bound_port(&server.stderr, "internal", &mut server.skipped);
+        let held = TcpStream::connect(("127.0.0.1", public)).expect("connect public");
+        wait_line(&server.stderr, "waiting", &mut server.skipped, |l| {
+            l == "waiting"
+        });
+        let _idle_kept = greeted_by_internal(target, internal, "before the drain");
+        signal(server.pid(), Signal::SIGTERM);
+        server.wait_released();
+        let draining = "public accept: draining";
+        if !server.skipped.iter().any(|l| l == draining) {
+            wait_line(&server.stderr, draining, &mut server.skipped, |l| {
+                l == draining
+            });
+        }
+        let refused = TcpStream::connect(("127.0.0.1", public));
+        assert!(
+            refused.is_err(),
+            "{target}: a connect to public after `released` succeeded"
+        );
+        for round in 0..3 {
+            greeted_by_internal(target, internal, &format!("in the drain, round {round}"));
+        }
+        let early = server.child.try_wait().expect("wait");
+        assert!(
+            early.is_none(),
+            "{target}: exited with the public connection open: {early:?}"
+        );
+        held.shutdown(std::net::Shutdown::Write)
+            .expect("end the public connection");
+        let status = wait_exit(&mut server.child, "the drained server");
+        assert_eq!(status.code(), Some(0), "{target}: {status:?}");
+        server.skipped.extend(server.stderr.iter());
+        let kept = format!("released 127.0.0.1:{internal}");
+        let released: Vec<&String> = server
+            .skipped
+            .iter()
+            .filter(|l| l.starts_with("released "))
+            .collect();
+        assert!(
+            !released.iter().any(|l| **l == kept),
+            "{target}: the kept listener was released: {released:?}"
+        );
+    });
+}
+
 /// Runs of a `flood_*` fixture per target.
 const FLOOD_RUNS: usize = 30;
 

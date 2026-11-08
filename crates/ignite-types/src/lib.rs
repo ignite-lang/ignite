@@ -651,6 +651,9 @@ pub enum Builtin {
     IntToText,
     Log,
     TcpListenerBind,
+    /// `TcpListener.bind_kept(address, port)`: [`Builtin::TcpListenerBind`]
+    /// of a listener the SIGTERM drain keeps (`docs/slice.md` 16.13).
+    TcpListenerBindKept,
     TcpListenerAccept,
     TcpListenerLocalPort,
     TcpStreamConnect,
