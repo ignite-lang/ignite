@@ -87,6 +87,9 @@ pub struct BuildOptions {
     /// `--static`: link against musl, with no program interpreter and no
     /// shared library (`docs/slice.md` 23).
     pub static_link: bool,
+    /// Run cargo with `--offline` (Rust target): resolve from the project's
+    /// `Cargo.lock` and the local cache, never the network. Default: off.
+    pub offline: bool,
 }
 
 #[allow(clippy::derivable_impls)]
@@ -103,6 +106,7 @@ impl Default for BuildOptions {
             std: None,
             triple: None,
             static_link: false,
+            offline: false,
         }
     }
 }
@@ -1988,7 +1992,14 @@ pub fn build(file: &Path, options: &BuildOptions) -> Result<BuildOutput, Error> 
         out.display()
     );
     test_build::claim_target_dir(&out, &target_dir)?;
-    cargo_build(&out, &target_dir, options.release, triple.as_deref(), false)?;
+    cargo_build(
+        &out,
+        &target_dir,
+        options.release,
+        triple.as_deref(),
+        false,
+        options.offline,
+    )?;
     let built = cargo_output_dir(&target_dir, options.release, triple.as_deref());
     let executables = project
         .executables
@@ -2036,6 +2047,7 @@ fn cargo_build(
     release: bool,
     triple: Option<&str>,
     quiet: bool,
+    offline: bool,
 ) -> Result<(), Error> {
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let mut command = Command::new(&cargo);
@@ -2057,6 +2069,9 @@ fn cargo_build(
     }
     if quiet {
         command.arg("--quiet");
+    }
+    if offline {
+        command.arg("--offline");
     }
     let status = command.status().map_err(|error| Error::Io {
         path: PathBuf::from(&cargo),

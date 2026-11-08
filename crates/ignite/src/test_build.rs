@@ -436,7 +436,14 @@ fn build_group(
                 .clone()
                 .unwrap_or_else(|| out.join("target"));
             claim_target_dir(&out, &target_dir)?;
-            crate::cargo_build(&out, &target_dir, build.release, triple.as_deref(), true)?;
+            crate::cargo_build(
+                &out,
+                &target_dir,
+                build.release,
+                triple.as_deref(),
+                true,
+                build.offline,
+            )?;
             let file = format!(
                 "{}{}",
                 ignite_rustgen::TEST_EXECUTABLE,
