@@ -139,3 +139,44 @@ fn readiness_takes_the_python_verifier_flags() {
     assert_eq!(args.candidate, "abc");
     assert!(parse(&words[..words.len() - 2]).is_err());
 }
+
+#[test]
+fn quality_times_the_compiler_cargo_built_under_cargo_target_dir() {
+    use std::ffi::OsStr;
+    use std::path::{Path, PathBuf};
+
+    use ignite_perf::quality::default_cli;
+
+    let repo = Path::new("/r");
+    assert_eq!(
+        default_cli(repo, None),
+        PathBuf::from("/r/target/debug/ignite")
+    );
+    assert_eq!(
+        default_cli(repo, Some(OsStr::new(""))),
+        PathBuf::from("/r/target/debug/ignite")
+    );
+    assert_eq!(
+        default_cli(repo, Some(OsStr::new("/scratch/t"))),
+        PathBuf::from("/scratch/t/debug/ignite")
+    );
+    assert_eq!(
+        default_cli(repo, Some(OsStr::new("build"))),
+        PathBuf::from("/r/build/debug/ignite")
+    );
+    let words = [
+        "quality",
+        "--runtime",
+        "/rt.a",
+        "--work",
+        "/w",
+        "--out",
+        "/o.json",
+        "--cli",
+        "/c/ignite",
+    ];
+    let Mode::Quality(args) = parse(&words).unwrap().mode else {
+        panic!("quality");
+    };
+    assert_eq!(args.cli, Some(PathBuf::from("/c/ignite")));
+}
