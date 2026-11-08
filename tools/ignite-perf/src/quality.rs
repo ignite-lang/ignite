@@ -10,7 +10,7 @@
 //! of the todo example per target, a fresh output (and, for Rust, a fresh cargo target) each
 //! (`rust`, `llvm`, ms); 3.2 the size of `todod` and `terminald` per target and profile
 //! (`<target>/<executable>/<profile>`, bytes); 5.3 the real-clock restart of
-//! `verify-llvm-readiness` (`llvm`, ms).
+//! `verify-llvm-readiness` (`llvm`, ms). `--timing-only` leaves out 3.2.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -43,6 +43,10 @@ pub struct QualityArgs {
     pub check_runs: usize,
     #[arg(long, default_value_t = 3)]
     pub build_runs: usize,
+    /// Only the timing rows (5.3, 6.1, 6.2): leave out the sizes (3.2), as `quality-remote`
+    /// measures on the dedicated host.
+    #[arg(long)]
+    pub timing_only: bool,
 }
 
 /// One measured value.
@@ -186,6 +190,9 @@ fn program_rows(args: &QualityArgs, out: &mut Vec<Measured>) -> R<()> {
             value: median(samples).round() as i64,
             load,
         });
+    }
+    if args.timing_only {
+        return Ok(());
     }
     for (source, executable) in [
         ("examples/todo/todo.ignite", "todod"),

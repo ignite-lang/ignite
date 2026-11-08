@@ -8,6 +8,7 @@ pub mod json;
 pub mod perf;
 pub mod quality;
 pub mod readiness;
+pub mod remote;
 
 /// Every source file of this crate. A capture records the SHA256 of [`harness_bundle`] in each
 /// row (`harness_sha256`) and keeps the bundle in `evidence/harness/<sha>.rs`, so a change of
@@ -22,6 +23,11 @@ pub const HARNESS_SOURCE: &[(&str, &str)] = &[
     ("src/perf.rs", include_str!("perf.rs")),
     ("src/quality.rs", include_str!("quality.rs")),
     ("src/readiness.rs", include_str!("readiness.rs")),
+    (
+        "src/remote-user-data.sh",
+        include_str!("remote-user-data.sh"),
+    ),
+    ("src/remote.rs", include_str!("remote.rs")),
 ];
 
 /// The crate's sources as one text: each file after a `// ==> path <==` line.
