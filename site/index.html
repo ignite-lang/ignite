@@ -444,8 +444,39 @@ ignite explain examples/terminal/terminal.design.ignite local</code></pre>
           <li><span class="tag">v0.11.0</span> <span>chunked HTTP request bodies, <code>spawn</code> arguments moved at their last use, generated Rust names that never collide with a program's</span></li>
           <li><span class="tag">v0.12.0</span> <span>streamed and binary HTTP responses, every RFC 9110 reason phrase, effectful fn values passed to <code>List.map</code>, <code>Bytes</code> set by index</span></li>
           <li><span class="tag">v0.13.0</span> <span>stream ends handed to <code>spawn</code> inside branches and match arms, program names that shadow Rust primitives, a website checked for layout and accessibility on every merge</span></li>
-          <li><span class="tag tag-next">next</span> the designs on the roadmap, not released</li>
+          <li><span class="tag tag-next">next</span> <span>the waves and designs below, not released</span></li>
         </ul>
+      </div>
+    </section>
+
+    <section class="docs outlook" id="outlook" aria-labelledby="outlook-title">
+      <div class="wrap">
+        <p class="kicker">What's next</p>
+        <h2 id="outlook-title">What is being built, and what is designed</h2>
+        <p class="outlook-lead">Being built now: bitwise operators, channels and timers, and the value model every data format will share. Planned next: WebSocket, RESP3 and NATS clients, codecs and <code>ignite fmt</code>, then YAML, benchmarks against plain Rust and Go, and one mid-level IR for both targets. These are plans, not dates.</p>
+        <div class="doc-cards doc-cards-pair">
+          <a class="doc-card" href="book/planned/web.html">
+            <span class="doc-num">design</span>
+            <h3>x.web</h3>
+            <p>A web framework that is part of the system: routes, JSON, live pages, caching, sign-in and health checks derived from the declaration.</p>
+          </a>
+          <a class="doc-card" href="book/planned/data.html">
+            <span class="doc-num">wave 7 to 9</span>
+            <h3>Data formats</h3>
+            <p>JSON, YAML and TOML from one value model, with codecs the compiler writes for your types.</p>
+          </a>
+          <a class="doc-card" href="book/planned/clients.html">
+            <span class="doc-num">wave 8</span>
+            <h3>Protocols and clients</h3>
+            <p>WebSocket, RESP3 with Sentinel and NATS in the standard library, tested over in-memory pipes.</p>
+          </a>
+          <a class="doc-card" href="book/planned/simulation.html">
+            <span class="doc-num">design</span>
+            <h3>Fault injection and simulation</h3>
+            <p>Resets, partitions and crashes injected from inside the program, with failures that replay from one seed.</p>
+          </a>
+        </div>
+        <p class="more"><a href="book/roadmap.html#whats-next">The full outlook on the roadmap &rarr;</a></p>
       </div>
     </section>
   </main>
