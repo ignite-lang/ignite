@@ -618,7 +618,13 @@ pub enum Builtin {
     TextStripPrefix,
     TextConcat,
     TextToBytes,
+    /// `t.pieces(separator)`: the texts between the separators, the body of
+    /// `std.text.split` (`docs/slice.md` section 13).
+    TextPieces,
     BytesToText,
+    /// `b.index_of(needle, start)`: the offset of the first `needle` at or
+    /// after `start` (`docs/slice.md` section 13).
+    BytesIndexOf,
     ListLen,
     ListIsEmpty,
     ListAt,

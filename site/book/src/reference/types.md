@@ -127,7 +127,8 @@ test "conversions" {
 is turned into `Bytes` with `to_bytes()` and back with `to_text()`.
 
 Builtin methods of `Text`: `len()` (in bytes), `is_empty()`, `trim()`, `starts_with(p)`,
-`strip_prefix(p) -> Option<Text>`, `concat(t)`, `to_bytes()`, `to_text()`. Everything else
+`strip_prefix(p) -> Option<Text>`, `concat(t)`, `pieces(s) -> List<Text>` (the texts between the
+separators, the body of `split`), `to_bytes()`, `to_text()`. Everything else
 (`split`, `contains`, `find`, `to_lower`, ...) is Ignite code in [std.text](std/text.md), used
 by method call syntax after an import.
 
@@ -150,6 +151,7 @@ use.
 | `map(f)` | `List<U>` | `f: fn(T) -> U`, pure |
 | `join(sep)` | `Text` | on `List<Text>` only |
 | `to_text()` | `Text` | on `Bytes` only |
+| `index_of(needle, start)` | `Option<Int>` | on `Bytes` only: the offset of the first `needle` at or after `start` |
 | `Bytes.of(list)`, `Bytes.empty()` | `Bytes` | statics |
 
 `for x in list { .. }` visits the elements in order.

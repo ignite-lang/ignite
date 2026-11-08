@@ -8,8 +8,8 @@ for byte. Case and whitespace rules are ASCII only.
 - Source: [`std/text.ignite`](https://github.com/ignite-lang/ignite/blob/main/std/text.ignite).
 - Import: `import std.text.{split, trim_end}`, or `import std.text.*` for every name.
 
-The builtin text methods `len`, `is_empty`, `trim`, `starts_with`, `strip_prefix` and
-`concat` need no import and are not repeated here.
+The builtin text methods `len`, `is_empty`, `trim`, `starts_with`, `strip_prefix`,
+`concat` and `pieces` (which `split` is) need no import and are not repeated here.
 
 ## Bytes
 
@@ -42,7 +42,7 @@ fn bytes_match_at(bytes: Bytes, needle: Bytes, at: Int) -> Bool
 | `find_from` | the byte offset of the first `needle` at or after `start` |
 | `contains` | whether `needle` occurs in `text` |
 | `ends_with` | whether `text` ends with `suffix` |
-| `bytes_find_from` | `find_from` on `Bytes` |
+| `bytes_find_from` | `find_from` on `Bytes`, the builtin `bytes.index_of(needle, start)` |
 | `bytes_match_at` | whether `needle` occurs in `bytes` at offset `at` |
 
 An empty needle is found at offset 0 by `find` and at `start` by `find_from`.

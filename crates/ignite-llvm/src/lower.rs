@@ -4488,6 +4488,46 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 let p = self.ptr(&r);
                 self.rt_out("text_from_bytes_lossy", &Ty::Text, &[format!("ptr {p}")])
             }
+            BytesIndexOf => {
+                self.m.declare(
+                    "ignite_rt_bytes_index_of",
+                    "i64",
+                    &["ptr".to_string(), "ptr".to_string(), "i64".to_string()],
+                );
+                let r = recv(self);
+                let p = self.ptr(&r);
+                let needle = self.read_arg(&args[0]);
+                let start = self.scalar_arg(&args[1]);
+                let at = self.f.val(format!(
+                    "call i64 @ignite_rt_bytes_index_of(ptr {p}, ptr {needle}, i64 {start})"
+                ));
+                let ty = Ty::Option(Box::new(Ty::Int));
+                let layout = self.env.enum_layout(&ty);
+                let result = self.temp(&ty);
+                let missing = self.f.val(format!("icmp slt i64 {at}, 0"));
+                let tag = self.f.val(format!("select i1 {missing}, i32 1, i32 0"));
+                self.f
+                    .ins(format!("store i32 {tag}, ptr {result}, align 4"));
+                let payload = self.gep(&result, layout.variants[0].1[0].1);
+                self.f
+                    .ins(format!("store i64 {at}, ptr {payload}, align 8"));
+                Val::Ptr(result, true)
+            }
+            TextPieces => {
+                self.m.declare(
+                    "ignite_rt_text_pieces",
+                    "void",
+                    &["ptr".to_string(), "ptr".to_string(), "ptr".to_string()],
+                );
+                let r = recv(self);
+                let p = self.ptr(&r);
+                let separator = self.read_arg(&args[0]);
+                self.rt_out(
+                    "text_pieces",
+                    &Ty::List(Box::new(Ty::Text)),
+                    &[format!("ptr {p}"), format!("ptr {separator}")],
+                )
+            }
             ListAt => self.list_at(e, receiver.expect("receiver"), args),
             ListSlice => {
                 let rexpr = receiver.expect("receiver");

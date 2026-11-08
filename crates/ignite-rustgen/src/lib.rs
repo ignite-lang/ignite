@@ -4534,6 +4534,23 @@ impl<'a> Generator<'a> {
         self.ref_arg(text)
     }
 
+    /// A `Bytes` argument that is only read, for `ignite_io::text::index_of`
+    /// (`impl AsRef<[u8]>`): `text.to_bytes()` borrows the text instead of
+    /// copying it, and a checked `slice` borrows
+    /// ([`checked_slice_ref`](Self::checked_slice_ref)).
+    fn read_bytes(&mut self, bytes: &Expr) -> String {
+        if let ExprKind::Method { receiver, .. } = &bytes.kind
+            && matches!(
+                self.callee(bytes),
+                Some(Callee::Builtin(Builtin::TextToBytes))
+            )
+        {
+            return self.ref_arg(receiver);
+        }
+        self.checked_slice_ref(bytes)
+            .unwrap_or_else(|| self.ref_arg(bytes))
+    }
+
     /// `list.slice(from, to)` with a failure site, as a borrow of `list`
     /// (`ignite_io::checked::slice_ref`) where the caller only reads it, a
     /// `slice` receiver borrowed the same way; `None` for any other
@@ -4816,6 +4833,17 @@ impl<'a> Generator<'a> {
                 let r = self.receiver(receiver);
                 let a = self.args(args);
                 return format!("{r}.{}({})", ident(&name.name), a.join(", "));
+            }
+            Some(Callee::Builtin(Builtin::BytesIndexOf)) if args.len() == 2 => {
+                let haystack = self.read_bytes(receiver);
+                let needle = self.read_bytes(&args[0]);
+                let start = self.value(&args[1]);
+                return format!("::ignite_io::text::index_of({haystack}, {needle}, {start})");
+            }
+            Some(Callee::Builtin(Builtin::TextPieces)) if args.len() == 1 => {
+                let text = self.ref_arg(receiver);
+                let separator = self.ref_arg(&args[0]);
+                return format!("::ignite_io::text::pieces({text}, {separator})");
             }
             Some(Callee::Builtin(Builtin::TcpStreamPeer)) => {
                 let endpoint = self.enum_name(&ignite_types::endpoint_name());

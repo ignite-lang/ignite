@@ -49,6 +49,7 @@ pub(crate) fn method(receiver: &Ty, name: &str) -> Option<Sig> {
         ),
         (Ty::Text, "concat") => sig(TextConcat, vec![Ty::Text], Ty::Text),
         (Ty::Text, "to_bytes") => sig(TextToBytes, vec![], bytes()),
+        (Ty::Text, "pieces") => sig(TextPieces, vec![Ty::Text], Ty::List(Box::new(Ty::Text))),
         (Ty::Text, "to_text") => sig(TextToText, vec![], Ty::Text),
         (Ty::Ref(_) | Ty::Signal(_), "to_text") => sig(TextToText, vec![], Ty::Text),
         (Ty::Int, "to_text") => sig(IntToTextMethod, vec![], Ty::Text),
@@ -285,6 +286,11 @@ fn list_method(element: &Ty, name: &str) -> Option<Sig> {
         "clear" => sig(ListClear, vec![], Ty::Unit),
         "join" if *element == Ty::Text => sig(ListJoin, vec![Ty::Text], Ty::Text),
         "to_text" if *element == Ty::Byte => sig(BytesToText, vec![], Ty::Text),
+        "index_of" if *element == Ty::Byte => sig(
+            BytesIndexOf,
+            vec![list, Ty::Int],
+            Ty::Option(Box::new(Ty::Int)),
+        ),
         _ => None,
     }
 }

@@ -151,6 +151,52 @@ pub extern "C" fn ignite_rt_text_starts_with(
     crate::entry(move || i8::from(bytes(text).starts_with(bytes(prefix))))
 }
 
+/// `i64 bytes_index_of(List* bytes, List* needle, i64 start)`:
+/// [`ignite_io::text::index_of`], -1 for `None`.
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_bytes_index_of(
+    data: *const IgniteList,
+    needle: *const IgniteList,
+    start: i64,
+) -> i64 {
+    crate::entry(move || ignite_io::text::index_of(bytes(data), bytes(needle), start).unwrap_or(-1))
+}
+
+/// `void text_pieces(List* out, Text* text, Text* separator)`:
+/// [`ignite_io::text::each_piece`], every piece a fresh `Text` copied
+/// without a UTF-8 check (a valid text cut at a valid separator is valid).
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_text_pieces(
+    out: *mut IgniteList,
+    text: *const IgniteList,
+    separator: *const IgniteList,
+) {
+    crate::entry(move || {
+        let (text, separator) = (bytes(text), bytes(separator));
+        let mut count = 0usize;
+        ignite_io::text::each_piece(text, separator, |_, _| count += 1);
+        let size = std::mem::size_of::<IgniteList>();
+        let ptr = crate::arena::alloc(count * size, std::mem::align_of::<IgniteList>())
+            .cast::<IgniteList>();
+        let mut index = 0;
+        ignite_io::text::each_piece(text, separator, |start, end| {
+            let piece = IgniteList::from_bytes(&text[start..end]);
+            // SAFETY: `ptr` is a fresh arena block of `count` aligned
+            // elements and the second pass yields the same `count` pieces.
+            unsafe { ptr.add(index).write(piece) };
+            index += 1;
+        });
+        put(
+            out,
+            IgniteList {
+                ptr: ptr.cast(),
+                len: count as i64,
+                cap: count as i64,
+            },
+        );
+    })
+}
+
 /// `void text_join(Text* out, List* texts, Text* separator)`.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_text_join(
