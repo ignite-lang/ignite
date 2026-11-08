@@ -1274,6 +1274,12 @@ pub struct Record {
     /// dedicated timing host (`ignite-perf quality-remote`).
     pub host: String,
     pub load: Option<String>,
+    /// A dedicated-host record (`ignite-perf quality-remote`): the BASE
+    /// commit measured beside it, BASE's median, and the machine with the
+    /// run's cost.
+    pub base: Option<String>,
+    pub base_value: Option<i64>,
+    pub machine: Option<Json>,
 }
 
 impl Record {
@@ -1289,6 +1295,15 @@ impl Record {
         ]);
         if let Some(load) = &self.load {
             fields.insert("load".to_string(), Json::Str(load.clone()));
+        }
+        if let Some(base) = &self.base {
+            fields.insert("base".to_string(), Json::Str(base.clone()));
+        }
+        if let Some(value) = self.base_value {
+            fields.insert("base_value".to_string(), Json::Int(value));
+        }
+        if let Some(machine) = &self.machine {
+            fields.insert("machine".to_string(), machine.clone());
         }
         Json::Object(fields).compact()
     }
@@ -1313,6 +1328,9 @@ impl Record {
                 .and_then(Json::as_i64)
                 .ok_or_else(|| format!("{line}: no `value`"))?,
             load: json.get("load").and_then(Json::as_str).map(str::to_string),
+            base: json.get("base").and_then(Json::as_str).map(str::to_string),
+            base_value: json.get("base_value").and_then(Json::as_i64),
+            machine: json.get("machine").cloned(),
         })
     }
 
@@ -1853,6 +1871,9 @@ fn record() {
             value: v.value,
             host: host.clone(),
             load: v.load.clone(),
+            base: None,
+            base_value: None,
+            machine: None,
         };
         text.push_str(&record.line());
         text.push('\n');
@@ -2142,6 +2163,9 @@ fn a_release_worse_than_the_last_is_refused() {
         value,
         host: "local".to_string(),
         load: (metric == "6.2").then(|| "20.00".to_string()),
+        base: None,
+        base_value: None,
+        machine: None,
     };
     let history = vec![
         record("bar", "4.3", "rust", 309),
@@ -2225,6 +2249,9 @@ fn a_dedicated_host_run_has_its_own_timing_trend() {
         value,
         host: host.to_string(),
         load: (metric == "6.2").then(|| "0.10".to_string()),
+        base: None,
+        base_value: None,
+        machine: None,
     };
     let ec2 = "ec2:c7i.metal-24xl";
     let history = vec![
@@ -2266,11 +2293,17 @@ fn a_dedicated_host_run_has_its_own_timing_trend() {
         load: None,
     };
     assert!(release_refusals(&baseline, &history, &[value]).is_empty());
-    let parsed = Record::parse(
-        r#"{"base":"b","base_value":400,"commit":"e","date":"2026-11-08","host":"ec2:c7i.metal-24xl","load":"0.10","machine":{"cpu":"x","smt":"off"},"metric":"6.2","run":"run","target":"llvm","value":380}"#,
-    )
-    .unwrap();
-    assert_eq!(parsed, history[3]);
+    let line = r#"{"base":"b","base_value":400,"commit":"e","date":"2026-11-08","host":"ec2:c7i.metal-24xl","load":"0.10","machine":{"cpu":"x","smt":"off"},"metric":"6.2","run":"run","target":"llvm","value":380}"#;
+    let parsed = Record::parse(line).unwrap();
+    assert_eq!(
+        parsed.line(),
+        line,
+        "a dedicated-host record does not round-trip"
+    );
+    assert_eq!(
+        (parsed.base.as_deref(), parsed.base_value, parsed.value),
+        (Some("b"), Some(400), 380)
+    );
 }
 
 #[test]
