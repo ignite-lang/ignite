@@ -420,6 +420,7 @@ cold comparison against each baseline meets the start-load rule and has no faile
 
 - No comments in `Cargo.toml`, `Taskfile.yml` or any other config file.
 - Tooling, checks and scripts are Rust (Timo, 2026-11-02): a `#[test]` in the crate that owns the rule, or a Rust binary. No new Python; Bash only for one-line invocations in `Taskfile.yml`. The former `scripts/*.py` are `tools/ignite-perf` and the serial `cargo fmt --all -- --check` of `task check` (`story:rust-tooling`); scripts under `docs/performance/` are recorded evidence and stay as they are.
+- The repository, its releases and its packages are public (Timo, 2026-11-08): no company, customer, service or internal project names, hosts, paths, account ids or credentials in any file, commit message, PR, release note or image label. A case study is named by what it is ("a WebSocket push service").
 - Commit titles follow Conventional Commits: `type(scope): summary` with `type` one of `feat`,
   `fix`, `perf`, `docs`, `test`, `refactor`, `chore`, `build`, `ci`; the scope is optional. Every
   commit has a body: a blank line after the title, then bullets on what changed and why.
