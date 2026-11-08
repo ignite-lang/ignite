@@ -149,7 +149,9 @@ behaviour (`bench/native/`, rows 3.3, 3.7, 3.8 and 3.9), after the timing rows
     write every change as `todo-data/<shard>/<id>/<version>.json` (a temporary file renamed into
     place, older versions removed, no `fsync`, as todod). They load the directory at start;
     todod loads it on the first request. Their other response headers are their library's.
-  - terminal, plain Rust: one OS thread per connection, as `ignite-io`; Go: one goroutine per
+  - terminal, plain Rust: a new OS thread per connection (`std::thread::spawn`), where
+    `ignite-io` keeps a finished task's thread and hands it the next task, so the `connect` cell
+    measures thread creation in the reference and not in Ignite; Go: one goroutine per
     connection. Both decode Telnet as `std.protocol.telnet` does (CR LF, CR NUL, a lone CR or LF
     ending a line, `DO` refused with `WONT`, `WILL` with `DONT`, AYT, IP, `IAC GA` after every
     prompt, the line and subnegotiation limits, the idle timeout) and answer the console's
@@ -177,6 +179,11 @@ behaviour (`bench/native/`, rows 3.3, 3.7, 3.8 and 3.9), after the timing rows
 - **Releases.** With `RUN=vX.Y.Z` a row whose HEAD ratio is worse than BASE's in the same run beyond
   the metric's tolerance (3.3 10 %, 3.7 20 %, 3.8 10 %, 3.9 5 %) refuses the release, as a timing
   row does.
+- **First run.** BASE = HEAD (an A/A run, 2026-11-08), 0.52 instance-hours on spot, 0.50 USD,
+  timing rows and benchmark together; its ratios are the bars (`quality/trend.md`, "Against plain
+  Rust"). Within the run BASE and HEAD agreed within 2.4 % on every throughput, RSS and size row;
+  p99 differed by up to 17.9 % (`llvm/terminal/rr-64`, one pass at 2.2 times the others), close
+  to the 20 % tolerance of 3.7.
 
 ## Hill-climbing
 
@@ -217,13 +224,13 @@ metric, the target, the value before and after, and the run of `task quality` th
 |---|---|---|---|---|---|---|
 | 3.1 | copies in the generated code of the golden corpus | ratchet | lower | `quality::static_metrics_hold_the_bar`: `.clone()` in the Rust generator's goldens, calls of `copy.*` in the LLVM goldens | llvm 90, rust 168 |  |
 | 3.2 | binary size | ratchet | lower | `ignite-perf quality` (task quality): size of `todod` and `terminald` per target and profile | llvm/terminald/dev 7563720 B, llvm/terminald/release 1468648 B, llvm/todod/dev 8230560 B, llvm/todod/release 2042752 B, rust/terminald/dev 6223520 B, rust/terminald/release 681368 B, rust/todod/dev 7405864 B, rust/todod/release 961880 B |  |
-| 3.3 | throughput against plain Rust | ratchet | higher | `ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): replies per second of todod and terminald over the plain-Rust implementation's, per cell | unmeasured: no benchmark run on the dedicated host yet |  |
+| 3.3 | throughput against plain Rust | ratchet | higher | `ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): replies per second of todod and terminald over the plain-Rust implementation's, per cell | llvm/terminal/connect-8 2.343×, llvm/terminal/rr-1 0.900×, llvm/terminal/rr-64 0.848×, llvm/todo/get-1 0.905×, llvm/todo/get-64 0.879×, llvm/todo/patch-16 0.578×, rust/terminal/connect-8 2.851×, rust/terminal/rr-1 0.874×, rust/terminal/rr-64 0.821×, rust/todo/get-1 0.786×, rust/todo/get-64 0.694×, rust/todo/patch-16 0.560× |  |
 | 3.4 | peak RSS, leaked handles and threads after a load run | gate | lower | `llvm_memory::` and `terminal::idle_terminald_runs_one_thread` (every merge) | unmeasured: no number: the named tests gate it in task gate |  |
 | 3.5 | runtime entries that can unwind a panic across `extern "C"` | gate | lower | `quality::static_metrics_hold_the_bar`, the rule of `contain::tests::every_entry_is_guarded`: `extern "C"` entries of `ignite-rt` not run through `crate::entry` | llvm 0 |  |
 | 3.6 | `unsafe` sites in the substrate a target links | ratchet | lower | `quality::static_metrics_hold_the_bar`: `unsafe` blocks, fns, impls and extern blocks; rust counts `ignite-io`, llvm `ignite-io` and `ignite-rt` | llvm 73, rust 7 |  |
-| 3.7 | p99 latency against plain Rust | ratchet | lower | `ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): p99 reply latency over the plain-Rust implementation's, per cell | unmeasured: no benchmark run on the dedicated host yet |  |
-| 3.8 | peak RSS under load against plain Rust | ratchet | lower | `ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): the server's peak RSS over the plain-Rust implementation's, per cell | unmeasured: no benchmark run on the dedicated host yet |  |
-| 3.9 | stripped binary size against plain Rust | ratchet | lower | `ignite-perf quality-remote` (`bench/native/`): the stripped release binary over the plain-Rust implementation's, per program | unmeasured: no benchmark run on the dedicated host yet |  |
+| 3.7 | p99 latency against plain Rust | ratchet | lower | `ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): p99 reply latency over the plain-Rust implementation's, per cell | llvm/terminal/connect-8 0.193×, llvm/terminal/rr-1 1.017×, llvm/terminal/rr-64 1.495×, llvm/todo/get-1 1.081×, llvm/todo/get-64 1.287×, llvm/todo/patch-16 2.170×, rust/terminal/connect-8 0.183×, rust/terminal/rr-1 1.029×, rust/terminal/rr-64 1.382×, rust/todo/get-1 1.234×, rust/todo/get-64 1.644×, rust/todo/patch-16 2.313× |  |
+| 3.8 | peak RSS under load against plain Rust | ratchet | lower | `ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): the server's peak RSS over the plain-Rust implementation's, per cell | llvm/terminal/connect-8 2.623×, llvm/terminal/rr-1 1.220×, llvm/terminal/rr-64 2.295×, llvm/todo/get-1 0.833×, llvm/todo/get-64 2.837×, llvm/todo/patch-16 1.516×, rust/terminal/connect-8 0.973×, rust/terminal/rr-1 1.067×, rust/terminal/rr-64 1.035×, rust/todo/get-1 0.753×, rust/todo/get-64 2.652×, rust/todo/patch-16 1.185× |  |
+| 3.9 | stripped binary size against plain Rust | ratchet | lower | `ignite-perf quality-remote` (`bench/native/`): the stripped release binary over the plain-Rust implementation's, per program | llvm/terminal 1.423×, llvm/todo 0.700×, rust/terminal 1.304×, rust/todo 0.692× |  |
 
 ### 4 Standard library and protocols
 
