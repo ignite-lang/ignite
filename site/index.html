@@ -445,6 +445,7 @@ ignite explain examples/terminal/terminal.design.ignite local</code></pre>
           <li><span class="tag">v0.12.0</span> <span>streamed and binary HTTP responses, every RFC 9110 reason phrase, effectful fn values passed to <code>List.map</code>, <code>Bytes</code> set by index</span></li>
           <li><span class="tag">v0.13.0</span> <span>stream ends handed to <code>spawn</code> inside branches and match arms, program names that shadow Rust primitives, a website checked for layout and accessibility on every merge</span></li>
           <li><span class="tag">v0.14.0</span> <span>environment variables, sleep, wall clock and peer addresses for programs, a clean exit after a drain, quality metrics every release must hold, a toolchain image</span></li>
+          <li><span class="tag">v0.15.0</span> <span>bitwise operators, channels and timers, the shared data value model, and the examples answering at about the speed of plain Rust</span></li>
           <li><span class="tag tag-next">next</span> <span>the waves and designs below, not released</span></li>
         </ul>
       </div>
@@ -454,7 +455,7 @@ ignite explain examples/terminal/terminal.design.ignite local</code></pre>
       <div class="wrap">
         <p class="kicker">What's next</p>
         <h2 id="outlook-title">What is being built, and what is designed</h2>
-        <p class="outlook-lead">Being built now: bitwise operators, channels and timers, and the value model every data format will share. Planned next: WebSocket, RESP3 and NATS clients, codecs and <code>ignite fmt</code>, then YAML, benchmarks against plain Rust and Go, and one mid-level IR for both targets. These are plans, not dates.</p>
+        <p class="outlook-lead">Being built now: an IO scheduler that waits on readiness instead of running one thread per connection. Planned next: WebSocket, RESP3 and NATS clients, codecs and <code>ignite fmt</code>, then YAML, benchmarks against plain Rust and Go, and one mid-level IR for both targets. These are plans, not dates.</p>
         <div class="doc-cards doc-cards-pair">
           <a class="doc-card" href="book/planned/web.html">
             <span class="doc-num">design</span>

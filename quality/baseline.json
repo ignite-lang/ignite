@@ -536,7 +536,8 @@
           "value": 7405864
         },
         "rust/todod/release": {
-          "value": 961880
+          "decision": "Accepted for v0.15.0 (coordinator, 2026-11-08): the Rust-target todo release binary grew 3.2 % over v0.14.0 (980,136 B) with wave 7 (std.data, channels, bitwise operators) and the native-parity rounds (text search builtins, the lent index_of, capacity hints), which add std code the todo example reaches; the growth is not attributed to one PR. Binary size is not one of the native-parity targets on the Rust target; revisited with the mid-level IR.",
+          "value": 1011216
         }
       },
       "direction": "lower",
@@ -551,40 +552,40 @@
       "area": "Generated code and runtime behaviour",
       "bars": {
         "llvm/terminal/connect-8": {
-          "value": 766
+          "value": 929
         },
         "llvm/terminal/rr-1": {
-          "value": 906
+          "value": 975
         },
         "llvm/terminal/rr-64": {
-          "value": 858
+          "value": 971
         },
         "llvm/todo/get-1": {
-          "value": 899
+          "value": 1015
         },
         "llvm/todo/get-64": {
-          "value": 869
+          "value": 1069
         },
         "llvm/todo/patch-16": {
-          "value": 576
+          "value": 1012
         },
         "rust/terminal/connect-8": {
-          "value": 946
+          "value": 956
         },
         "rust/terminal/rr-1": {
-          "value": 886
+          "value": 962
         },
         "rust/terminal/rr-64": {
-          "value": 824
+          "value": 956
         },
         "rust/todo/get-1": {
-          "value": 809
+          "value": 975
         },
         "rust/todo/get-64": {
-          "value": 703
+          "value": 981
         },
         "rust/todo/patch-16": {
-          "value": 567
+          "value": 994
         }
       },
       "direction": "higher",
@@ -644,40 +645,40 @@
       "area": "Generated code and runtime behaviour",
       "bars": {
         "llvm/terminal/connect-8": {
-          "value": 1132
+          "value": 1105
         },
         "llvm/terminal/rr-1": {
-          "value": 1017
+          "value": 1000
         },
         "llvm/terminal/rr-64": {
-          "value": 1240
+          "value": 1032
         },
         "llvm/todo/get-1": {
-          "value": 1099
+          "value": 992
         },
         "llvm/todo/get-64": {
-          "value": 1265
+          "value": 1103
         },
         "llvm/todo/patch-16": {
-          "value": 2193
+          "value": 1445
         },
         "rust/terminal/connect-8": {
-          "value": 1058
+          "value": 1055
         },
         "rust/terminal/rr-1": {
-          "value": 1008
+          "value": 1004
         },
         "rust/terminal/rr-64": {
-          "value": 1243
+          "value": 1082
         },
         "rust/todo/get-1": {
-          "value": 1202
+          "value": 1044
         },
         "rust/todo/get-64": {
-          "value": 1551
+          "value": 1252
         },
         "rust/todo/patch-16": {
-          "value": 2275
+          "value": 1543
         }
       },
       "direction": "lower",
@@ -692,28 +693,29 @@
       "area": "Generated code and runtime behaviour",
       "bars": {
         "llvm/terminal/connect-8": {
-          "value": 2645
+          "decision": "release v0.15.0 (2026-11-08): the coordinator accepts peak RSS under connect-8 on the LLVM target rising from 2.637x at v0.14.0 to 2.938x of plain Rust (dedicated-host run of 798033f2); it rose with spawn-without-handshake (PR 125: the parent copies a task's arguments into transfer memory, the task takes it as the start of its arena; worker threads 10 to 13 in that unit's measurement; the cause is not pinned beyond that); story readiness-scheduler replaces one thread per connection, and the bar is revisited when it lands",
+          "value": 2938
         },
         "llvm/terminal/rr-1": {
-          "value": 1221
+          "value": 1203
         },
         "llvm/terminal/rr-64": {
-          "value": 2288
+          "value": 1434
         },
         "llvm/todo/get-1": {
-          "value": 839
+          "value": 819
         },
         "llvm/todo/get-64": {
-          "value": 2857
+          "value": 1258
         },
         "llvm/todo/patch-16": {
-          "value": 1468
+          "value": 913
         },
         "rust/terminal/connect-8": {
-          "value": 983
+          "value": 981
         },
         "rust/terminal/rr-1": {
-          "value": 1065
+          "value": 1063
         },
         "rust/terminal/rr-64": {
           "value": 1036
@@ -722,7 +724,7 @@
           "value": 765
         },
         "rust/todo/get-64": {
-          "value": 2654
+          "value": 2612
         },
         "rust/todo/patch-16": {
           "value": 1158
