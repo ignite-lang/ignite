@@ -111,6 +111,10 @@ pub const TASK_STACK: usize = 2 * 1024 * 1024;
 /// Free stacks kept for the next tasks.
 const STACK_POOL: usize = 64;
 
+/// Free stacks a thread keeps in front of the pool's lock: a task that a
+/// task spawns (served on the same worker) takes one without the lock.
+const LOCAL_STACK_CACHE: usize = 2;
+
 /// Tasks a worker runs before it looks at its reactor again although more
 /// are runnable.
 const BUDGET: usize = 128;
@@ -175,9 +179,16 @@ struct Shared {
     /// The worker's thread, unparked to wake it while it has no reactor.
     thread: OnceLock<std::thread::Thread>,
     incoming: Mutex<Incoming>,
+    /// `incoming` may hold something: set under its lock by a hand-over,
+    /// cleared under it by the worker that takes it. The worker reads it
+    /// instead of taking the lock on every turn of its loop.
+    pending: AtomicBool,
     /// The worker sleeps (in its reactor, or parked): a hand-over must
     /// wake it.
     sleeping: AtomicBool,
+    /// The worker's only task is in a blocking read ([`block_alone`]): a
+    /// spawn goes elsewhere.
+    blocked: AtomicBool,
     /// Tasks placed on the worker and not ended.
     tasks: AtomicUsize,
 }
@@ -205,9 +216,39 @@ impl Shared {
             reactor: OnceLock::new(),
             thread: OnceLock::new(),
             incoming: Mutex::new(Incoming::default()),
+            pending: AtomicBool::new(false),
             sleeping: AtomicBool::new(false),
+            blocked: AtomicBool::new(false),
             tasks: AtomicUsize::new(0),
         }
+    }
+
+    /// Hand `put` to the worker's `incoming` (without waking it).
+    fn hand_over(&self, put: impl FnOnce(&mut Incoming)) {
+        let mut incoming = lock(&self.incoming);
+        put(&mut incoming);
+        // SeqCst: this store and the worker's `sleeping` store, then this
+        // side's `sleeping` swap ([`Shared::notify`]) and the worker's
+        // `pending` load, form a store-load pair each way: one side sees
+        // the other's write, so the worker does not sleep on a hand-over.
+        self.pending.store(true, Ordering::SeqCst);
+    }
+
+    /// Whether something was handed over and not taken yet; SeqCst for the
+    /// store-load pair described at [`Shared::hand_over`].
+    fn has_pending(&self) -> bool {
+        self.pending.load(Ordering::SeqCst)
+    }
+
+    /// Take what was handed over, if the flag says there may be some.
+    fn take(&self) -> Option<Incoming> {
+        if !self.has_pending() {
+            return None;
+        }
+        let mut incoming = lock(&self.incoming);
+        // Relaxed: under the lock that every hand-over sets it under.
+        self.pending.store(false, Ordering::Relaxed);
+        Some(std::mem::take(&mut *incoming))
     }
 
     /// The worker's reactor, created on first use; called on the worker.
@@ -257,6 +298,8 @@ thread_local! {
     /// keys apart.
     static TIMERS: RefCell<BTreeMap<(Instant, u64), Waiter>> = const { RefCell::new(BTreeMap::new()) };
     static TIMER_SEQUENCE: Cell<u64> = const { Cell::new(0) };
+    /// This thread's free stacks ([`LOCAL_STACK_CACHE`]).
+    static LOCAL_STACKS: RefCell<Vec<DefaultStack>> = const { RefCell::new(Vec::new()) };
     /// The timer of each task slot of this worker ([`SlotTimer`]).
     static SLOT_TIMERS: RefCell<Vec<SlotTimer>> = const { RefCell::new(Vec::new()) };
     /// The guard page of the running task's stack, `start..end`; read by
@@ -284,13 +327,26 @@ fn enqueue(waiter: &Waiter, task: &Task) {
         RUN.with(|run| run.borrow_mut().push_back(waiter.clone()));
         return;
     }
-    lock(&task.worker.incoming).woken.push(waiter.clone());
+    task.worker
+        .hand_over(|incoming| incoming.woken.push(waiter.clone()));
     task.worker.notify();
 }
 
 /// Park the running `task` (`wait::park`): switch to the worker's loop
 /// until a wake or `deadline`.
 pub(crate) fn park(waiter: &Waiter, task: &Task, deadline: Option<Instant>) -> Woken {
+    park_from(waiter, task, deadline, None)
+}
+
+/// [`park`] where `now`, if given, is the instant `deadline` was just
+/// computed from: the first turn compares against it instead of reading
+/// the clock.
+fn park_from(
+    waiter: &Waiter,
+    task: &Task,
+    deadline: Option<Instant>,
+    mut now: Option<Instant>,
+) -> Woken {
     debug_assert!(
         HERE.with(Cell::get) == Arc::as_ptr(&task.worker),
         "a task parks on its own worker"
@@ -300,7 +356,7 @@ pub(crate) fn park(waiter: &Waiter, task: &Task, deadline: Option<Instant>) -> W
             return Woken::Notified;
         }
         if let Some(deadline) = deadline {
-            if Instant::now() >= deadline {
+            if now.take().unwrap_or_else(Instant::now) >= deadline {
                 return Woken::Deadline;
             }
             arm(task.slot, deadline, waiter);
@@ -388,7 +444,8 @@ pub(crate) fn wait_descriptor(
 ) -> io::Result<DescriptorWait> {
     let reactor = task.worker.reactor()?;
     let token = reactor.register(descriptor, interest, waiter.clone())?;
-    task.ready.store(0, Ordering::SeqCst);
+    // Relaxed: set and read on this worker only (its dispatch).
+    task.ready.store(0, Ordering::Relaxed);
     let woken = park(waiter, task, deadline);
     let _ = reactor.deregister(token);
     let ready = Interest::from_bits(task.ready.swap(0, Ordering::SeqCst));
@@ -406,15 +463,28 @@ pub(crate) fn wait_descriptor(
 /// already counted live (`crate::task`).
 pub(crate) fn spawn(job: Job) -> io::Result<()> {
     install_overflow_handler();
-    let stack = match lock(&STACKS).pop() {
+    let stack = match take_stack() {
         Some(stack) => stack,
         None => DefaultStack::new(TASK_STACK)?,
     };
     let here = HERE.with(Cell::get);
     let mut workers = lock(&WORKERS);
-    if let Some(shared) = choose(&workers, here) {
+    let mut passed: Vec<*const Shared> = Vec::new();
+    while let Some((shared, last)) = choose(&workers, here, &passed) {
+        // SeqCst: this increment, then the `blocked` load, against
+        // `block_alone`'s `blocked` store, then its `tasks` load: either
+        // this spawn sees the worker blocked and goes elsewhere, or the
+        // worker sees a second task and does not block. `last`: every
+        // other worker was passed, so the task waits for this one.
         shared.tasks.fetch_add(1, Ordering::SeqCst);
-        lock(&shared.incoming).new.push((job, stack));
+        if !last && shared.blocked.load(Ordering::SeqCst) {
+            shared.tasks.fetch_sub(1, Ordering::SeqCst);
+            passed.push(Arc::as_ptr(&shared));
+            continue;
+        }
+        // Relaxed: a bound for `block_alone`, not an order with any data.
+        LIVE.fetch_add(1, Ordering::Relaxed);
+        shared.hand_over(|incoming| incoming.new.push((job, stack)));
         drop(workers);
         if Arc::as_ptr(&shared) != here {
             shared.notify();
@@ -422,8 +492,9 @@ pub(crate) fn spawn(job: Job) -> io::Result<()> {
         return Ok(());
     }
     let shared = Arc::new(Shared::new());
-    shared.tasks.store(1, Ordering::SeqCst);
-    lock(&shared.incoming).new.push((job, stack));
+    // Relaxed: the worker thread is not started yet; its start orders it.
+    shared.tasks.store(1, Ordering::Relaxed);
+    shared.hand_over(|incoming| incoming.new.push((job, stack)));
     let started = Arc::clone(&shared);
     match std::thread::Builder::new()
         .name(String::from("worker"))
@@ -431,6 +502,8 @@ pub(crate) fn spawn(job: Job) -> io::Result<()> {
     {
         Ok(_) => {
             workers.push(shared);
+            // Relaxed: as above.
+            LIVE.fetch_add(1, Ordering::Relaxed);
             Ok(())
         }
         Err(error) => {
@@ -454,37 +527,86 @@ pub(crate) fn spawn(job: Job) -> io::Result<()> {
 /// switch, and a task that spawns many (an accept loop on a worker)
 /// still spreads them. Otherwise, and from a thread that is no worker,
 /// an idle worker, else a new one up to [`worker_limit`], else the least
-/// loaded.
-fn choose(workers: &[Arc<Shared>], here: *const Shared) -> Option<Arc<Shared>> {
-    let load = |shared: &Arc<Shared>| shared.tasks.load(Ordering::SeqCst);
+/// loaded. A worker whose task is in a blocking read ([`block_alone`]),
+/// or that the caller `passed` as such, is busy: it is not chosen while
+/// another is or a new one may start. With every worker busy and none
+/// to start, the least loaded is chosen with `true` (the last resort; at
+/// most `worker_limit() - 1` workers block, so it is rare).
+fn choose(
+    workers: &[Arc<Shared>],
+    here: *const Shared,
+    passed: &[*const Shared],
+) -> Option<(Arc<Shared>, bool)> {
+    // Relaxed: placement only weighs the counts; `spawn` orders the
+    // increment it makes against `blocked`.
+    let load = |shared: &Arc<Shared>| shared.tasks.load(Ordering::Relaxed);
     let elsewhere = |shared: &Arc<Shared>| Arc::as_ptr(shared) != here;
-    if let Some(local) = workers.iter().find(|shared| !elsewhere(shared)) {
+    let free = |shared: &&Arc<Shared>| {
+        !passed.contains(&Arc::as_ptr(shared)) && !shared.blocked.load(Ordering::Relaxed)
+    };
+    if let Some(local) = workers
+        .iter()
+        .filter(free)
+        .find(|shared| !elsewhere(shared))
+    {
         let least = if workers.len() < worker_limit() {
             0
         } else {
             workers.iter().map(load).min().unwrap_or(0)
         };
         if load(local) <= least + 1 {
-            return Some(Arc::clone(local));
+            return Some((Arc::clone(local), false));
         }
     }
     if let Some(idle) = workers
         .iter()
+        .filter(free)
         .filter(|shared| load(shared) == 0)
         .min_by_key(|shared| elsewhere(shared))
     {
-        return Some(Arc::clone(idle));
+        return Some((Arc::clone(idle), false));
     }
     if workers.len() < worker_limit() {
         return None;
     }
+    if let Some(least) = workers
+        .iter()
+        .filter(free)
+        .min_by_key(|shared| (load(shared), elsewhere(shared)))
+    {
+        return Some((Arc::clone(least), false));
+    }
     workers
         .iter()
-        .min_by_key(|shared| (load(shared), elsewhere(shared)))
-        .cloned()
+        .min_by_key(|shared| load(shared))
+        .map(|shared| (Arc::clone(shared), true))
 }
 
+/// A free stack: from this worker's cache, else from the pool.
+fn take_stack() -> Option<DefaultStack> {
+    let cached = LOCAL_STACKS
+        .try_with(|stacks| stacks.borrow_mut().pop())
+        .ok()
+        .flatten();
+    cached.or_else(|| lock(&STACKS).pop())
+}
+
+/// Keep a stack that a task left: in this worker's cache while it has
+/// room ([`LOCAL_STACK_CACHE`]), else in the pool, else unmap it.
 fn give_stack(stack: DefaultStack) {
+    let stack = match LOCAL_STACKS.try_with(|stacks| {
+        let mut stacks = stacks.borrow_mut();
+        if stacks.len() < LOCAL_STACK_CACHE {
+            stacks.push(stack);
+            None
+        } else {
+            Some(stack)
+        }
+    }) {
+        Ok(None) => return,
+        Ok(Some(stack)) => stack,
+        Err(_) => return,
+    };
     let mut stacks = lock(&STACKS);
     if stacks.len() < STACK_POOL {
         stacks.push(stack);
@@ -526,7 +648,9 @@ impl Worker {
 
     /// Take what other threads handed over.
     fn take_incoming(&mut self) {
-        let Incoming { woken, new } = std::mem::take(&mut *lock(&self.shared.incoming));
+        let Some(Incoming { woken, new }) = self.shared.take() else {
+            return;
+        };
         if !woken.is_empty() {
             RUN.with(|run| run.borrow_mut().extend(woken));
         }
@@ -595,7 +719,8 @@ impl Worker {
             .coroutine
             .take()
             .expect("the resumed task's coroutine");
-        task.state.store(RUNNING, Ordering::SeqCst);
+        // Relaxed: a waker acts only on PARKED, and this task was QUEUED.
+        task.state.store(RUNNING, Ordering::Relaxed);
         YIELDER.with(|cell| cell.set(local.yielder));
         GUARD.with(|cell| cell.set(local.guard));
         RUNNING_TASK.with(|running| *running.borrow_mut() = Some(waiter.clone()));
@@ -607,13 +732,17 @@ impl Worker {
         match result {
             CoroutineResult::Yield(()) => {
                 local.coroutine = Some(coroutine);
+                // SeqCst: this store, then the `has_wake` load, against a
+                // waker's NOTIFIED set, then its QUEUED exchange: one sees
+                // the other, so a wake is not lost.
                 task.state.store(PARKED, Ordering::SeqCst);
                 if waiter.has_wake() && task.queue() {
                     RUN.with(|run| run.borrow_mut().push_back(waiter.clone()));
                 }
             }
             CoroutineResult::Return(()) => {
-                task.state.store(DONE, Ordering::SeqCst);
+                // Release: a waker reading DONE does nothing with the task.
+                task.state.store(DONE, Ordering::Release);
                 self.restore_locals();
                 forget_timer(slot);
                 give_stack(coroutine.into_stack());
@@ -622,6 +751,8 @@ impl Worker {
                 self.free.push(slot);
                 self.live -= 1;
                 self.shared.tasks.fetch_sub(1, Ordering::SeqCst);
+                // Relaxed: as in `spawn`.
+                LIVE.fetch_sub(1, Ordering::Relaxed);
                 crate::task::task_finished();
             }
         }
@@ -677,7 +808,9 @@ impl Worker {
     /// ended.
     fn retire(&self) -> bool {
         let mut workers = lock(&WORKERS);
-        if self.shared.tasks.load(Ordering::SeqCst) != 0 || !lock(&self.shared.incoming).is_empty()
+        // Under `WORKERS`, which every spawn holds while it counts a task
+        // and hands it over: neither changes meanwhile.
+        if self.shared.tasks.load(Ordering::Relaxed) != 0 || !lock(&self.shared.incoming).is_empty()
         {
             return false;
         }
@@ -752,9 +885,12 @@ fn work(shared: Arc<Shared>) {
             idle_since = None;
             next_timer
         };
+        // SeqCst: the store-load pair with a hand-over (`Shared::hand_over`).
         worker.shared.sleeping.store(true, Ordering::SeqCst);
-        if !lock(&worker.shared.incoming).is_empty() {
-            worker.shared.sleeping.store(false, Ordering::SeqCst);
+        if worker.shared.has_pending() {
+            // Relaxed: only this thread sets it; a waker that swapped it
+            // already sends a wake that the next sleep consumes.
+            worker.shared.sleeping.store(false, Ordering::Relaxed);
             continue;
         }
         match worker.shared.reactor.get() {
@@ -768,7 +904,8 @@ fn work(shared: Arc<Shared>) {
                 None => std::thread::park(),
             },
         }
-        worker.shared.sleeping.store(false, Ordering::SeqCst);
+        // Relaxed: as above; a late waker's wake only ends a later sleep.
+        worker.shared.sleeping.store(false, Ordering::Relaxed);
         dispatch(&mut events);
     }
 }
@@ -988,13 +1125,16 @@ impl Readiness {
     /// A worker that cannot create its reactor (no descriptor free for its
     /// epoll and eventfd) looks at the descriptor without waiting and parks
     /// the task for [`RETRY`], until it can: a session keeps running while
-    /// the process is out of descriptors.
+    /// the process is out of descriptors. `now`: the instant `deadline`
+    /// was computed from just before, so this wait reads no clock to learn
+    /// how far it is.
     pub(crate) fn wait(
         &self,
         descriptor: BorrowedFd<'_>,
         interest: Interest,
         mark: u64,
         deadline: Option<Instant>,
+        now: Option<Instant>,
     ) -> io::Result<DescriptorWait> {
         let me = Waiter::current();
         let Some(task) = me.task() else {
@@ -1024,7 +1164,7 @@ impl Readiness {
                 return Ok(DescriptorWait::Woken);
             }
         }
-        if let Some(waited) = wait_alone(task, state, descriptor, interest, mark, deadline)? {
+        if let Some(waited) = wait_alone(task, state, descriptor, interest, mark, deadline, now)? {
             return Ok(waited);
         }
         {
@@ -1034,7 +1174,7 @@ impl Readiness {
             }
             waiting.of(interest).push(me.clone());
         }
-        let woken = crate::wait::park(&me, deadline);
+        let woken = park_from(&me, task, deadline, now);
         let still_queued = lock(&state.waiting).of(interest).remove(&me);
         Ok(if still_queued && woken == Woken::Deadline {
             DescriptorWait::Deadline
@@ -1059,25 +1199,31 @@ fn wait_alone(
     interest: Interest,
     mark: u64,
     deadline: Option<Instant>,
+    now: Option<Instant>,
 ) -> io::Result<Option<DescriptorWait>> {
     let shared = &task.worker;
-    if shared.tasks.load(Ordering::SeqCst) != 1 || runnable() {
+    // Relaxed: a hint; a spawn that raises it after this also hands over,
+    // which the `pending` check below sees.
+    if shared.tasks.load(Ordering::Relaxed) != 1 || runnable() {
         return Ok(None);
     }
     let Some(reactor) = shared.reactor.get() else {
         return Ok(None);
     };
+    // SeqCst: the store-load pair with a hand-over (`Shared::hand_over`).
     shared.sleeping.store(true, Ordering::SeqCst);
-    if !lock(&shared.incoming).is_empty() {
-        shared.sleeping.store(false, Ordering::SeqCst);
+    if shared.has_pending() {
+        // Relaxed: only this thread sets it (see the worker loop).
+        shared.sleeping.store(false, Ordering::Relaxed);
         return Ok(None);
     }
-    if state.events(interest).load(Ordering::SeqCst) != mark {
-        shared.sleeping.store(false, Ordering::SeqCst);
+    // Acquire: pairs with the event count's increment (`Descriptor::ready`).
+    if state.events(interest).load(Ordering::Acquire) != mark {
+        shared.sleeping.store(false, Ordering::Relaxed);
         return Ok(Some(DescriptorWait::Woken));
     }
-    let ready = reactor.poll_one(descriptor, interest, deadline);
-    shared.sleeping.store(false, Ordering::SeqCst);
+    let ready = reactor.poll_one(descriptor, interest, deadline, now);
+    shared.sleeping.store(false, Ordering::Relaxed);
     Ok(Some(if ready? {
         DescriptorWait::Ready(interest)
     } else if deadline.is_some_and(|end| Instant::now() >= end) {
@@ -1085,6 +1231,70 @@ fn wait_alone(
     } else {
         DescriptorWait::Woken
     }))
+}
+
+/// Workers whose only task is in a blocking read ([`block_alone`]).
+static BLOCKED: AtomicUsize = AtomicUsize::new(0);
+
+/// Tasks placed on workers and not yet ended. While fewer than
+/// [`worker_limit`] live, a spawn finds an idle worker or starts one and
+/// never passes a blocked worker; with more, a worker blocked in a read
+/// would keep its one task while others take the rest of a burst of
+/// connections, and tasks do not migrate (`get-64`: a quarter of the
+/// replies per second lost).
+static LIVE: AtomicUsize = AtomicUsize::new(0);
+
+/// The permission of the running task to make one blocking system call
+/// on its worker's thread, as a task of the mode `threads` would; dropped
+/// when the call returned.
+pub(crate) struct Blocking {
+    shared: Arc<Shared>,
+}
+
+impl Drop for Blocking {
+    fn drop(&mut self) {
+        // Release: a spawn that sees it cleared may place a task here,
+        // after everything the blocked call did.
+        self.shared.blocked.store(false, Ordering::Release);
+        BLOCKED.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
+/// Let the running task block its worker's thread in one system call
+/// (a read with nothing to read yet), instead of waiting through the
+/// reactor: one call instead of `poll` and the read. Only for the only
+/// task of its worker, with nothing runnable or handed over, and while
+/// fewer tasks live than [`worker_limit`] ([`LIVE`]): the worker
+/// counts as busy meanwhile, so `spawn` places tasks on another worker
+/// (or starts one), and nothing that comes for this worker waits on the
+/// call. `None` off a worker, or when any of that does not hold.
+pub(crate) fn block_alone() -> Option<Blocking> {
+    let me = Waiter::current();
+    let task = me.task()?;
+    let shared = &task.worker;
+    // Relaxed: a first look; the SeqCst pair below decides.
+    if shared.tasks.load(Ordering::Relaxed) != 1
+        || runnable()
+        || shared.has_pending()
+        || LIVE.load(Ordering::Relaxed) >= worker_limit()
+    {
+        return None;
+    }
+    // Relaxed: a bound on blocked workers, not an order with any data.
+    if BLOCKED.fetch_add(1, Ordering::Relaxed) + 1 >= worker_limit() {
+        BLOCKED.fetch_sub(1, Ordering::Relaxed);
+        return None;
+    }
+    // SeqCst: this store, then the `tasks` load, against `spawn`'s
+    // increment, then its `blocked` load (see there).
+    shared.blocked.store(true, Ordering::SeqCst);
+    let blocking = Blocking {
+        shared: Arc::clone(shared),
+    };
+    if shared.tasks.load(Ordering::SeqCst) != 1 || shared.has_pending() {
+        return None;
+    }
+    Some(blocking)
 }
 
 /// How long a task on a worker without a reactor parks between two looks

@@ -419,6 +419,143 @@ fn child_emptying_reads() {
     wait_for_tasks();
 }
 
+/// The only task of a worker may block it in `recv` (`sched::block_alone`):
+/// a task spawned meanwhile runs at once on another worker, not after that
+/// read, and the read still ends at its idle timeout. With one worker the
+/// task never blocks it, so the spawned task runs on the same worker.
+#[test]
+fn a_task_spawned_while_a_lone_task_blocks_in_a_read_runs_at_once() {
+    passed(&child(
+        "scheduler::child_lone_blocking_read",
+        &[("IGNITE_WORKERS", "2")],
+    ));
+    passed(&child(
+        "scheduler::child_lone_blocking_read",
+        &[("IGNITE_WORKERS", "1")],
+    ));
+}
+
+#[test]
+fn child_lone_blocking_read() {
+    use std::io::Write;
+    if !in_child() {
+        return;
+    }
+    let workers: usize = std::env::var("IGNITE_WORKERS").unwrap().parse().unwrap();
+    for round in 0..2 {
+        let (stream, mut peer) = pair();
+        let (report, reports) = mpsc::channel();
+        let reader = report.clone();
+        spawn(move || {
+            stream.set_idle_timeout(400).unwrap();
+            let first = stream.read(16).unwrap();
+            let start = Instant::now();
+            let second = stream.read(16).unwrap();
+            reader
+                .send(format!(
+                    "reader {:?} {first:?} {second:?} {} {}",
+                    std::thread::current().id(),
+                    stream.timed_out(),
+                    start.elapsed() >= Duration::from_millis(390)
+                ))
+                .unwrap();
+        });
+        if round == 0 {
+            peer.write_all(b"go").unwrap();
+        }
+        std::thread::sleep(Duration::from_millis(100));
+        let started = Instant::now();
+        spawn(move || {
+            report
+                .send(format!("spawned {:?}", std::thread::current().id()))
+                .unwrap();
+        });
+        let spawned = reports.recv_timeout(LIMIT).expect("the spawned task ran");
+        let waited = started.elapsed();
+        assert!(spawned.starts_with("spawned"), "{spawned}");
+        let reader = reports.recv_timeout(LIMIT).expect("the reader ended");
+        if round == 0 {
+            assert!(
+                waited < Duration::from_millis(250),
+                "the spawned task waited {waited:?}"
+            );
+            assert!(
+                reader.ends_with("Data([103, 111]) Eof true true"),
+                "{reader}"
+            );
+        }
+        let spawned_on = spawned.trim_start_matches("spawned ");
+        assert_eq!(
+            reader.contains(spawned_on),
+            workers == 1,
+            "{reader} / {spawned}"
+        );
+        drop(peer);
+        wait_for_tasks();
+    }
+}
+
+/// A lone task blocks its worker in `recv` only while fewer tasks live
+/// than workers may run: once a second task lives on the other worker, the
+/// reader's next read waits through the reactor, its worker takes spawned
+/// tasks again, and of two tasks spawned then one runs beside the reader.
+#[test]
+fn a_worker_whose_task_blocked_once_takes_tasks_again() {
+    passed(&child(
+        "scheduler::child_blocked_worker_rejoins",
+        &[("IGNITE_WORKERS", "2")],
+    ));
+}
+
+#[test]
+fn child_blocked_worker_rejoins() {
+    use std::io::Write;
+    if !in_child() {
+        return;
+    }
+    let (stream, mut peer) = pair();
+    let (report, reports) = mpsc::channel();
+    let reader = report.clone();
+    spawn(move || {
+        while let Ok(Input::Data(_)) = stream.read(16) {
+            reader
+                .send(format!("{:?}", std::thread::current().id()))
+                .unwrap();
+        }
+    });
+    std::thread::sleep(Duration::from_millis(100));
+    let mut holds = Vec::new();
+    let mut hold = |report: mpsc::Sender<String>| {
+        let (keep, kept) = Channel::bounded::<bool>(1);
+        holds.push(keep);
+        spawn(move || {
+            report
+                .send(format!("{:?}", std::thread::current().id()))
+                .unwrap();
+            kept.receive();
+        });
+    };
+    hold(report.clone());
+    let first = reports.recv_timeout(LIMIT).expect("the first task ran");
+    peer.write_all(b"one").unwrap();
+    let read_on = reports.recv_timeout(LIMIT).expect("the reader read");
+    assert_ne!(first, read_on, "the first task passed the blocked worker");
+    std::thread::sleep(Duration::from_millis(100));
+    hold(report.clone());
+    hold(report);
+    let later = [
+        reports.recv_timeout(LIMIT).expect("a later task ran"),
+        reports.recv_timeout(LIMIT).expect("a later task ran"),
+    ];
+    assert!(
+        later.contains(&read_on),
+        "no later task ran beside the reader on {read_on}: {later:?}"
+    );
+    drop(holds);
+    drop(peer);
+    wait_for_tasks();
+}
+
 /// The epoll loop is reached only through the reactor interface: no
 /// source file of the substrate but `reactor.rs` names epoll's calls.
 #[test]

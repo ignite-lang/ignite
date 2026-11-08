@@ -1,10 +1,11 @@
 //! `TcpStream.set_idle_timeout` (`docs/slice.md` section 11.5): a read
 //! that waits longer than the timeout ends as if the peer had closed
-//! (`Input::Eof`; `TcpStream::read_into` returns 0 bytes). On a
-//! non-blocking socket (IO mode `readiness`) the timeout is the deadline of
-//! the read's wait (a timer on a worker, `poll`'s timeout on a thread); on
-//! a blocking one (mode `threads`) it is `SO_RCVTIMEO`. It belongs to the
-//! stream, so every clone shares it.
+//! (`Input::Eof`; `TcpStream::read_into` returns 0 bytes). A read that
+//! waits for readiness (IO mode `readiness`) has it as the deadline of its
+//! wait (a timer on a worker, `poll`'s timeout on a thread); a read that
+//! blocks in `recv` (mode `threads`, or the only task of a worker,
+//! `sched::block_alone`) has it as the socket's `SO_RCVTIMEO`, which is
+//! set in both modes. It belongs to the stream, so every clone shares it.
 
 use std::sync::atomic::Ordering;
 use std::time::Duration;
@@ -14,11 +15,8 @@ use crate::{IoError, TcpStream};
 impl TcpStream {
     /// Set the idle timeout to `ms` milliseconds; 0 or less removes it.
     pub fn set_idle_timeout(&self, ms: i64) -> Result<(), IoError> {
-        let (idle, blocking) = self.idle_ms();
+        let (idle, socket) = self.idle_ms();
         idle.store(ms.max(0), Ordering::Release);
-        let Some(socket) = blocking else {
-            return Ok(());
-        };
         let timeout = u64::try_from(ms)
             .ok()
             .filter(|ms| *ms > 0)

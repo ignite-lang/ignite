@@ -1,6 +1,8 @@
-//! TCP over `std::net` sockets: non-blocking in the IO mode `readiness`,
-//! where every wait goes through the stream's `Readiness` (a task parks, a
-//! thread polls), blocking in the mode `threads`.
+//! TCP over `std::net` sockets. A stream's socket blocks in both IO modes.
+//! In `readiness` its reads and sends are `MSG_DONTWAIT` and every wait
+//! goes through the stream's `Readiness` (a task parks, a thread polls),
+//! except a read of the only task of a worker, which blocks in `recv`
+//! (`sched::block_alone`); in `threads` they block in the kernel.
 //!
 //! Every handle is `Clone`; a clone shares the socket, which closes when the
 //! last clone is dropped. A stream has one lock per direction around the
@@ -28,12 +30,15 @@
 //! from its arrival until a read has returned it.
 
 use std::cell::RefCell;
-use std::io::{ErrorKind, Read, Write};
+use std::io::ErrorKind;
 use std::net::Shutdown;
 use std::os::fd::{AsFd, AsRawFd};
 use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, TryLockError, Weak};
 use std::time::{Duration, Instant};
+
+use nix::errno::Errno;
+use nix::sys::socket::MsgFlags;
 
 use crate::reactor::Interest;
 use crate::sched::Readiness;
@@ -127,7 +132,7 @@ impl Slot {
                 return Ok(DescriptorWait::Woken);
             }
             self.readiness
-                .wait(listener.as_fd(), Interest::READ, mark, None)
+                .wait(listener.as_fd(), Interest::READ, mark, None, None)
         };
         let waited = if self.kept {
             crate::task::idle_on_kept(wait)
@@ -336,7 +341,7 @@ impl Stream {
                 Err(error) if error.kind() == ErrorKind::Interrupted => {}
                 Err(error) if error.kind() == ErrorKind::WouldBlock => {
                     self.readiness
-                        .wait(self.socket.as_fd(), Interest::WRITE, mark, None)?;
+                        .wait(self.socket.as_fd(), Interest::WRITE, mark, None, None)?;
                 }
                 Err(error) => return Err(error.into()),
             }
@@ -363,12 +368,27 @@ impl Stream {
         }
     }
 
+    /// The flags of a `send`: the socket blocks in both IO modes, so in
+    /// `readiness` every send is `MSG_DONTWAIT` and waits for room through
+    /// the reactor; none raises `SIGPIPE`.
+    fn send_flags(&self) -> MsgFlags {
+        if self.blocking {
+            MsgFlags::MSG_NOSIGNAL
+        } else {
+            MsgFlags::MSG_NOSIGNAL | MsgFlags::MSG_DONTWAIT
+        }
+    }
+
     /// Send the buffer; the caller holds the write lock.
     fn send(&self, out: &mut Out) -> Result<(), IoError> {
         if out.buffer.is_empty() {
             return Ok(());
         }
-        let sent = self.send_all(&out.buffer, |rest| (&self.socket).write(rest));
+        let flags = self.send_flags();
+        let descriptor = self.socket.as_raw_fd();
+        let sent = self.send_all(&out.buffer, |rest| {
+            nix::sys::socket::send(descriptor, rest, flags).map_err(std::io::Error::from)
+        });
         out.buffer.clear();
         if out.buffer.capacity() > SEND_BUFFER {
             out.buffer = Vec::new();
@@ -415,23 +435,15 @@ impl Buffered for Stream {
         let mut at = 0;
         while at < out.buffer.len() {
             let rest = &out.buffer[at..];
-            // SAFETY: the descriptor belongs to `self.socket`, which the
-            // write lock keeps open, and `rest` is readable for its length.
-            let sent = unsafe {
-                nix::libc::send(
-                    self.socket.as_raw_fd(),
-                    rest.as_ptr().cast(),
-                    rest.len(),
-                    nix::libc::MSG_DONTWAIT | nix::libc::MSG_NOSIGNAL,
-                )
-            };
-            match usize::try_from(sent) {
+            match nix::sys::socket::send(
+                self.socket.as_raw_fd(),
+                rest,
+                MsgFlags::MSG_DONTWAIT | MsgFlags::MSG_NOSIGNAL,
+            ) {
                 Ok(count) => at += count,
-                Err(_) => match std::io::Error::last_os_error().kind() {
-                    ErrorKind::Interrupted => {}
-                    ErrorKind::WouldBlock if self.writable_before(deadline) => {}
-                    _ => break,
-                },
+                Err(Errno::EINTR) => {}
+                Err(Errno::EAGAIN) if self.writable_before(deadline) => {}
+                Err(_) => break,
             }
         }
         out.buffer.clear();
@@ -448,19 +460,18 @@ impl Drop for Stream {
     }
 }
 
-/// One `accept4` on `listener`: the connection, non-blocking unless the IO
-/// mode is `threads` (one system call instead of `accept` and a
-/// `FIONBIO`), close-on-exec, and the peer the call reported.
+/// One `accept4` on `listener`: the connection, close-on-exec, and the
+/// peer the call reported (one system call instead of `accept` and a
+/// `getpeername`). The socket blocks in both IO modes: in `readiness` its
+/// reads and sends are `MSG_DONTWAIT` unless a read may block its worker
+/// (`sched::block_alone`).
 fn accept_socket(
     listener: &std::net::TcpListener,
 ) -> std::io::Result<(std::net::TcpStream, Option<std::net::SocketAddr>)> {
     use nix::libc;
     use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
     use std::os::fd::{FromRawFd, OwnedFd};
-    let mut flags = libc::SOCK_CLOEXEC;
-    if crate::sched::readiness() {
-        flags |= libc::SOCK_NONBLOCK;
-    }
+    let flags = libc::SOCK_CLOEXEC;
     // SAFETY: `storage` is zeroed (a valid `sockaddr_storage`) and `length`
     // holds its size, so `accept4` writes within it; a descriptor it
     // returns is new and owned by nothing else, so `OwnedFd` takes it; the
@@ -571,8 +582,10 @@ impl TcpListener {
             let mark = self.slot.readiness.mark(Interest::READ);
             match accept_socket(listener) {
                 Ok((socket, peer)) => return Ok(TcpStream::from_socket_kept(socket, peer, kept)),
-                Err(e) if e.kind() == ErrorKind::Interrupted => continue,
-                Err(e) if e.kind() == ErrorKind::WouldBlock => {
+                // The two codes every accept loop meets compared as numbers,
+                // not through `ErrorKind`'s decoding of every code.
+                Err(e) if e.raw_os_error() == Some(nix::libc::EINTR) => continue,
+                Err(e) if e.raw_os_error() == Some(nix::libc::EAGAIN) => {
                     if !kept && crate::drain::draining() {
                         return Err(IoError::new(crate::drain::DRAINING));
                     }
@@ -602,15 +615,13 @@ impl TcpListener {
 
 impl TcpStream {
     fn from_socket(socket: std::net::TcpStream) -> TcpStream {
-        let blocking = !crate::sched::readiness();
-        let _ = socket.set_nonblocking(!blocking);
         let peer = socket.peer_addr().ok();
         Self::from_socket_kept(socket, peer, false)
     }
 
-    /// A stream over `socket`, already non-blocking unless the IO mode is
-    /// `threads`, with the peer the operating system reported; `kept` when
-    /// a listener kept through the drain accepted it.
+    /// A stream over `socket`, a blocking one in both IO modes (`Stream`),
+    /// with the peer the operating system reported; `kept` when a listener
+    /// kept through the drain accepted it.
     fn from_socket_kept(
         socket: std::net::TcpStream,
         peer: Option<std::net::SocketAddr>,
@@ -694,18 +705,27 @@ impl TcpStream {
         // is that of the read that ended last, also with readers queued on
         // the lock (`docs/slice.md` 26.2).
         let ended = |timed_out: bool| self.inner.timed_out.store(timed_out, Ordering::Release);
-        let socket = &self.inner.socket;
+        let descriptor = self.inner.socket.as_raw_fd();
         // Whether the last `recv` of this read left the socket empty: it
         // read less than it asked for (but not the end of the stream), or
         // found nothing.
         let emptied = std::cell::Cell::new(false);
+        // The next `recv` may block the thread (`sched::block_alone`, or
+        // the IO mode `threads`); otherwise it is `MSG_DONTWAIT`. The
+        // socket itself blocks in both modes.
+        let block_next = std::cell::Cell::new(self.inner.blocking);
         let mut receive = |buffer: &mut [u8]| {
-            let received = (&*socket).read(buffer);
+            let flags = if block_next.replace(self.inner.blocking) {
+                MsgFlags::empty()
+            } else {
+                MsgFlags::MSG_DONTWAIT
+            };
+            let received = nix::sys::socket::recv(descriptor, buffer, flags);
             emptied.set(match &received {
                 Ok(n) => *n > 0 && *n < buffer.len(),
-                Err(e) => e.kind() == ErrorKind::WouldBlock,
+                Err(errno) => *errno == Errno::EAGAIN,
             });
-            received
+            received.map_err(std::io::Error::from)
         };
         let mut deadline: Option<Option<Instant>> = None;
         // The read before this one emptied the socket: wait for readiness
@@ -720,18 +740,29 @@ impl TcpStream {
             }
         };
         loop {
-            if let Some(mark) = wait_first.take()
-                && let Some(ended_early) = self.wait_readable(mark, &mut deadline)
-            {
-                ended(ended_early.is_ok());
-                return ended_early.map(|()| None);
+            // A wait that this read would make now: either this task may
+            // block its worker in the `recv` itself (it is the worker's only
+            // task, and the read's idle deadline has not begun, so the
+            // socket's `SO_RCVTIMEO` is that deadline), or it waits for
+            // readiness.
+            let mut blocking = None;
+            if let Some(mark) = wait_first.take() {
+                blocking = deadline.is_none().then(crate::sched::block_alone).flatten();
+                if blocking.is_none()
+                    && let Some(ended_early) = self.wait_readable(mark, &mut deadline)
+                {
+                    ended(ended_early.is_ok());
+                    return ended_early.map(|()| None);
+                }
             }
+            block_next.set(self.inner.blocking || blocking.is_some());
             let mark = self.inner.readiness.mark(Interest::READ);
-            let attempted = if self.inner.blocking && self.inner.kept {
+            let attempted = if (self.inner.blocking || blocking.is_some()) && self.inner.kept {
                 crate::task::idle_on_kept(|| attempt(&mut receive))
             } else {
                 attempt(&mut receive)
             };
+            let blocked = blocking.take().is_some();
             match attempted {
                 Ok(value) => {
                     if !self.inner.blocking && emptied.get() {
@@ -740,19 +771,16 @@ impl TcpStream {
                     ended(false);
                     return Ok(Some(value));
                 }
-                Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+                Err(e) if e.raw_os_error() == Some(nix::libc::EINTR) => {}
                 Err(e)
-                    if self.inner.blocking
+                    if (self.inner.blocking || blocked)
                         && matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) =>
                 {
                     ended(true);
                     return Ok(None);
                 }
-                Err(e) if e.kind() == ErrorKind::WouldBlock => {
-                    if let Some(ended_early) = self.wait_readable(mark, &mut deadline) {
-                        ended(ended_early.is_ok());
-                        return ended_early.map(|()| None);
-                    }
+                Err(e) if e.raw_os_error() == Some(nix::libc::EAGAIN) => {
+                    wait_first = Some(mark);
                 }
                 Err(e) => {
                     ended(false);
@@ -764,18 +792,24 @@ impl TcpStream {
 
     /// The wait of [`TcpStream::read_with`] for the socket to become
     /// readable after `mark`. `None`: attempt the read. `Some(Ok(()))`:
-    /// the idle timeout passed. `Some(Err(_))`: the wait failed.
+    /// the idle timeout passed. `Some(Err(_))`: the wait failed. The first
+    /// wait of a read computes its deadline, reading the clock once.
     fn wait_readable(
         &self,
         mark: u64,
         deadline: &mut Option<Option<Instant>>,
     ) -> Option<Result<(), IoError>> {
-        let until = *deadline.get_or_insert_with(|| self.idle_deadline());
+        let mut now = None;
+        let until = *deadline.get_or_insert_with(|| {
+            let (until, at) = self.idle_deadline();
+            now = at;
+            until
+        });
         let socket = &self.inner.socket;
         let wait = || {
             self.inner
                 .readiness
-                .wait(socket.as_fd(), Interest::READ, mark, until)
+                .wait(socket.as_fd(), Interest::READ, mark, until, now)
         };
         let waited = if self.inner.kept {
             crate::task::idle_on_kept(wait)
@@ -789,22 +823,22 @@ impl TcpStream {
         }
     }
 
-    /// When a read that begins to wait now ends for the idle timeout.
-    fn idle_deadline(&self) -> Option<Instant> {
+    /// When a read that begins to wait now ends for the idle timeout, and
+    /// the instant read for it; neither without an idle timeout.
+    fn idle_deadline(&self) -> (Option<Instant>, Option<Instant>) {
         let ms = self.inner.idle.load(Ordering::Acquire);
-        u64::try_from(ms)
-            .ok()
-            .filter(|ms| *ms > 0)
-            .and_then(|ms| Instant::now().checked_add(Duration::from_millis(ms)))
+        let Some(ms) = u64::try_from(ms).ok().filter(|ms| *ms > 0) else {
+            return (None, None);
+        };
+        let now = Instant::now();
+        (now.checked_add(Duration::from_millis(ms)), Some(now))
     }
 
-    /// The idle timeout in milliseconds, 0 for none, and the socket when it
-    /// blocks, whose `SO_RCVTIMEO` carries the timeout (`crate::idle`).
-    pub(crate) fn idle_ms(&self) -> (&AtomicI64, Option<&std::net::TcpStream>) {
-        (
-            &self.inner.idle,
-            self.inner.blocking.then_some(&self.inner.socket),
-        )
+    /// The idle timeout in milliseconds, 0 for none, and the socket, whose
+    /// `SO_RCVTIMEO` carries the timeout for a read that blocks in `recv`
+    /// (`crate::idle`).
+    pub(crate) fn idle_ms(&self) -> (&AtomicI64, &std::net::TcpStream) {
+        (&self.inner.idle, &self.inner.socket)
     }
 
     /// Whether the last read of the stream, on any handle, returned end of
@@ -937,7 +971,15 @@ impl TcpStream {
             return stream.send(&mut out);
         }
         out.buffer.extend_from_slice(data);
-        let sent = stream.send_all(&out.buffer, |rest| send_urgent(&stream.socket, rest));
+        // One `send` with `MSG_OOB`, so the urgent pointer is after its last
+        // byte: one call, one segment for a short message, the urgent byte
+        // arriving with the bytes before it. `send_all` sends what a short
+        // send left the same way, which moves the pointer to the same byte.
+        let flags = stream.send_flags() | MsgFlags::MSG_OOB;
+        let descriptor = stream.socket.as_raw_fd();
+        let sent = stream.send_all(&out.buffer, |rest| {
+            nix::sys::socket::send(descriptor, rest, flags).map_err(std::io::Error::from)
+        });
         out.buffer.clear();
         if out.buffer.capacity() > SEND_BUFFER {
             out.buffer = Vec::new();
@@ -958,25 +1000,6 @@ impl TcpStream {
             .revents()
             .is_some_and(|events| events.contains(PollFlags::POLLPRI)))
     }
-}
-
-/// One `send` of `rest` with `MSG_OOB`, so the urgent pointer is after its
-/// last byte: one call, one segment for a short message, the urgent byte
-/// arriving with the bytes before it. [`Stream::send_all`] sends what a
-/// short send left the same way, which moves the pointer to the same last
-/// byte.
-fn send_urgent(socket: &std::net::TcpStream, rest: &[u8]) -> std::io::Result<usize> {
-    // SAFETY: the descriptor belongs to `socket`, which the caller's write
-    // lock keeps open, and `rest` is readable for its length.
-    let sent = unsafe {
-        nix::libc::send(
-            socket.as_raw_fd(),
-            rest.as_ptr().cast(),
-            rest.len(),
-            nix::libc::MSG_OOB | nix::libc::MSG_NOSIGNAL,
-        )
-    };
-    usize::try_from(sent).map_err(|_| std::io::Error::last_os_error())
 }
 
 /// `Endpoint.of(ref)` (`docs/slice.md` 16.9, 16.13): the address and port
@@ -1034,11 +1057,12 @@ mod tests {
         }
     }
 
-    /// An accepted socket comes from one `accept4`: non-blocking exactly
-    /// in the IO mode `readiness`, close-on-exec, and with the peer the
-    /// call reported, the connecting socket's own address.
+    /// An accepted socket comes from one `accept4`: blocking in both IO
+    /// modes (in `readiness` its reads and sends say `MSG_DONTWAIT`),
+    /// close-on-exec, and with the peer the call reported, the connecting
+    /// socket's own address.
     #[test]
-    fn an_accepted_socket_has_its_mode_close_on_exec_and_its_peer() {
+    fn an_accepted_socket_blocks_is_close_on_exec_and_has_its_peer() {
         use nix::fcntl::{FcntlArg, FdFlag, OFlag, fcntl};
         let listener = super::TcpListener::bind("127.0.0.1".to_string(), 0).unwrap();
         let client =
@@ -1046,10 +1070,7 @@ mod tests {
         let stream = listener.accept().unwrap();
         let socket = stream.socket();
         let status = OFlag::from_bits_truncate(fcntl(socket, FcntlArg::F_GETFL).unwrap());
-        assert_eq!(
-            status.contains(OFlag::O_NONBLOCK),
-            crate::sched::readiness()
-        );
+        assert!(!status.contains(OFlag::O_NONBLOCK));
         let descriptor = FdFlag::from_bits_truncate(fcntl(socket, FcntlArg::F_GETFD).unwrap());
         assert!(descriptor.contains(FdFlag::FD_CLOEXEC));
         let local = client.local_addr().unwrap();

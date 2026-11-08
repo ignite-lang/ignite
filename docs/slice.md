@@ -907,12 +907,16 @@ pub fn set_task_locals(make: fn() -> Box<dyn TaskLocals>);   // each new task ge
   task on the caller's worker while that worker has at most one task more than the least
   loaded worker (a worker not yet started counts as one with none). Otherwise, and from a
   thread that is no worker, it places the task on an idle worker, else on a new worker, else
-  on the one with the fewest tasks. A task stays on its worker (no stealing, no migration). A worker without a task waits up to
+  on the one with the fewest tasks. A worker whose only task is blocked in a read (below)
+  counts as busy: placement passes it, and only when every worker is busy and none can start
+  does a task go to it, to run when the read returns. A task stays on its worker (no
+  stealing, no migration). A worker without a task waits up to
   `LINGER` for one, then ends, so an idle server runs no worker. A wait of a task (a read, a
   write that finds the socket buffer full, `accept`, a channel, a pipe, a timer, a child,
-  standard input) parks the task and lets its worker run another. Sockets are non-blocking
-  (an accepted one from a single `accept4` with `SOCK_NONBLOCK`) and registered edge-triggered
-  with the worker's epoll on their first wait. A read that left the socket empty (it read
+  standard input) parks the task and lets its worker run another. Sockets block, as in
+  `threads` mode (an accepted one from a single `accept4` with `SOCK_CLOEXEC`); a task's
+  `recv` and `send` pass `MSG_DONTWAIT`, and a socket is registered edge-triggered with the
+  worker's epoll on its first wait. A read that left the socket empty (it read
   less than it asked for, or nothing) makes the next read of the stream wait for readiness
   before its first `recv`. A read that filled its buffer lets the next one try at once. A worker creates
   its epoll and eventfd when a task first waits for a descriptor, so tasks that wait only for
@@ -920,9 +924,14 @@ pub fn set_task_locals(make: fn() -> Box<dyn TaskLocals>);   // each new task ge
   descriptors) looks at the descriptor every 10 ms instead, until it can. A worker runs at
   most 128 tasks in a row before it polls for descriptors without waiting. The only task of a
   worker with nothing else to run waits for its descriptor with one `poll` on the worker's
-  thread, as a blocked thread would, and a hand-over to the worker ends that wait.
+  thread, as a blocked thread would, and a hand-over to the worker ends that wait. A read
+  without a deadline of its own by such a task, on a worker with no hand-over pending, is one
+  blocking `recv` instead, while fewer tasks live than `worker_limit()` (never with one
+  worker), so a spawn meanwhile finds an idle worker or starts one; the worker counts as busy
+  for that read. Each wait reads the clock once.
   `connect`, name resolution, `Directory`, `Launcher` and stdout run inline on the worker. The
-  idle timeout (26.2) is the deadline of the read's wait. A panic in a task ends the task, not
+  idle timeout (26.2) is `SO_RCVTIMEO` for a blocking `recv` and the deadline of the read's
+  wait otherwise. A panic in a task ends the task, not
   its worker, as `task ended with error: <report>`; a stack overflow writes `thread 'worker'
   has overflowed its stack` and aborts the process, as Rust does on a thread. Thread-locals
   are the worker's: a runtime that keeps per-task state in thread-locals registers

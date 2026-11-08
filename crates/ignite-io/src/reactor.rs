@@ -34,7 +34,7 @@ use std::ops::BitOr;
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, RawFd};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use nix::errno::Errno;
 use nix::poll::{PollFd, PollFlags, PollTimeout};
@@ -235,7 +235,11 @@ fn timeout(deadline: Option<Instant>) -> PollTimeout {
     let Some(deadline) = deadline else {
         return PollTimeout::NONE;
     };
-    let left = deadline.saturating_duration_since(Instant::now());
+    timeout_left(deadline.saturating_duration_since(Instant::now()))
+}
+
+/// The milliseconds of `left`, rounded up as [`timeout`] does.
+fn timeout_left(left: Duration) -> PollTimeout {
     let millis = left.as_micros().div_ceil(1000);
     PollTimeout::try_from(millis.min(i32::MAX as u128)).unwrap_or(PollTimeout::NONE)
 }
@@ -306,18 +310,25 @@ impl EpollReactor {
     /// wait of a worker's only task (`crate::sched`): one `poll`, as a
     /// blocked thread's, instead of a switch to the worker's loop and its
     /// `epoll_wait`. The descriptor may also be registered here; its edge
-    /// then waits in the epoll instance for the next `wait`.
+    /// then waits in the epoll instance for the next `wait`. `now`, if
+    /// given, is the instant `deadline` was just computed from: the
+    /// timeout is taken from it instead of reading the clock again.
     pub(crate) fn poll_one(
         &self,
         descriptor: BorrowedFd<'_>,
         interest: Interest,
         deadline: Option<Instant>,
+        now: Option<Instant>,
     ) -> io::Result<bool> {
         let mut fds = [
             PollFd::new(descriptor, interest.poll()),
             PollFd::new(self.wakes.as_fd(), PollFlags::POLLIN),
         ];
-        match nix::poll::poll(&mut fds, timeout(deadline)) {
+        let timeout = match (deadline, now) {
+            (Some(deadline), Some(now)) => timeout_left(deadline.saturating_duration_since(now)),
+            _ => timeout(deadline),
+        };
+        match nix::poll::poll(&mut fds, timeout) {
             Ok(_) | Err(Errno::EINTR) => {}
             Err(error) => return Err(error.into()),
         }
