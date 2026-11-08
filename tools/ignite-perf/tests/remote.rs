@@ -85,6 +85,7 @@ fn settings(state: &Path, dry_run: bool) -> Settings {
         passes: 3,
         check_runs: 15,
         build_runs: 3,
+        bench_passes: 5,
         dry_run,
         state: state.to_path_buf(),
         repo: PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
@@ -372,7 +373,7 @@ fn the_host_runs_both_trees_interleaved_after_a_discarded_warm_up() {
             ("head", 3)
         ]
     );
-    let command = remote::host_command(3, 15, 3);
+    let command = remote::host_command(3, 15, 3, 5);
     assert!(
         command.contains("ignite-perf quality-host")
             && command.contains("--passes 3 --check-runs 15 --build-runs 3")

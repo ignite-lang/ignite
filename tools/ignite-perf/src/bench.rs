@@ -61,7 +61,7 @@ pub struct BenchArgs {
     #[arg(long, default_value = "1")]
     pub bench_warmup: String,
     /// Passes of the matrix, servers in ABBA order.
-    #[arg(long, default_value_t = 3)]
+    #[arg(long, default_value_t = 5)]
     pub bench_passes: usize,
 }
 

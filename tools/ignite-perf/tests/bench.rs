@@ -158,8 +158,11 @@ fn a_release_is_refused_on_a_ratio_worse_than_the_last_release_in_the_run() {
 
 #[test]
 fn the_host_runs_the_benchmark_after_the_timing_rows() {
-    let command = remote::host_command(3, 15, 3);
-    assert!(command.contains("--bench-passes 3"), "{command}");
+    let command = remote::host_command(3, 15, 3, 5);
+    assert!(
+        command.contains("--passes 3 ") && command.contains("--bench-passes 5"),
+        "{command}"
+    );
     let Mode::QualityHost(args) =
         Cli::try_parse_from(["ignite-perf", "quality-host", "--root", "/q"])
             .unwrap()
@@ -170,6 +173,21 @@ fn the_host_runs_the_benchmark_after_the_timing_rows() {
     assert!(!args.no_bench);
     assert_eq!(args.bench.server_cpus, "2-5");
     assert_eq!(args.bench.load_cpus, "8-31");
+    assert_eq!(args.bench.bench_passes, 5);
+    let Mode::QualityRemote(remote_args) = Cli::try_parse_from([
+        "ignite-perf",
+        "quality-remote",
+        "--base",
+        "a",
+        "--head",
+        "b",
+    ])
+    .unwrap()
+    .mode
+    else {
+        panic!("quality-remote");
+    };
+    assert_eq!((remote_args.passes, remote_args.bench_passes), (3, 5));
     let Mode::QualityHost(args) =
         Cli::try_parse_from(["ignite-perf", "quality-host", "--root", "/q", "--no-bench"])
             .unwrap()

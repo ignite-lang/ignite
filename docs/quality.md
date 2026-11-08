@@ -149,10 +149,11 @@ behaviour (`bench/native/`, rows 3.3, 3.7, 3.8 and 3.9), after the timing rows
     write every change as `todo-data/<shard>/<id>/<version>.json` (a temporary file renamed into
     place, older versions removed, no `fsync`, as todod). They load the directory at start;
     todod loads it on the first request. Their other response headers are their library's.
-  - terminal, plain Rust: a new OS thread per connection (`std::thread::spawn`), where
-    `ignite-io` keeps a finished task's thread and hands it the next task, so the `connect` cell
-    measures thread creation in the reference and not in Ignite; Go: one goroutine per
-    connection. Both decode Telnet as `std.protocol.telnet` does (CR LF, CR NUL, a lone CR or LF
+  - terminal, plain Rust: one OS thread per running session, a finished thread kept for up to
+    1 s and handed the next connection, as `ignite-io`'s task threads are
+    (`bench/native/rust/terminal/src/workers.rs`), so the `connect` cell measures the protocol
+    and not thread creation; Go: one goroutine per connection, which the Go runtime schedules
+    on reused threads already. Both decode Telnet as `std.protocol.telnet` does (CR LF, CR NUL, a lone CR or LF
     ending a line, `DO` refused with `WONT`, `WILL` with `DONT`, AYT, IP, `IAC GA` after every
     prompt, the line and subnegotiation limits, the idle timeout) and answer the console's
     commands with its texts. They do not implement the Synch (urgent data), which no cell sends.
@@ -167,7 +168,7 @@ behaviour (`bench/native/`, rows 3.3, 3.7, 3.8 and 3.9), after the timing rows
 - **Machine.** Loopback; the server pinned to CPUs 2 to 5, the load generator to 8 to 31
   (`sched_setaffinity`, `--server-cpus`, `--load-cpus`), so neither competes with the other or
   with CPUs 0 and 1. Each server starts in a fresh working directory.
-- **Passes.** 3 passes, the servers of a cell in one order in odd passes and reversed in even ones
+- **Passes.** 5 passes (`--bench-passes`; the timing rows keep 3), the servers of a cell in one order in odd passes and reversed in even ones
   (ABBA). Every ratio is taken within a pass, an implementation's value over plain Rust's in the
   same pass, and a row's value is the median of the pass ratios; a run with errors is left out,
   and a cell without a plain-Rust value fails the run.

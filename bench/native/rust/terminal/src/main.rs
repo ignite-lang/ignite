@@ -1,5 +1,6 @@
 //! terminald of `examples/terminal/terminal.ignite` in plain Rust: the standard library only,
-//! one OS thread per connection with blocking reads, as the Ignite program runs; a reference
+//! one OS thread per running session with blocking reads, finished threads reused for the next
+//! connection ([`workers`]), as the Ignite program runs; a reference
 //! program for `docs/quality.md` row 3.3.
 //!
 //! The same bytes on the wire as the Ignite program for every input the benchmark and its
@@ -11,6 +12,8 @@
 //! silent for 10 minutes is dropped. Not implemented: the Synch (TCP urgent data and the Data
 //! Mark), which costs the Ignite server one `SIOCATMARK` per read.
 //! `--port P` (default 2323) on 127.0.0.1; `listening on 127.0.0.1:P` on stderr once bound.
+
+mod workers;
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -211,9 +214,10 @@ fn main() {
         .unwrap_or_else(|e| exit(&format!("bind 127.0.0.1:{port}: {e}")));
     let bound = listener.local_addr().map_or(port, |a| a.port());
     eprintln!("listening on 127.0.0.1:{bound}");
+    let workers = workers::Workers::new();
     for stream in listener.incoming() {
         let Ok(stream) = stream else { continue };
-        if std::thread::Builder::new()
+        if workers
             .spawn(move || {
                 if let Err(error) = session(stream) {
                     eprintln!("session ended with error: {error}");

@@ -91,6 +91,9 @@ pub struct RemoteArgs {
     pub check_runs: usize,
     #[arg(long, default_value_t = 3)]
     pub build_runs: usize,
+    /// Passes of the native benchmark, servers in ABBA order (`bench.rs`).
+    #[arg(long, default_value_t = 5)]
+    pub bench_passes: usize,
     /// Print the aws calls; make the creating ones with EC2's `--dry-run`.
     #[arg(long)]
     pub dry_run: bool,
@@ -218,6 +221,7 @@ pub struct Settings {
     pub passes: usize,
     pub check_runs: usize,
     pub build_runs: usize,
+    pub bench_passes: usize,
     pub dry_run: bool,
     pub state: PathBuf,
     pub repo: PathBuf,
@@ -269,11 +273,16 @@ pub fn schedule(passes: usize) -> Vec<(&'static str, usize)> {
 /// the checkout running the mode), then its `ignite-perf quality-host` over `~/q`. Only the
 /// started process is in the background, in a session of its own with every stream
 /// redirected, so the SSH channel closes at once.
-pub fn host_command(passes: usize, check_runs: usize, build_runs: usize) -> String {
+pub fn host_command(
+    passes: usize,
+    check_runs: usize,
+    build_runs: usize,
+    bench_passes: usize,
+) -> String {
     let inner = format!(
         ". \"$HOME/.cargo/env\" && cd harness && CARGO_INCREMENTAL=0 cargo build -q --locked -p ignite-perf \
          && target/debug/ignite-perf quality-host --root \"$HOME/q\" --passes {passes} \
-         --check-runs {check_runs} --build-runs {build_runs} --bench-passes {passes}; echo $? > \"$HOME/q/run.exit\""
+         --check-runs {check_runs} --build-runs {build_runs} --bench-passes {bench_passes}; echo $? > \"$HOME/q/run.exit\""
     );
     format!(
         "cd q && rm -f run.exit && {{ setsid nohup sh -c {} > run.log 2>&1 < /dev/null & }}",
@@ -1078,7 +1087,12 @@ impl<'a> Remote<'a> {
     }
 
     fn measure(&mut self) -> R<i32> {
-        let command = host_command(self.s.passes, self.s.check_runs, self.s.build_runs);
+        let command = host_command(
+            self.s.passes,
+            self.s.check_runs,
+            self.s.build_runs,
+            self.s.bench_passes,
+        );
         self.ssh_ok(&command)?;
         self.log("measuring on the host");
         let deadline = self.shell.now() + self.s.max_hours * 3600.0;
@@ -1737,6 +1751,7 @@ pub fn main(args: &RemoteArgs) -> R<i32> {
         passes: args.passes,
         check_runs: args.check_runs,
         build_runs: args.build_runs,
+        bench_passes: args.bench_passes,
         dry_run: args.dry_run,
         state: state.clone(),
         repo: args.repo.clone(),
@@ -1784,8 +1799,8 @@ pub fn main(args: &RemoteArgs) -> R<i32> {
         let text = fs::read_to_string(&bench).map_err(io_err(bench.display()))?;
         let samples = crate::bench::read_samples(&text)?;
         let sizes = crate::perf::read_json(&fetched.join("bench-sizes.json"))?;
-        rows.extend(crate::bench::rows(&samples, &sizes, args.passes)?);
-        bench_records = crate::bench::records(&samples, &sizes, args.passes);
+        rows.extend(crate::bench::rows(&samples, &sizes, args.bench_passes)?);
+        bench_records = crate::bench::records(&samples, &sizes, args.bench_passes);
     }
     let baseline = crate::perf::read_json(&args.repo.join("quality/baseline.json"))?;
     let refused = if args.run.starts_with('v') {
