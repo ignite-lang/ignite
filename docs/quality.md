@@ -180,11 +180,12 @@ behaviour (`bench/native/`, rows 3.3, 3.7, 3.8 and 3.9), after the timing rows
 - **Releases.** With `RUN=vX.Y.Z` a row whose HEAD ratio is worse than BASE's in the same run beyond
   the metric's tolerance (3.3 10 %, 3.7 20 %, 3.8 10 %, 3.9 5 %) refuses the release, as a timing
   row does.
-- **First run.** BASE = HEAD (an A/A run, 2026-11-08), 0.52 instance-hours on spot, 0.50 USD,
-  timing rows and benchmark together; its ratios are the bars (`quality/trend.md`, "Against plain
-  Rust"). Within the run BASE and HEAD agreed within 2.4 % on every throughput, RSS and size row;
-  p99 differed by up to 17.9 % (`llvm/terminal/rr-64`, one pass at 2.2 times the others), close
-  to the 20 % tolerance of 3.7.
+- **First run.** BASE = HEAD (an A/A run, 2026-11-08, 5 benchmark passes), 0.65 instance-hours on
+  spot, 0.63 USD, timing rows and benchmark together; its ratios are the bars (`quality/trend.md`,
+  "Against plain Rust"). Within the run BASE and HEAD agreed within 1.7 % on every throughput, RSS
+  and size row and within 3.0 % on every p99 row (`rust/terminal/rr-64`), so 3.7 keeps its 20 %
+  tolerance. An earlier run over 3 passes, with a plain-Rust terminal that started a thread per
+  connection, was replaced; one p99 row differed 17.9 % there.
 
 ## Hill-climbing
 
@@ -225,13 +226,13 @@ metric, the target, the value before and after, and the run of `task quality` th
 |---|---|---|---|---|---|---|
 | 3.1 | copies in the generated code of the golden corpus | ratchet | lower | `quality::static_metrics_hold_the_bar`: `.clone()` in the Rust generator's goldens, calls of `copy.*` in the LLVM goldens | llvm 90, rust 168 |  |
 | 3.2 | binary size | ratchet | lower | `ignite-perf quality` (task quality): size of `todod` and `terminald` per target and profile | llvm/terminald/dev 7563720 B, llvm/terminald/release 1468648 B, llvm/todod/dev 8230560 B, llvm/todod/release 2042752 B, rust/terminald/dev 6223520 B, rust/terminald/release 681368 B, rust/todod/dev 7405864 B, rust/todod/release 961880 B |  |
-| 3.3 | throughput against plain Rust | ratchet | higher | `ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): replies per second of todod and terminald over the plain-Rust implementation's, per cell | llvm/terminal/connect-8 2.343×, llvm/terminal/rr-1 0.900×, llvm/terminal/rr-64 0.848×, llvm/todo/get-1 0.905×, llvm/todo/get-64 0.879×, llvm/todo/patch-16 0.578×, rust/terminal/connect-8 2.851×, rust/terminal/rr-1 0.874×, rust/terminal/rr-64 0.821×, rust/todo/get-1 0.786×, rust/todo/get-64 0.694×, rust/todo/patch-16 0.560× |  |
+| 3.3 | throughput against plain Rust | ratchet | higher | `ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): replies per second of todod and terminald over the plain-Rust implementation's, per cell | llvm/terminal/connect-8 0.766×, llvm/terminal/rr-1 0.906×, llvm/terminal/rr-64 0.858×, llvm/todo/get-1 0.899×, llvm/todo/get-64 0.869×, llvm/todo/patch-16 0.576×, rust/terminal/connect-8 0.946×, rust/terminal/rr-1 0.886×, rust/terminal/rr-64 0.824×, rust/todo/get-1 0.809×, rust/todo/get-64 0.703×, rust/todo/patch-16 0.567× |  |
 | 3.4 | peak RSS, leaked handles and threads after a load run | gate | lower | `llvm_memory::` and `terminal::idle_terminald_runs_one_thread` (every merge) | unmeasured: no number: the named tests gate it in task gate |  |
 | 3.5 | runtime entries that can unwind a panic across `extern "C"` | gate | lower | `quality::static_metrics_hold_the_bar`, the rule of `contain::tests::every_entry_is_guarded`: `extern "C"` entries of `ignite-rt` not run through `crate::entry` | llvm 0 |  |
 | 3.6 | `unsafe` sites in the substrate a target links | ratchet | lower | `quality::static_metrics_hold_the_bar`: `unsafe` blocks, fns, impls and extern blocks; rust counts `ignite-io`, llvm `ignite-io` and `ignite-rt` | llvm 73, rust 7 |  |
-| 3.7 | p99 latency against plain Rust | ratchet | lower | `ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): p99 reply latency over the plain-Rust implementation's, per cell | llvm/terminal/connect-8 0.193×, llvm/terminal/rr-1 1.017×, llvm/terminal/rr-64 1.495×, llvm/todo/get-1 1.081×, llvm/todo/get-64 1.287×, llvm/todo/patch-16 2.170×, rust/terminal/connect-8 0.183×, rust/terminal/rr-1 1.029×, rust/terminal/rr-64 1.382×, rust/todo/get-1 1.234×, rust/todo/get-64 1.644×, rust/todo/patch-16 2.313× |  |
-| 3.8 | peak RSS under load against plain Rust | ratchet | lower | `ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): the server's peak RSS over the plain-Rust implementation's, per cell | llvm/terminal/connect-8 2.623×, llvm/terminal/rr-1 1.220×, llvm/terminal/rr-64 2.295×, llvm/todo/get-1 0.833×, llvm/todo/get-64 2.837×, llvm/todo/patch-16 1.516×, rust/terminal/connect-8 0.973×, rust/terminal/rr-1 1.067×, rust/terminal/rr-64 1.035×, rust/todo/get-1 0.753×, rust/todo/get-64 2.652×, rust/todo/patch-16 1.185× |  |
-| 3.9 | stripped binary size against plain Rust | ratchet | lower | `ignite-perf quality-remote` (`bench/native/`): the stripped release binary over the plain-Rust implementation's, per program | llvm/terminal 1.423×, llvm/todo 0.700×, rust/terminal 1.304×, rust/todo 0.692× |  |
+| 3.7 | p99 latency against plain Rust | ratchet | lower | `ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): p99 reply latency over the plain-Rust implementation's, per cell | llvm/terminal/connect-8 1.132×, llvm/terminal/rr-1 1.017×, llvm/terminal/rr-64 1.240×, llvm/todo/get-1 1.099×, llvm/todo/get-64 1.265×, llvm/todo/patch-16 2.193×, rust/terminal/connect-8 1.058×, rust/terminal/rr-1 1.008×, rust/terminal/rr-64 1.243×, rust/todo/get-1 1.202×, rust/todo/get-64 1.551×, rust/todo/patch-16 2.275× |  |
+| 3.8 | peak RSS under load against plain Rust | ratchet | lower | `ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): the server's peak RSS over the plain-Rust implementation's, per cell | llvm/terminal/connect-8 2.645×, llvm/terminal/rr-1 1.221×, llvm/terminal/rr-64 2.288×, llvm/todo/get-1 0.839×, llvm/todo/get-64 2.857×, llvm/todo/patch-16 1.468×, rust/terminal/connect-8 0.983×, rust/terminal/rr-1 1.065×, rust/terminal/rr-64 1.036×, rust/todo/get-1 0.765×, rust/todo/get-64 2.654×, rust/todo/patch-16 1.158× |  |
+| 3.9 | stripped binary size against plain Rust | ratchet | lower | `ignite-perf quality-remote` (`bench/native/`): the stripped release binary over the plain-Rust implementation's, per program | llvm/terminal 1.378×, llvm/todo 0.700×, rust/terminal 1.263×, rust/todo 0.692× |  |
 
 ### 4 Standard library and protocols
 

@@ -505,40 +505,40 @@
       "area": "Generated code and runtime behaviour",
       "bars": {
         "llvm/terminal/connect-8": {
-          "value": 2343
+          "value": 766
         },
         "llvm/terminal/rr-1": {
-          "value": 900
+          "value": 906
         },
         "llvm/terminal/rr-64": {
-          "value": 848
+          "value": 858
         },
         "llvm/todo/get-1": {
-          "value": 905
+          "value": 899
         },
         "llvm/todo/get-64": {
-          "value": 879
+          "value": 869
         },
         "llvm/todo/patch-16": {
-          "value": 578
+          "value": 576
         },
         "rust/terminal/connect-8": {
-          "value": 2851
+          "value": 946
         },
         "rust/terminal/rr-1": {
-          "value": 874
+          "value": 886
         },
         "rust/terminal/rr-64": {
-          "value": 821
+          "value": 824
         },
         "rust/todo/get-1": {
-          "value": 786
+          "value": 809
         },
         "rust/todo/get-64": {
-          "value": 694
+          "value": 703
         },
         "rust/todo/patch-16": {
-          "value": 560
+          "value": 567
         }
       },
       "direction": "higher",
@@ -596,40 +596,40 @@
       "area": "Generated code and runtime behaviour",
       "bars": {
         "llvm/terminal/connect-8": {
-          "value": 193
+          "value": 1132
         },
         "llvm/terminal/rr-1": {
           "value": 1017
         },
         "llvm/terminal/rr-64": {
-          "value": 1495
+          "value": 1240
         },
         "llvm/todo/get-1": {
-          "value": 1081
+          "value": 1099
         },
         "llvm/todo/get-64": {
-          "value": 1287
+          "value": 1265
         },
         "llvm/todo/patch-16": {
-          "value": 2170
+          "value": 2193
         },
         "rust/terminal/connect-8": {
-          "value": 183
+          "value": 1058
         },
         "rust/terminal/rr-1": {
-          "value": 1029
+          "value": 1008
         },
         "rust/terminal/rr-64": {
-          "value": 1382
+          "value": 1243
         },
         "rust/todo/get-1": {
-          "value": 1234
+          "value": 1202
         },
         "rust/todo/get-64": {
-          "value": 1644
+          "value": 1551
         },
         "rust/todo/patch-16": {
-          "value": 2313
+          "value": 2275
         }
       },
       "direction": "lower",
@@ -644,40 +644,40 @@
       "area": "Generated code and runtime behaviour",
       "bars": {
         "llvm/terminal/connect-8": {
-          "value": 2623
+          "value": 2645
         },
         "llvm/terminal/rr-1": {
-          "value": 1220
+          "value": 1221
         },
         "llvm/terminal/rr-64": {
-          "value": 2295
+          "value": 2288
         },
         "llvm/todo/get-1": {
-          "value": 833
+          "value": 839
         },
         "llvm/todo/get-64": {
-          "value": 2837
+          "value": 2857
         },
         "llvm/todo/patch-16": {
-          "value": 1516
+          "value": 1468
         },
         "rust/terminal/connect-8": {
-          "value": 973
+          "value": 983
         },
         "rust/terminal/rr-1": {
-          "value": 1067
+          "value": 1065
         },
         "rust/terminal/rr-64": {
-          "value": 1035
+          "value": 1036
         },
         "rust/todo/get-1": {
-          "value": 753
+          "value": 765
         },
         "rust/todo/get-64": {
-          "value": 2652
+          "value": 2654
         },
         "rust/todo/patch-16": {
-          "value": 1185
+          "value": 1158
         }
       },
       "direction": "lower",
@@ -692,13 +692,13 @@
       "area": "Generated code and runtime behaviour",
       "bars": {
         "llvm/terminal": {
-          "value": 1423
+          "value": 1378
         },
         "llvm/todo": {
           "value": 700
         },
         "rust/terminal": {
-          "value": 1304
+          "value": 1263
         },
         "rust/todo": {
           "value": 692

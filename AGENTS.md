@@ -483,13 +483,15 @@ without waiting for a person.
   quality page. The release is refused, and not cut, when it fails: a count row worse than at
   the last release (or the bar) beyond its tolerance. Timing rows there are `host: local` and
   refuse nothing. Then run `task quality-remote BASE=<last release tag> HEAD=<release commit>
-  RUN=vX.Y.Z` with `IGNITE_PERF_AWS_PROFILE` set (spending on it is approved, under half an
-  instance-hour of a spot `c7i.metal-24xl`): it measures the timing rows of both trees
+  RUN=vX.Y.Z` with `IGNITE_PERF_AWS_PROFILE` set (spending on it is approved, about two thirds of an
+  instance-hour of a spot `c7i.metal-24xl`): it measures the timing rows and the native benchmark of both trees
   interleaved on a dedicated EC2 host and refuses the release, exit 1, when a timing row of HEAD
   is worse than BASE's beyond its tolerance; it fails when anything tagged by the run is left in
   the account. Commit the regenerated files with the release; the release notes carry the
   release's row of `quality/trend.md`, its dedicated-host row and the run's cost (`machine` of
   its records).
+- EC2 runs (`task quality-remote`: timing and native benchmarks) happen only when a release is
+  about to be cut (Timo, 2026-11-08); merges run the local gate only.
 - Announce: send the release's tag, URL and notes to the `brain` session (Claude session named
   `brain`, `SendMessage`), asking it to forward the announcement to AI autodev. Send the path of
   a ready file, not the text: Slack mrkdwn (`<url|label>` links), every line at most 200
