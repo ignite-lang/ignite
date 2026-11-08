@@ -28,19 +28,19 @@ With the default limits:
 | nothing for 30 s | the connection is closed |
 
 Each rejection closes the connection after a lingering close: the reply is written, the write
-half shut down, and up to 64 KiB of input drained, each read waiting at most 1 s, so the
-client reads the reply instead of a reset. Both limits are `HttpLimits` fields (`drain`,
+half shut down, and up to 64 KiB of input drained, each read waiting at most 1 s. The client
+then reads the reply instead of a reset. Both limits are `HttpLimits` fields (`drain`,
 `drain_timeout`).
 
-The head is parsed strictly, so a proxy in front cannot frame a request differently: a bare CR
-or LF, a header name that is not a token (whitespace before the colon, a line starting with
-whitespace), a control byte in a value, and a repeated `Content-Length` or one that is not 1
-to 18 digits are all 400.
+The head is parsed strictly, so a proxy in front cannot frame a request differently. Each of
+these is 400: a bare CR or LF, a header name that is not a token, such as whitespace before the
+colon or a line starting with whitespace, a control byte in a value, and a repeated
+`Content-Length` or one that is not 1 to 18 digits.
 
 A request body sent with `Transfer-Encoding: chunked` is decoded before the application sees
 it: `Request.body` holds the joined chunks, and the request's headers are those of its head.
-Chunk extensions are ignored; trailer fields are checked like header fields and then discarded,
-never merged into the headers. A chunk size is compared against the body limit digit by digit,
+Chunk extensions are ignored. Trailer fields are checked like header fields and then
+discarded. They are not merged into the headers. A chunk size is compared against the body limit digit by digit,
 so a size with any number of digits cannot overflow.
 
 The application's response is replaced by 500 when one of its header fields would break RFC
@@ -58,12 +58,12 @@ The application's response is replaced by 500 when one of its header fields woul
   IMF-fixdate such as `Sun, 06 Nov 1994 08:49:37 GMT` (`Retry-After` may also be a number of
   seconds).
 
-HTTP/1.1 keeps the connection unless the request asks to close; HTTP/1.0 closes it unless the
+HTTP/1.1 keeps the connection unless the request asks to close. HTTP/1.0 closes it unless the
 request asks to keep it. `Connection: close` wins over `keep-alive`.
 
 A request-target in absolute form (`GET http://example.com:8080/p?q HTTP/1.1`) is accepted: the
 application sees the path and query, and the target's authority as its `host` header in place
-of the received `Host`. A `HEAD` request reaches the application as `GET`; the answer carries
+of the received `Host`. A `HEAD` request reaches the application as `GET`. The answer carries
 the head of its response, with the `Content-Length` of the body, but not the body. A rejected
 `HEAD` request gets the head of the rejection only.
 
@@ -106,7 +106,7 @@ fn HttpServer.main<S>(self: HttpServer<S>) -> IoResult<Unit>
   and closes the stream.
 - `HttpApp<S>` is what a server runs: shared state, and the handler called once per request
   with that state. The handler may use effects on the state, such as a `Store`. `piece` gives
-  the body of a streamed response (see [Responses](#responses)); it defaults to `no_piece`,
+  the body of a streamed response, see [Responses](#responses). It defaults to `no_piece`,
   which ends every body at once.
 - `HttpLimits` bounds a connection: the longest head (else 431) and body (else 413), the idle
   time after which the connection is closed, and how much input a lingering close drains, each
@@ -185,7 +185,7 @@ fn render(response: Response, keep_alive: Bool) -> Bytes
 | `checked` | the response, or 500 when one of its header fields is refused (see Behaviour) |
 | `render` | the bytes of an `Inline` or `Binary` response: status line, headers, `Content-Length` (not for 204) and `Connection`, then the body |
 
-`content` says where the body is. `Inline`, the default, sends `body`; `Binary(bytes)` sends
+`content` says where the body is. `Inline`, the default, sends `body`. `Binary(bytes)` sends
 the bytes in place of `body`. Both go out with a `Content-Length`, so `Response.plain` and
 `Response.json` are unchanged on the wire.
 
@@ -222,8 +222,8 @@ system TodoService {
 }
 ```
 
-The handler routes on the method and the path segments (shortened here; the example also
-handles `/todos/{id}`):
+The handler routes on the method and the path segments. It is shortened here: the example
+also handles `/todos/{id}`.
 
 ```ignite,fragment
 fn handle(todos: Store<Todo>, request: Request) -> Response = match (request.method, request.segments()) {

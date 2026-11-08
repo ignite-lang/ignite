@@ -2,8 +2,8 @@
 
 An effect is something a function does to the world beyond computing its result: reading
 stdin, writing a socket, accepting a connection, ending the process. Ignite tracks effects in
-the type system. A function that performs none is **pure**; a function that performs some
-says which, or the compiler works it out. Why the language is built this way is in
+the type system. A function that performs none is **pure**. A function that performs some
+says which, or the compiler works it out. The reasons are in
 [Effects and capabilities](../design/effects.md).
 
 ## Effect names
@@ -95,8 +95,8 @@ A parameter effect of a callee is charged to the caller through the argument it 
 - A local bound from a parameter (`let s = conn`, a field `app.state`, a pattern binding)
   keeps that parameter as its root, so `app.state.put(..)` is an effect on `app`.
 - A value the function created itself, such as a stream from `listener.accept()` or
-  `TcpStream.connect(..)`, belongs to the function. Effects on it need not be declared;
-  creating it was the effect (`listener.accept`, `net.connect`).
+  `TcpStream.connect(..)`, belongs to the function. Effects on it need not be declared.
+  Creating it was the effect (`listener.accept`, `net.connect`).
 
 ```ignite
 fn echo<S: ByteStream>(stream: S) -> Result<Unit, IoError> requires [stream.read, stream.write] {
@@ -154,8 +154,8 @@ test "an effectful field" {
 - Using an effectful fn as a value where the expected type is a pure fn type, or where
   nothing expects a fn type that covers it, is E017.
 - A closure that performs effects on a captured value charges them to the function that
-  creates the closure, at the point of creation (E016 if that function's `requires` lacks
-  them).
+  creates the closure, at the point of creation. If that function's `requires` lacks
+  them, it is E016.
 - `xs.map(f)` on a `List` takes a closure, a named fn or a local holding one that performs
   effects of the function calling `map`: `ids.map(|id| store.get(id))` checks in a function with
   `requires [store.read]`. An effect the caller's `requires` does not cover, or one on `f`'s
@@ -165,7 +165,7 @@ test "an effectful field" {
 ## `spawn`
 
 `spawn f(args)` starts `f(args)` as a new task and returns `Unit` at once. Tasks run
-concurrently; each has its own thread in the substrate.
+concurrently. Each has its own thread in the substrate.
 
 ```ignite
 fn echo<S: ByteStream>(stream: S) -> Result<Unit, IoError> requires [stream.read, stream.write] {
@@ -192,14 +192,13 @@ fn accept_loop(listener: TcpListener) -> Result<Unit, IoError> requires [listene
 
 ## `?` and failure
 
-`?` is error propagation, not an effect, but it is where effectful code most often meets the
-type system:
+`?` is error propagation, not an effect. Its rules:
 
 - In a function, `e?` takes a `Result<T, E>`. It needs the function to return
   `Result<_, E>` with the same `E` (E040: "`?` needs a function returning `Result`", or
   "`?` propagates `IoError`, the function returns errors of type `Text`").
-- `?` on an `Option` in a function is E040 ("`?` needs a `Result`, found `Option<Int>`");
-  convert it with `ok_or` from [std.option](std/option-result.md).
+- `?` on an `Option` in a function is E040 ("`?` needs a `Result`, found `Option<Int>`").
+  Convert it with `ok_or` from [std.option](std/option-result.md).
 - In a `test` block, `?` also takes an `Option`, and a failure fails the test. See
   [Tests and assertions](tests.md#-in-tests).
 

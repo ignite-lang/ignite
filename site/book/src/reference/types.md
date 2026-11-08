@@ -1,8 +1,8 @@
 # Types
 
-Every expression in Ignite has a type, known when the program is checked. There are no
-implicit conversions: an `Int` is never silently a `Byte`, a `Text` never silently `Bytes`.
-This page lists the types of v0.3.0 and what each one supports. The intent behind them is in
+Every expression in Ignite has a type, known when the program is checked. No conversion is
+implicit: an `Int` does not become a `Byte`, nor a `Text` `Bytes`, without a call. This page
+lists the types of v0.3.0 and what each one supports. The intent behind them is in
 [the design of intent and properties](../design/intent.md).
 
 ## At a glance
@@ -44,10 +44,10 @@ A fn without a return type returns `Unit`. `()` is the Unit type as well as its 
 | `== !=` | yes | yes | yes | yes |
 | `&& \|\| !` | no | no | yes | no |
 
-- Both operands of a binary operator have the same type. `Byte + Int` is E040; convert one
-  side with `b.to_int()`, or with `i.to_byte()`, which returns `Option<Byte>` (`None` outside
-  0 to 255).
-- Integer division rounds toward zero; `%` is the remainder of that division.
+- Both operands of a binary operator have the same type. `Byte + Int` is E040. Convert one
+  side with `b.to_int()`, or with `i.to_byte()`, which returns `Option<Byte>`: `None` outside
+  0 to 255.
+- Integer division rounds toward zero. `%` is the remainder of that division.
 - `&&` and `||` evaluate their right operand only when needed.
 - `Text` orders by the bytes of its UTF-8 encoding, which is code point order: `"Z" < "a"`,
   `"z" < "é"`, and a prefix sorts first. A `Map` keeps `Text` keys in the same order.
@@ -57,12 +57,13 @@ A fn without a return type returns `Unit`. `()` is the Unit type as well as its 
 
 Integer arithmetic never wraps. On `Int` and `Byte`, an overflowing `+`, `-` or `*`, a
 division or remainder by zero, `-` of the smallest `Int`, and the smallest `Int` divided by
-`-1` are failures, on both targets and in dev and release builds alike. A failure ends the
-task that ran it with a report of the form
-`<operation> failed at <file>:<line>:<column>: <detail>`. In a test it fails the test; in the
+`-1` are failures, on both targets and in dev and release builds alike.
+
+A failure ends the task that ran it with a report of the form
+`<operation> failed at <file>:<line>:<column>: <detail>`. In a test it fails the test. In the
 main task the process exits with status 101. See [Tests and assertions](tests.md#failures).
 
-Arithmetic that is meant to wrap says so: `a.wrapping_add(b)`, `a.wrapping_sub(b)` and
+Wrapping arithmetic is written out: `a.wrapping_add(b)`, `a.wrapping_sub(b)` and
 `a.wrapping_mul(b)` on `Int` return the result modulo 2^64 in two's complement, as Go's `int`
 and Rust's `i64::wrapping_*` do, and never fail.
 
@@ -96,15 +97,18 @@ test "checked arithmetic" {
 
 `U32` is a word for hashes, checksums and bit fields, not a counting integer: `+`, `-`, `*`
 and unary `-` are modulo 2^32 and never fail. `/` and `%` are unsigned and fail on a zero
-divisor, as on `Int`. `& | ^ ~` act on the 32 bits; `x << n` and `x >> n` take an `Int` amount,
-`>>` shifts in zeros, and an amount outside 0 to 31 gives 0. `x.rotate_left(n)` and
-`x.rotate_right(n)` take `n` modulo 32. Comparisons are unsigned.
+divisor, as on `Int`. Comparisons are unsigned.
 
-An integer literal is a `U32` where one is expected (`let k: U32 = 0x5A827999`, `x + 1`);
-outside 0 to 4294967295 it is E044. `U32` and `Int` never mix: `x + n` with `n: Int` is E040.
+- `& | ^ ~` act on the 32 bits.
+- `x << n` and `x >> n` take an `Int` amount. `>>` shifts in zeros. An amount outside 0 to 31
+  gives 0.
+- `x.rotate_left(n)` and `x.rotate_right(n)` take `n` modulo 32.
+
+An integer literal is a `U32` where one is expected (`let k: U32 = 0x5A827999`, `x + 1`).
+Outside 0 to 4294967295 it is E044. `U32` and `Int` never mix: `x + n` with `n: Int` is E040.
 Conversions are explicit: `x.to_int()`, `n.to_u32()` (`Option<U32>`), `n.wrap_u32()` (the
-low 32 bits), `b.to_u32()` on a `Byte`, `x.to_byte()` (`Option<Byte>`) and `x.wrap_byte()`
-(the low 8 bits, also on `Int`).
+low 32 bits), `b.to_u32()` on a `Byte`, `x.to_byte()` (`Option<Byte>`) and `x.wrap_byte()`.
+`x.wrap_byte()` gives the low 8 bits and also works on `Int`.
 
 ```ignite
 fn rotl5(x: U32) -> U32 = x.rotate_left(5)
@@ -155,20 +159,22 @@ test "conversions" {
 is turned into `Bytes` with `to_bytes()` and back with `to_text()`.
 
 Builtin methods of `Text`: `len()` (in bytes), `is_empty()`, `trim()`, `starts_with(p)`,
-`strip_prefix(p) -> Option<Text>`, `concat(t)`, `pieces(s) -> List<Text>` (the texts between the
-separators, the body of `split`), `to_bytes()`, `to_text()`. Everything else
-(`split`, `contains`, `find`, `to_lower`, ...) is Ignite code in [std.text](std/text.md), used
-by method call syntax after an import.
+`strip_prefix(p) -> Option<Text>`, `concat(t)`, `pieces(s) -> List<Text>`, `to_bytes()`,
+`to_text()`. `pieces(s)` returns the texts between the separators and is the body of `split`.
+Everything else, such as `split`, `contains`, `find` and `to_lower`, is Ignite code in
+[std.text](std/text.md), used by method call syntax after an import.
 
 Offsets into a `Text` are byte offsets, and matching is byte for byte.
 
 ## Lists
 
-`List<T>` is an ordered list of values of one type. `[1, 2, 3]` is a literal; `[]` and
+`List<T>` is an ordered list of values of one type. `[1, 2, 3]` is a literal. `[]` and
 `List.empty()` are the empty list, whose element type comes from an annotation or a later
-use. `List.with_capacity(n)` and `Bytes.with_capacity(n)` are the empty list too, with room for
-`n` elements before `push` has to grow it; only speed tells them apart from `List.empty()`, and
-a negative `n` counts as 0.
+use.
+
+`List.with_capacity(n)` and `Bytes.with_capacity(n)` are the empty list too, with room for
+`n` elements before `push` has to grow it. Only speed tells them apart from `List.empty()`. A
+negative `n` counts as 0.
 
 | method | type | note |
 |---|---|---|
@@ -225,7 +231,7 @@ test "lists" {
 - `for (k, v) in m { .. }` visits the entries in key order.
 - Key types: `Int`, `Byte`, `Text`, `Bool`, enums without payloads (ordered by declaration)
   and `Ref`. Any other key type is E106.
-- Maps are values, like lists; `put` and `remove` need a `var` or a parameter.
+- Maps are values, like lists. `put` and `remove` need a `var` or a parameter.
 
 ```ignite
 fn counts(words: List<Text>) -> Map<Text, Int> {
@@ -261,7 +267,7 @@ test "maps" {
   with the same error type (E040 otherwise). Its value is the `Ok` payload.
 - In a fn, `?` works on `Result` only. In a `test` body it also takes an `Option`, and it
   fails the test instead of returning: see [Tests and assertions](tests.md#-in-tests).
-- `IoError.new(message)` makes an error; `e.with_exit_code(n)` sets the exit status a
+- `IoError.new(message)` makes an error. `e.with_exit_code(n)` sets the exit status a
   program ends with when the error reaches its `main`.
 - Helpers such as `unwrap_or`, `map`, `and_then` and `ok_or` are in
   [std.option and std.result](std/option-result.md).
@@ -312,7 +318,7 @@ test "records" {
 
 - Fields are separated by `,` or line breaks.
 - A field may have a default: `port: Int = 8080`. The default is a pure expression of the
-  record's module; it may use constants and pure fns, no locals.
+  record's module. It may use constants and pure fns, no locals.
 - A record literal `Server { host = "x" }` must set every field that has no default
   (E047 otherwise). An unknown or repeated field is E047 too.
 - `Server { port }` is short for `Server { port = port }`.
@@ -354,7 +360,7 @@ test "enums" {
 - A variant is written bare (`Empty`) or qualified (`Shape.Empty`).
 - A bare variant resolves against the expected type, whether or not its enum is imported.
   When the expected type does not decide, the enum in scope that declares the name owns it.
-  Two enums in scope declaring it is E005; qualify it.
+  Two enums in scope declaring it is E005: qualify it.
 - A variant with a payload used without its arguments is E003.
 - `match` must cover every variant (E046). Payload patterns are checked recursively.
 - `Some`, `None`, `Ok`, `Err`, `Data` and `Eof` are builtin variants.
@@ -385,8 +391,8 @@ test "tuples" {
 
 ## Recursive types
 
-A type may contain itself through an enum payload, `Option`, `Result` or `List`; such
-positions are boxed by the compiler. A record that contains itself through records and
+A type may contain itself through an enum payload, `Option`, `Result` or `List`. The
+compiler boxes such positions. A record that contains itself through records and
 tuples alone would be infinite and is E055.
 
 ```ignite
@@ -409,9 +415,9 @@ test "recursive types" {
 
 ## Type aliases
 
-`type Name = T` gives another name to a type; `type Name<P> = T` takes parameters. An alias
+`type Name = T` gives another name to a type. `type Name<P> = T` takes parameters. An alias
 is exactly the type it names: no value or diagnostic tells them apart. An alias that refers
-to itself is E048; a wrong number of type arguments is E048 too.
+to itself is E048, and so is a wrong number of type arguments.
 
 ```ignite
 type Port = Int
@@ -434,7 +440,7 @@ test "aliases" {
 - A named fn used as a value (`apply(double, 4)`) has a fn type.
 - A closure `|x| x + 1`, `|x: Int, y: Int| x * y` or `|| 0` is a fn value written in place.
   Its body is an expression or a block. Parameter types come from an annotation or from the
-  expected fn type (E042 when neither gives one).
+  expected fn type. When neither gives one it is E042.
 - A closure captures the bindings it reads **by copy**, at the moment it is created. A later
   change to the outer binding does not affect it. Assigning to a captured binding inside the
   closure is E006.
@@ -442,7 +448,7 @@ test "aliases" {
 - A field of fn type is called like a method: `app.handle(x)`.
 - An effectful fn type names its parameters and lists effects:
   `fn(state: Store<Todo>, request: Request) -> Response requires [state.*]`. It is the only
-  kind of fn type an effectful function fits; see [Effects](effects.md#effectful-fn-types).
+  kind of fn type an effectful function fits. See [Effects](effects.md#effectful-fn-types).
 
 ```ignite
 fn apply(f: fn(Int) -> Int, x: Int) -> Int = f(x)
@@ -486,8 +492,8 @@ test "generics" {
 }
 ```
 
-- Type arguments are inferred from the arguments and the expected type. They are never
-  written at a call. When nothing decides a parameter it is E042; annotate the binding.
+- Type arguments are inferred from the arguments and the expected type. They are not
+  written at a call. When nothing decides a parameter it is E042: annotate the binding.
 - Inside a generic declaration, a value of a type parameter can be bound, passed, returned,
   stored and copied (`x.copy()`). Operators, `==`, `to_text`, `debug()` and other methods are
   E045 or E041.
@@ -496,9 +502,8 @@ test "generics" {
 - A fn or role type parameter may have the bound `ByteStream`: `<S: ByteStream>`. Inside the
   fn, a value of type `S` has the stream methods `read`, `write_all`, `close`,
   `set_idle_timeout`, `write_urgent` and `urgent_pending`. A call that passes a type that is
-  not a stream is E096. `ByteStream`
-  is the only interface; any other bound, or two bounds, is E099, and `ByteStream` used as a
-  type is E099.
+  not a stream is E096. `ByteStream` is the only interface. Any other bound, two bounds, or
+  `ByteStream` used as a type is E099.
 
 ```ignite
 fn send_line<S: ByteStream>(stream: S, line: Text) -> Result<Unit, IoError> requires [stream.write] {
@@ -515,8 +520,8 @@ test "a bounded type parameter" {
 
 ## Quantities
 
-Quantity types carry a unit, so durations, sizes and ratios cannot be mixed with each other
-or with plain numbers by accident. They are written as [quantity
+Quantity types carry a unit, so durations, sizes and ratios do not mix with each other
+or with plain numbers. They are written as [quantity
 literals](lexical.md#quantity-and-percentage-literals).
 
 | type | unit of storage | conversions |
@@ -531,7 +536,7 @@ literals](lexical.md#quantity-and-percentage-literals).
   unary `-` are E045.
 - Overflow is a failure, as for `Int`.
 - `debug()` prints the literal in the largest unit that divides the value exactly:
-  `1500 ms`, `15 minutes`, `16 KiB`, `99.9%`. Quantities have no `to_text`; interpolate
+  `1500 ms`, `15 minutes`, `16 KiB`, `99.9%`. Quantities have no `to_text`: interpolate
   `d.debug()` or `d.to_ms()`.
 
 ```ignite
@@ -556,8 +561,8 @@ test "quantities" {
 - `List` (and `Bytes`), `Map`, `Option`, `Result`, `Input`, tuples, records and enums: element
   by element, field by field, variant and payloads.
 
-A type is comparable when nothing inside it is a fn, a handle (`TcpStream`, `TcpListener`,
-`PipeStream`, `Store`), an `IoError` or a type parameter. `==` on any other type is E045.
+A type is comparable when it contains no fn, no handle (`TcpStream`, `TcpListener`,
+`PipeStream`, `Store`), no `IoError` and no type parameter. `==` on any other type is E045.
 
 ## Debug text
 
@@ -595,9 +600,9 @@ test "debug text" {
 
 ## Substrate and system types
 
-These types come from the substrate (the IO layer compiled programs link) and from system
-declarations. They are listed here for completeness; their operations are in the
-[std.net](std/net.md) reference and the [Effects](effects.md) page.
+These types come from the substrate, the IO layer compiled programs link, and from system
+declarations. Their operations are in the [std.net](std/net.md) reference and the
+[Effects](effects.md) page.
 
 | type | what it is |
 |---|---|

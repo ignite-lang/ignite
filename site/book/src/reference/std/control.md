@@ -1,12 +1,15 @@
 # std.control
 
 The pure reducers that `ignite run` steps. A machine is a value, an event is a value, and
-`step` is a pure function from both to the next machine and the effects to dispatch. The
-driver of `ignite run` knows these types, the hook names `machine`, `validate` and `classify`, and the
-functions `step` and `companions`; `ignite apply` also calls the constructors
-`member_action` and `transition` and steps `Transition` with `transit` (below). Reducers read no clock: every event carries
-`at`, a `Duration` since the start of the run's journal. The module also holds the
-`Transition` reducer that orders the changes of one `ignite apply`.
+`step` is a pure function from both to the next machine and the effects to dispatch.
+Reducers read no clock: every event carries `at`, a `Duration` since the start of the run's
+journal.
+
+The driver of `ignite run` knows these types, the hook names `machine`, `validate` and
+`classify`, and the functions `step` and `companions`. The module also holds the `Transition`
+reducer that orders the changes of one `ignite apply`. `ignite apply` calls the constructors
+`member_action` and `transition` and steps `Transition` with `transit`, see
+[Transition](#transition-apply).
 
 - Layer: general. It imports only the leaf modules [std.sli](sli.md),
   [std.policy](policy.md) and [std.time](time.md), so that every kind whose `machine` hook
@@ -52,8 +55,8 @@ fn companions(machine: Machine) -> List<Machine>
   every machine a `machine` hook returned.
 
 A hook has the shape `fn K.machine(self: K, id: Text) -> Machine`, where `id` is the member
-path; any other shape is E109. A reducer that fails (an assertion, an overflow, running out of
-fuel) stops that machine only; the run continues and exits 1 (E128).
+path. Any other shape is E109. A reducer that fails on an assertion, an overflow or running
+out of fuel stops that machine only. The run continues and exits 1 (E128).
 
 ### Events
 
@@ -153,15 +156,16 @@ The supervisor of one native-process member. It starts the member, waits for its
 `listening on` line, restarts it under its [`Restart`](policy.md) policy and gives up when the
 policy does.
 
-- `Start` spawns the member afresh. `Started` arms the readiness timer; `Ready` disarms it. A
+- `Start` spawns the member afresh. `Started` arms the readiness timer. `Ready` disarms it. A
   member without a listener is ready at `Started`.
 - No `Ready` within `readiness_timeout` kills the process and counts a failure.
 - An exit or signal that no `Kill` of this machine requested is a failure, exit 0 included,
   and so is a failed spawn.
 - After a failure the attempt number is the number of failures within the policy's
-  trailing `interval`, this one included. If the policy `allows` it, the supervisor waits the backoff's `delay`
-  and spawns again; otherwise it is `Failed` and notes `gave_up`. Other machines go on.
-- `Control("stop")` drains the process with SIGTERM; its exit is then no failure.
+  trailing `interval`, this one included. If the policy `allows` it, the supervisor waits the
+  backoff's `delay` and spawns again. Otherwise it is `Failed` and notes `gave_up`. Other
+  machines go on.
+- `Control("stop")` drains the process with SIGTERM. Its exit is then no failure.
 
 ## Probe scheduler
 
@@ -184,14 +188,14 @@ type ProbeScheduler {
 ```
 
 The scheduler of one probe member. Slots open every `interval` from the target's first
-`Ready` on; each slot dispatches one attempt with a deadline of `timeout`.
+`Ready` on. Each slot dispatches one attempt with a deadline of `timeout`.
 
 - A result before the deadline is emitted on `signal` as `Sample { slot, line = Some(line) }`,
   `slot` being the slot the attempt was dispatched for.
 - The deadline aborts the attempt and emits `Sample { slot, line = None }`, a bad attempt.
-- A failed attempt (no executable, an exit status other than 0, an undecodable line) is
-  missing evidence: it emits nothing and notes `missing`.
-- `Start` forgets the schedule; the target's next `Ready` reopens it.
+- A failed attempt is missing evidence: no executable, an exit status other than 0, an
+  undecodable line. It emits nothing and notes `missing`.
+- `Start` forgets the schedule. The target's next `Ready` reopens it.
 
 ## Evaluator
 
@@ -223,10 +227,10 @@ type Bucket {
 }
 ```
 
-The evaluator of one [contract](contract.md). It counts each `Verdict` of its signal (the driver
-has applied the contract's `classify` to the decoded line) in the bucket of its slot,
-keeps the window's counts, and publishes a `Standing` at every emission and every
-period boundary.
+The evaluator of one [contract](contract.md). It counts each `Verdict` of its signal in the
+bucket of its slot, keeps the window's counts, and publishes a `Standing` at every emission
+and every period boundary. The driver has applied the contract's `classify` to the decoded
+line before the `Verdict` arrives.
 
 - A `Rolling(span)` window keeps its counts in buckets of `max(interval, span / 10,000)`.
 - A `CalendarMonth(zone)` window keeps the current period's counts and sets a timer at the
@@ -272,12 +276,13 @@ fn expected_slots(horizon: Duration, interval: Duration, from: Duration, to: Dur
    `InsufficientEvidence`.
 4. Otherwise [`meets`](sli.md) decides: `Compliant` or `Violated`.
 
-`completeness` is the executed share of the expected slots before filling; `coverage` is the
-share of the window inside the evidence horizon. `version` is 0 from the reducer; the
-driver fills it with the journal sequence number of the standing record. A `Fired` record's
-`standing_seq` is filled by the driver too, with the sequence number of the standing it rests
-on. `expected_slots`
-counts the slots of `interval` from the horizon within `from` to `to`.
+| field | value |
+|---|---|
+| `completeness` | the executed share of the expected slots before filling |
+| `coverage` | the share of the window inside the evidence horizon |
+| `version` | 0 from the reducer; the driver fills it with the journal sequence number of the standing record |
+| `standing_seq` of a `Fired` record | filled by the driver with the sequence number of the standing it rests on |
+| `expected_slots` | the slots of `interval` from the horizon within `from` to `to` |
 
 ## Rollout
 
@@ -310,7 +315,7 @@ The rollout of one member under its [`DrainRollout`](policy.md) policy, started 
    `on_deadline` applies: `disconnect_remaining` kills it.
 
 `Control("rollout start_first")` starts the new process while the old one keeps serving, and
-drains the old one only once the new one is ready; a new process that never becomes ready
+drains the old one only after the new one is ready. A new process that never becomes ready
 leaves the old one serving.
 
 ## Journal segments and constants
@@ -328,15 +333,21 @@ type Segment {
 `Segment` is one record of the journal's `segment` kind: a run's start, resume or stop, the
 clock mode, the generation, and the declared members the run cannot build.
 
-Constants: `SIGKILL` (9), `SIGTERM` (15); the timer ids `BACKOFF_TIMER` (1) and
-`READINESS_TIMER` (2) of the supervisor, `SLOT_TIMER` (0) of the scheduler, whose deadline
-timers carry the attempt id, `PERIOD_TIMER` (1) of the evaluator and `DEADLINE_TIMER` (1) of
-the rollout; `BUCKETS_PER_WINDOW` (10000).
+| constant | value | kind |
+|---|---|---|
+| `SIGKILL` | 9 | signal |
+| `SIGTERM` | 15 | signal |
+| `BACKOFF_TIMER` | 1 | supervisor timer |
+| `READINESS_TIMER` | 2 | supervisor timer |
+| `SLOT_TIMER` | 0 | scheduler timer; deadline timers carry the attempt id |
+| `PERIOD_TIMER` | 1 | evaluator timer |
+| `DEADLINE_TIMER` | 1 | rollout timer |
+| `BUCKETS_PER_WINDOW` | 10000 | |
 
 ## Transition (apply)
 
 `Transition` orders the changes of one `ignite apply`. The driver computes the plan's member
-actions and steps this reducer; the reducer decides what happens next, and the driver only
+actions and steps this reducer. The reducer decides what happens next. The driver only
 executes it and reports back. It is pure and reads no clock.
 
 ```ignite,fragment
@@ -397,7 +408,7 @@ fn action_kind(text: Text) -> ActionKind
 The sequence:
 
 1. Every owned member to remove, and every owned member to replace without a draining
-   cutover, is stopped in `stop_order` (dependents before their providers), one at a time,
+   cutover, is stopped in `stop_order`, dependents before their providers, one at a time,
    each awaiting its `MemberStopped`. A provider whose dependent cuts over is not stopped
    first: it still serves that dependent.
 2. `SwitchRevision` hands the running instances that stay to the desired revision.
@@ -407,12 +418,15 @@ The sequence:
 4. When the last one is ready the transition converges, and the driver's `Converged` gives
    `Commit`.
 
-A desired member that gives up abandons the transition with `Abandon("gave_up", member)`, an
-effect the driver could not carry out (`EffectFailed`) abandons it with its reason, and
-members whose providers can never be ready abandon it as `ordering_cycle`. A member that is not
-owned, and a member to detach or keep, is never stopped or started. `member_action` and
-`transition` are the constructors the driver calls with the plan's texts; `action_kind` maps
-`add`, `replace`, `remove` and `detach`, and any other text to `Keep`.
+| cause | the transition is abandoned with |
+|---|---|
+| a desired member gives up | `Abandon("gave_up", member)` |
+| the driver could not carry out an effect (`EffectFailed`) | its reason |
+| members whose providers can never be ready | `ordering_cycle` |
+
+A member that is not owned, and a member to detach or keep, is never stopped or started.
+`member_action` and `transition` are the constructors the driver calls with the plan's texts.
+`action_kind` maps `add`, `replace`, `remove` and `detach`, and any other text to `Keep`.
 
 ## Examples
 
