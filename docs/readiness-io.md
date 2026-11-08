@@ -85,12 +85,14 @@ change are in section 8, `story:readiness-scheduler`.
 
 ### 3.4 Keeping both possible
 
-Two later replacements stay open, each without touching what the other parts depend on.
+Two later replacements stay open, each without touching what the other parts depend on, and
+the program keeps a choice between two IO modes.
 
 **The reactor is swappable.** Every wait goes through the waiter of section 4.2, and the
 scheduler drives readiness through one reactor interface in `crates/ignite-io`
-(`story:readiness-waiters` lands it, `story:readiness-scheduler` puts the epoll loop behind
-it). The interface is what a worker needs from a readiness source:
+(`story:readiness-waiters` lands it with the epoll implementation and the test double
+`ScriptedReactor` under one contract suite, `story:readiness-scheduler` drives its workers
+through it). The interface is what a worker needs from a readiness source:
 
 - register a descriptor once with its interest (read, write, urgent, hang-up) and deregister it;
 - wait for readiness events until a deadline, returning the waiters to make runnable;
@@ -109,6 +111,16 @@ not scheduled. Stackless lowering is chosen only if the memory cost of stacks is
 matter: the touched stack per idle task (8 to 32 KiB, inferred, K3) and the RSS of 10,000 idle
 Telnet sessions (section 6 row 7, recorded in R3), against a program that needs that many idle
 tasks (vision's 10,000 idle actors, before actors P5).
+
+**The IO mode is a setting, in the long run** (Timo, 2026-11-08). A program chooses its IO mode
+as a build or executable setting (for example `ignite build --io threads|readiness`, or a field
+of the executable kind; `story:io-mode-setting` decides which), not by language syntax: no
+`async` or `await`, so functions are not split into two kinds, and user code reads the same in
+both modes (blocking-looking IO, concurrency through `spawn` and channels). `threads` is
+today's one OS thread per task; `readiness` is stackful tasks on epoll workers, later possibly a
+tokio reactor behind the same seam. Both modes pass the same tests and give the same results;
+only cost differs. The waiter seam therefore keeps the thread-per-task implementation as one of
+its implementations, not as a stage to remove.
 
 ## 4 Design
 

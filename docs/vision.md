@@ -301,8 +301,12 @@ coroutines), recorded in wave D of section 4, the L0 row of section 3, D2 option
 the layout rules of `AGENTS.md`. Both stay possible later: the reactor sits behind one
 interface, so a tokio-driven reactor can replace the epoll loop in `ignite-io` alone; stackless
 lowering per target stays an alternative, gated on task failure ending by return instead of
-`longjmp`, and chosen only if stack memory per idle task is measured to matter.
-`story:readiness-scheduler` rewrites wave D, D2 and D3 when it lands.
+`longjmp`, and chosen only if stack memory per idle task is measured to matter. In the long
+run (Timo, 2026-11-08) the program chooses its IO mode, `threads` (one OS thread per task) or
+`readiness`, as a build or executable setting, never by syntax: no `async` or `await`, user
+code reads the same in both modes, and both pass the same tests with the same results; only
+cost differs (`story:io-mode-setting`). `story:readiness-scheduler` rewrites wave D, D2 and D3
+when it lands.
 
 ## 8 Open decisions
 
