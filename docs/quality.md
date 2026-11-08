@@ -86,7 +86,9 @@ with its host and regenerates `quality/trend.md`, the table below and the book p
 timing row without a bar its first value. With `RUN=vX.Y.Z` the run is a release:
 `quality::record` refuses it when a count row is worse than at the last release (or the bar,
 before the first release) beyond its metric's tolerance, and then records the run as `run`, not as
-the release. Timing rows are not part of the refusal yet; they join it once they are measured on
+the release. A bar moved worse with a `decision` that the baseline at the last release's commit
+does not hold is that row's reference instead: a value within it is held, and the run names the
+decision; a value beyond it is refused. Timing rows are not part of the refusal yet; they join it once they are measured on
 the dedicated host (`story:quality-timing-host`). The release steps in `AGENTS.md` § Releases
 run it.
 

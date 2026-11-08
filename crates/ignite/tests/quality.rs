@@ -483,16 +483,28 @@ fn save_baseline(baseline: &Baseline) {
 
 /// `main`'s `quality/baseline.json`, when `main` has one.
 fn main_baseline() -> Option<Baseline> {
+    let text = baseline_text_at("main")?;
+    Some(read_baseline(&parse(&text, "main:quality/baseline.json")).expect("main's baseline"))
+}
+
+/// The baseline at the commit of the last release (or the bar), when it can
+/// be read: the release check takes the decisions it does not hold as new.
+fn baseline_at(rev: &str) -> Option<Baseline> {
+    let text = baseline_text_at(rev)?;
+    read_baseline(&Json::parse(&text).ok()?).ok()
+}
+
+/// The text of `quality/baseline.json` at the revision `rev`, when it has one.
+fn baseline_text_at(rev: &str) -> Option<String> {
     let output = Command::new("git")
-        .args(["show", "main:quality/baseline.json"])
+        .args(["show", &format!("{rev}:quality/baseline.json")])
         .current_dir(workspace())
         .output()
         .ok()?;
     if !output.status.success() {
         return None;
     }
-    let text = String::from_utf8(output.stdout).ok()?;
-    Some(read_baseline(&parse(&text, "main:quality/baseline.json")).expect("main's baseline"))
+    String::from_utf8(output.stdout).ok()
 }
 
 fn blessing() -> bool {
@@ -1708,18 +1720,38 @@ fn civil_date(secs: u64) -> String {
     format!("{year:04}-{month:02}-{day:02}")
 }
 
-/// Every refusal of a release: a count value worse than at the last release
-/// (or the bar) beyond its metric's tolerance. Timing rows are left out until
-/// they are measured on the dedicated host (story:quality-timing-host).
-pub fn release_refusals(baseline: &Baseline, history: &[Record], values: &[Value]) -> Vec<String> {
+/// The outcome of the release check: the refusals, and the rows a decision
+/// taken since the last release holds (named so the run shows them).
+pub struct ReleaseCheck {
+    pub refused: Vec<String>,
+    pub decided: Vec<String>,
+}
+
+/// The release check: a count value worse than at the last release (or the
+/// bar) beyond its metric's tolerance is refused. A bar that `baseline`
+/// moved worse than the last release's value with a `decision` that
+/// `at_last` (the baseline at the last release's commit; `None` when it
+/// cannot be read) does not hold is that row's reference instead: within it
+/// the row is held by the decision, beyond it refused. Timing rows are left
+/// out until they are measured on the dedicated host
+/// (story:quality-timing-host).
+pub fn release_refusals(
+    baseline: &Baseline,
+    at_last: Option<&Baseline>,
+    history: &[Record],
+    values: &[Value],
+) -> ReleaseCheck {
+    let mut out = ReleaseCheck {
+        refused: Vec::new(),
+        decided: Vec::new(),
+    };
     let Some((_, last)) = runs(history)
         .into_iter()
         .rev()
         .find(|((run, _, _), _)| run == "bar" || run.starts_with('v'))
     else {
-        return Vec::new();
+        return out;
     };
-    let mut errors = Vec::new();
     for v in values {
         let (Some(metric), Some(then)) = (
             baseline.metrics.get(&v.metric),
@@ -1727,22 +1759,56 @@ pub fn release_refusals(baseline: &Baseline, history: &[Record], values: &[Value
         ) else {
             continue;
         };
-        if metric.kind != "hill-climb"
-            && !is_timing(&v.metric)
-            && metric.direction.worse(*then, v.value, metric.tolerance)
-        {
-            errors.push(format!(
-                "{} {}: {} at the last release, {} now ({}, {:?})",
-                v.metric,
-                v.target,
-                then,
-                v.value,
-                metric.direction.word(),
-                metric.tolerance
-            ));
+        if metric.kind == "hill-climb" || is_timing(&v.metric) {
+            continue;
+        }
+        let decided = metric.bars.get(&v.target).and_then(|bar| {
+            let decision = bar.decision.as_deref()?.trim();
+            let new = match at_last {
+                Some(at_last) => new_decision(Some(decision), at_last),
+                None => !decision.is_empty(),
+            };
+            (new && metric
+                .direction
+                .worse(*then, bar.value, Tolerance::Count(0)))
+            .then(|| (bar.value, decision.to_string()))
+        });
+        match decided {
+            Some((bar, decision)) => {
+                if metric.direction.worse(bar, v.value, metric.tolerance) {
+                    out.refused.push(format!(
+                        "{} {}: {} by the decision `{}`, {} now ({}, {:?})",
+                        v.metric,
+                        v.target,
+                        bar,
+                        decision,
+                        v.value,
+                        metric.direction.word(),
+                        metric.tolerance
+                    ));
+                } else if metric.direction.worse(*then, v.value, metric.tolerance) {
+                    out.decided.push(format!(
+                        "{} {}: {} at the last release, {} now, held by the decision `{}` (bar {})",
+                        v.metric, v.target, then, v.value, decision, bar
+                    ));
+                }
+            }
+            None => {
+                if metric.direction.worse(*then, v.value, metric.tolerance) {
+                    out.refused.push(format!(
+                        "{} {}: {} at the last release, {} now ({}, {:?})",
+                        v.metric,
+                        v.target,
+                        then,
+                        v.value,
+                        metric.direction.word(),
+                        metric.tolerance
+                    ));
+                }
+            }
         }
     }
-    errors
+    out
 }
 
 /// `task quality`: read every source's measured values from
@@ -1788,7 +1854,16 @@ fn record() {
     let run = std::env::var("IGNITE_QUALITY_RUN").unwrap_or_else(|_| "run".to_string());
     let history = read_history();
     let refused = if run.starts_with('v') {
-        release_refusals(&baseline, &history, &values)
+        let at_last = runs(&history)
+            .into_iter()
+            .rev()
+            .find(|((run, _, _), _)| run == "bar" || run.starts_with('v'))
+            .and_then(|((_, commit, _), _)| baseline_at(&commit));
+        let checked = release_refusals(&baseline, at_last.as_ref(), &history, &values);
+        for line in &checked.decided {
+            eprintln!("release {run}: {line}");
+        }
+        checked.refused
     } else {
         Vec::new()
     };
@@ -2125,8 +2200,12 @@ fn a_release_worse_than_the_last_is_refused() {
         value,
         load: (metric == "6.2").then(|| "20.00".to_string()),
     };
-    assert!(release_refusals(&baseline, &history, &[value("4.3", "rust", 312)]).is_empty());
-    let refused = release_refusals(&baseline, &history, &[value("4.3", "rust", 310)]);
+    assert!(
+        release_refusals(&baseline, None, &history, &[value("4.3", "rust", 312)])
+            .refused
+            .is_empty()
+    );
+    let refused = release_refusals(&baseline, None, &history, &[value("4.3", "rust", 310)]).refused;
     assert!(
         refused.len() == 1 && refused[0].contains("312 at the last release"),
         "{refused:?}"
@@ -2136,7 +2215,7 @@ fn a_release_worse_than_the_last_is_refused() {
         held.is_empty(),
         "a timing row on host local was held: {held:?}"
     );
-    let timed = release_refusals(&baseline, &history, &[value("6.2", "llvm", 9000)]);
+    let timed = release_refusals(&baseline, None, &history, &[value("6.2", "llvm", 9000)]).refused;
     assert!(
         timed.is_empty(),
         "a timing row on host local refused a release: {timed:?}"
@@ -2165,6 +2244,74 @@ fn a_release_worse_than_the_last_is_refused() {
     assert!(
         page.contains("| llvm | 900 ms | 2000 ms | local, not comparable |"),
         "{page}"
+    );
+}
+
+/// A bar moved worse by a `decision` that the baseline at the last release
+/// did not hold is the reference of the release check for its row: a value
+/// within the decided bar is held by the decision, which the check names; a
+/// value worse than the decided bar is still refused. A decision the last
+/// release already held changes nothing.
+#[test]
+fn a_release_honours_a_decision_taken_since_the_last_release() {
+    let decision = "story:x (2026-11-08): two more gaps";
+    let at_bar = baseline_of(&[(
+        "4.2",
+        metric(Direction::Lower, Tolerance::Count(0), &[("rust", 1)]),
+    )]);
+    let mut decided = baseline_of(&[(
+        "4.2",
+        metric(Direction::Lower, Tolerance::Count(0), &[("rust", 2)]),
+    )]);
+    decided
+        .metrics
+        .get_mut("4.2")
+        .unwrap()
+        .bars
+        .get_mut("rust")
+        .unwrap()
+        .decision = Some(decision.to_string());
+    let history = vec![Record {
+        commit: "c".to_string(),
+        date: "2026-11-07".to_string(),
+        run: "bar".to_string(),
+        metric: "4.2".to_string(),
+        target: "rust".to_string(),
+        value: 1,
+        host: "local".to_string(),
+        load: None,
+    }];
+    let value = |value| Value {
+        metric: "4.2".to_string(),
+        target: "rust".to_string(),
+        value,
+        load: None,
+    };
+    let held = release_refusals(&decided, Some(&at_bar), &history, &[value(2)]);
+    assert!(held.refused.is_empty(), "{:?}", held.refused);
+    assert!(
+        held.decided.len() == 1
+            && held.decided[0].contains("1 at the last release, 2 now")
+            && held.decided[0].contains(decision),
+        "{:?}",
+        held.decided
+    );
+    let unknown = release_refusals(&decided, None, &history, &[value(2)]);
+    assert!(unknown.refused.is_empty(), "{:?}", unknown.refused);
+    let worse = release_refusals(&decided, Some(&at_bar), &history, &[value(3)]);
+    assert!(
+        worse.refused.len() == 1
+            && worse.refused[0].contains("2 by the decision")
+            && worse.refused[0].contains(decision)
+            && worse.refused[0].contains("3 now"),
+        "{:?}",
+        worse.refused
+    );
+    let old = release_refusals(&decided, Some(&decided), &history, &[value(2)]);
+    assert!(
+        old.refused.len() == 1 && old.refused[0].contains("1 at the last release"),
+        "{:?}",
+        old.refused
     );
 }
 
