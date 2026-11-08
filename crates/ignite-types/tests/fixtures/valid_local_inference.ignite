@@ -11,12 +11,19 @@ fn pushed() -> Int {
   xs.push(1)
   var ys = List.empty()
   ys.push("a")
-  return xs.len() + ys.len()
+  var zs = List.with_capacity(4)
+  zs.push(true)
+  return xs.len() + ys.len() + zs.len()
 }
 
 fn passed() -> Int {
   let xs = List.empty()
   return total(xs)
+}
+
+fn passed_with_capacity() -> Int {
+  let xs = List.with_capacity(16)
+  return total(xs) + Bytes.with_capacity(16).len()
 }
 
 fn returned() -> Option<Text> {

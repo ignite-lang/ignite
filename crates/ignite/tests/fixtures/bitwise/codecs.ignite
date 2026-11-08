@@ -35,7 +35,7 @@ fn sha1(message: Bytes) -> List<Int> {
     data.push(byte(length * 8 >> shift))
     shift = shift - 8
   }
-  var w: List<Int> = []
+  var w: List<Int> = List.with_capacity(80)
   while w.len() < 80 {
     w.push(0)
   }
@@ -90,7 +90,7 @@ fn sha1(message: Bytes) -> List<Int> {
 /// The words as 40 lowercase hex digits.
 fn hex(words: List<Int>) -> Text {
   let digits = b"0123456789abcdef"
-  var out = Bytes.empty()
+  var out = Bytes.with_capacity(words.len() * 8)
   for word in words {
     var shift = 28
     while shift >= 0 {
@@ -104,8 +104,8 @@ fn hex(words: List<Int>) -> Text {
 /// `data` in base64 with padding (RFC 4648 section 4).
 fn base64(data: Bytes) -> Text {
   let alphabet = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-  var out = Bytes.empty()
   let n = data.len()
+  var out = Bytes.with_capacity((n + 2) / 3 * 4)
   var i = 0
   while i + 3 <= n {
     let v = data[i].to_int() << 16 | data[i + 1].to_int() << 8 | data[i + 2].to_int()
@@ -133,7 +133,7 @@ fn base64(data: Bytes) -> Text {
 
 fn repeated(text: Text, times: Int) -> Bytes {
   let piece = text.to_bytes()
-  var out = Bytes.empty()
+  var out = Bytes.with_capacity(piece.len() * times)
   var i = 0
   while i < times {
     out.append(piece)
@@ -181,7 +181,7 @@ type Bench {
 }
 
 fn Bench.main(self: Bench) -> Result<Unit, IoError> {
-  var data = Bytes.empty()
+  var data = Bytes.with_capacity(1048576)
   var i = 0
   while i < 1048576 {
     data.push(byte(i * 31 + 7))

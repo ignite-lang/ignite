@@ -387,7 +387,8 @@ impl<'a> Resolver<'a> {
             ExprKind::Name(owner) => {
                 !self.out.refs.contains_key(&key(receiver))
                     && (crate::builtins::static_fn(&owner.name, name).is_some()
-                        || (owner.name == "Channel" && name == "bounded"))
+                        || (owner.name == "Channel" && name == "bounded")
+                        || (owner.name == "List" && name == "with_capacity"))
             }
             _ => false,
         }

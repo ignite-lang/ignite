@@ -1118,6 +1118,11 @@ impl<'p> Evaluator<'p> {
         let mut next = || args.next().ok_or_else(|| internal("missing argument"));
         match builtin {
             Builtin::BytesEmpty | Builtin::ListEmpty => Ok(Value::List(Vec::new())),
+            // The capacity hint is ignored: only speed would observe it.
+            Builtin::BytesWithCapacity | Builtin::ListWithCapacity => {
+                next()?;
+                Ok(Value::List(Vec::new()))
+            }
             Builtin::MapEmpty => Ok(Value::Map(Vec::new())),
             Builtin::BytesOf => next(),
             Builtin::IntToText => match next()? {
@@ -2265,7 +2270,9 @@ fn is_static(builtin: Builtin) -> bool {
         builtin,
         Builtin::BytesEmpty
             | Builtin::BytesOf
+            | Builtin::BytesWithCapacity
             | Builtin::ListEmpty
+            | Builtin::ListWithCapacity
             | Builtin::MapEmpty
             | Builtin::IntToText
             | Builtin::IntParse

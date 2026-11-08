@@ -2870,18 +2870,21 @@ impl<'a> Generator<'a> {
     }
 
     /// Whether `expr` is a value whose type only its context decides: `[]`,
-    /// `None`, `List.empty()`, `Map.empty()`, `Store.new()`, or a block or
-    /// `if` ending in one. The typer decides such a `let` from later uses
-    /// (`docs/slice.md` section 13, row 3); rustc does not when the first
-    /// use is a generic fn such as `ignite_io::checked::at`, so the `let`
-    /// carries the type the typer recorded.
+    /// `None`, `List.empty()`, `List.with_capacity(n)`, `Map.empty()`,
+    /// `Store.new()`, or a block or `if` ending in one. The typer decides
+    /// such a `let` from later uses (`docs/slice.md` section 13, row 3);
+    /// rustc does not when the first use is a generic fn such as
+    /// `ignite_io::checked::at`, so the `let` carries the type the typer
+    /// recorded.
     fn undecided(&self, expr: &Expr) -> bool {
         let tail = |block: &Block| matches!(block.stmts.last(), Some(Stmt { kind: StmtKind::Expr(e), .. }) if self.undecided(e));
-        let empty = |receiver: &Expr, name: &Ident| {
-            matches!(
-                (self.qualifier(receiver), name.name.as_str()),
-                (Some("List" | "Map"), "empty") | (Some("Store"), "new")
-            )
+        let empty = |receiver: &Expr, name: &Ident, args: &[Expr]| match (
+            self.qualifier(receiver),
+            name.name.as_str(),
+        ) {
+            (Some("List" | "Map"), "empty") | (Some("Store"), "new") => args.is_empty(),
+            (Some("List"), "with_capacity") => args.len() == 1,
+            _ => false,
         };
         match &expr.kind {
             ExprKind::List(items) => items.is_empty(),
@@ -2890,10 +2893,9 @@ impl<'a> Generator<'a> {
                 receiver,
                 name,
                 args,
-            } => args.is_empty() && empty(receiver, name),
+            } => empty(receiver, name, args),
             ExprKind::Call { callee, args } => {
-                args.is_empty()
-                    && matches!(&callee.kind, ExprKind::Field { receiver, name } if empty(receiver, name))
+                matches!(&callee.kind, ExprKind::Field { receiver, name } if empty(receiver, name, args))
             }
             ExprKind::Block(block) => tail(block),
             ExprKind::If { then, .. } => tail(then),
@@ -4102,7 +4104,13 @@ impl<'a> Generator<'a> {
             ("Bytes", "of", [list]) => {
                 format!("({list}).iter().map(|x| *x as u8).collect::<Vec<u8>>()")
             }
+            ("Bytes", "with_capacity", [n]) => {
+                format!("Vec::<u8>::with_capacity(({n}).max(0) as usize)")
+            }
             ("List", "empty", []) => "Vec::new()".to_string(),
+            ("List", "with_capacity", [n]) => {
+                format!("Vec::with_capacity(({n}).max(0) as usize)")
+            }
             ("Map", "empty", []) => "::std::collections::BTreeMap::new()".to_string(),
             ("Store", "new", []) => "::ignite_io::Store::new()".to_string(),
             ("Channel", "bounded", [capacity]) => {

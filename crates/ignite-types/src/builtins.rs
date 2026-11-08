@@ -354,13 +354,14 @@ fn store_method(item: &Ty, name: &str) -> Option<Sig> {
     }
 }
 
-/// `Owner.name(..)` for a builtin static other than `List.empty`, whose
-/// result type comes from the context.
+/// `Owner.name(..)` for a builtin static other than `List.empty` and
+/// `List.with_capacity`, whose result type comes from the context.
 pub(crate) fn static_fn(owner: &str, name: &str) -> Option<Sig> {
     use Builtin::*;
     match (owner, name) {
         ("Bytes", "empty") => sig(BytesEmpty, vec![], bytes()),
         ("Bytes", "of") => sig(BytesOf, vec![bytes()], bytes()),
+        ("Bytes", "with_capacity") => sig(BytesWithCapacity, vec![Ty::Int], bytes()),
         ("Int", "to_text") => sig(IntToText, vec![Ty::Int], Ty::Text),
         ("Int", "parse") => sig(IntParse, vec![Ty::Text], Ty::Option(Box::new(Ty::Int))),
         ("TcpListener", "bind") => sig(
