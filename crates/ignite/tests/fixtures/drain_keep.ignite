@@ -1,0 +1,51 @@
+package tests.drain_keep
+
+// Built for both targets and run by tests/drain.rs (`docs/slice.md`
+// 16.13, story `drain-keeps-listeners`, the case study's G6): the
+// listener `internal` is kept through the drain and answers every
+// connection until the process exits; `ingress` is released at SIGTERM as
+// before. The process exits 0 once the ingress connection is done, while a
+// task still waits in `internal`'s accept and another in an idle read of a
+// connection `internal` accepted.
+
+fn answer(stream: TcpStream) -> Result<Unit, IoError> requires [stream.read, stream.write] {
+  stream.write_all("internal\n".to_bytes())?
+  let input = stream.read(64)?
+  return Ok(Unit)
+}
+
+fn serve_internal(listener: TcpListener) -> Result<Unit, IoError> {
+  loop {
+    let stream = listener.accept()?
+    spawn answer(stream)
+  }
+}
+
+fn hold(stream: TcpStream) -> Result<Unit, IoError> requires [stream.read] {
+  let input = stream.read(64)?
+  return Ok(Unit)
+}
+
+type App {
+  ingress: TcpListener
+  internal: TcpListener
+  executable: Text
+}
+
+fn App.main(self: App) -> Result<Unit, IoError> {
+  spawn serve_internal(self.internal)
+  let held = self.ingress.accept()?
+  spawn hold(held)
+  log("waiting")
+  match self.ingress.accept() {
+    Ok(_) => log("ingress accepted")
+    Err(e) => log("ingress accept: {e.message}")
+  }
+  Ok(())
+}
+
+system DrainKeep {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 0 }
+  resource internal: TcpListener { address = "127.0.0.1", port = 0, keep_through_drain = true }
+  component app: App { ingress = ingress, internal = internal, executable = "drainkeep" }
+}

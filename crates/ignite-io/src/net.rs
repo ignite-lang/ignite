@@ -88,6 +88,11 @@ pub(crate) struct Slot {
     listener: RwLock<Option<std::net::TcpListener>>,
     address: String,
     port: i64,
+    /// Kept through the drain (story `drain-keeps-listeners`): never
+    /// registered with `crate::drain`, so never released; a task waiting
+    /// in its `accept`, or in a read of a stream it accepted, is idle for
+    /// the drain's wait (`crate::task::idle_on_kept`).
+    kept: bool,
 }
 
 impl Slot {
@@ -138,6 +143,9 @@ struct Stream {
     /// The other end's address and port, read once when the stream was
     /// made ([`TcpStream::peer`]).
     peer: (String, i64),
+    /// Accepted by a listener kept through the drain: a task waiting in a
+    /// read of it is idle for the drain's wait.
+    kept: bool,
 }
 
 /// The write side of a stream: bytes written and not yet sent.
@@ -356,6 +364,20 @@ impl Drop for Stream {
 impl TcpListener {
     /// Bind `address:port`. Port 0 picks a free port.
     pub fn bind(address: String, port: i64) -> Result<TcpListener, IoError> {
+        Self::bind_with(address, port, false)
+    }
+
+    /// [`TcpListener::bind`] of a listener kept through the drain
+    /// (`docs/slice.md` 16.13, story `drain-keeps-listeners`): SIGTERM does
+    /// not release it, and it accepts until the process exits. The drain's
+    /// wait for live tasks does not wait for a task blocked in its
+    /// `accept` or in a read of a stream it accepted.
+    pub fn bind_kept(address: String, port: i64) -> Result<TcpListener, IoError> {
+        Self::bind_with(address, port, true)
+    }
+
+    /// [`TcpListener::bind`], kept through the drain when `kept`.
+    pub fn bind_with(address: String, port: i64, kept: bool) -> Result<TcpListener, IoError> {
         let target = socket_address("bind", &address, port)?;
         let listener = std::net::TcpListener::bind(&target)
             .map_err(|e| IoError::new(format!("bind {target}: {e}")))?;
@@ -367,8 +389,11 @@ impl TcpListener {
             listener: RwLock::new(Some(listener)),
             address,
             port,
+            kept,
         });
-        crate::drain::register(&slot);
+        if !kept {
+            crate::drain::register(&slot);
+        }
         Ok(TcpListener { slot })
     }
 
@@ -379,18 +404,25 @@ impl TcpListener {
     /// of [`ACCEPT_BACKOFF_FIRST`], doubling up to [`ACCEPT_BACKOFF_LAST`];
     /// the first failure of a run is logged once. Any other failure is
     /// returned. While the process drains (`crate::drain`), and after the
-    /// drain closed the listener, the error is "draining".
+    /// drain closed the listener, the error is "draining"; a listener kept
+    /// through the drain ([`TcpListener::bind_kept`]) accepts on.
     pub fn accept(&self) -> Result<TcpStream, IoError> {
         flush();
         let guard = self.slot.read();
         let Some(listener) = guard.as_ref() else {
             return Err(IoError::new(crate::drain::DRAINING));
         };
+        let kept = self.slot.kept;
         let mut pause = ACCEPT_BACKOFF_FIRST;
         let mut failing = false;
         loop {
-            match listener.accept() {
-                Ok((socket, _peer)) => return Ok(TcpStream::from_socket(socket)),
+            let accepted = if kept {
+                crate::task::idle_on_kept(|| listener.accept())
+            } else {
+                listener.accept()
+            };
+            match accepted {
+                Ok((socket, _peer)) => return Ok(TcpStream::from_socket_kept(socket, kept)),
                 Err(e) if e.kind() == ErrorKind::Interrupted => continue,
                 Err(e) if transient(&e) => {
                     if !failing {
@@ -400,7 +432,7 @@ impl TcpListener {
                     std::thread::sleep(pause);
                     pause = (pause * 2).min(ACCEPT_BACKOFF_LAST);
                 }
-                Err(_) if crate::drain::draining() => {
+                Err(_) if !kept && crate::drain::draining() => {
                     return Err(IoError::new(crate::drain::DRAINING));
                 }
                 Err(e) => return Err(e.into()),
@@ -416,6 +448,11 @@ impl TcpListener {
 
 impl TcpStream {
     fn from_socket(socket: std::net::TcpStream) -> TcpStream {
+        Self::from_socket_kept(socket, false)
+    }
+
+    /// A stream; `kept` when a listener kept through the drain accepted it.
+    fn from_socket_kept(socket: std::net::TcpStream, kept: bool) -> TcpStream {
         let _ = socket.set_nodelay(true);
         let on: nix::libc::c_int = 1;
         // SAFETY: the descriptor belongs to `socket`, and `on` outlives the
@@ -442,6 +479,7 @@ impl TcpStream {
                 closed: AtomicBool::new(false),
                 timed_out: AtomicBool::new(false),
                 peer,
+                kept,
             }),
         }
     }
@@ -485,7 +523,12 @@ impl TcpStream {
         // the lock (`docs/slice.md` 26.2).
         let ended = |timed_out: bool| self.inner.timed_out.store(timed_out, Ordering::Release);
         loop {
-            match (&self.inner.socket).read(buffer) {
+            let read = if self.inner.kept {
+                crate::task::idle_on_kept(|| (&self.inner.socket).read(buffer))
+            } else {
+                (&self.inner.socket).read(buffer)
+            };
+            match read {
                 Ok(count) => {
                     ended(false);
                     return Ok(count);

@@ -5992,6 +5992,8 @@ fn is_comparison(op: BinaryOp) -> bool {
 struct Listener {
     address: String,
     port: i64,
+    /// `keep_through_drain = true` (`docs/slice.md` 16.13).
+    kept: bool,
 }
 
 /// The resources of one system.
@@ -6187,17 +6189,26 @@ fn lower_resource(resource: &ResourceDecl, diagnostics: &mut Vec<Diagnostic>) ->
     }
     let mut address = None;
     let mut port = None;
+    let mut kept = false;
     let mut valid = true;
     for property in &resource.properties {
         match (property.name.name.as_str(), &property.value.kind) {
             ("address", ExprKind::Str(text)) if address.is_none() => address = Some(text.clone()),
             ("port", ExprKind::Int(value)) if port.is_none() => port = Some(*value),
-            ("address" | "port" | "exposure" | "backlog", _)
+            ("address" | "port" | "exposure" | "backlog" | "keep_through_drain", _)
                 if is_duplicate(&resource.properties, property) =>
             {
                 diagnostics.push(e020(
                     property.name.span,
                     format!("duplicate property `{}`", property.name.name),
+                ));
+                valid = false;
+            }
+            ("keep_through_drain", ExprKind::Bool(value)) => kept = *value,
+            ("keep_through_drain", _) => {
+                diagnostics.push(e020(
+                    property.value.span,
+                    "property `keep_through_drain` must be `true` or `false`",
                 ));
                 valid = false;
             }
@@ -6250,7 +6261,11 @@ fn lower_resource(resource: &ResourceDecl, diagnostics: &mut Vec<Diagnostic>) ->
         }
     }
     match (valid, address, port) {
-        (true, Some(address), Some(port)) => Some(Listener { address, port }),
+        (true, Some(address), Some(port)) => Some(Listener {
+            address,
+            port,
+            kept,
+        }),
         _ => None,
     }
 }
@@ -6416,8 +6431,9 @@ fn executable_main(
         } else {
             listener.port.to_string()
         };
+        let bind = if listener.kept { "bind_kept" } else { "bind" };
         w.line(&format!(
-            "let {variable} = ::ignite_io::TcpListener::bind(String::from(\"{address}\"), {port})?;"
+            "let {variable} = ::ignite_io::TcpListener::{bind}(String::from(\"{address}\"), {port})?;"
         ));
         w.line(&format!(
             "::ignite_io::log(&format!(\"listening on {address_format}:{{}}\", {variable}.local_port()));"

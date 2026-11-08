@@ -32,6 +32,7 @@
 //! once per [`TRIM_INTERVAL`], and a worker that ends after lingering
 //! trims what is still marked, so the last release is not left behind.
 
+use std::cell::Cell;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError, TryLockError};
 use std::thread::Thread;
@@ -44,35 +45,72 @@ pub const LINGER: Duration = Duration::from_secs(1);
 
 type Job = Box<dyn FnOnce() + Send + 'static>;
 
-/// Tasks handed to [`spawn`] that have not ended: counted from the call
-/// until the task returned or failed. The drain (`docs/slice.md` 16.13)
-/// waits for zero.
-static LIVE: Mutex<usize> = Mutex::new(0);
+/// The tasks the drain (`docs/slice.md` 16.13) waits for.
+struct Count {
+    /// Tasks handed to [`spawn`] that have not ended: counted from the
+    /// call until the task returned or failed.
+    live: usize,
+    /// Of those, the tasks waiting in [`idle_on_kept`] now.
+    kept: usize,
+}
+
+static LIVE: Mutex<Count> = Mutex::new(Count { live: 0, kept: 0 });
+/// Notified when a task ends or begins to wait on a kept listener.
 static ENDED: Condvar = Condvar::new();
 
+thread_local! {
+    /// The thread is a task worker ([`work`]), not `main` or a thread a
+    /// program started.
+    static IN_TASK: Cell<bool> = const { Cell::new(false) };
+}
+
 fn task_started() {
-    *lock(&LIVE) += 1;
+    lock(&LIVE).live += 1;
 }
 
 fn task_ended() {
-    let mut live = lock(&LIVE);
-    *live = live.saturating_sub(1);
+    let mut count = lock(&LIVE);
+    count.live = count.live.saturating_sub(1);
     ENDED.notify_all();
 }
 
 /// The number of tasks started and not yet ended.
 pub fn live_tasks() -> usize {
-    *lock(&LIVE)
+    lock(&LIVE).live
 }
 
-/// Wait until every task started with [`spawn`] has ended. No bound: a
-/// task that never ends keeps the caller waiting (`docs/slice.md` 16.13,
-/// A6: outside `ignite run` only the driver's deadline ends a drain).
+/// Wait until every task started with [`spawn`] has ended or waits in
+/// [`idle_on_kept`]: in `accept` on a listener kept through the drain, or
+/// in a read of a stream such a listener accepted (story
+/// `drain-keeps-listeners`). No bound: any other task that never ends
+/// keeps the caller waiting (`docs/slice.md` 16.13, A6: outside `ignite
+/// run` only the driver's deadline ends a drain).
 pub fn wait_for_tasks() {
-    let mut live = lock(&LIVE);
-    while *live > 0 {
-        live = ENDED.wait(live).unwrap_or_else(PoisonError::into_inner);
+    let mut count = lock(&LIVE);
+    while count.live > count.kept {
+        count = ENDED.wait(count).unwrap_or_else(PoisonError::into_inner);
     }
+}
+
+/// Run `wait`, a blocking `accept` or read on a listener kept through the
+/// drain or a stream it accepted; while it runs on a task thread, the
+/// task does not hold up [`wait_for_tasks`]. On any other thread `wait`
+/// just runs: `main` is not a task.
+pub(crate) fn idle_on_kept<T>(wait: impl FnOnce() -> T) -> T {
+    if !IN_TASK.with(Cell::get) {
+        return wait();
+    }
+    struct Back;
+    impl Drop for Back {
+        fn drop(&mut self) {
+            let mut count = lock(&LIVE);
+            count.kept = count.kept.saturating_sub(1);
+        }
+    }
+    lock(&LIVE).kept += 1;
+    ENDED.notify_all();
+    let _back = Back;
+    wait()
 }
 
 /// An idle worker: its thread and the slot `spawn` puts its next task in.
@@ -202,6 +240,7 @@ static FAILING: AtomicBool = AtomicBool::new(false);
 
 /// Run `job`, then the tasks `spawn` hands this thread, until it lingered.
 fn work(mut job: Job) {
+    IN_TASK.with(|in_task| in_task.set(true));
     let me = Arc::new(Worker {
         thread: std::thread::current(),
         next: Mutex::new(None),
@@ -256,6 +295,7 @@ mod tests {
         a_failed_task_leaves_its_worker_to_the_next();
         every_task_runs_once_under_contention();
         the_drain_waits_for_every_live_task();
+        the_drain_does_not_wait_for_a_task_idle_on_a_kept_listener();
     }
 
     #[test]
@@ -318,6 +358,57 @@ mod tests {
             .recv_timeout(Duration::from_secs(5))
             .expect("the wait ends when the tasks end");
         assert_eq!(live_tasks(), 0);
+    }
+
+    /// Whether [`wait_for_tasks`], started now on a thread of its own,
+    /// returns within `limit`.
+    fn wait_returns_within(limit: Duration) -> bool {
+        let (done, waited) = channel();
+        std::thread::spawn(move || {
+            wait_for_tasks();
+            let _ = done.send(());
+        });
+        waited.recv_timeout(limit).is_ok()
+    }
+
+    /// Story `drain-keeps-listeners`: `wait_for_tasks` does not wait for a
+    /// task that waits in `accept` on a listener kept through the drain,
+    /// nor for one in a read of a stream such a listener accepted; it
+    /// still waits for a task in `accept` on any other listener.
+    fn the_drain_does_not_wait_for_a_task_idle_on_a_kept_listener() {
+        wait_for_tasks();
+        let kept = crate::TcpListener::bind_kept("127.0.0.1".to_string(), 0).unwrap();
+        let port = kept.local_port() as u16;
+        let (ended, task_end) = channel();
+        spawn(move || {
+            let stream = kept.accept().unwrap();
+            let _ = stream.read(64);
+            ended.send(()).unwrap();
+        });
+        assert!(
+            wait_returns_within(Duration::from_secs(5)),
+            "the wait waits for a task in a kept accept"
+        );
+        let client = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+        assert!(
+            wait_returns_within(Duration::from_secs(5)),
+            "the wait waits for a task in a read of a kept stream"
+        );
+        let other = crate::TcpListener::bind("127.0.0.1".to_string(), 0).unwrap();
+        let other_port = other.local_port() as u16;
+        spawn(move || {
+            let _ = other.accept();
+        });
+        assert!(
+            !wait_returns_within(Duration::from_millis(200)),
+            "the wait ended with a task in an accept that is not kept"
+        );
+        drop(std::net::TcpStream::connect(("127.0.0.1", other_port)).unwrap());
+        drop(client);
+        task_end
+            .recv_timeout(Duration::from_secs(5))
+            .expect("the kept task ends when its peer closes");
+        assert!(wait_returns_within(Duration::from_secs(5)));
     }
 
     fn a_failed_task_leaves_its_worker_to_the_next() {

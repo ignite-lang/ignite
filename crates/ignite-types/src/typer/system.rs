@@ -62,12 +62,14 @@ type Outputs = Vec<(String, Ty)>;
 
 /// The compiler-known properties of a `TcpListener` resource
 /// (`docs/slice.md` section 14.4) in field order, with whether each has a
-/// default.
-const TCP_LISTENER_FIELDS: [(&str, bool); 4] = [
+/// default. `keep_through_drain` (16.13, story `drain-keeps-listeners`)
+/// has none: the model shows it only where it is given.
+const TCP_LISTENER_FIELDS: [(&str, bool); 5] = [
     ("address", false),
     ("port", false),
     ("exposure", true),
     ("backlog", true),
+    ("keep_through_drain", false),
 ];
 
 /// One compiler-known property of a capability resource kind
@@ -1336,7 +1338,8 @@ impl Typer<'_> {
     }
 
     /// A resource declaration: `TcpListener` with `address`, `port`,
-    /// `exposure` and `backlog` (the last two defaulted), or `Store<T>`
+    /// `exposure` and `backlog` (the two defaulted) and the optional
+    /// `keep_through_drain` (16.13), or `Store<T>`
     /// with no properties.
     fn resource(&mut self, resource: &ResourceDecl) {
         match resource.kind.name.as_str() {
@@ -1346,6 +1349,7 @@ impl Typer<'_> {
                     ("port", Ty::Int),
                     ("exposure", exposure()),
                     ("backlog", Ty::Int),
+                    ("keep_through_drain", Ty::Bool),
                 ];
                 let mut seen: Vec<&str> = Vec::new();
                 let mut address: Option<&Expr> = None;
@@ -1390,7 +1394,7 @@ impl Typer<'_> {
                                 "E047",
                                 property.name.span,
                                 format!(
-                                    "`TcpListener` has no property `{name}`; its properties are `address`, `port`, `exposure` and `backlog`"
+                                    "`TcpListener` has no property `{name}`; its properties are `address`, `port`, `exposure`, `backlog` and `keep_through_drain`"
                                 ),
                             );
                             self.synth(&property.value);
