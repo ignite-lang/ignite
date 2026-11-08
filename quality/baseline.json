@@ -20,6 +20,18 @@
     "crates/ignite/tests/fixtures/conformance/adversary_std_telnet.ignite::adversary: replies and the prompt after a reply are NVT data": "builtin `PipePair` has no value at compile time",
     "crates/ignite/tests/fixtures/conformance/adversary_two_specs/main.ignite::padding exits with seven": "builtin `ProcessExit` has no value at compile time",
     "crates/ignite/tests/fixtures/conformance/signal.ignite::never ends": "exceeds the evaluator's fuel of 10000000 units",
+    "crates/ignite/tests/fixtures/net_builtins/adversary.ignite::adv: a huge timeout still connects": "builtin `TcpListenerBind` has no value at compile time",
+    "crates/ignite/tests/fixtures/net_builtins/adversary.ignite::adv: a name with several addresses tries the next one": "builtin `TcpListenerBind` has no value at compile time",
+    "crates/ignite/tests/fixtures/net_builtins/adversary.ignite::adv: a negative timeout is refused before any attempt": "builtin `TcpListenerBind` has no value at compile time",
+    "crates/ignite/tests/fixtures/net_builtins/adversary.ignite::adv: a partial read after a timeout clears timed_out": "builtin `TcpListenerBind` has no value at compile time",
+    "crates/ignite/tests/fixtures/net_builtins/adversary.ignite::adv: a refused port fails at once, not after the timeout": "builtin `TcpListenerBind` has no value at compile time",
+    "crates/ignite/tests/fixtures/net_builtins/adversary.ignite::adv: an IPv4 peer of a dual-stack listener is written as IPv4": "builtin `TcpListenerBind` has no value at compile time",
+    "crates/ignite/tests/fixtures/net_builtins/adversary.ignite::adv: an IPv6 connect_within reports the peer without brackets": "builtin `TcpListenerBind` has no value at compile time",
+    "crates/ignite/tests/fixtures/net_builtins/adversary.ignite::adv: timed_out is false before a read, also with an idle timeout set": "builtin `TcpListenerBind` has no value at compile time",
+    "crates/ignite/tests/fixtures/net_builtins/connect.ignite::main connect": "a main does IO; the evaluator has none",
+    "crates/ignite/tests/fixtures/process_builtins/case_gaps.ignite::main g2": "a main does IO; the evaluator has none",
+    "crates/ignite/tests/fixtures/process_builtins/case_gaps.ignite::main g3": "a main does IO; the evaluator has none",
+    "crates/ignite/tests/fixtures/process_builtins/case_gaps.ignite::main g8": "a main does IO; the evaluator has none",
     "crates/ignite/tests/fixtures/siblings/demo.ignite::module greeting": "`module(\"demo.ops\")` has no field `greeting`",
     "crates/ignite/tests/fixtures/slice16/callee_forms.ignite::the callee is evaluated before the arguments": "builtin `PipePair` has no value at compile time",
     "crates/ignite/tests/fixtures/slice16/calls.ignite::effectful fn values called through a field and an index": "builtin `PipePair` has no value at compile time",
@@ -75,6 +87,7 @@
     "crates/ignite/tests/fixtures/tests/basics.ignite::output shown on failure": "builtin `StdoutWriteAll` has no value at compile time",
     "crates/ignite/tests/fixtures/tests/basics.ignite::tcp echo through a task": "builtin `TcpListenerBind` has no value at compile time",
     "crates/ignite/tests/fixtures/tests/builtins.ignite::Clock.monotonic: two reads are ordered": "builtin `ClockMonotonic` has no value at compile time",
+    "crates/ignite/tests/fixtures/tests/checker_names.ignite::an unannotated record binding calls a Store method": "builtin `StoreNew` has no value at compile time",
     "crates/ignite/tests/fixtures/tests/clones.ignite::a discarded update or upsert stores the new value": "builtin `StoreNew` has no value at compile time",
     "crates/ignite/tests/fixtures/tests/clones.ignite::a field of an upsert result is the stored field": "builtin `StoreNew` has no value at compile time",
     "crates/ignite/tests/fixtures/tests/codespec_lists.ignite::Stderr is a stream of its own": "builtin `StdoutWriteAll` has no value at compile time",
@@ -97,11 +110,17 @@
     "std/fs.ignite::a legal 250-byte name is written": "builtin `DirectoryTemporary` has no value at compile time",
     "std/fs.ignite::paths that leave the root are refused": "builtin `DirectoryTemporary` has no value at compile time",
     "std/fs.ignite::remove_tree removes links, not their targets": "builtin `DirectoryTemporary` has no value at compile time",
+    "std/net.ignite::a read the idle timeout ended is told from a close": "builtin `TcpListenerBind` has no value at compile time",
+    "std/net.ignite::connect_within gives up within its timeout": "builtin `ClockMonotonic` has no value at compile time",
+    "std/net.ignite::the peer of a stream is the other end, in both families": "builtin `TcpListenerBind` has no value at compile time",
     "std/process.ignite::a child over its timeout is killed with its group": "builtin `LauncherNew` has no value at compile time",
     "std/process.ignite::a child reads its input on stdin, and the null device without one": "builtin `LauncherNew` has no value at compile time",
     "std/process.ignite::a child that does not read its input still ends": "builtin `LauncherNew` has no value at compile time",
     "std/process.ignite::a child's output and status are captured": "builtin `LauncherNew` has no value at compile time",
     "std/process.ignite::a command line keeps its arguments in order": "builtin `CommandLineOf` has no value at compile time",
+    "std/process.ignite::a flush sends what the task wrote before its next write": "builtin `PipePair` has no value at compile time",
+    "std/process.ignite::a sleep sends what the task wrote first": "builtin `PipePair` has no value at compile time",
+    "std/process.ignite::a sleep waits at least its duration, one of zero or less not at all": "builtin `ClockMonotonic` has no value at compile time",
     "std/process.ignite::a started child is killed": "builtin `LauncherNew` has no value at compile time",
     "std/process.ignite::adversary: a missing working directory is not a missing program": "builtin `LauncherNew` has no value at compile time",
     "std/process.ignite::adversary: a waited child keeps its id after its handle is reused": "builtin `LauncherNew` has no value at compile time",
@@ -109,9 +128,11 @@
     "std/process.ignite::adversary: grandchildren do not hold the result": "builtin `LauncherNew` has no value at compile time",
     "std/process.ignite::adversary: kill after the end keeps the exit status": "builtin `LauncherNew` has no value at compile time",
     "std/process.ignite::adversary: output exactly at and one past the limit, both streams": "builtin `LauncherNew` has no value at compile time",
+    "std/process.ignite::an environment gives a variable's value, the last entry of a name winning": "builtin `EnvironmentOf` has no value at compile time",
     "std/process.ignite::every count of the bound is drawn, a count past it refused": "builtin `EntropyNew` has no value at compile time",
     "std/process.ignite::output past the limit is counted, not kept": "builtin `LauncherNew` has no value at compile time",
     "std/process.ignite::the launcher refuses what it cannot run": "builtin `LauncherNew` has no value at compile time",
+    "std/process.ignite::the wall clock is an instant of std.time after 2026-01-01": "builtin `ClockNow` has no value at compile time",
     "std/process.ignite::two draws differ": "builtin `EntropyNew` has no value at compile time",
     "std/protocol/http.ignite::HEAD is answered as GET without content": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::Http chunks only an HTTP/1.1 response with content": "builtin `PipePair` has no value at compile time",
@@ -126,6 +147,7 @@
     "std/protocol/http.ignite::a body of exactly the default 1 MiB is served": "exceeds the evaluator's limit Nodes(1000000)",
     "std/protocol/http.ignite::a body over 1 MiB is 413": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::a body split across three deliveries": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a chunk whose data ends in CR and another byte instead of CR LF is 400": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::a chunked body over the body limit is 413 however many digits its size has": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::a chunked request body is decoded": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::a head of exactly HttpLimits.head is served, one byte more is 431": "builtin `PipePair` has no value at compile time",
@@ -141,17 +163,21 @@
     "std/protocol/http.ignite::a streamed 304 is the head only and the connection goes on": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::a streamed 3xx answer to CONNECT is chunked": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::a streamed response is sent in chunks as its pieces come": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::adversary: a chunk read whole but for its LF keeps less than three reads of input and the line": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::adversary: the body limit in one-byte chunks is decoded in under 8 s": "exceeds the evaluator's limit Nodes(1000000)",
     "std/protocol/http.ignite::an HTTP/1.1 request has exactly one valid Host or is 400": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::an absolute-form target is accepted and its authority replaces Host": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::an application Transfer-Encoding is 500": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::an empty piece is skipped and does not end a chunked body": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::an empty write delivers nothing and the closed connection gets no answer": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::an error of piece ends a chunked body before its last chunk and the connection with it": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::an unterminated chunk-size line or trailer over the head limit is 431, not read until the peer closes": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::chunk extensions are ignored": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::every status of RFC 9110 has its reason phrase": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::next_request ends on a connection closed before a whole request": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::next_request reads a head, its body and keeps the rest": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::next_request takes a pipelined request from the buffer": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::one chunk of the whole body limit is decoded holding at most one read besides the body": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::pipelined bodies whose total crosses the body limit are each within it": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::pipelined heads whose total crosses the head limit are each within it": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::the HTTP idle timeout alone ends a pipe connection": "builtin `PipePair` has no value at compile time",
@@ -264,13 +290,13 @@
       "area": "Semantics: one meaning across the three consumers",
       "bars": {
         "eval": {
-          "value": 420
+          "value": 423
         },
         "llvm": {
-          "value": 614
+          "value": 643
         },
         "rust": {
-          "value": 614
+          "value": 643
         }
       },
       "direction": "higher",
@@ -341,7 +367,8 @@
       "area": "Semantics: one meaning across the three consumers",
       "bars": {
         "eval": {
-          "value": 194
+          "decision": "wave 5 integration (2026-11-08): main since b23f827e (wave 6 process and net builtins, std.net and std.process tests) and the chunked decoder tests of story http-chunked-adversary-findings add units that do IO or exceed the fuel; each is listed in eval_cannot_run with its reason",
+          "value": 220
         }
       },
       "direction": "lower",
@@ -424,7 +451,7 @@
       "area": "Front end: the checker refuses exactly the wrong programs",
       "bars": {
         "all": {
-          "value": 319
+          "value": 323
         }
       },
       "direction": "higher",
@@ -543,10 +570,12 @@
       "area": "Generated code and runtime behaviour",
       "bars": {
         "llvm": {
-          "value": 73
+          "decision": "wave 5 integration (2026-11-08): the substrate entries of wave 6 (story process-builtins: environment, sleep, clocks, flush; story net-builtins: peer address, timed-out reads, connect timeout) add unsafe sites in ignite-io and ignite-rt",
+          "value": 76
         },
         "rust": {
-          "value": 7
+          "decision": "wave 5 integration (2026-11-08): the substrate entries of wave 6 (story process-builtins: environment, sleep, clocks, flush; story net-builtins: peer address, timed-out reads, connect timeout) add unsafe sites in ignite-io and ignite-rt",
+          "value": 9
         }
       },
       "direction": "lower",
@@ -588,7 +617,8 @@
           "value": 0
         },
         "llvm/rfc9110": {
-          "value": 1
+          "decision": "story http-chunked-adversary-findings (2026-11-07): RFC9110.R6_2_5 restated as unsupported while RFC9112.R2_2_1 is a gap (docs/slice.md, adversary findings); closes with story http-octet-head-and-date",
+          "value": 2
         },
         "llvm/rfc9112": {
           "value": 1
@@ -603,7 +633,8 @@
           "value": 0
         },
         "rust/rfc9110": {
-          "value": 1
+          "decision": "story http-chunked-adversary-findings (2026-11-07): RFC9110.R6_2_5 restated as unsupported while RFC9112.R2_2_1 is a gap (docs/slice.md, adversary findings); closes with story http-octet-head-and-date",
+          "value": 2
         },
         "rust/rfc9112": {
           "value": 1
@@ -624,10 +655,10 @@
           "value": 191
         },
         "llvm": {
-          "value": 309
+          "value": 322
         },
         "rust": {
-          "value": 309
+          "value": 322
         }
       },
       "direction": "higher",
@@ -754,7 +785,8 @@
       "area": "Engineering health",
       "bars": {
         "all": {
-          "value": 21
+          "decision": "wave 5 integration (2026-11-08): main since b23f827e adds two ignored tests in the wave 6 builtins suites",
+          "value": 23
         }
       },
       "direction": "lower",
@@ -784,7 +816,8 @@
       "area": "Engineering health",
       "bars": {
         "all": {
-          "value": 34
+          "decision": "wave 5 integration (2026-11-08): main since b23f827e adds nine open rows to docs/friction.md from a case study (commit b7b9ed855)",
+          "value": 43
         }
       },
       "direction": "lower",
