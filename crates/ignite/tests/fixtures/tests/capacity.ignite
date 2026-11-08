@@ -1,0 +1,69 @@
+package fixtures.capacity
+
+// The capacity hint `List.with_capacity(n)` and `Bytes.with_capacity(n)`
+// (`docs/slice.md` 31), run by `ignite test` on both targets in debug and
+// release (crates/ignite/tests/ignite_test.rs `capacity_hint_on_both_targets`).
+// Only speed is observable: the list is empty, `push` beyond `n` grows, and a
+// negative `n` is taken as 0.
+
+type Row {
+  name: Text
+  cells: List<Int>
+}
+
+test "a list with capacity is empty" {
+  let xs: List<Int> = List.with_capacity(8)
+  assert xs.len() == 0
+  assert xs.is_empty()
+  assert xs == []
+  let b = Bytes.with_capacity(16)
+  assert b.len() == 0
+  assert b == Bytes.empty()
+}
+
+test "push beyond the capacity grows" {
+  var xs: List<Int> = List.with_capacity(2)
+  var i = 0
+  while i < 100 {
+    xs.push(i * i)
+    i = i + 1
+  }
+  assert xs.len() == 100
+  assert xs[0] == 0
+  assert xs[99] == 9801
+  var b = Bytes.with_capacity(1)
+  b.push(104)
+  b.push(105)
+  b.append(b"!!")
+  assert b == b"hi!!"
+}
+
+test "zero and a negative capacity are empty lists" {
+  var none: List<Text> = List.with_capacity(0)
+  none.push("a")
+  assert none == ["a"]
+  var negative: List<Text> = List.with_capacity(-5)
+  assert negative.len() == 0
+  negative.push("b")
+  assert negative == ["b"]
+  var b = Bytes.with_capacity(-1)
+  b.push(1)
+  assert b.len() == 1
+}
+
+fn rows(n: Int) -> List<Row> {
+  var out = List.with_capacity(n)
+  var i = 0
+  while i < n {
+    out.push(Row { name = i.to_text(), cells = [i] })
+    i = i + 1
+  }
+  out
+}
+
+test "the element type comes from the context" {
+  let made = rows(3)
+  assert made.len() == 3
+  assert made[2].name == "2"
+  assert made[1].cells == [1]
+}

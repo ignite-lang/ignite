@@ -140,7 +140,9 @@ pub const BUILTIN_TYPES: &[&str] = &[
 pub const BUILTIN_STATICS: &[(&str, &str)] = &[
     ("Bytes", "empty"),
     ("Bytes", "of"),
+    ("Bytes", "with_capacity"),
     ("List", "empty"),
+    ("List", "with_capacity"),
     ("Int", "to_text"),
     ("TcpListener", "bind"),
     ("TcpStream", "connect"),
@@ -291,7 +293,9 @@ const BUILTIN_VARIANT_PAYLOADS: &[(&str, usize)] = &[
 const BUILTIN_STATIC_ARITIES: &[(&str, &str, usize)] = &[
     ("Bytes", "empty", 0),
     ("Bytes", "of", 1),
+    ("Bytes", "with_capacity", 1),
     ("List", "empty", 0),
+    ("List", "with_capacity", 1),
     ("Int", "to_text", 1),
     ("TcpListener", "bind", 2),
     ("TcpStream", "connect", 2),

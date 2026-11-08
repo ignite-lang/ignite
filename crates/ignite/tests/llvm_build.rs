@@ -237,6 +237,193 @@ fn ir_is_pinned_to_the_target() {
     }
 }
 
+/// The major LLVM version of a `--version` text: `LLVM version: X.Y.Z`
+/// (rustc `-vV`) or `clang version X.Y.Z`.
+fn llvm_major(text: &str) -> Option<u32> {
+    let rest = text
+        .split("LLVM version: ")
+        .nth(1)
+        .or_else(|| text.split("clang version ").nth(1))?;
+    rest.split('.').next()?.trim().parse().ok()
+}
+
+/// Whether this host can link a release build with LTO (`docs/llvm.md`
+/// section 1): rustc and clang share an LLVM major version and `ld.lld`
+/// is on `PATH`.
+fn lto_possible() -> bool {
+    let version = |tool: &str, flag: &str| {
+        let output = Command::new(tool).arg(flag).output().ok()?;
+        llvm_major(&String::from_utf8_lossy(&output.stdout))
+    };
+    let rustc = std::env::var("RUSTC").unwrap_or_else(|_| "rustc".to_string());
+    let rustc = version(&rustc, "-vV");
+    rustc.is_some()
+        && rustc == version("clang", "--version")
+        && std::env::var_os("PATH").is_some_and(|paths| {
+            std::env::split_paths(&paths).any(|dir| dir.join("ld.lld").is_file())
+        })
+}
+
+/// `ignite build --target llvm --release` of the probe with no `--runtime`,
+/// the runtime cache under `dir/cache`.
+fn release_build_of_the_probe(dir: &Path, clang: &Path) -> Output {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/probe.ignite");
+    run(Command::new(env!("CARGO_BIN_EXE_ignite"))
+        .args(["build", "--target", "llvm", "--release"])
+        .arg(&source)
+        .arg("--out")
+        .arg(dir.join("out"))
+        .arg("--clang")
+        .arg(clang)
+        .env("XDG_CACHE_HOME", dir.join("cache")))
+}
+
+/// Exit code, standard output and standard error of the probe's two
+/// executables in `out/bin`.
+fn probe_results(out: &Path) -> Vec<(Option<i32>, String, String)> {
+    ["probe", "crash"]
+        .iter()
+        .map(|name| {
+            let output = Command::new(out.join("bin").join(name)).output().unwrap();
+            (
+                output.status.code(),
+                String::from_utf8_lossy(&output.stdout).into_owned(),
+                String::from_utf8_lossy(&output.stderr).into_owned(),
+            )
+        })
+        .collect()
+}
+
+/// The probe built without `--release` and `--runtime`: what every release
+/// build must print.
+fn dev_probe_results(dir: &Path) -> Vec<(Option<i32>, String, String)> {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/probe.ignite");
+    let out = dir.join("dev");
+    run(&mut llvm_build(&source, &out, &which("clang"), false));
+    probe_results(&out)
+}
+
+/// Story `llvm-lto-runtime`, `docs/llvm.md` section 1: with `--release`
+/// and no `--runtime`, every unit is compiled to bitcode (`-flto=thin`)
+/// and each executable is linked by lld together with the bitcode runtime
+/// the driver carries, written to `<cache>/ignite/runtime/lto-<hash>/`.
+/// The executables behave as the dev build's.
+#[test]
+fn release_links_std_program_and_runtime_with_lto() {
+    if !lto_possible() {
+        eprintln!("skipped: rustc and clang differ in LLVM version, or no ld.lld");
+        return;
+    }
+    let dir = tmp("llvm-lto");
+    let log = dir.join("clang.log");
+    let clang = logging_clang(&dir, &log);
+    release_build_of_the_probe(&dir, &clang);
+    let text = std::fs::read_to_string(&log).unwrap();
+    let steps: Vec<&str> = text
+        .lines()
+        .filter(|line| !line.contains("-emit-llvm"))
+        .collect();
+    assert_eq!(steps.len(), 4 + 2, "{text}");
+    let lto_runtime = dir.join("cache/ignite/runtime");
+    for line in steps {
+        let args: Vec<&str> = line.split(' ').collect();
+        assert!(args.contains(&"-flto=thin"), "{line}");
+        if !args.contains(&"-c") {
+            assert!(args.contains(&"-fuse-ld=lld"), "{line}");
+            assert!(args.contains(&"-O2"), "{line}");
+            let runtime = args
+                .iter()
+                .find(|arg| arg.ends_with(".a"))
+                .unwrap_or_else(|| panic!("no archive in {line}"));
+            assert!(
+                runtime.starts_with(&*lto_runtime.join("lto-").to_string_lossy()),
+                "{line}"
+            );
+        }
+    }
+    assert_eq!(probe_results(&dir.join("out")), dev_probe_results(&dir));
+}
+
+/// Story `llvm-lto-runtime`, the fallback: a clang of another LLVM version
+/// than the rustc that built the carried runtime cannot read its bitcode,
+/// so the release build compiles native objects and links the native
+/// runtime without LTO, as does a release build with `--runtime`.
+#[test]
+fn release_with_another_llvm_links_the_native_runtime_without_lto() {
+    let dir = tmp("llvm-lto-fallback");
+    let log = dir.join("clang.log");
+    let wrapper = dir.join("clang");
+    std::fs::write(
+        &wrapper,
+        format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{}'\ncase \" $* \" in *' -emit-llvm '*) '{clang}' \"$@\" | sed 's/clang version [0-9]*/clang version 1/'; exit ;; esac\nexec '{clang}' \"$@\"\n",
+            log.display(),
+            clang = which("clang").display()
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o755)).unwrap();
+    release_build_of_the_probe(&dir, &wrapper);
+    let text = std::fs::read_to_string(&log).unwrap();
+    assert!(!text.contains("-flto"), "{text}");
+    assert!(
+        !dir.join("cache/ignite/runtime").exists() || {
+            std::fs::read_dir(dir.join("cache/ignite/runtime"))
+                .unwrap()
+                .all(|entry| {
+                    !entry
+                        .unwrap()
+                        .file_name()
+                        .to_string_lossy()
+                        .starts_with("lto-")
+                })
+        }
+    );
+    let expected = dev_probe_results(&dir);
+    assert_eq!(probe_results(&dir.join("out")), expected);
+
+    let _ = std::fs::remove_file(&log);
+    let explicit = dir.join("explicit");
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/probe.ignite");
+    run(&mut llvm_build(
+        &source,
+        &explicit,
+        &logging_clang(&dir, &log),
+        true,
+    ));
+    let text = std::fs::read_to_string(&log).unwrap();
+    assert!(!text.contains("-flto"), "{text}");
+    assert_eq!(probe_results(&explicit), expected);
+}
+
+/// Story `llvm-lto-runtime`: `ignite test --release` with no `--runtime`
+/// probes the target with the native runtime it links, so its IR and its
+/// objects agree on one triple and the tests pass, without LTO.
+#[test]
+fn release_tests_link_the_native_runtime() {
+    let dir = tmp("llvm-lto-tests");
+    let log = dir.join("clang.log");
+    let clang = logging_clang(&dir, &log);
+    let output = Command::new(env!("CARGO_BIN_EXE_ignite"))
+        .args(["test", "--target", "llvm", "--release"])
+        .arg(workspace().join("std/option.ignite"))
+        .arg("--out")
+        .arg(dir.join("out"))
+        .arg("--clang")
+        .arg(&clang)
+        .env("XDG_CACHE_HOME", dir.join("cache"))
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = std::fs::read_to_string(&log).unwrap();
+    assert!(!text.contains("-flto"), "{text}");
+}
+
 /// `docs/llvm.md` section 1, target: a runtime archive built for another
 /// architecture than `--triple` fails with a clear error (exit 3) before
 /// clang compiles anything.

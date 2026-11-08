@@ -40,6 +40,26 @@ Size. Every function and datum is in its own section (rustc emits the runtime's 
 way by default), so `--gc-sections` drops what no executable reaches. The workspace builds `ignite-rt` with `codegen-units = 1` in the release
 profile.
 
+LTO (story `llvm-lto-runtime`). A `-linux-gnu` driver carries the runtime twice: the native
+archive and the same archive built with `-Clinker-plugin-lto`, whose Rust code is LLVM
+bitcode (`crates/ignite/build.rs`, a second nested `cargo build` beside the first, in the
+driver's profile), with the triple and the major LLVM version of the rustc that built it.
+A build with `--release` and none of `--runtime`, `--triple` and `--static` compiles each
+unit with `-O2 -flto=thin` and links each executable with
+`clang -flto=thin -O2 -fuse-ld=lld -Wl,--thinlto-cache-policy=cache_size_bytes=64m
+-Wl,--thinlto-cache-dir=DIR/llvm/lto-cache` and the bitcode runtime, written to
+`<cache>/lto-<hash>/libignite_rt.a`, in place of the native archive, so runtime entries
+inline into Ignite code (`ignite_rt_arena_state`'s 169 calls in `todod` go). Such a build
+pins its IR to the runtime's triple (`x86_64-unknown-linux-gnu`, which clang reads as its
+own `x86_64-pc-linux-gnu`), so that lld links modules of one triple. It needs clang of the
+same major LLVM version as that rustc, read from the `llvm.ident` of the target probe and
+cached in `target.stamp`, and `ld.lld` next to clang or on `PATH`; without either, and with
+any of the three flags, the release build is the per-unit `-O2` build against the native
+archive described above. ThinLTO rather than full LTO: in the probe that chose it (todo
+get-64, 5 interleaved runs) full LTO cut user instructions per reply 4.5 % and thin 7.9 %,
+and thin links in 1.6 s per executable against 2.7 s. `ignite test --release` links the
+native archive.
+
 Reachable std only (slice 11, `docs/slice.md` 15.1 item 2). `std.ll` holds only the std
 fns, constants, field defaults and glue reachable from the program: the program module and
 the mains are lowered first, every symbol they name is a root, and the std module keeps a
@@ -432,12 +452,25 @@ position, even with no buffer.
   kernel without a trim: ember's `FLUSHDB` (`db.values()` copies the keyspace into the
   arena) left 10 MB of freed chunks resident until the next trim while chunks were
   `malloc` blocks (2026-11-04).
-  `spawn` hands the new task a pointer to the arguments in the parent's memory: an owned
-  argument (a temporary or a moved place) moved into a block in the parent's frame, a
-  borrowed aggregate (a variable, a field, a constant) as its place's pointer, not copied.
-  The task deep-copies them into its own arena and calls `ignite_rt_spawn_ready()` before
-  the parent continues (`ignite_rt_spawn` blocks until then and returns 1), so the places
-  are unchanged while the task reads them.
+  `spawn` builds the new task's environment in transfer memory: `ignite_rt_spawn_begin()`
+  sends the parent's allocations to a fresh transfer arena, the parent allocates the
+  environment block there and deep-copies every argument into it (an aggregate, owned or
+  borrowed, through `copy.<T>`; a scalar stored), and `ignite_rt_spawn` hands the transfer
+  arena to the task with the environment pointer and returns 1 at once; the parent
+  allocates in its own arenas again and may change or free the places it copied. The task
+  starts with the transfer arena as the bottom of its own, empty arena and allocates after
+  it, and its thunk passes the aggregates to the callee in place, so each argument is
+  deep-copied once, as before, and the task's end frees it with the rest of its arena. The
+  chunk the task's thread kept from its last task goes in exchange to one process-wide list
+  of at most 16 that the next transfer takes from: no `mmap` or `munmap` per spawn in steady
+  state, and no thread holds a chunk more per live task. (When the arena is not empty, as
+  for a C caller's own thread, the task keeps the transfer arena apart until it ends or
+  calls `ignite_rt_spawn_ready()`; generated code does not call it.) Until story
+  spawn-without-handshake the
+  environment lay in the parent's frame and places, the task copied it into its own arena
+  and `ignite_rt_spawn` blocked on a channel until the task's `spawn_ready`: the parent's
+  wait and the task's wake-up were 1.9 of the 5.2 futex calls per connection of the Telnet
+  server under connect-8 (plain Rust 2.8).
 
   A stream lives as long as on the Rust target, where each task and binding holds a clone
   of an `Arc` (story `llvm-stream-ownership`). Each handle-table entry counts its owners:
@@ -484,7 +517,8 @@ position, even with no buffer.
     method call other than `copy()`, `?` or `match`) and not mentioned after the spawn
     (`region::moved_to_task`) still passes its owner to the task without `tcp_retain`.
   Until slice 10 the accept loop was generated and used a shallow `spawn_copy` without the
-  handshake; the Ignite loop pays the handshake per connection.
+  handshake; from slice 10 to story spawn-without-handshake the Ignite loop paid it per
+  connection.
 - String literals are global constants copied into the arena where they are used as values.
 - A `Store<T>` keeps its values outside every arena, so they outlive the task and the loop
   region that put them. Five glue functions per element type do the moves:
@@ -579,8 +613,9 @@ calling task (section 4). `T*` means a pointer to the section-3 layout;
 | `void init(i32 argc, ptr argv)` | first call in every `main`: store args, install the panic hook and the `atexit` terminal restore, ignore `SIGPIPE` |
 | `ptr alloc(i64 size, i64 align)` | arena allocation of the current task (its scratch arena while scratch is on) |
 | `ptr arena_state()` | the calling thread's bump state `{ ptr cursor, ptr limit, i64 offset, ptr base }`, for the inline helpers below; `memory(none)` in the IR declaration, since a thread's state never moves |
-| `i8 spawn(ptr fn, ptr env)` | start `fn(env)` as a new task (`ignite_io::try_spawn`) with a new arena; returns 1 after the task called `spawn_ready`, or 0 at once when no thread can start (then `fn` does not run and the caller releases the stream handles in `env`, section 4) |
-| `void spawn_ready()` | see above |
+| `void spawn_begin()` | later allocations of the current task go to a new transfer arena, until the next `spawn` (section 4) |
+| `i8 spawn(ptr fn, ptr env)` | start `fn(env)` as a new task (`ignite_io::try_spawn`) with a new arena and hand it the transfer arena `spawn_begin` began, which becomes the bottom of the task's arena; returns 1 at once without waiting for the task, or 0 when no thread can start (then `fn` does not run, the transfer arena is freed and the caller releases the stream handles in `env`, section 4) |
+| `void spawn_ready()` | the task no longer reads its environment: free its transfer arena now when its own arena did not adopt it (section 4); generated code does not call it; later calls do nothing |
 | `void task_end()` | free the current task's arena and scratch arena, kept large blocks included, keeping one chunk for the thread's next task; the last call of every task |
 | `i64 arena_mark()` | the current position of the task's arena (section 4) |
 | `void arena_release(i64 mark)` | free everything the task's arena handed out after `mark`; a mark at or above the current position frees nothing; the scratch arena is not touched |
@@ -656,7 +691,7 @@ substrate the Rust target calls too; argument parsing, termios save and restore 
 codes are `ignite-io`'s as well. The adapter converts section-3 values to and from `ignite-io`
 values (a `Text` or `List` argument is copied into a Rust value, a result into the task's
 arena) and owns only what the LLVM target needs: the arenas and loop regions (section 4), the
-`spawn`/`spawn_ready` handshake, and the handle table. A handle is an index into a
+the transfer arenas of `spawn`, and the handle table. A handle is an index into a
 process-wide table of `ignite_io::TcpListener`, `ignite_io::TcpStream` and `ignite_io::PipeStream` values. The table
 has no global lock on the IO path. It is a list of segments that never move; segment k
 holds 64 × 2^k slots, each slot behind its own mutex. A handle is the slot index plus one

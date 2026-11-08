@@ -638,6 +638,7 @@ meaning. The generator emits exactly the Rust on the right.
 | `Bytes.of(list)` | `(list).iter().map(\|x\| *x as u8).collect::<Vec<u8>>()` | static |
 | `Bytes.of([])`, `b""` | `Vec::<u8>::new()` | static; an empty list has no element type to infer |
 | `List.empty()` | `Vec::new()` | static |
+| `List.with_capacity(n)`, `Bytes.with_capacity(n)` | `Vec::with_capacity((n).max(0) as usize)`, `Vec::<u8>::with_capacity(..)` | static; section 31 |
 | `Int.to_text(i)` | `i.to_string()` | static |
 | `log(t)` | `::ignite_io::log(&t)` | free function, writes a line to stderr |
 
@@ -10041,3 +10042,93 @@ and `<Receiver>`.
   `ignite-check` fixture `e010_channel_in_const` (E010, E016); `ignite-types` fixture
   `e042_channel_element` (E042, E040), `moves::channel_ends_move_into_tasks_and_send_moves_its_value`,
   `builtin_tables`.
+
+## 31 The capacity hint
+
+**Status: implemented in `story:list-capacity`.**
+
+Source: `docs/fixed-width-ints.md` section 5 (F1) and acceptance row 2. A list or `Bytes` built
+by `push` from empty doubles its buffer; a program that knows the final size had no way to say
+so, where Rust has `Vec::with_capacity`.
+
+### 31.1 The statics
+
+| Ignite | type | effect | builtin |
+|---|---|---|---|
+| `List.with_capacity(n)` | `(Int) -> List<T>`, `T` from the expected type as for `List.empty()` | none | `ListWithCapacity` |
+| `Bytes.with_capacity(n)` | `(Int) -> Bytes` | none | `BytesWithCapacity` |
+
+An empty list with room for `n` elements. Only speed is observable: `len()` is 0, the value
+equals `[]` and `Bytes.empty()`, `push` beyond `n` still grows, and `n < 0` is taken as 0. The
+evaluator ignores the hint and gives the empty list.
+
+- `List.with_capacity(n)` takes its element type as `List.empty()` does (section 13, row 3):
+  from the expected type, else from later uses of the `let` it is bound by; E042 when neither
+  decides (the message names `List.with_capacity(..)`), E040 when the expected type is no
+  list. `n` is an `Int` (E040 otherwise).
+
+Layers:
+
+| layer | |
+|---|---|
+| `ignite-check` | rows of `BUILTIN_STATICS`, `BUILTIN_STATIC_ARITIES` |
+| `ignite-types` | `Builtin::ListWithCapacity` (typed beside `List.empty()`), `Builtin::BytesWithCapacity` (`static_fn`); `ownership::change` none; `moves` treats `List.with_capacity` as a static receiver |
+| `ignite-eval` | the empty list, the argument evaluated and dropped |
+| Rust target | `Vec::with_capacity((n).max(0) as usize)`, `Vec::<u8>::with_capacity(..)`; a `let` bound to `List.with_capacity(n)` carries the typer's type, as one bound to `List.empty()` |
+| LLVM target | the empty list, then `@ignite.reserve(list, n, size, align)`: one arena allocation of `max(n, 4)` elements for `n > 0`, none for `n <= 0` |
+| typed document (24) | a `call` with a `builtin` callee, no new kind |
+
+`CODEGEN_REVISION` is bumped once for this story.
+
+### 31.2 Where std and the fixtures use it
+
+- `fixtures/bitwise/codecs.ignite` (29.5): the 1 MiB input, base64's output
+  (`(n + 2) / 3 * 4`), the SHA-1 schedule `w` (80), `hex`'s output and `repeated`. SHA-1's
+  padded copy stays `var data = message` followed by `push`, as `codecs.rs` does
+  (`message.to_vec()` then `push`): an exact-size `Bytes.with_capacity(length + 72)` followed by
+  `append` measured more page faults on both targets (31.3).
+- `std.json` and `std.protocol.http`: unchanged here. On this base `render_head` builds a `Text`
+  (no hint applies), and `quote` and `encode` are rewritten by `perf/http-parse-fewer-copies`
+  into `write_quoted` and `write_value`, whose buffer start is then a one-line change each.
+
+### 31.3 Measured
+
+Recorded 2026-11-08, base `0a36ee6c2` (before: its compiler, std and codecs fixture) against
+this story; `codecs` built `--release` on both targets, the LLVM one against `ignite-rt` built
+`--release`; `codecs.rs` built with `rustc -O`. 9 interleaved runs pinned to one CPU, `perf
+stat` task-clock, page faults and user instructions, medians; 1-minute load 33 to 37.
+
+| executable | task-clock | / Rust | page faults | / Rust | instructions / Rust |
+|---|---|---|---|---|---|
+| hand-written Rust | 63.7 ms | 1 | 997 | 1 | 1 |
+| LLVM target, before | 168.9 ms | 2.65 | 30,576 | 30.67 | 2.18 |
+| LLVM target, after | 129.8 ms | 2.04 | 3,836 | 3.85 | 2.18 |
+| Rust target, before | 90.8 ms | 1.43 | 1,350 | 1.35 | 1.56 |
+| Rust target, after | 92.5 ms | 1.45 | 1,341 | 1.35 | 1.56 |
+| LLVM target, before, runtime of `perf/rt-hot-path` | 133.8 ms | 2.10 | 5,759 | 5.78 | 2.18 |
+| LLVM target, after, runtime of `perf/rt-hot-path` | 126.9 ms | 1.99 | 2,216 | 2.22 | 2.18 |
+
+- `docs/fixed-width-ints.md` acceptance row 2 (page faults at most 1.5 times the reference) is
+  not met by the hint alone: 3.85 on this runtime, 2.22 with the large-block reuse of
+  `perf/rt-hot-path` (the runtime the epic's 5.8 was measured with). The remaining faults are
+  not growth: on this runtime every large block (over 16 KiB) is a fresh `calloc` and goes back
+  at each release, so each round faults its 1 MiB and 1.3 MiB buffers in again; with the reuse,
+  63 % of the faults are in libc's copy and fill functions (`perf record -e page-faults`), the
+  first round's copies (SHA-1's padded copy, `to_text` of base64's output) among them.
+- SHA-1's padded copy as `Bytes.with_capacity(length + 72)` and `append`: 19,348 faults on
+  this runtime, 1,958 with the reuse, and 11,125 on the Rust target (from 1,350, glibc's
+  dynamic trim threshold follows the largest freed block, 1.3 MiB instead of 2 MiB). Not used.
+- Instructions do not move: the hint removes copies and faults, not work.
+
+### 31.4 Tests
+
+- `ignite_test::capacity_hint_on_both_targets` (`fixtures/tests/capacity.ignite`): four inline
+  tests on both targets in dev and release: an empty list and `Bytes` with capacity, `push`
+  past the capacity (100 pushes into 2), capacity 0 and negative, the element type from the
+  return type of the enclosing fn.
+- `eval::evaluator_agrees_with_the_{rust,llvm}_target`: `list_with_capacity` in
+  `fixtures/eval_equivalence.ignite` gives the same debug text in the evaluator and on both
+  targets.
+- `ignite-types` fixtures `valid_local_inference` (the element type from a later `push` and
+  from an argument) and `e042_with_capacity` (E042, E040).
+- `bitwise::sha1_and_base64_vectors_on_both_targets` over the rewritten codecs fixture.

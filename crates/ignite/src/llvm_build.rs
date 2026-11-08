@@ -36,8 +36,62 @@ pub const DEV_OPTIMIZATION: &str = "-O0";
 /// Optimization level of `clang -c` with `--release`.
 pub const RELEASE_OPTIMIZATION: &str = "-O2";
 
+/// `clang -c` flag of a release build with LTO: each unit is compiled to
+/// bitcode for ThinLTO, and lld optimises and generates code for it
+/// together with the bitcode runtime at the link.
+pub const LTO_COMPILE_FLAG: &str = "-flto=thin";
+
+/// Link flags of a release build with LTO, before the inputs: ThinLTO at
+/// `-O2` through lld, which reads LLVM bitcode without a linker plugin.
+/// The ThinLTO cache (`--thinlto-cache-dir`, in the IR directory) lets the
+/// second executable of a program and a relink reuse the backend work of
+/// modules whose inputs did not change; it is pruned to 64 MiB.
+pub const LTO_LINK_FLAGS: &[&str] = &[
+    "-flto=thin",
+    "-O2",
+    "-fuse-ld=lld",
+    "-Wl,--thinlto-cache-policy=cache_size_bytes=64m",
+];
+
 /// The file in the IR directory that caches the target probe.
 const TARGET_STAMP: &str = "target.stamp";
+
+/// The ThinLTO cache directory in the IR directory.
+const LTO_CACHE: &str = "lto-cache";
+
+/// The bitcode runtime a build links with LTO, before clang's LLVM
+/// version is known: with `--release`, without `--runtime`, `--triple` and
+/// `--static`, when the driver carries one (`build.rs`) and `ld.lld` lies
+/// next to clang or on `PATH`. Every other build links the native archive
+/// without LTO, as before.
+fn lto_candidate(options: &BuildOptions) -> Option<&'static crate::embedded_runtime::LtoRuntime> {
+    if !options.release
+        || options.runtime.is_some()
+        || options.triple.is_some()
+        || options.static_link
+    {
+        return None;
+    }
+    let runtime = crate::embedded_runtime::lto_runtime()?;
+    let clang = resolve_program(options.clang.as_deref().unwrap_or(Path::new("clang")));
+    let beside = clang.parent().map(|dir| dir.join("ld.lld"));
+    let lld = beside
+        .filter(|path| path.is_file())
+        .unwrap_or_else(|| resolve_program(Path::new("ld.lld")));
+    lld.is_file().then_some(runtime)
+}
+
+/// The cached bitcode runtime of a build that links with LTO: a
+/// [`lto_candidate`] whose rustc used the major LLVM version clang reports
+/// (`major`, from the target probe), since lld reads bitcode only of its
+/// own LLVM. `None` links the native archive without LTO.
+fn lto_runtime(options: &BuildOptions, major: Option<u32>) -> Option<PathBuf> {
+    let runtime = lto_candidate(options)?;
+    if major != Some(runtime.llvm_major) {
+        return None;
+    }
+    crate::embedded_runtime::materialize_lto()
+}
 
 /// `path` itself when it has a directory part, else its first match on
 /// `PATH`.
@@ -78,10 +132,24 @@ fn file_identity(path: &Path) -> String {
 /// (`clang [--target=T] -S -emit-llvm -x c /dev/null -o -`). The answer is
 /// cached in `ir_dir/target.stamp` under the clang command and the clang
 /// binary's path, size and modification time, so a rebuild runs no clang.
+/// A build that may link with LTO ([`lto_candidate`]) is pinned to the
+/// triple of the bitcode runtime instead (`x86_64-unknown-linux-gnu` for
+/// clang's `x86_64-pc-linux-gnu`: one target, two spellings), so that lld
+/// links modules of one triple.
 pub(crate) fn target(
     options: &BuildOptions,
     ir_dir: &Path,
 ) -> Result<ignite_llvm::TargetSpec, Error> {
+    Ok(probe(options, ir_dir)?.0)
+}
+
+/// [`target`], and the major LLVM version of clang, read from the
+/// `llvm.ident` of the same probe (`clang version X.Y.Z`); `None` when the
+/// probe names none.
+fn probe(
+    options: &BuildOptions,
+    ir_dir: &Path,
+) -> Result<(ignite_llvm::TargetSpec, Option<u32>), Error> {
     let clang_path = options
         .clang
         .clone()
@@ -89,6 +157,8 @@ pub(crate) fn target(
     let mut args: Vec<OsString> = Vec::new();
     if let Some(triple) = crate::musl::clang_triple(options)? {
         args.push(format!("--target={triple}").into());
+    } else if let Some(runtime) = lto_candidate(options) {
+        args.push(format!("--target={}", runtime.triple).into());
     }
     args.extend(["-S", "-emit-llvm", "-x", "c", "/dev/null", "-o", "-"].map(OsString::from));
     let key = stamp(
@@ -100,8 +170,11 @@ pub(crate) fn target(
     if let Ok(cached) = std::fs::read_to_string(&stamp_path)
         && let Some(rest) = cached.strip_prefix(&key)
         && let Some(spec) = parse_target(rest)
+        && let Some(version) = rest
+            .lines()
+            .find_map(|line| line.strip_prefix(CLANG_VERSION))
     {
-        return Ok(spec);
+        return Ok((spec, llvm_major(version)));
     }
     std::fs::create_dir_all(ir_dir).map_err(io_error(ir_dir))?;
     let output = Command::new(&clang_path)
@@ -127,12 +200,33 @@ pub(crate) fn target(
             ),
         });
     };
+    let version = probe
+        .lines()
+        .filter(|line| line.starts_with('!'))
+        .find_map(|line| {
+            let rest = line.split("clang version ").nth(1)?;
+            Some(rest.split(['"', ' ']).next()?.to_string())
+        })
+        .unwrap_or_default();
     let text = format!(
-        "{key}target triple = \"{}\"\ntarget datalayout = \"{}\"\n",
+        "{key}target triple = \"{}\"\ntarget datalayout = \"{}\"\n{CLANG_VERSION}{version}\n",
         spec.triple, spec.datalayout
     );
     std::fs::write(&stamp_path, text).map_err(io_error(&stamp_path))?;
-    Ok(spec)
+    Ok((spec, llvm_major(&version)))
+}
+
+/// The line of the target stamp after which clang's version stands.
+const CLANG_VERSION: &str = "clang version = ";
+
+/// The leading number of a version text `X.Y.Z…`.
+fn llvm_major(version: &str) -> Option<u32> {
+    let digits: String = version
+        .trim_start()
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect();
+    digits.parse().ok()
 }
 
 /// The `target triple` and `target datalayout` lines of an IR text.
@@ -398,10 +492,12 @@ pub(crate) fn link(
     };
     let out = out_dir(package, options);
     let ir_dir = out.join("llvm");
-    let spec = target(options, &ir_dir)?;
-    let runtime = match &kit {
-        Some(kit) => kit.runtime.clone(),
-        None => crate::runtime_or_default(options.runtime.as_ref())?,
+    let (spec, clang_major) = probe(options, &ir_dir)?;
+    let lto = lto_runtime(options, clang_major);
+    let runtime = match (&kit, &lto) {
+        (Some(kit), _) => kit.runtime.clone(),
+        (None, Some(lto)) => lto.clone(),
+        (None, None) => crate::runtime_or_default(options.runtime.as_ref())?,
     };
     if !runtime.is_file() {
         return Err(missing_runtime(runtime));
@@ -433,6 +529,9 @@ pub(crate) fn link(
         write_if_changed(&ll, ir)?;
         let object = ir_dir.join(format!("{name}.o"));
         let mut args: Vec<OsString> = vec!["-c".into(), optimization.into()];
+        if lto.is_some() {
+            args.push(LTO_COMPILE_FLAG.into());
+        }
         args.extend(COMPILE_FLAGS.iter().map(Into::into));
         args.push(format!("--target={}", spec.triple).into());
         args.extend([ll.into_os_string(), "-o".into(), object.clone().into()]);
@@ -452,6 +551,11 @@ pub(crate) fn link(
         ];
         if let Some(kit) = &kit {
             args.extend(kit.before());
+        }
+        if lto.is_some() {
+            args.extend(LTO_LINK_FLAGS.iter().map(Into::into));
+            let cache = ir_dir.join(LTO_CACHE);
+            args.push(format!("-Wl,--thinlto-cache-dir={}", cache.display()).into());
         }
         let mut inputs = String::new();
         for unit in [
