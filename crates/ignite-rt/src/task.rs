@@ -9,8 +9,8 @@
 //! Until story spawn-without-handshake the environment lay in the parent's
 //! memory and `spawn` blocked on a channel until the task had copied it:
 //! the parent's wait and the task's wake-up were 1.9 of the 5.2 futex
-//! calls per connection of the Telnet server under connect-8 (plain Rust
-//! 2.8; 2026-11-08).
+//! calls per connection of the terminal example server under connect-8
+//! (plain Rust 2.8; 2026-11-08).
 
 use std::cell::RefCell;
 use std::ffi::c_void;
