@@ -11,7 +11,7 @@ the IO substrate (Rust) that compiled programs link.
 |---|---|
 | `crates/ignite-syntax/` | lexer, parser, AST, diagnostics |
 | `crates/ignite-check/` | name resolution across modules, effect and protocol rules; produces `Symbols` |
-| `crates/ignite-types/` | type checker: a type for every expression, E040 to E046 (E046 match exhaustiveness, list columns split by length for rest patterns, `docs/slice.md` 20.5); `moves.rs`, the last-use moves analysis (20.3): `TypedProgram::moves` (a place in a move position taken without a copy) and `consumed` (the parameters a callee takes by value, a per-module fixpoint, `ModuleTypes::consumed`), read by both backends |
+| `crates/ignite-types/` | type checker: a type for every expression, E040 to E046 (E046 match exhaustiveness, list columns split by length for rest patterns, `docs/slice.md` 20.5); `moves.rs`, the last-use moves analysis (20.3): `TypedProgram::moves` (a place in a move position taken without a copy) and `consumed` (the parameters a callee takes by value, a per-module fixpoint, `ModuleTypes::consumed`), read by both backends; `called_only` and `lent_bytes` (fn parameters a body only calls, `Bytes` parameters it only reads as a slice, 20.3.7), read by the Rust target |
 | `crates/ignite-rustgen/` | Rust target: the `ignite-std` crate and the program crate |
 | `crates/ignite-llvm/` | LLVM target: IR text for std, program and one main per executable |
 | `crates/ignite-rt/` | runtime of the LLVM target, `libignite_rt.a`: C ABI adapter over `ignite-io` (value conversion, handle table), arenas and regions, the spawn handshake; no IO of its own |

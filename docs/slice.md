@@ -612,14 +612,14 @@ meaning. The generator emits exactly the Rust on the right.
 | `t.len()` | `(t.len() as i64)` | Text, Bytes, List |
 | `t.is_empty()` | `t.is_empty()` | |
 | `t.trim()` | `t.trim().to_string()` | |
-| `t.starts_with(p)` | `t.starts_with(&p)` | |
-| `t.strip_prefix(p)` | `t.strip_prefix(&p).map(\|s\| s.to_string())` | |
+| `t.starts_with(p)` | `t.starts_with(&p)`; `t.starts_with("..")` for a literal (20.3.7) | |
+| `t.strip_prefix(p)` | `t.strip_prefix(&p).map(\|s\| s.to_string())`; a literal as a `&str` (20.3.7) | |
 | `t.concat(u)` | `format!("{}{}", t, u)` | |
-| `t.to_bytes()` | `t.clone().into_bytes()`; `t.into_bytes()` when `t` is a fresh text nothing else owns (a literal, a `+` chain or interpolation, `to_text` of Int, Byte or Bool, `concat`, `trim`) | |
+| `t.to_bytes()` | `t.clone().into_bytes()`; `t.into_bytes()` when `t` is a fresh text nothing else owns (a literal, a `+` chain or interpolation, `to_text` of Int, Byte or Bool, `concat`, `trim`) | `t.as_bytes()` to a lent bytes parameter and in the other borrowed forms of 20.3.7 |
 | `b.to_text()` | `String::from_utf8_lossy(&b).into_owned()` | |
 | `b.slice(i, j).to_text()` | `String::from_utf8_lossy(::ignite_io::checked::slice_ref(&b, i, j, <site>)).into_owned()`: the slice is borrowed, not copied, with the failure of `checked::slice` | Bytes |
 | `b.at(i)` | `b[(i) as usize]`, then `.clone()` when the element is not `Int`, `Byte` or `Bool` (also `l[i]`) | Bytes, List |
-| `l.map(f)` | `l.iter().cloned().map(f).collect::<Vec<_>>()` | List |
+| `l.map(f)` | `l.iter().cloned().map(f).collect::<Vec<_>>()` | List; `l.iter().map(..)` without the copy in the cases of 20.3.7 |
 | `b.to_int()` | `(b as i64)` | Byte |
 | `i.to_byte()` | `u8::try_from(i).ok()` | Int |
 | `Int.parse(t)` | `::ignite_io::parse_int(&t)`: decimal digits with an optional leading `-`, `None` for a leading `+` and for anything `str::parse::<i64>` rejects; the LLVM runtime's `int_parse` calls the same function | static |
@@ -630,7 +630,7 @@ meaning. The generator emits exactly the Rust on the right.
 | `b.push(x)` | `b.push(x)` | Bytes, List |
 | `b.append(c)` | `b.extend_from_slice(&c)`, `c` borrowed; `&c.clone()` when `c` is rooted at the variable of `b` | Bytes, List |
 | `b.clear()` | `b.clear()` | |
-| `l.join(sep)` | `l.join(&sep)` | List<Text> |
+| `l.join(sep)` | `l.join(&sep)`; `l.join("..")` for a literal | List<Text> |
 | `x.copy()` | `x.clone()` | |
 | `Bytes.empty()` | `Vec::<u8>::new()` | static |
 | `Bytes.of(list)` | `(list).iter().map(\|x\| *x as u8).collect::<Vec<u8>>()` | static |
@@ -7019,7 +7019,7 @@ call makes more copies than before.
 
 - A consumed parameter is declared by value, `p: T`, or `mut p: T` when the body changes it; the
   entry copy of section 6 disappears for it. Every other parameter keeps today's form: `&T`,
-  scalars and fn types included (`x: &i64`, cloned on entry when Copy), and a role's parameters
+  scalars and fn types included (`x: &i64`, cloned on entry when Copy; a called-only fn or lent bytes parameter is lent, 20.3.7), and a role's parameters
   stay `mut name: T` by value whether consumed or not.
 - A moving place is emitted bare, without `.clone()` or `&`, to a consumed parameter, to any
   role parameter and through a fn value. A non-moving argument to a consumed parameter is
@@ -7066,6 +7066,58 @@ call makes more copies than before.
 
 Unchanged. `ignite-eval` copies values by construction and reads neither `moves` nor
 `consumed`.
+
+#### 20.3.7 Lent parameters and fewer copies on the Rust target (story `rustgen-fewer-allocations`)
+
+Two more parameter sets, beside `consumed`, decided once per module after it and read from
+the typed modules for imported fns. Names are not resolved: a shadowing binding's uses count
+against the parameter, an extra copy and never a missed one.
+
+- *Called only* (`ModuleTypes::called_only`, `TypedProgram::called_only`): a fn-typed
+  parameter of a fn or associated fn whose every use is the callee of a call, none inside a
+  closure or a `spawn`, and that nothing assigns.
+- *Lent bytes* (`ModuleTypes::lent_bytes`, `TypedProgram::lent_bytes`): a `Bytes` parameter that
+  is not consumed and that its body reads only as a slice (`TypedProgram::reads_as_slice`):
+  every use is the receiver of `len`, `is_empty`, `at`, `slice` or `to_text`, or a positional
+  argument to a lent bytes parameter, outside any closure or `spawn`, never assigned. The
+  greatest fixpoint over the module's fns, so a recursive call keeps it.
+
+The Rust target (20.3.4 otherwise):
+
+- A called-only parameter is `p: &(dyn Fn(A) -> R + Send + Sync)`, not copied on entry. A
+  closure literal passed to it is a plain closure that borrows its captures,
+  `&|a: A| -> R { .. }`, with no `Arc` and no copy of a capture; a fn of the module or an
+  imported one named there is its fn-value closure without the `Arc`, `&|__a0: A| f(&__a0)`;
+  any other argument passes the
+  `Arc`'s `dyn Fn` as `&*f` (a generic callee would not get it by deref coercion), and so do
+  the calls the generator writes itself (fn-value wrappers, `spawn`, reordered named
+  arguments).
+- A lent bytes parameter is `p: &[u8]`; the argument `t.to_bytes()` of a `Text` place `t` is
+  `t.as_bytes()`, and `let b = t.to_bytes()` without an annotation, whose following statements
+  in its block read `b` only as a slice, bind no other `b` and do not change `t`'s variable, is
+  `let b: &[u8] = t.as_bytes();`, read like a borrowed parameter. `t.to_bytes().slice(i, j)
+  .to_text()` borrows `t.as_bytes()`, and `for x in t.to_bytes()` over a `Text` place whose
+  variable the body does not change iterates `t.bytes()`.
+- A `Text` literal read by reference (an argument by reference, a `Map` key) is a `static`
+  `LazyLock<String>` built once, `""` is `&String::new()`; as an operand of `==` or `!=` on
+  `Text` and as the argument of `starts_with`, `strip_prefix` and `join` it is a `&str`. An
+  operand `l.at(i)` of `==` or `!=` compares the element in place, `(*checked::at(..))`.
+- A `Text` `+` chain is flattened through its right operands too (an interpolation,
+  `a + "{b}c"`) into one `format!`. `x = x + ..` on a local `Text` variable that the appended
+  parts do not name appends in place: `write!(x, ..)`, or `x.push_str("..")` when every part is
+  a literal.
+- A fn body's tail `x.to_bytes()` or `x.to_text()` on a variable the fn owns (not a borrowed
+  parameter, not a capture) takes its buffer: `x.into_bytes()`,
+  `String::from_utf8(x).unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned())`.
+- `l.map(f)` with a closure literal that does not consume its parameter
+  (`TypedProgram::closure_consumed`) maps `l.iter()`, the parameter a reference read like a
+  borrowed parameter; with a fn of the module or an imported one that does not consume its
+  parameter, `l.iter().map(|__a0| f(__a0))`. Neither copies an element.
+- The `for` over a list place of section 6 that iterates by reference also takes
+  `l.slice(i, j)` of a list place whose bounds change nothing: it iterates
+  `(checked::slice_ref(&l, i, j, <site>)).iter()`, with no copy of the slice.
+
+The LLVM target and the evaluator read none of this.
 
 ### 20.4 Closures and calls of fn-typed expressions (D4, D5)
 
