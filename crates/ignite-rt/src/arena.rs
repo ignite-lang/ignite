@@ -62,8 +62,8 @@ pub(crate) const LARGE: usize = CHUNK / 4;
 const SPARE: usize = 16;
 /// Chunks the task arena keeps for the next task on the same thread. One:
 /// with none, each connection of a server that takes one connection per
-/// request mapped and unmapped a chunk, 36 % more CPU per reply (Telnet
-/// connect-8, 2026-11-08), and the peak RSS under load did not change.
+/// request mapped and unmapped a chunk, 36 % more CPU per reply (the terminal
+/// benchmark connect-8, 2026-11-08), and the peak RSS under load did not change.
 const SPARE_AFTER_TASK: usize = 1;
 /// Released large blocks an arena keeps for reuse.
 const SPARE_LARGE: usize = 8;

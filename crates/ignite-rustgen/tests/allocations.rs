@@ -72,8 +72,10 @@ fn reading_the_bytes_of_a_text_borrows_them() {
     assert!(!split.contains(".clone().into_bytes()"), "{split}");
     let find_from = function(&std, "find_from");
     assert!(!find_from.contains(".clone().into_bytes()"), "{find_from}");
-    let quote = function(&std, "quote");
-    assert!(!quote.contains(".clone().into_bytes()"), "{quote}");
+    // quote is unreachable from the todo example since story
+    // http-parse-fewer-copies; write_quoted reads the bytes of its text instead.
+    let quoted = function(&std, "write_quoted");
+    assert!(!quoted.contains(".clone().into_bytes()"), "{quoted}");
 }
 
 #[test]

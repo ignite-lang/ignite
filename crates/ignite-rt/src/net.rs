@@ -25,7 +25,7 @@
 //! The stream operations take no slot lock at all: each thread reuses a
 //! clone of the stream it used last while the slot's `live` value still
 //! names its handle ([`with_stream`]). The lock and the reference count
-//! per read and write were 4.75 % of a Telnet server's user time
+//! per read and write were 4.75 % of the terminal server's user time
 //! (2026-11-08).
 
 use std::cell::RefCell;
@@ -537,8 +537,8 @@ pub extern "C" fn ignite_rt_tcp_read(
 }
 
 /// Read buffers up to this size stay with their thread, until its task
-/// ends, for the next read that does not go in place (a JSON-RPC server
-/// reads 64 KiB at a time; an HTTP server 16 KiB).
+/// ends, for the next read that does not go in place (the std servers
+/// read 16 to 64 KiB at a time).
 const KEPT_READ_BUFFER: usize = 64 * 1024;
 
 thread_local! {
@@ -555,8 +555,8 @@ thread_local! {
 /// read are copied into the arena: a request over [`arena::LARGE`] would
 /// be a block of its own (a zeroed `malloc` block that keeps all `maximum`
 /// bytes and leaves no chunk for the inline allocator), and a smaller one
-/// would start a new chunk for headroom it mostly gives back (an HTTP
-/// server with a 16 KiB read held two touched chunks per connection).
+/// would start a new chunk for headroom it mostly gives back (a server
+/// reading 16 KiB at a time held two touched chunks per connection).
 pub(crate) fn read_into_arena(
     maximum: i64,
     read_into: impl FnOnce(&mut [u8]) -> Result<usize, IoError>,
