@@ -3281,9 +3281,12 @@ impl Checker {
     /// declarations alone (`docs/slice.md` section 11.7): a local with a
     /// known type, a field of a value of known record type, `copy()`, `e?`,
     /// `l[i]`, the results of `Store` methods, a literal of a record
-    /// without type parameters and a call by name of a fn without type
-    /// parameters whose declared return type is no fn type (that type; a
-    /// fn value a call returns stays E042, 20.4.3). `None` otherwise.
+    /// without type parameters and a call by name of a fn this module
+    /// declares without type parameters whose declared return type is no
+    /// fn type (that type; a fn value a call returns stays E042, 20.4.3).
+    /// An imported fn is left out: its return type names the exporting
+    /// module's types, which a local type of the same name would replace
+    /// here. `None` otherwise.
     fn static_type(&self, expr: &Expr) -> Option<Type> {
         let named = |name: &str, args: Vec<Type>| {
             let ident = Ident {
@@ -3333,7 +3336,10 @@ impl Checker {
                     let owner = self.path_head(receiver)?;
                     return self.constructor_type(&owner.name, &name.name, expr.span);
                 }
-                ExprKind::Name(f) if self.local(&f.name).is_none() => {
+                ExprKind::Name(f)
+                    if self.local(&f.name).is_none()
+                        && !self.symbols.imported.contains_key(&f.name) =>
+                {
                     let ret = self.expand(self.symbols.fn_returns.get(&f.name)?);
                     if ret.is_fn() {
                         return None;

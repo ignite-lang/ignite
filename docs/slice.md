@@ -1519,12 +1519,15 @@ and `to_text`.
   parameter types, `let` annotations, record field types (generic arguments substituted,
   aliases expanded), `x.f`, `x.copy()`, `e?`, `l[i]`, Store results, `for` over a list, a
   literal of a record without type parameters (`let w = World { .. }`, case-study gap G15), a
-  call of a fn without type parameters by its name whose declared return type is no fn type (that
-  type: `let d = ends()`, then `d.tx.send(1)`; a fn value a call returns stays E042, 20.4.3), and the names a `match` arm binds from a scrutinee of such a type (the
-  value itself, tuple elements, the payload of `Some(x)` of an `Option<T>` and of `Ok(x)` and
-  `Err(e)` of a `Result<T, E>`: `match senders.get(id) { Some(tx) => tx.send(1), .. }` with
-  `senders: Store<Sender<Int>>`; case-study gap G32). Where it cannot, the type checker reports E042 at the call (``cannot check the effects of `get`:
-  the type of its receiver is not declared; annotate the binding``).
+  call by name of a fn without type parameters that the module itself declares and whose
+  declared return type is no fn type (that type: `let d = ends()`, then `d.tx.send(1)`; an
+  imported fn's return type names the exporting module's types and stays E042, as does a fn
+  value a call returns, 20.4.3), and the names a `match` arm binds from a scrutinee of such a
+  type (the value itself, tuple elements, the payload of `Some(x)` of an `Option<T>` and of
+  `Ok(x)` and `Err(e)` of a `Result<T, E>`: `match senders.get(id) { Some(tx) => tx.send(1),
+  .. }` with `senders: Store<Sender<Int>>`; case-study gap G32). Where it cannot, the type
+  checker reports E042 at the call (``cannot check the effects of `get`: the type of its
+  receiver is not declared; annotate the binding``).
 
 **Systems.** In component property expressions every resource name is a value: a
 `TcpListener` resource of type `TcpListener`, a `Store<T>` resource of type `Store<T>`

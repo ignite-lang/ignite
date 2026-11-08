@@ -392,7 +392,7 @@
 - Code: the effect check takes a receiver's type from declarations alone (`docs/slice.md` 11.7): `static_type` in `crates/ignite-check/src/lib.rs` resolves no call of a declared fn (`ExprKind::Call` covers only `Owner.constructor(..)`), and `pattern` binds a `PatternKind::Binding` without a type from the scrutinee (`Option<T>` of `Store.get`). The type checker reports the missing effect site: `effect_site` and `unchecked_effects` in `crates/ignite-types/src/typer.rs`. Same class as G15.
 - Story: `story:infer-channel-ends`.
 - Blocks: no (with the workaround).
-- Closed in wave 8 by story `infer-channel-ends` (`docs/slice.md` 11.7): a `match` arm's bindings take their types from a scrutinee of known type, and a call of a fn without type parameters has its declared return type unless that is a fn type.
+- Closed in wave 8 by story `infer-channel-ends` (`docs/slice.md` 11.7): a `match` arm's bindings take their types from a scrutinee of known type, and a call of a fn the module declares without type parameters has its declared return type unless that is a fn type.
 
 ## G20 (correction)
 
