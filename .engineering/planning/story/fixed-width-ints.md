@@ -2,13 +2,14 @@
 format: aep.planning-md/3
 id: story:fixed-width-ints
 kind: story
-status: proposed
+status: active
 title: Fixed-width unsigned integers, rotate and fixed-size lists
 relations:
 - decomposes: epic:native-parity
-revision: 2
+revision: 3
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T03:59:06Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-11-08T06:03:41Z", actor: "human:timo", revision: 3}
 ---
 # Story: fixed-width-ints
 
