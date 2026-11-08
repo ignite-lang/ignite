@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-08T02:20:00Z",
+  "actor": "human:timo",
+  "artifact": "story:drain-exit",
+  "kind": "story",
+  "revision": 7,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 419c6986 (wave 6 with main): 1200 cargo passed, 1 timing flake passed 3/3 alone; test-ignite 317 per target; ux 284 + ratchet",
+    "reference": "https://github.com/ignite-lang/ignite/pull/110"
+  }
+}

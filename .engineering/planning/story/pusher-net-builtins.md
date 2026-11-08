@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:pusher-net-builtins
 kind: story
-status: active
+status: implemented
 title: Peer address, distinguishable read timeout, connect timeout
 scope:
 - confidence: inferred
@@ -19,10 +19,11 @@ scope:
   path: docs/slice.md
 - confidence: inferred
   path: std/net.ignite
-revision: 6
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-07T22:11:32Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-07T22:11:32Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-08T02:16:34Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: case-study-net-builtins
 
