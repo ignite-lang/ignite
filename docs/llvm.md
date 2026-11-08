@@ -441,8 +441,19 @@ position, even with no buffer.
   Functions take no mark of their own: whatever a call allocates is released by the
   caller's loop.
 - A task is the process's main thread, or a task `ignite_io::try_spawn` started for a
-  `spawn`. It reuses idle threads (`docs/slice.md` section 7). A task's arena is freed when
-  it ends (`task_end`), except for one chunk that the thread keeps for its next task.
+  `spawn`: a thread of its own in IO mode `threads`, a stackful task on a worker in
+  `readiness` (`docs/slice.md` section 7, IO modes). A task's arena is freed when it ends
+  (`task_end`), except for one chunk that the thread keeps for its next task. In
+  `readiness` several tasks share a worker thread, so the runtime's per-task
+  thread-locals (the arena and its bump state, the failure handlers and kept report, the
+  owned handles and the cached stream, the transfer memory not adopted) are exchanged
+  whenever a different task resumes (`ignite_io::set_task_locals`,
+  `crates/ignite-rt/src/task.rs`): a new task starts
+  with one spare chunk taken from its worker (up to 4 kept per worker) and gives its spare
+  chunks back when it ends. The bump state's address that generated code caches is the
+  worker's, and the swap writes the running task's state into it, so a task that resumes
+  sees its own. A task's `setjmp` and the failure's `longjmp` both run on the task's own
+  stack, so a failure ends only that task.
   A task whose arenas held more than 1 MiB of large blocks at `task_end` calls `ignite_io::released_memory`,
   as a `Store` does when it drops a value, and the substrate returns the free heap pages
   with glibc's `malloc_trim(0)` when a later task or an idle thread ends (`docs/slice.md`

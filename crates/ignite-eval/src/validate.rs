@@ -233,7 +233,7 @@ fn classifies(modules: &Modules<'_>, kind: &Ty, element: &Ty) -> bool {
 /// record or enum already being checked (a recursive type).
 fn outcome(ty: &Ty, modules: &Modules<'_>, seen: &mut Vec<QualName>) -> bool {
     match ty {
-        Ty::Bool | Ty::Int | Ty::Text | Ty::Byte | Ty::Quantity(_) => true,
+        Ty::Bool | Ty::Int | Ty::Text | Ty::Byte | Ty::U32 | Ty::Quantity(_) => true,
         Ty::List(item) | Ty::Option(item) => outcome(item, modules, seen),
         Ty::Tuple(items) => items.iter().all(|item| outcome(item, modules, seen)),
         Ty::Record(q) | Ty::GenericRecord(q, _) | Ty::Enum(q) | Ty::GenericEnum(q, _) => {

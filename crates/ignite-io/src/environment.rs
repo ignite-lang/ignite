@@ -13,6 +13,7 @@ use crate::IoError;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Environment {
     variables: Arc<BTreeMap<String, String>>,
+    _counted: Arc<crate::census::Counted>,
 }
 
 impl Environment {
@@ -30,6 +31,9 @@ impl Environment {
             .collect();
         Environment {
             variables: Arc::new(variables),
+            _counted: Arc::new(crate::census::Counted::new(
+                crate::census::Kind::Capabilities,
+            )),
         }
     }
 
@@ -49,6 +53,9 @@ impl Environment {
             .collect();
         Environment {
             variables: Arc::new(variables),
+            _counted: Arc::new(crate::census::Counted::new(
+                crate::census::Kind::Capabilities,
+            )),
         }
     }
 

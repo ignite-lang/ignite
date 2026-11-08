@@ -57,6 +57,7 @@ const LAYERS: &[(&str, Layer)] = &[
     ("std.fs", Layer::Base),
     ("std.process", Layer::Base),
     ("std.sync", Layer::Base),
+    ("std.runtime", Layer::Base),
     ("std.option", Layer::Base),
     ("std.result", Layer::Base),
     ("std.text", Layer::Base),

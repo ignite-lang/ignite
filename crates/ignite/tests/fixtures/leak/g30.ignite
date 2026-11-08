@@ -1,0 +1,39 @@
+package g30
+
+// Case study gap G30 (`docs/leak-guard.md` 1.1, 6.1): a channel end moved
+// out of its plain `let (tx, rx)` binding is never released on the LLVM
+// target. The reproducer's `alias` and `field` forms, each run 2,000
+// times inline. Red on LLVM by the live `handles` and `channels` counts,
+// green on Rust. `story:channel-release-on-close` fixes the lowering and
+// moves both tests into `std/sync.ignite`.
+
+import std.runtime.{soak}
+
+type Waiter {
+  id: Int
+  wake: Receiver<Int>
+}
+
+fn alias_end(run: Int) -> Unit {
+  let (tx, rx) = Channel.bounded(1)
+  let r: Receiver<Int> = rx
+  let rung = tx.try_send(run)
+  tx.close()
+  let got = r.receive_within(0 ms)
+}
+
+fn field_end(run: Int) -> Unit {
+  let (tx, rx) = Channel.bounded(1)
+  let w = Waiter { id = run, wake = rx }
+  let rung = tx.try_send(run)
+  tx.close()
+  let got = w.wake.receive_within(0 ms)
+}
+
+test "a channel end bound a second time is released (G30)" {
+  assert soak(2000, alias_end).growth == []
+}
+
+test "a channel end kept in a record field is released (G30)" {
+  assert soak(2000, field_end).growth == []
+}

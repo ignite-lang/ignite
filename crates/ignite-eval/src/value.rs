@@ -33,6 +33,8 @@ pub enum Value {
     Bool(bool),
     Int(i64),
     Byte(u8),
+    /// A `U32` (`docs/slice.md` 32).
+    U32(u32),
     Text(String),
     /// `Bytes` is a list of bytes.
     List(Vec<Value>),
@@ -255,6 +257,7 @@ impl Value {
             Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
             Value::Int(n) => out.push_str(&n.to_string()),
             Value::Byte(b) => out.push_str(&b.to_string()),
+            Value::U32(x) => out.push_str(&x.to_string()),
             Value::Text(text) => write_text(text, out),
             Value::List(items) => {
                 out.push('[');
@@ -403,6 +406,11 @@ fn decode(json: &Json, ty: &Ty, types: &TypedProgram, path: &str) -> Result<Valu
             .as_i64()
             .map(Value::Int)
             .ok_or_else(|| expected("an integer")),
+        Ty::U32 => json
+            .as_i64()
+            .and_then(|n| u32::try_from(n).ok())
+            .map(Value::U32)
+            .ok_or_else(|| expected("an integer in 0..=4294967295")),
         Ty::Text => json
             .as_str()
             .map(|t| Value::Text(t.to_string()))

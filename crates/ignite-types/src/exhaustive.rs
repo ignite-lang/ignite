@@ -231,11 +231,11 @@ pub(crate) fn uncovered(rows: &[Vec<&Pattern>], tys: &[Ty], cx: &Context) -> Vec
     let split = match ty {
         _ if only_catch_all => None,
         Ty::Bool => Some(Split::Bool),
-        Ty::Int | Ty::Byte if ranged => {
-            let (min, max) = if *ty == Ty::Byte {
-                (0, 255)
-            } else {
-                (i64::MIN, i64::MAX)
+        Ty::Int | Ty::Byte | Ty::U32 if ranged => {
+            let (min, max) = match ty {
+                Ty::Byte => (0, 255),
+                Ty::U32 => (0, i64::from(u32::MAX)),
+                _ => (i64::MIN, i64::MAX),
             };
             let bounds: Vec<(i64, i64)> = rows
                 .iter()

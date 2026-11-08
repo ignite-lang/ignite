@@ -1526,6 +1526,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             }
             ExprKind::Int(v) => match self.ty(e) {
                 Ty::Byte => Val::Scalar(((*v as u8) as i8).to_string()),
+                Ty::U32 => Val::Scalar(((*v as u32) as i32).to_string()),
                 _ => Val::Scalar(v.to_string()),
             },
             ExprKind::Str(s) => self.text_literal(s.as_bytes()),
@@ -1568,7 +1569,10 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 let x = self.scalar(&v);
                 match op {
                     UnaryOp::Not => Val::Scalar(self.f.val(format!("xor i1 {x}, true"))),
-                    UnaryOp::BitNot => Val::Scalar(self.f.val(format!("xor i64 {x}, -1"))),
+                    UnaryOp::BitNot => {
+                        let t = scalar_type(&self.ty(operand)).unwrap_or("i64");
+                        Val::Scalar(self.f.val(format!("xor {t} {x}, -1")))
+                    }
                     UnaryOp::Neg => {
                         let t = scalar_type(&self.ty(operand)).unwrap_or("i64");
                         if t == "i64" && !matches!(operand.kind, ExprKind::Int(_)) {
@@ -2893,6 +2897,12 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                     let t = self.rt_out("int_to_text", &Ty::Text, &[format!("i64 {i}")]);
                     self.ptr(&t)
                 }
+                (Builtin::U32ToText, Ty::U32) => {
+                    let w = self.scalar(v);
+                    let i = self.f.val(format!("zext i32 {w} to i64"));
+                    let t = self.rt_out("int_to_text", &Ty::Text, &[format!("i64 {i}")]);
+                    self.ptr(&t)
+                }
                 (Builtin::BoolToText, Ty::Bool) => {
                     let b = self.scalar(v);
                     let yes = self.literal_ref(b"true");
@@ -3240,9 +3250,22 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         let r = self.coerce(&ty, &rty, r);
         let t = scalar_type(&ty).unwrap_or("i64");
         let (a, b) = (self.scalar(&l), self.scalar(&r));
-        let signed = ty != Ty::Byte;
+        let signed = !matches!(ty, Ty::Byte | Ty::U32);
         if op.is_bitwise() {
+            if ty == Ty::U32 {
+                return Val::Scalar(self.bitwise_u32(op, &a, &b));
+            }
             return Val::Scalar(self.bitwise(op, &a, &b));
+        }
+        // `U32`'s `+ - *` are modulo 2^32 (`docs/slice.md` 32.1): no
+        // overflow check.
+        if ty == Ty::U32 && matches!(op, BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul) {
+            let instr = match op {
+                BinaryOp::Add => "add",
+                BinaryOp::Sub => "sub",
+                _ => "mul",
+            };
+            return Val::Scalar(self.f.val(format!("{instr} i32 {a}, {b}")));
         }
         let instr = match op {
             BinaryOp::Eq => "icmp eq",
@@ -3362,6 +3385,30 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 self.f.val(format!("ashr i64 {a}, {amount}"))
             }
         }
+    }
+
+    /// `a op b` on `i32` for a bitwise `op` on `U32` (`docs/slice.md`
+    /// 32.1): a shift amount `b` is an `i64`; `>>` is logical, and an amount
+    /// outside `0..32` (compared unsigned, so a negative one too) selects 0
+    /// for either shift. A literal amount in range is shifted by directly.
+    fn bitwise_u32(&mut self, op: BinaryOp, a: &str, b: &str) -> String {
+        let shift = match op {
+            BinaryOp::BitAnd => return self.f.val(format!("and i32 {a}, {b}")),
+            BinaryOp::BitOr => return self.f.val(format!("or i32 {a}, {b}")),
+            BinaryOp::BitXor => return self.f.val(format!("xor i32 {a}, {b}")),
+            BinaryOp::Shl => "shl",
+            _ => "lshr",
+        };
+        if let Ok(n) = b.parse::<i64>()
+            && (0..32).contains(&n)
+        {
+            return self.f.val(format!("{shift} i32 {a}, {n}"));
+        }
+        let fits = self.f.val(format!("icmp ult i64 {b}, 32"));
+        let amount = self.f.val(format!("trunc i64 {b} to i32"));
+        let shifted = self.f.val(format!("{shift} i32 {a}, {amount}"));
+        self.f
+            .val(format!("select i1 {fits}, i32 {shifted}, i32 0"))
     }
 
     /// `a op b` for `+`, `-` and `*` through `llvm.*.with.overflow`: an
@@ -3556,6 +3603,13 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                         "uge",
                         "ule",
                     ),
+                    Ty::U32 => (
+                        "i32",
+                        ((lo as u32) as i32).to_string(),
+                        ((hi as u32) as i32).to_string(),
+                        "uge",
+                        "ule",
+                    ),
                     _ => ("i64", lo.to_string(), hi.to_string(), "sge", "sle"),
                 };
                 let above = self.f.val(format!("icmp {ge} {t} {x}, {lo}"));
@@ -3642,6 +3696,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 let x = self.scalar(v);
                 let (t, n) = match ty {
                     Ty::Byte => ("i8", ((*n as u8) as i8).to_string()),
+                    Ty::U32 => ("i32", ((*n as u32) as i32).to_string()),
                     _ => ("i64", n.to_string()),
                 };
                 let ok = self.f.val(format!("icmp eq {t} {x}, {n}"));
@@ -4701,6 +4756,24 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                     .ins(format!("call void @ignite_rt_clock_sleep(i64 {duration})"));
                 Val::Unit
             }
+            RuntimeCensus => {
+                self.m
+                    .declare("ignite_rt_runtime_census", "void", &["ptr".to_string()]);
+                self.rt_out("runtime_census", &ignite_types::census(), &[])
+            }
+            RuntimeSettle => {
+                self.m.declare(
+                    "ignite_rt_runtime_settle",
+                    "i8",
+                    &["i64".to_string(), "i64".to_string()],
+                );
+                let tasks = self.scalar_arg(&args[0]);
+                let within = self.scalar_arg(&args[1]);
+                let settled = self.f.val(format!(
+                    "call i8 @ignite_rt_runtime_settle(i64 {tasks}, i64 {within})"
+                ));
+                Val::Scalar(self.f.val(format!("icmp ne i8 {settled}, 0")))
+            }
             ClockNow => {
                 self.m.declare("ignite_rt_clock_now", "i64", &[]);
                 Val::Scalar(self.f.val("call i64 @ignite_rt_clock_now()"))
@@ -4754,6 +4827,12 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 let r = recv(self);
                 let b = self.scalar(&r);
                 let i = self.f.val(format!("zext i8 {b} to i64"));
+                self.rt_out("int_to_text", &Ty::Text, &[format!("i64 {i}")])
+            }
+            U32ToText => {
+                let r = recv(self);
+                let w = self.scalar(&r);
+                let i = self.f.val(format!("zext i32 {w} to i64"));
                 self.rt_out("int_to_text", &Ty::Text, &[format!("i64 {i}")])
             }
             BoolToText => {
@@ -4939,6 +5018,66 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 self.f
                     .ins(format!("store i8 {byte}, ptr {payload}, align 1"));
                 Val::Ptr(result, true)
+            }
+            // `docs/slice.md` 32.3: the conversions of `U32`.
+            U32ToInt | ByteToU32 => {
+                let r = recv(self);
+                let x = self.scalar(&r);
+                let (from, to) = if b == U32ToInt {
+                    ("i32", "i64")
+                } else {
+                    ("i8", "i32")
+                };
+                Val::Scalar(self.f.val(format!("zext {from} {x} to {to}")))
+            }
+            IntWrapU32 | IntWrapByte | U32WrapByte => {
+                let r = recv(self);
+                let x = self.scalar(&r);
+                let (from, to) = match b {
+                    IntWrapU32 => ("i64", "i32"),
+                    IntWrapByte => ("i64", "i8"),
+                    _ => ("i32", "i8"),
+                };
+                Val::Scalar(self.f.val(format!("trunc {from} {x} to {to}")))
+            }
+            IntToU32 | U32ToByte => {
+                let r = recv(self);
+                let x = self.scalar(&r);
+                let (from, to, bound, some) = if b == IntToU32 {
+                    ("i64", "i32", "4294967296", Ty::U32)
+                } else {
+                    ("i32", "i8", "256", Ty::Byte)
+                };
+                let ty = Ty::Option(Box::new(some));
+                let layout = self.env.enum_layout(&ty);
+                let result = self.temp(&ty);
+                let fits = self.f.val(format!("icmp ult {from} {x}, {bound}"));
+                let tag = self.f.val(format!("select i1 {fits}, i32 0, i32 1"));
+                self.f
+                    .ins(format!("store i32 {tag}, ptr {result}, align 4"));
+                let narrow = self.f.val(format!("trunc {from} {x} to {to}"));
+                let payload = self.gep(&result, layout.variants[0].1[0].1);
+                let align = if to == "i32" { 4 } else { 1 };
+                self.f
+                    .ins(format!("store {to} {narrow}, ptr {payload}, align {align}"));
+                Val::Ptr(result, true)
+            }
+            U32RotateLeft | U32RotateRight => {
+                // `llvm.fshl.i32(x, x, n)` is a rotate and takes `n` modulo
+                // 32, which is 32.1's rule for the amount.
+                let r = recv(self);
+                let x = self.scalar(&r);
+                let n = self.scalar_arg(&args[0]);
+                let n = self.f.val(format!("trunc i64 {n} to i32"));
+                let name = if b == U32RotateLeft { "fshl" } else { "fshr" };
+                self.m.declare(
+                    &format!("llvm.{name}.i32"),
+                    "i32",
+                    &["i32".into(), "i32".into(), "i32".into()],
+                );
+                Val::Scalar(self.f.val(format!(
+                    "call i32 @llvm.{name}.i32(i32 {x}, i32 {x}, i32 {n})"
+                )))
             }
             IntWrappingAdd | IntWrappingSub | IntWrappingMul => {
                 let r = recv(self);

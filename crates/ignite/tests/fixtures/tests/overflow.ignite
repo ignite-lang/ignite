@@ -77,9 +77,24 @@ test "byte rem by zero" {
   assert b == 0
 }
 
+fn word(text: Text) -> U32 = int(text).wrap_u32()
+
+test "u32 div by zero" {
+  let w = word("1") / word("0")
+  assert w == 0
+}
+
+test "u32 rem by zero" {
+  let w = word("1") % word("0")
+  assert w == 0
+}
+
 test "in range passes" {
   assert int("9223372036854775806") + int("1") == int("9223372036854775807")
   assert int("-9223372036854775807") / int("-1") == int("9223372036854775807")
   assert byte(4) - byte(4) == byte(0)
   assert -int("7") % int("3") == -1
+  assert word("4294967295") + word("1") == word("0")
+  assert word("0") - word("1") == word("4294967295")
+  assert word("65536") * word("65536") == 0
 }

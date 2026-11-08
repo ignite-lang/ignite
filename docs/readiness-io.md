@@ -178,6 +178,10 @@ Off a worker, a wait for a descriptor is a `poll` on the descriptor and the thre
   and parks. Readiness wakes it; the call retries.
 - Deadlines (`set_idle_timeout`, `connect_within`, `receive_within`, `Clock.sleep`) are timer
   entries; today's `SO_RCVTIMEO` is replaced, `timed_out()` keeps its meaning (slice §26.2).
+- As landed in R1: accepted sockets stay blocking and a task's `recv` and `send` pass
+  `MSG_DONTWAIT`, so the only task of a worker reads with one blocking `recv` (idle timeout
+  `SO_RCVTIMEO`) and its worker counts as busy for placement (slice §7). The lone task's
+  `poll` and wake cost more per reply than a blocked thread's `recv` (`rr-1`).
 
 ### 4.4 The substrate, call by call
 
