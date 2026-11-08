@@ -1092,6 +1092,10 @@ pub use limits::{OPEN_FILES_REPORT_BELOW, open_files_limit, raise_open_files_lim
 // `docs/slice.md` 30: bounded channels between tasks.
 pub mod channel;
 pub use channel::{Channel, Receiver, Sender};
+// `docs/readiness-io.md` 4.2 and 3.4: one waiter for every wait, and the
+// readiness source behind one interface.
+pub mod reactor;
+pub mod wait;
 
 static EXIT_HOOKS: std::sync::Mutex<Vec<fn()>> = std::sync::Mutex::new(Vec::new());
 

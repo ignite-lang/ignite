@@ -1,8 +1,8 @@
 //! Bounded channels between the tasks of one process (`docs/slice.md` 30):
 //! `Channel.bounded(capacity)` gives a [`Sender`] and a [`Receiver`] over
 //! one queue of at most `capacity` values, guarded by a mutex with one
-//! condition variable per direction. No descriptor is opened: a waiter is a
-//! thread parked on a condition variable.
+//! wait list per direction. No descriptor is opened: a waiter is parked
+//! through [`crate::wait`].
 //!
 //! Every handle of an end is a clone that shares the end. `close` on any
 //! handle of either end closes the channel, and so does the drop of the last
@@ -16,8 +16,10 @@
 
 use std::collections::VecDeque;
 use std::fmt;
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
+
+use crate::wait::{WaitList, Woken, park_in, wake};
 
 /// The constructor of bounded channels.
 #[derive(Clone, Copy, Debug)]
@@ -38,9 +40,9 @@ impl Channel {
                 queue: VecDeque::new(),
                 capacity,
                 closed: false,
+                not_empty: WaitList::new(),
+                not_full: WaitList::new(),
             }),
-            not_empty: Condvar::new(),
-            not_full: Condvar::new(),
         });
         (
             Sender {
@@ -76,16 +78,16 @@ struct End<T>(Arc<Shared<T>>);
 
 struct Shared<T> {
     state: Mutex<State<T>>,
-    /// A value was queued or the channel closed.
-    not_empty: Condvar,
-    /// A value was taken or the channel closed.
-    not_full: Condvar,
 }
 
 struct State<T> {
     queue: VecDeque<T>,
     capacity: usize,
     closed: bool,
+    /// Receivers waiting for a value to be queued or the channel to close.
+    not_empty: WaitList,
+    /// Senders waiting for a value to be taken or the channel to close.
+    not_full: WaitList,
 }
 
 impl<T> Drop for End<T> {
@@ -111,12 +113,26 @@ impl<T> Shared<T> {
         self.lock()
     }
 
+    /// Queue `value` in the locked `state`, which has room, and wake the
+    /// longest waiting receiver once the lock is released.
+    fn queue(&self, mut state: MutexGuard<'_, State<T>>, value: T) {
+        state.queue.push_back(value);
+        let receiver = state.not_empty.pop();
+        drop(state);
+        if let Some(receiver) = receiver {
+            wake(&receiver);
+        }
+    }
+
     fn close(&self) {
         let mut state = self.lock();
         state.closed = true;
+        let receivers = state.not_empty.take();
+        let senders = state.not_full.take();
         drop(state);
-        self.not_empty.notify_all();
-        self.not_full.notify_all();
+        for mut list in [receivers, senders] {
+            list.wake_all();
+        }
     }
 
     /// The next value, waiting for one until `deadline` (forever when
@@ -127,29 +143,24 @@ impl<T> Shared<T> {
         let mut state = self.lock_to_wait(empty);
         loop {
             if let Some(value) = state.queue.pop_front() {
+                let sender = state.not_full.pop();
                 drop(state);
-                self.not_full.notify_one();
+                if let Some(sender) = sender {
+                    wake(&sender);
+                }
                 return Some(value);
             }
             if state.closed {
                 return None;
             }
-            state = match deadline {
-                None => self
-                    .not_empty
-                    .wait(state)
-                    .unwrap_or_else(PoisonError::into_inner),
-                Some(deadline) => {
-                    let left = deadline.saturating_duration_since(Instant::now());
-                    if left.is_zero() {
-                        return None;
-                    }
-                    self.not_empty
-                        .wait_timeout(state, left)
-                        .unwrap_or_else(PoisonError::into_inner)
-                        .0
-                }
-            };
+            if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                return None;
+            }
+            let woken;
+            (state, woken) = park_in(&self.state, state, |s| &mut s.not_empty, deadline);
+            if woken == Woken::Deadline && state.queue.is_empty() {
+                return None;
+            }
         }
     }
 }
@@ -166,15 +177,10 @@ impl<T> Sender<T> {
                 return false;
             }
             if state.queue.len() < state.capacity {
-                state.queue.push_back(value);
-                drop(state);
-                shared.not_empty.notify_one();
+                shared.queue(state, value);
                 return true;
             }
-            state = shared
-                .not_full
-                .wait(state)
-                .unwrap_or_else(PoisonError::into_inner);
+            state = park_in(&shared.state, state, |s| &mut s.not_full, None).0;
         }
     }
 
@@ -182,13 +188,11 @@ impl<T> Sender<T> {
     /// the channel is full or closed. Never waits.
     pub fn try_send(&self, value: T) -> bool {
         let shared = &self.end.0;
-        let mut state = shared.lock();
+        let state = shared.lock();
         if state.closed || state.queue.len() >= state.capacity {
             return false;
         }
-        state.queue.push_back(value);
-        drop(state);
-        shared.not_empty.notify_one();
+        shared.queue(state, value);
         true
     }
 

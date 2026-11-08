@@ -33,6 +33,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, TryLockError, Weak};
 use std::time::{Duration, Instant};
 
+use crate::reactor::Interest;
+use crate::wait::{DescriptorWait, WaitList, Waiter, wait_descriptor};
 use crate::{Input, IoError, read_input, socket_address};
 
 /// Bytes a send buffer holds before `write_all` sends it at once.
@@ -93,6 +95,8 @@ pub(crate) struct Slot {
     /// in its `accept`, or in a read of a stream it accepted, is idle for
     /// the drain's wait (`crate::task::idle_on_kept`).
     kept: bool,
+    /// Waiters in `accept`, which [`Slot::release`] wakes.
+    acceptors: Mutex<WaitList>,
 }
 
 impl Slot {
@@ -100,10 +104,34 @@ impl Slot {
         self.listener.read().unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// Release the listener for the drain: shut its read side down, which
-    /// wakes a pending `accept` with an error, then close it once that
-    /// `accept` has let go of it. The `released <address>:<port>` line, or
-    /// `None` when the listener was already closed.
+    /// Wait until `listener` (this slot's, non-blocking) has a connection
+    /// to accept, or [`Slot::release`] wakes the caller. The wait goes
+    /// through the reactor interface ([`crate::wait::wait_descriptor`]);
+    /// on a listener kept through the drain the waiting task does not hold
+    /// up the drain's wait for live tasks.
+    fn wait_for_connection(&self, listener: &std::net::TcpListener) -> Result<(), IoError> {
+        let me = Waiter::current();
+        lock(&self.acceptors).push(me.clone());
+        let wait = || {
+            if !self.kept && crate::drain::draining() {
+                return Ok(DescriptorWait::Woken);
+            }
+            wait_descriptor(listener.as_raw_fd(), Interest::READ, None)
+        };
+        let waited = if self.kept {
+            crate::task::idle_on_kept(wait)
+        } else {
+            wait()
+        };
+        lock(&self.acceptors).remove(&me);
+        waited.map(|_| ()).map_err(IoError::from)
+    }
+
+    /// Release the listener for the drain: shut its read side down and
+    /// wake every waiter in a pending `accept`, which then fails with
+    /// "draining", then close it once that `accept` has let go of it. The
+    /// `released <address>:<port>` line, or `None` when the listener was
+    /// already closed.
     pub(crate) fn release(&self) -> Option<String> {
         {
             let guard = self.read();
@@ -111,6 +139,7 @@ impl Slot {
             // SAFETY: the descriptor belongs to `listener`, which the read
             // lock keeps open for the call.
             unsafe { nix::libc::shutdown(listener.as_raw_fd(), nix::libc::SHUT_RD) };
+            lock(&self.acceptors).wake_all();
         }
         let closed = self
             .listener
@@ -222,6 +251,10 @@ pub(crate) fn flush_at_exit() {
     for stream in pending.into_iter().filter_map(|weak| weak.upgrade()) {
         stream.flush_at_exit(deadline);
     }
+}
+
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 /// The lock of `mutex`, waited for until `deadline` at most.
@@ -381,6 +414,9 @@ impl TcpListener {
         let target = socket_address("bind", &address, port)?;
         let listener = std::net::TcpListener::bind(&target)
             .map_err(|e| IoError::new(format!("bind {target}: {e}")))?;
+        listener
+            .set_nonblocking(true)
+            .map_err(|e| IoError::new(format!("bind {target}: {e}")))?;
         let port = listener
             .local_addr()
             .map(|bound| i64::from(bound.port()))
@@ -390,6 +426,7 @@ impl TcpListener {
             address,
             port,
             kept,
+            acceptors: Mutex::new(WaitList::new()),
         });
         if !kept {
             crate::drain::register(&slot);
@@ -416,20 +453,21 @@ impl TcpListener {
         let mut pause = ACCEPT_BACKOFF_FIRST;
         let mut failing = false;
         loop {
-            let accepted = if kept {
-                crate::task::idle_on_kept(|| listener.accept())
-            } else {
-                listener.accept()
-            };
-            match accepted {
+            match listener.accept() {
                 Ok((socket, _peer)) => return Ok(TcpStream::from_socket_kept(socket, kept)),
                 Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+                Err(e) if e.kind() == ErrorKind::WouldBlock => {
+                    if !kept && crate::drain::draining() {
+                        return Err(IoError::new(crate::drain::DRAINING));
+                    }
+                    self.slot.wait_for_connection(listener)?;
+                }
                 Err(e) if transient(&e) => {
                     if !failing {
                         crate::log(&format!("accept: {e}; retrying"));
                         failing = true;
                     }
-                    std::thread::sleep(pause);
+                    crate::wait::sleep(pause);
                     pause = (pause * 2).min(ACCEPT_BACKOFF_LAST);
                 }
                 Err(_) if !kept && crate::drain::draining() => {

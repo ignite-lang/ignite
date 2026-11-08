@@ -2,13 +2,14 @@
 //! OS thread of its own for as long as the task runs, and reuses threads
 //! that finished a task within [`LINGER`] instead of starting new ones.
 //!
-//! A worker that finished a task puts itself on the idle stack and parks.
-//! `spawn` pops the most recently idle worker (its stack and caches are
-//! warm), puts the task in the worker's slot and unparks it; only when the
-//! stack is empty does it start a thread. A worker that waited [`LINGER`]
-//! without a task takes itself off the stack under the stack's lock and
-//! ends; if a `spawn` popped it first, that `spawn` fills (or has filled)
-//! its slot, so the worker waits for the task and runs it. A task that
+//! A worker that finished a task puts itself on the idle stack and parks
+//! its waiter ([`crate::wait`]). `spawn` pops the most recently idle worker
+//! (its stack and caches are warm), puts the task in the worker's slot and
+//! wakes it; only when the stack is empty does it start a thread. A worker
+//! that waited [`LINGER`] without a task takes itself off the stack under
+//! the stack's lock and ends; if a `spawn` popped it first, that `spawn`
+//! fills (or has filled) its slot, so the worker waits for the task and
+//! runs it. A task that
 //! fails or panics (`docs/slice.md` section 14.8) is caught at the worker:
 //! `task ended with error: <report>` is logged, and the worker takes its
 //! next task as after any other task.
@@ -34,11 +35,11 @@
 
 use std::cell::Cell;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError, TryLockError};
-use std::thread::Thread;
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, TryLockError};
 use std::time::{Duration, Instant};
 
 use crate::IoError;
+use crate::wait::{WaitList, Waiter, park, park_in, wake};
 
 /// How long a worker without a task waits for one before it ends.
 pub const LINGER: Duration = Duration::from_secs(1);
@@ -52,11 +53,16 @@ struct Count {
     live: usize,
     /// Of those, the tasks waiting in [`idle_on_kept`] now.
     kept: usize,
+    /// [`wait_for_tasks`], woken when a task ends or begins to wait on a
+    /// kept listener.
+    ended: WaitList,
 }
 
-static LIVE: Mutex<Count> = Mutex::new(Count { live: 0, kept: 0 });
-/// Notified when a task ends or begins to wait on a kept listener.
-static ENDED: Condvar = Condvar::new();
+static LIVE: Mutex<Count> = Mutex::new(Count {
+    live: 0,
+    kept: 0,
+    ended: WaitList::new(),
+});
 
 thread_local! {
     /// The thread is a task worker ([`work`]), not `main` or a thread a
@@ -71,7 +77,7 @@ fn task_started() {
 fn task_ended() {
     let mut count = lock(&LIVE);
     count.live = count.live.saturating_sub(1);
-    ENDED.notify_all();
+    count.ended.wake_all();
 }
 
 /// The number of tasks started and not yet ended.
@@ -88,7 +94,7 @@ pub fn live_tasks() -> usize {
 pub fn wait_for_tasks() {
     let mut count = lock(&LIVE);
     while count.live > count.kept {
-        count = ENDED.wait(count).unwrap_or_else(PoisonError::into_inner);
+        count = park_in(&LIVE, count, |c| &mut c.ended, None).0;
     }
 }
 
@@ -107,15 +113,17 @@ pub(crate) fn idle_on_kept<T>(wait: impl FnOnce() -> T) -> T {
             count.kept = count.kept.saturating_sub(1);
         }
     }
-    lock(&LIVE).kept += 1;
-    ENDED.notify_all();
+    let mut count = lock(&LIVE);
+    count.kept += 1;
+    count.ended.wake_all();
+    drop(count);
     let _back = Back;
     wait()
 }
 
-/// An idle worker: its thread and the slot `spawn` puts its next task in.
+/// An idle worker: its waiter and the slot `spawn` puts its next task in.
 struct Worker {
-    thread: Thread,
+    waiter: Waiter,
     next: Mutex<Option<Job>>,
 }
 
@@ -150,7 +158,7 @@ where
     let worker = lock(&IDLE).pop();
     if let Some(worker) = worker {
         *lock(&worker.next) = Some(job);
-        worker.thread.unpark();
+        wake(&worker.waiter);
         return Ok(());
     }
     match std::thread::Builder::new().spawn(move || work(job)) {
@@ -242,7 +250,7 @@ static FAILING: AtomicBool = AtomicBool::new(false);
 fn work(mut job: Job) {
     IN_TASK.with(|in_task| in_task.set(true));
     let me = Arc::new(Worker {
-        thread: std::thread::current(),
+        waiter: Waiter::current(),
         next: Mutex::new(None),
     });
     loop {
@@ -258,9 +266,8 @@ fn work(mut job: Job) {
             if let Some(next) = lock(&me.next).take() {
                 break next;
             }
-            let now = Instant::now();
-            if now < deadline {
-                std::thread::park_timeout(deadline - now);
+            if Instant::now() < deadline {
+                park(&me.waiter, Some(deadline));
                 continue;
             }
             let mut idle = lock(&IDLE);
@@ -275,7 +282,7 @@ fn work(mut job: Job) {
                 if let Some(next) = lock(&me.next).take() {
                     break next;
                 }
-                std::thread::park();
+                park(&me.waiter, None);
             };
             break next;
         };
@@ -436,7 +443,7 @@ mod tests {
         loop {
             {
                 let idle = lock(&IDLE);
-                if let Some(at) = idle.iter().position(|w| w.thread.id() == id) {
+                if let Some(at) = idle.iter().position(|w| w.waiter.thread() == Some(id)) {
                     return Some(idle.len() - at);
                 }
             }

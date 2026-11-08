@@ -6,7 +6,9 @@
 mod entropy_adversary;
 mod fs_adversary;
 mod pipe;
+mod reactor;
 mod stdio;
 mod tcp;
 mod terminal;
 mod urgent;
+mod waiter;
