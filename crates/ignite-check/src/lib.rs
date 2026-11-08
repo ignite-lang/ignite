@@ -2174,6 +2174,52 @@ impl Checker {
         }
     }
 
+    /// Give the names an arm pattern binds the types that follow from `ty`,
+    /// the declared type of the scrutinee: the whole value for a binding,
+    /// the elements of a tuple, and the payload of `Some(x)` of an
+    /// `Option<T>` and of `Ok(x)` and `Err(e)` of a `Result<T, E>`, so
+    /// `match senders.get(id) { Some(tx) => tx.send(1), .. }` checks the
+    /// effect of `send` by type (`docs/slice.md` 11.7).
+    fn type_pattern_bindings(&mut self, pattern: &Pattern, ty: &Type) {
+        match &pattern.kind {
+            PatternKind::Binding(name) => {
+                if let Some(local) = self
+                    .scopes
+                    .last_mut()
+                    .and_then(|scope| scope.get_mut(&name.name))
+                {
+                    local.ty = Some(ty.clone());
+                }
+            }
+            PatternKind::Tuple(items) if ty.is_tuple() && ty.args.len() == items.len() => {
+                for (item, element) in items.iter().zip(&ty.args) {
+                    self.type_pattern_bindings(item, element);
+                }
+            }
+            PatternKind::Variant { path, args } if args.len() == 1 => {
+                let (owner, variant) = match path.as_slice() {
+                    [variant] => (ty.name.name.as_str(), variant.name.as_str()),
+                    [owner, variant] => (owner.name.as_str(), variant.name.as_str()),
+                    _ => return,
+                };
+                if owner != ty.name.name || self.type_params.contains(owner) {
+                    return;
+                }
+                let index = match (owner, variant) {
+                    ("Option", "Some") | ("Result", "Ok") => 0,
+                    ("Result", "Err") => 1,
+                    _ => return,
+                };
+                if ty.args.len() != if owner == "Option" { 1 } else { 2 } {
+                    return;
+                }
+                let payload = self.expand(&ty.args[index]);
+                self.type_pattern_bindings(&args[0], &payload);
+            }
+            _ => {}
+        }
+    }
+
     fn lookup(&self, name: &str) -> Option<Binding> {
         self.local(name).map(|local| local.binding)
     }
@@ -2727,9 +2773,13 @@ impl Checker {
             ExprKind::Match { scrutinee, arms } => {
                 self.expr(scrutinee);
                 let roots = self.roots(scrutinee);
+                let scrutinee_ty = self.static_type(scrutinee);
                 for arm in arms {
                     self.scopes.push(BTreeMap::new());
                     self.pattern(&arm.pattern, &roots, Binding::Pattern);
+                    if let Some(ty) = &scrutinee_ty {
+                        self.type_pattern_bindings(&arm.pattern, ty);
+                    }
                     self.expr(&arm.body);
                     let tail = self.roots(&arm.body);
                     self.tail_roots.insert(expr_key(&arm.body), tail);
@@ -3230,8 +3280,10 @@ impl Checker {
     /// The declared type of the value of `expr`, where it follows from
     /// declarations alone (`docs/slice.md` section 11.7): a local with a
     /// known type, a field of a value of known record type, `copy()`, `e?`,
-    /// `l[i]`, the results of `Store` methods and a literal of a record
-    /// without type parameters. `None` otherwise.
+    /// `l[i]`, the results of `Store` methods, a literal of a record
+    /// without type parameters and a call by name of a fn without type
+    /// parameters whose declared return type is no fn type (that type; a
+    /// fn value a call returns stays E042, 20.4.3). `None` otherwise.
     fn static_type(&self, expr: &Expr) -> Option<Type> {
         let named = |name: &str, args: Vec<Type>| {
             let ident = Ident {
@@ -3276,13 +3328,20 @@ impl Checker {
                 let owner = self.path_head(receiver)?;
                 return self.constructor_type(&owner.name, &name.name, expr.span);
             }
-            ExprKind::Call { callee, .. } => {
-                let ExprKind::Field { receiver, name } = &callee.kind else {
-                    return None;
-                };
-                let owner = self.path_head(receiver)?;
-                return self.constructor_type(&owner.name, &name.name, expr.span);
-            }
+            ExprKind::Call { callee, .. } => match &callee.kind {
+                ExprKind::Field { receiver, name } => {
+                    let owner = self.path_head(receiver)?;
+                    return self.constructor_type(&owner.name, &name.name, expr.span);
+                }
+                ExprKind::Name(f) if self.local(&f.name).is_none() => {
+                    let ret = self.expand(self.symbols.fn_returns.get(&f.name)?);
+                    if ret.is_fn() {
+                        return None;
+                    }
+                    ret
+                }
+                _ => return None,
+            },
             ExprKind::Try(inner) => {
                 let inner = self.static_type(inner)?;
                 if inner.name.name != "Result" {

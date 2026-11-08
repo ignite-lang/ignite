@@ -168,3 +168,36 @@ test "a value sent is the receiver's own" {
   assert rx.receive() == Some([1, 2])
   assert items == [1, 2, 3]
 }
+
+test type Ends {
+  tx: Sender<Int>
+  rx: Receiver<Int>
+}
+
+test fn ends() -> Ends {
+  let pair: (Sender<Int>, Receiver<Int>) = Channel.bounded(2)
+  Ends { tx = pair.0, rx = pair.1 }
+}
+
+test fn ring(senders: Store<Sender<Int>>, id: Int, value: Int) -> Bool requires [senders.read, senders.send] {
+  match senders.get(id) {
+    Some(tx) => tx.try_send(value)
+    None => false
+  }
+}
+
+test "an end found in a Store needs no annotation" {
+  let (tx, rx) = Channel.bounded(2)
+  let senders: Store<Sender<Int>> = Store.new()
+  let id = senders.next_id()
+  senders.put(id, tx)
+  assert ring(senders, id, 5)
+  assert !ring(senders, id + 1, 6)
+  assert rx.receive_within(1 seconds) == Some(5)
+}
+
+test "the ends of a returned record need no annotation" {
+  let d = ends()
+  assert d.tx.try_send(9)
+  assert d.rx.receive_within(1 seconds) == Some(9)
+}

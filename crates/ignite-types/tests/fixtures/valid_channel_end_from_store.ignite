@@ -1,0 +1,16 @@
+// Case study gap G32: a channel end bound by `Some(tx)` from a
+// `Store<Sender<Int>>` lookup has its effect checked without an annotation.
+
+fn ring(senders: Store<Sender<Int>>, id: Int) -> Bool requires [senders.read, senders.send] {
+  match senders.get(id) {
+    Some(tx) => tx.try_send(1)
+    None => false
+  }
+}
+
+fn ring_by_path(senders: Store<Sender<Int>>, id: Int) -> Bool requires [senders.write, senders.send] {
+  match senders.remove(id) {
+    Option.Some(tx) => tx.send(1)
+    Option.None => false
+  }
+}

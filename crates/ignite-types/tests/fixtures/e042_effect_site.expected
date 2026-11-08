@@ -1,2 +1,1 @@
 e042_effect_site.ignite:12:17: error[E042]: cannot check the effects of `get`: the type of its receiver is not declared; annotate the binding
-e042_effect_site.ignite:18:16: error[E042]: cannot check the effects of `run`: the type of its receiver is not declared; annotate the binding

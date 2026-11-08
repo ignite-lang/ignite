@@ -1,0 +1,18 @@
+// Case study gap G32: `let d = ends()` takes the declared return type of
+// `ends`, so the channel ends in its fields need no annotation.
+
+type Ends {
+  tx: Sender<Int>
+  rx: Receiver<Int>
+}
+
+fn ends() -> Ends {
+  let pair: (Sender<Int>, Receiver<Int>) = Channel.bounded(4)
+  Ends { tx = pair.0, rx = pair.1 }
+}
+
+fn round_trip() -> Option<Int> {
+  let d = ends()
+  d.tx.try_send(1)
+  d.rx.receive()
+}
