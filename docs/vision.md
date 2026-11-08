@@ -293,6 +293,17 @@ or a lower one, and a kind that speaks one protocol lives in that protocol's mod
 `std.protocol.telnet`; it now lives in `std.protocol.telnet` and `std/probe.ignite` is gone.
 The slice-10 row above and the slice records keep the old path as history.
 
+T8. **Readiness IO: stackful tasks over epoll in `crates/ignite-io`** (Timo, 2026-11-08, "A
+now - then make both possible"; `docs/readiness-io.md` 3.3, 3.4). Spawned tasks run as stackful
+tasks on a few worker threads, one epoll loop per worker; neither backend changes its lowering.
+It replaces slice 5's intent (tokio inside `ignite-io`, Rust-target futures, LLVM-target
+coroutines), recorded in wave D of section 4, the L0 row of section 3, D2 option B and D3, and
+the layout rules of `AGENTS.md`. Both stay possible later: the reactor sits behind one
+interface, so a tokio-driven reactor can replace the epoll loop in `ignite-io` alone; stackless
+lowering per target stays an alternative, gated on task failure ending by return instead of
+`longjmp`, and chosen only if stack memory per idle task is measured to matter.
+`story:readiness-scheduler` rewrites wave D, D2 and D3 when it lands.
+
 ## 8 Open decisions
 
 Each needs Timo's answer; each changes what the next wave builds. The default is the

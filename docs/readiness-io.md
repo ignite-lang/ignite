@@ -1,6 +1,8 @@
 # Readiness IO: connections without a blocked thread each
 
-**Status: design, not implemented.**
+**Status: decided (Timo, 2026-11-08: option A, with the reactor swappable and stackless
+lowering kept possible); not implemented.** "Option A" is the choice as it was put to Timo:
+section 3.3's stackful tasks over epoll, column B of table 3.1, not its column A.
 **Date:** 8 November 2026
 **Story:** `story:readiness-io` of `epic:native-parity` (goal set by Timo, 2026-11-08: Ignite
 programs within 1.1x of plain Rust).
@@ -77,8 +79,36 @@ This departs from slice 5's recorded intent ("tokio inside `ignite-io`, Rust-tar
 LLVM-target coroutines", Timo 2026-11-01; vision wave D, D2, D3; AGENTS.md layout rules). It
 keeps the rule behind it: the substrate is written once and both targets do IO through the
 same functions. It is stronger on one point: both targets also suspend the same way, so "a
-target differs only in how it suspends a task" becomes "targets do not differ". Taking it needs
-Timo's word (Q1); the texts to change are in section 8, `story:readiness-scheduler`.
+target differs only in how it suspends a task" becomes "targets do not differ". Timo took it on
+2026-11-08 ("A now - then make both possible", Q1), on the terms of section 3.4; the texts to
+change are in section 8, `story:readiness-scheduler`.
+
+### 3.4 Keeping both possible
+
+Two later replacements stay open, each without touching what the other parts depend on.
+
+**The reactor is swappable.** Every wait goes through the waiter of section 4.2, and the
+scheduler drives readiness through one reactor interface in `crates/ignite-io`
+(`story:readiness-waiters` lands it, `story:readiness-scheduler` puts the epoll loop behind
+it). The interface is what a worker needs from a readiness source:
+
+- register a descriptor once with its interest (read, write, urgent, hang-up) and deregister it;
+- wait for readiness events until a deadline, returning the waiters to make runnable;
+- wake a worker that is waiting, from any thread (today's `eventfd`).
+
+The hand-written epoll loop is the first implementation. A tokio-driven reactor (tokio's
+`mio` registry and its timer wheel, driven by the worker loop) would implement the same three
+operations; replacing one with the other changes `crates/ignite-io` only, neither backend and
+no generated code.
+
+**Stackless lowering stays a later alternative per target** (slice 5's futures and
+coroutines, table 3.1 column A). Prerequisite: a failing task ends by returning an error
+through its frames to the task wrapper instead of the LLVM target's `longjmp` (llvm §4), which
+is undefined across coroutine frames. That change is useful alone (no `setjmp` per task) and is
+not scheduled. Stackless lowering is chosen only if the memory cost of stacks is measured to
+matter: the touched stack per idle task (8 to 32 KiB, inferred, K3) and the RSS of 10,000 idle
+Telnet sessions (section 6 row 7, recorded in R3), against a program that needs that many idle
+tasks (vision's 10,000 idle actors, before actors P5).
 
 ## 4 Design
 
@@ -277,7 +307,7 @@ not beside it.
 
 | # | question | recommended default |
 |---|---|---|
-| Q1 | Replace slice 5's "tokio, futures, coroutines" with stackful tasks over epoll (3.3)? | yes; it is Timo's recorded decision, so it needs his word before R1 |
+| Q1 | Replace slice 5's "tokio, futures, coroutines" with stackful tasks over epoll (3.3)? | answered yes (Timo, 2026-11-08): stackful tasks over epoll now, the reactor behind one interface so tokio can replace epoll, stackless lowering kept possible behind failure by return (3.4) |
 | Q2 | `corosensei` or hand-written context switch? | `corosensei`; replace only if it blocks musl `--static` (slice §23) or shows in a profile |
 | Q3 | Worker count | `available_parallelism`, override `IGNITE_WORKERS`; no command-line flag (the program owns its flags) |
 | Q4 | A task that never waits starves its worker's queue | idle workers steal runnable tasks (4.1); add `Task.yield_now` (vision §5) only when a program needs it |
