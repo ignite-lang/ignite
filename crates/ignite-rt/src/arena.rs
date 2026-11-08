@@ -115,6 +115,54 @@ struct Block {
     chunk: bool,
 }
 
+impl Block {
+    /// The bytes the block holds: a chunk, or a large block's size.
+    fn bytes(&self) -> usize {
+        if self.chunk {
+            CHUNK
+        } else {
+            self.layout.size()
+        }
+    }
+}
+
+/// Count `bytes` of a block entering (`sign` 1) or leaving (-1) an
+/// arena's stack in the census (`arena_bytes`).
+fn arena_counted(bytes: usize, sign: i64) {
+    ignite_io::census::add(ignite_io::census::Kind::ArenaBytes, sign * bytes as i64);
+}
+
+/// Bytes of released large blocks the arenas keep for reuse: heap memory
+/// of a pool, which the census leaves out of `heap_bytes`.
+static POOLED_LARGE: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+
+fn pooled_large(bytes: usize, sign: i64) {
+    POOLED_LARGE.fetch_add(sign * bytes as i64, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// [`POOLED_LARGE`] now.
+pub(crate) fn pooled_large_bytes() -> i64 {
+    POOLED_LARGE.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Bytes of the blocks the calling thread's arenas hold now: the part
+/// of the census' `arena_bytes` that is the caller's own.
+pub(crate) fn own_bytes() -> i64 {
+    with_task(|task| {
+        [
+            Some(&task.arena),
+            Some(&task.scratch),
+            task.transfer.as_ref(),
+        ]
+        .into_iter()
+        .flatten()
+        .flat_map(|arena| arena.blocks.iter())
+        .map(|block| block.bytes() as i64)
+        .sum()
+    })
+    .unwrap_or(0)
+}
+
 struct Arena {
     blocks: Vec<Block>,
     spare: Vec<NonNull<u8>>,
@@ -215,7 +263,9 @@ impl Arena {
             .filter(|(_, (_, kept))| kept.size() >= layout.size() && kept.align() >= layout.align())
             .min_by_key(|(_, (_, kept))| kept.size())
             .map(|(at, _)| at)?;
-        Some(self.spare_large.swap_remove(at))
+        let kept = self.spare_large.swap_remove(at);
+        pooled_large(kept.1.size(), -1);
+        Some(kept)
     }
 
     fn push(&mut self, layout: Layout, chunk: bool, used: usize) -> Result<*mut u8, String> {
@@ -243,6 +293,7 @@ impl Arena {
                 pointer
             }
         };
+        arena_counted(if chunk { CHUNK } else { layout.size() }, 1);
         let start = self.top();
         self.blocks.push(Block {
             pointer,
@@ -299,6 +350,7 @@ impl Arena {
         } else if self.spare_large.len() < SPARE_LARGE
             && self.spare_large_bytes() + block.layout.size() <= SPARE_LARGE_BYTES
         {
+            pooled_large(block.layout.size(), 1);
             self.spare_large.push((block.pointer, block.layout));
         } else {
             self.drop_large(block.pointer, block.layout);
@@ -330,6 +382,7 @@ impl Arena {
                 break;
             }
             let block = self.blocks.pop().expect("a last block");
+            arena_counted(block.bytes(), -1);
             poison(block.pointer.as_ptr(), 0, block.used);
             self.free(block);
         }
@@ -352,6 +405,7 @@ impl Arena {
             chunk_drop(pointer);
         }
         while let Some((pointer, layout)) = self.spare_large.pop() {
+            pooled_large(layout.size(), -1);
             self.drop_large(pointer, layout);
         }
     }
@@ -370,6 +424,7 @@ fn poison(base: *mut u8, from: usize, to: usize) {
 impl Drop for Arena {
     fn drop(&mut self) {
         for block in self.blocks.drain(..) {
+            arena_counted(block.bytes(), -1);
             if block.chunk {
                 chunk_drop(block.pointer);
             } else {
@@ -380,6 +435,7 @@ impl Drop for Arena {
             chunk_drop(pointer);
         }
         for (pointer, layout) in self.spare_large.drain(..) {
+            pooled_large(layout.size(), -1);
             large_dealloc(pointer, layout);
         }
     }
@@ -811,6 +867,12 @@ pub(crate) fn task_end() {
     let _ = with_task(|task| {
         if task.arena.heap + task.scratch.heap > RELEASED_AT_TASK_END {
             ignite_io::released_memory();
+        }
+        if ignite_io::census::seeded("arena")
+            && let Some(block) = task.arena.blocks.pop()
+        {
+            // The seeded leak `arena`: the block stays allocated and counted.
+            let _kept = block;
         }
         task.in_scratch = false;
         task.arena.clear(SPARE_AFTER_TASK);

@@ -75,6 +75,31 @@ pub const TEST_HEADER: &str = "#![allow(warnings)]\n";
 /// Cargo package name of the generated standard library.
 pub const STD_PACKAGE: &str = "ignite-std";
 
+/// The counting global allocator of every generated executable, so
+/// `Runtime.census()` reads its heap bytes (`docs/slice.md` 33).
+const ALLOCATOR: &str = "#[global_allocator]\nstatic __IGNITE_ALLOCATOR: ::ignite_io::census::Counting = ::ignite_io::census::Counting;\n";
+
+/// The fields of `std.runtime.Census` in declaration order, as
+/// `ignite_io::census::Census` names them (`docs/slice.md` 33).
+const CENSUS_FIELDS: &[&str] = &[
+    "tasks",
+    "workers",
+    "channels",
+    "listeners",
+    "streams",
+    "pipes",
+    "children",
+    "directories",
+    "capabilities",
+    "handles",
+    "handle_slots",
+    "heap_copies",
+    "stores",
+    "heap_bytes",
+    "arena_bytes",
+    "resident_bytes",
+];
+
 /// Substrate types whose statics lower to `ignite_io::<Owner>::<name>(..)`.
 const SUBSTRATE_OWNERS: &[&str] = &[
     "TcpListener",
@@ -1147,6 +1172,7 @@ fn test_main_with(tests: &[TestInfo], path: impl Fn(&str) -> String) -> String {
     let mut w = Writer::new();
     w.raw(TEST_HEADER);
     w.raw(FILE_HEADER);
+    w.raw(ALLOCATOR);
     w.line("");
     w.open("fn main() {");
     w.open("::ignite_io::test_main(&[");
@@ -4579,6 +4605,20 @@ impl<'a> Generator<'a> {
             ("Clock", "sleep", [duration]) => format!("::ignite_io::clock::sleep({duration})"),
             ("Clock", "now", []) => "::ignite_io::clock::now()".to_string(),
             ("Process", "flush", []) => "::ignite_io::flush()".to_string(),
+            ("Runtime", "census", []) => {
+                let census = self.enum_name(&ignite_types::census_name());
+                format!(
+                    "{{ let c = ::ignite_io::census::read(); {census} {{ {} }} }}",
+                    CENSUS_FIELDS
+                        .iter()
+                        .map(|f| format!("{f}: c.{f}"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            }
+            ("Runtime", "settle", [tasks, within]) => {
+                format!("::ignite_io::census::settle({tasks}, {within})")
+            }
             ("Process", "open_files_limit", []) => "::ignite_io::open_files_limit()".to_string(),
             ("Int", "to_text", [value]) => {
                 format!("{}.to_string()", wrap(&args[0], value.clone()))
@@ -6930,6 +6970,7 @@ fn executable_main(
     let mut head = Writer::new();
     head.raw(FILE_HEADER);
     head.line(&format!("use ::{crate_name}::*;"));
+    head.raw(ALLOCATOR);
     let mut w = Writer::new();
     w.line("");
     w.open("fn main() {");

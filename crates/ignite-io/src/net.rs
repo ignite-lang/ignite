@@ -95,6 +95,7 @@ pub struct TcpListener {
 /// (`crate::drain`), with the address and port it was bound to.
 #[derive(Debug)]
 pub(crate) struct Slot {
+    _counted: crate::census::Counted,
     listener: RwLock<Option<std::net::TcpListener>>,
     address: String,
     port: i64,
@@ -182,6 +183,7 @@ struct Stream {
     /// reactors, before the socket closes.
     readiness: Readiness,
     socket: std::net::TcpStream,
+    _counted: crate::census::Counted,
     reading: Lock<()>,
     writing: Lock<Out>,
     /// The socket blocks (IO mode `threads`): a read and a send wait in
@@ -539,6 +541,7 @@ impl TcpListener {
             .map(|bound| i64::from(bound.port()))
             .unwrap_or(0);
         let slot = Arc::new(Slot {
+            _counted: crate::census::Counted::new(crate::census::Kind::Listeners),
             listener: RwLock::new(Some(listener)),
             address,
             port,
@@ -636,6 +639,7 @@ impl TcpStream {
         TcpStream {
             inner: Arc::new(Stream {
                 readiness: Readiness::new(),
+                _counted: crate::census::Counted::new(crate::census::Kind::Streams),
                 socket,
                 reading: Lock::new(()),
                 writing: Lock::new(Out::default()),

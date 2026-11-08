@@ -1,5 +1,7 @@
 #![allow(unused_mut, unused_variables, dead_code, unused_parens, unused_imports, unreachable_code, non_snake_case, bindings_with_variant_name, clippy::all)]
 use ::bounds::*;
+#[global_allocator]
+static __IGNITE_ALLOCATOR: ::ignite_io::census::Counting = ::ignite_io::census::Counting;
 
 fn main() {
     ::std::process::exit(::ignite_io::run(|| {

@@ -24,6 +24,7 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
 mod arena;
+mod census;
 mod clock;
 mod fail;
 mod net;
@@ -38,6 +39,7 @@ pub use arena::{
     ignite_rt_arena_release, ignite_rt_arena_scratch, ignite_rt_arena_scratch_clear,
     ignite_rt_arena_state, ignite_rt_task_end,
 };
+pub use census::{ignite_rt_runtime_census, ignite_rt_runtime_settle};
 pub use clock::ignite_rt_clock_monotonic;
 pub use fail::{
     ignite_rt_assert_failed, ignite_rt_fail_arith, ignite_rt_fail_index, ignite_rt_fail_match,

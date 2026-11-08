@@ -431,6 +431,12 @@ pub(crate) fn static_fn(owner: &str, name: &str) -> Option<Sig> {
         ),
         ("Clock", "now") => sig(ClockNow, vec![], Ty::Quantity(QuantityKind::Duration)),
         ("Process", "flush") => sig(ProcessFlush, vec![], Ty::Unit),
+        ("Runtime", "census") => sig(RuntimeCensus, vec![], census()),
+        ("Runtime", "settle") => sig(
+            RuntimeSettle,
+            vec![Ty::Int, Ty::Quantity(QuantityKind::Duration)],
+            Ty::Bool,
+        ),
         ("Process", "open_files_limit") => sig(ProcessOpenFilesLimit, vec![], Ty::Int),
         ("TcpStream", "connect_within") => sig(
             TcpStreamConnectWithin,
@@ -450,6 +456,16 @@ pub fn endpoint_name() -> crate::QualName {
 /// The record `std.net.Endpoint`: the result of `Endpoint.of`.
 pub fn endpoint() -> Ty {
     Ty::Record(endpoint_name())
+}
+
+/// The name of the record `std.runtime.Census` (`docs/slice.md` 33).
+pub fn census_name() -> crate::QualName {
+    crate::QualName::new("std.runtime", "Census")
+}
+
+/// The record `std.runtime.Census`: the result of `Runtime.census()`.
+pub fn census() -> Ty {
+    Ty::Record(census_name())
 }
 
 /// The builtin free function `log(line: Text)`.
@@ -491,6 +507,7 @@ mod tests {
                 ("ChildProcess", process.clone()),
                 ("Endpoint", vec!["std.net".to_string()]),
                 ("Launcher", process),
+                ("Runtime", vec!["std.runtime".to_string()]),
             ]
         );
     }

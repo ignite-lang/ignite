@@ -54,9 +54,14 @@ impl Pipe {
     pub fn pair() -> (PipeStream, PipeStream) {
         let into_first = Arc::new(Queue::default());
         let into_second = Arc::new(Queue::default());
+        let pair = Arc::new(crate::census::Counted::new(crate::census::Kind::Pipes));
         (
-            PipeStream::end(Arc::clone(&into_first), Arc::clone(&into_second)),
-            PipeStream::end(into_second, into_first),
+            PipeStream::end(
+                Arc::clone(&into_first),
+                Arc::clone(&into_second),
+                Arc::clone(&pair),
+            ),
+            PipeStream::end(into_second, into_first, pair),
         )
     }
 }
@@ -92,6 +97,8 @@ struct Received {
 struct End {
     /// What this end reads.
     incoming: Arc<Queue>,
+    /// The census token of the pair, shared by its two ends.
+    _pair: Arc<crate::census::Counted>,
     /// The peer's `incoming`, which this end's deliveries fill.
     outgoing: Arc<Queue>,
     reading: Lock<()>,
@@ -225,9 +232,14 @@ impl Drop for End {
 }
 
 impl PipeStream {
-    fn end(incoming: Arc<Queue>, outgoing: Arc<Queue>) -> PipeStream {
+    fn end(
+        incoming: Arc<Queue>,
+        outgoing: Arc<Queue>,
+        pair: Arc<crate::census::Counted>,
+    ) -> PipeStream {
         PipeStream {
             end: Arc::new(End {
+                _pair: pair,
                 incoming,
                 outgoing,
                 reading: Lock::new(()),

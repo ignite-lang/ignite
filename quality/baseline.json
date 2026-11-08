@@ -625,12 +625,12 @@
       "area": "Generated code and runtime behaviour",
       "bars": {
         "llvm": {
-          "decision": "readiness IO (2026-11-08): story readiness-waiters adds three unsafe sites in ignite-io reactor.rs (BorrowedFd::borrow_raw of a registered descriptor in epoll and poll), story readiness-scheduler five in ignite-io sched.rs (the coroutine yielder of the running task, installing and restoring the SIGSEGV and SIGBUS handlers that report a task stack overflow, the alternate signal stack, si_addr in that handler)",
-          "value": 88
+          "decision": "readiness IO (2026-11-08): story readiness-waiters adds three unsafe sites in ignite-io reactor.rs (BorrowedFd::borrow_raw of a registered descriptor in epoll and poll), story readiness-scheduler five in ignite-io sched.rs (the coroutine yielder of the running task, installing and restoring the SIGSEGV and SIGBUS handlers that report a task stack overflow, the alternate signal stack, si_addr in that handler); story leak-census (2026-11-08): the counting global allocator `ignite_io::census::Counting` adds seven sites (the `unsafe impl GlobalAlloc`, its `alloc`, `dealloc` and `realloc` and the three calls of `System` inside them), required by the trait; integration of readiness IO, U32 and the leak census (2026-11-08): bar set once from the measured value of the merged tree",
+          "value": 95
         },
         "rust": {
-          "decision": "readiness IO (2026-11-08): story readiness-waiters adds three unsafe sites in ignite-io reactor.rs (BorrowedFd::borrow_raw of a registered descriptor in epoll and poll), story readiness-scheduler five in ignite-io sched.rs (the coroutine yielder of the running task, installing and restoring the SIGSEGV and SIGBUS handlers that report a task stack overflow, the alternate signal stack, si_addr in that handler)",
-          "value": 18
+          "decision": "readiness IO (2026-11-08): story readiness-waiters adds three unsafe sites in ignite-io reactor.rs (BorrowedFd::borrow_raw of a registered descriptor in epoll and poll), story readiness-scheduler five in ignite-io sched.rs (the coroutine yielder of the running task, installing and restoring the SIGSEGV and SIGBUS handlers that report a task stack overflow, the alternate signal stack, si_addr in that handler); story leak-census (2026-11-08): the counting global allocator `ignite_io::census::Counting` adds seven sites (the `unsafe impl GlobalAlloc`, its `alloc`, `dealloc` and `realloc` and the three calls of `System` inside them), required by the trait; integration of readiness IO, U32 and the leak census (2026-11-08): bar set once from the measured value of the merged tree",
+          "value": 25
         }
       },
       "direction": "lower",

@@ -68,16 +68,14 @@ unsafe impl Sync for HeapValue {}
 
 impl Clone for HeapValue {
     fn clone(&self) -> HeapValue {
-        HeapValue {
-            ptr: (self.glue.to_heap)(self.ptr),
-            glue: self.glue,
-        }
+        HeapValue::made((self.glue.to_heap)(self.ptr), self.glue)
     }
 }
 
 impl Drop for HeapValue {
     fn drop(&mut self) {
         (self.glue.free)(self.ptr);
+        ignite_io::census::release(ignite_io::census::Kind::HeapCopies);
     }
 }
 
@@ -102,12 +100,16 @@ impl Glue {
 }
 
 impl HeapValue {
+    /// The value owning the heap copy `ptr`, counted in the census
+    /// (`heap_copies`) until it is dropped.
+    fn made(ptr: *mut u8, glue: Glue) -> HeapValue {
+        ignite_io::census::add(ignite_io::census::Kind::HeapCopies, 1);
+        HeapValue { ptr, glue }
+    }
+
     /// A heap copy of the section-3 value at `value`.
     pub(crate) fn copy_in(value: *const u8, glue: Glue) -> HeapValue {
-        HeapValue {
-            ptr: (glue.to_heap)(value),
-            glue,
-        }
+        HeapValue::made((glue.to_heap)(value), glue)
     }
 
     /// Copy the value into the section-3 memory at `out`.
@@ -171,10 +173,7 @@ pub extern "C" fn ignite_rt_store_next_id(handle: *const RtStore) -> i64 {
 pub extern "C" fn ignite_rt_store_put(handle: *const RtStore, id: i64, value: *const u8) {
     crate::entry(move || {
         let s = store(handle);
-        let value = HeapValue {
-            ptr: (s.glue.to_heap)(value),
-            glue: s.glue,
-        };
+        let value = HeapValue::made((s.glue.to_heap)(value), s.glue);
         s.store.put(id, value);
     })
 }
@@ -247,7 +246,7 @@ pub extern "C" fn ignite_rt_store_update(
             id,
             |old| match thunk(f, old.ptr) {
                 ptr if ptr.is_null() => Err(()),
-                ptr => Ok(HeapValue { ptr, glue: s.glue }),
+                ptr => Ok(HeapValue::made(ptr, s.glue)),
             },
             |new| new.copy_out(out),
         )
@@ -281,7 +280,7 @@ pub extern "C" fn ignite_rt_store_upsert(
             id,
             |old| match thunk(f, old.map_or(std::ptr::null(), |old| old.ptr)) {
                 ptr if ptr.is_null() => Err(()),
-                ptr => Ok(HeapValue { ptr, glue: s.glue }),
+                ptr => Ok(HeapValue::made(ptr, s.glue)),
             },
             |new| new.copy_out(out),
         )

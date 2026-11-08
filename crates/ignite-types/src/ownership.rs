@@ -197,6 +197,8 @@ pub fn change(builtin: Builtin) -> Option<Change> {
         | ClockSleep
         | ClockNow
         | ProcessFlush
+        | RuntimeCensus
+        | RuntimeSettle
         | ProcessOpenFilesLimit
         | ChannelBounded
         | SenderSend

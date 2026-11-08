@@ -836,6 +836,7 @@ fn dispatch(events: &mut Vec<Event>) {
 /// The loop of a worker thread (module docs).
 fn work(shared: Arc<Shared>) {
     crate::task::mark_task_thread();
+    let _worker = crate::census::Counted::new(crate::census::Kind::Workers);
     alternate_signal_stack();
     HERE.with(|here| here.set(Arc::as_ptr(&shared)));
     let _ = shared.thread.set(std::thread::current());

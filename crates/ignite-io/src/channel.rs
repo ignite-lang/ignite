@@ -43,6 +43,7 @@ impl Channel {
                 not_empty: WaitList::new(),
                 not_full: WaitList::new(),
             }),
+            _counted: crate::census::Counted::new(crate::census::Kind::Channels),
         });
         (
             Sender {
@@ -78,6 +79,17 @@ struct End<T>(Arc<Shared<T>>);
 
 struct Shared<T> {
     state: Mutex<State<T>>,
+    _counted: crate::census::Counted,
+}
+
+/// The seeded leak `bytes` (`crate::census`): 370 bytes kept per channel
+/// dropped, which no counted object holds.
+impl<T> Drop for Shared<T> {
+    fn drop(&mut self) {
+        if crate::census::seeded("bytes") {
+            crate::census::keep_bytes(370);
+        }
+    }
 }
 
 struct State<T> {

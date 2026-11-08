@@ -71,6 +71,7 @@ thread_local! {
 }
 
 fn task_started() {
+    crate::census::add(crate::census::Kind::Tasks, 1);
     lock(&LIVE).live += 1;
 }
 
@@ -81,6 +82,7 @@ fn task_started() {
 /// the wait was a condition variable (2026-11-08); the wait list is woken
 /// only then.
 fn task_ended() {
+    crate::census::release(crate::census::Kind::Tasks);
     let mut count = lock(&LIVE);
     count.live = count.live.saturating_sub(1);
     if count.live <= count.kept {
@@ -297,6 +299,7 @@ pub(crate) fn trim_after_linger() {
 /// Run `job`, then the tasks `spawn` hands this thread, until it lingered.
 fn work(mut job: Job) {
     IN_TASK.with(|in_task| in_task.set(true));
+    let _worker = crate::census::Counted::new(crate::census::Kind::Workers);
     let me = Arc::new(Worker {
         waiter: Waiter::current(),
         next: Mutex::new(None),
