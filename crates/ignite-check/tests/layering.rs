@@ -60,6 +60,7 @@ const LAYERS: &[(&str, Layer)] = &[
     ("std.result", Layer::Base),
     ("std.text", Layer::Base),
     ("std.json", Layer::Base),
+    ("std.data", Layer::Base),
     ("std.sli", Layer::Leaf),
     ("std.time", Layer::Leaf),
     ("std.policy", Layer::Leaf),
