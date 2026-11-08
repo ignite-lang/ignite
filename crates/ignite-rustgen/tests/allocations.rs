@@ -98,9 +98,11 @@ fn list_map_reads_the_elements_in_place() {
 #[test]
 fn a_for_over_a_slice_of_a_list_borrows_its_elements() {
     let (_, std) = todo();
-    let head = function(&std, "parse_head");
-    assert!(!head.contains("checked::slice(&lines"), "{head}");
-    assert!(head.contains("checked::slice_ref(&lines"), "{head}");
+    // parse_head reads the head by offsets since story http-parse-fewer-copies;
+    // coding_status keeps a for over a slice of a list on the request path.
+    let codings = function(&std, "coding_status");
+    assert!(!codings.contains("checked::slice(&codings"), "{codings}");
+    assert!(codings.contains("checked::slice_ref(&codings"), "{codings}");
 }
 
 #[test]
