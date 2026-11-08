@@ -62,3 +62,4 @@
 - [Planned: fault injection and simulation](planned/simulation.md)
 - [Planned: protocols and clients](planned/clients.md)
 - [FAQ](faq.md)
+- [Quality](quality.md)

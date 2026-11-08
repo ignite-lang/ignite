@@ -28,7 +28,8 @@ fn the_subcommands_are_those_of_the_python_tools() {
             "apply-cycle",
             "all",
             "summarize",
-            "verify-llvm-readiness"
+            "verify-llvm-readiness",
+            "quality"
         ]
     );
 }

@@ -745,6 +745,7 @@ fn run() {
                 std,
                 triple,
                 static_link,
+                offline: false,
             };
             ignite::build(&file, &options).map(|output| {
                 for executable in &output.executables {

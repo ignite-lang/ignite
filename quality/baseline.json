@@ -1,0 +1,839 @@
+{
+  "about": "The quality bar (docs/quality.md, story quality-ratchet): one entry per metric with its kind, direction, tolerance and source, and one bar per target. The bars are the first assessment's values; a value worse than its bar beyond the tolerance is refused, an improvement is written into the bar in the same change (IGNITE_BLESS=1), and a bar made worse than main's needs a decision. known_differences lists differences of the differential runner accepted until a story fixes them; eval_cannot_run lists the units the evaluator cannot run, with the reason; eval_slow names the decision that keeps a unit over the evaluator's time limit out of merge runs.",
+  "areas": [
+    "Semantics: one meaning across the three consumers",
+    "Front end: the checker refuses exactly the wrong programs",
+    "Generated code and runtime behaviour",
+    "Standard library and protocols",
+    "Operations: run, apply, host",
+    "Compiler speed",
+    "Engineering health",
+    "Documentation and users"
+  ],
+  "eval_cannot_run": {
+    "crates/ignite/tests/fixtures/codespec_siblings/reader.ignite::main reader": "a main does IO; the evaluator has none",
+    "crates/ignite/tests/fixtures/conformance/adversary_should_failure.ignite::a forwarded line exits with seven": "builtin `ProcessExit` has no value at compile time",
+    "crates/ignite/tests/fixtures/conformance/adversary_std_http.ignite::adversary: a Content-Length beside a Unicode space is 400": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/conformance/adversary_std_http.ignite::adversary: a response with a transfer coding other than chunked ends the connection": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/conformance/adversary_std_http.ignite::adversary: a response with the close option ends the connection": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/conformance/adversary_std_http.ignite::adversary: an obs-text octet reaches the application as one octet": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/conformance/adversary_std_telnet.ignite::adversary: replies and the prompt after a reply are NVT data": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/conformance/adversary_two_specs/main.ignite::padding exits with seven": "builtin `ProcessExit` has no value at compile time",
+    "crates/ignite/tests/fixtures/conformance/signal.ignite::never ends": "exceeds the evaluator's fuel of 10000000 units",
+    "crates/ignite/tests/fixtures/siblings/demo.ignite::module greeting": "`module(\"demo.ops\")` has no field `greeting`",
+    "crates/ignite/tests/fixtures/slice16/callee_forms.ignite::the callee is evaluated before the arguments": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/slice16/calls.ignite::effectful fn values called through a field and an index": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/slice16/closures.ignite::a closure handed to a spawned task": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/slice16/closures.ignite::a closure in a store": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/slice16/closures.ignite::a closure writes through a captured stream": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/slice16/moves_scale.ignite::200000 steps through a call": "over the time limit of 60 s",
+    "crates/ignite/tests/fixtures/slice16/moves_scale.ignite::50000 steps through a call": "over the time limit of 60 s",
+    "crates/ignite/tests/fixtures/slice17/command_line.ignite::main todo": "a main does IO; the evaluator has none",
+    "crates/ignite/tests/fixtures/slice17/command_line.ignite::other command lines parse by their subcommand": "builtin `CommandLineOf` has no value at compile time",
+    "crates/ignite/tests/fixtures/slice17/command_line.ignite::the acceptance's command line parses to an add": "builtin `CommandLineOf` has no value at compile time",
+    "crates/ignite/tests/fixtures/slice9/closures_passed.ignite::a capture changed after the call it was passed to": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/slice9/closures_passed.ignite::a closure parameter shadowing a borrowed parameter": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/slice9/closures_passed.ignite::a closure stored in a binding, then passed to update and upsert": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/slice9/closures_passed.ignite::nested passed closures": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/slice9/closures_passed.ignite::store update after the captured binding is rebound": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/slice9/closures_passed.ignite::store update copying captured values into the result": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/slice9/closures_passed.ignite::store update with captured parameters": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/slice9/closures_passed.ignite::store update with shadowed and loop captures": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/slice9/closures_passed.ignite::store upsert with captured parameters, a local and a for element": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/slice9/for_borrow.ignite::stores": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/slice9/for_borrow.ignite::the element stored into another list, a store and a map": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/slice9/match_borrow.ignite::a match on a Store-read value": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/slice9/match_borrow.ignite::bindings leave the arm and the scrutinee is passed on whole": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/slice9/regions.ignite::boxed values carried across releases and through the store": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/slice9/regions.ignite::store update with a capturing closure in a loop": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/handed_on.ignite::a failing task closes a pattern-bound pipe end spawned from a helper": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/handed_on.ignite::a stream handed on through two tasks outlives both": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/handed_on.ignite::a stream handed on to a second task outlives the first task": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/handed_on.ignite::an accepted stream handed on to a second task outlives the first task": "builtin `TcpListenerBind` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/named_spawn.ignite::named spawn arguments in another order reach their parameters": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/nested_spawn.ignite::a failing task closes a pipe end spawned inside an if branch": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/nested_spawn.ignite::a failing task closes a spawned pipe end whose name a later binding shadows": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/nested_spawn_adversary.ignite::adv1 a failing task closes a spawned end whose name only an inner block shadows": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/nested_spawn_adversary.ignite::adv3 a failing task closes a pipe end spawned in a branch that owns a pipe of its own": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/nested_spawn_adversary.ignite::adv4 a failing task closes a pipe end spawned in a match nested in an if": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/nested_spawn_adversary.ignite::adv5 a failing task closes a UFCS receiver spawned inside a branch with named arguments": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/nested_spawn_adversary.ignite::adv6 a failing task closes a pipe end spawned in an else-if chain": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/nested_spawn_adversary.ignite::adv7 named spawn arguments run in source order and arrive in parameter order": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/nested_spawn_adversary2.ignite::b1 a failing task closes a spawned end whose name a later match arm binds": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/nested_spawn_adversary2.ignite::b2 a failing task closes a spawned end whose name a later for loop binds": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/nested_spawn_adversary2.ignite::b3 a failing task closes a spawned end whose name a later closure parameter binds": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/nested_spawn_adversary2.ignite::b4 an end used after an inner shadowing stays the body's and writable": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/nested_spawn_adversary2.ignite::b5 an end used after a match arm that binds its name stays the body's and writable": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/nested_spawn_arms.ignite::a branch that owns a pipe of its own closes it at its end after handing an outer end over": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/nested_spawn_arms.ignite::a failing task closes a pipe end passed by name inside a branch": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/nested_spawn_arms.ignite::a failing task closes a pipe end spawned inside a match arm": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/nested_spawn_arms.ignite::a failing task closes a pipe end spawned inside an else branch": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/test_body_spawn.ignite::a failing task closes a pattern-bound pipe end spawned from the test body": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/test_body_spawn.ignite::a pipe end used after its spawn stays open for the test body": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/tests/basics.ignite::exit code 3": "builtin `ProcessExit` has no value at compile time",
+    "crates/ignite/tests/fixtures/tests/basics.ignite::output hidden on success": "builtin `StdoutWriteAll` has no value at compile time",
+    "crates/ignite/tests/fixtures/tests/basics.ignite::output shown on failure": "builtin `StdoutWriteAll` has no value at compile time",
+    "crates/ignite/tests/fixtures/tests/basics.ignite::tcp echo through a task": "builtin `TcpListenerBind` has no value at compile time",
+    "crates/ignite/tests/fixtures/tests/builtins.ignite::Clock.monotonic: two reads are ordered": "builtin `ClockMonotonic` has no value at compile time",
+    "crates/ignite/tests/fixtures/tests/clones.ignite::a discarded update or upsert stores the new value": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/tests/clones.ignite::a field of an upsert result is the stored field": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/tests/codespec_lists.ignite::Stderr is a stream of its own": "builtin `StdoutWriteAll` has no value at compile time",
+    "crates/ignite/tests/fixtures/tests/fields.ignite::a field of a Store read": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/tests/large_output.ignite::large streams": "builtin `StdoutWriteAll` has no value at compile time",
+    "crates/ignite/tests/fixtures/tests/slow.ignite::never ends": "exceeds the evaluator's fuel of 10000000 units",
+    "crates/ignite/tests/fixtures/tests/store.ignite::an overflow in update ends its test": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/tests/store.ignite::an overflow in update in a task leaves the store usable": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/tests/store.ignite::an overflow in upsert in a task leaves the store usable": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/tests/store.ignite::upsert from 8 tasks on one new id keeps every write": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/tests/store.ignite::upsert inserts on an empty id and replaces a held value": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/tests/store_load.ignite::values under updates of one shard: every id, values grow, no long wait, no lost write": "builtin `StoreNew` has no value at compile time",
+    "examples/terminal/commands.ignite::the terminal transcript over a pipe": "builtin `PipePair` has no value at compile time",
+    "examples/todo/todo.ignite::a todo written is loaded by a fresh state": "builtin `DirectoryTemporary` has no value at compile time",
+    "examples/todo/todo.ignite::handle answers 400, 404 and 405": "builtin `DirectoryTemporary` has no value at compile time",
+    "examples/todo/todo.ignite::handle creates, lists, reads, updates and deletes": "builtin `DirectoryTemporary` has no value at compile time",
+    "examples/todo/todo.ignite::ids past 65,536 go to the next shard and load from it": "builtin `DirectoryTemporary` has no value at compile time",
+    "std/fs.ignite::a file over the read bound is refused": "builtin `DirectoryTemporary` has no value at compile time",
+    "std/fs.ignite::a file written is read back, listed, nested and removed": "builtin `DirectoryTemporary` has no value at compile time",
+    "std/fs.ignite::a legal 250-byte name is written": "builtin `DirectoryTemporary` has no value at compile time",
+    "std/fs.ignite::paths that leave the root are refused": "builtin `DirectoryTemporary` has no value at compile time",
+    "std/fs.ignite::remove_tree removes links, not their targets": "builtin `DirectoryTemporary` has no value at compile time",
+    "std/process.ignite::a child over its timeout is killed with its group": "builtin `LauncherNew` has no value at compile time",
+    "std/process.ignite::a child reads its input on stdin, and the null device without one": "builtin `LauncherNew` has no value at compile time",
+    "std/process.ignite::a child that does not read its input still ends": "builtin `LauncherNew` has no value at compile time",
+    "std/process.ignite::a child's output and status are captured": "builtin `LauncherNew` has no value at compile time",
+    "std/process.ignite::a command line keeps its arguments in order": "builtin `CommandLineOf` has no value at compile time",
+    "std/process.ignite::a started child is killed": "builtin `LauncherNew` has no value at compile time",
+    "std/process.ignite::adversary: a missing working directory is not a missing program": "builtin `LauncherNew` has no value at compile time",
+    "std/process.ignite::adversary: a waited child keeps its id after its handle is reused": "builtin `LauncherNew` has no value at compile time",
+    "std/process.ignite::adversary: environment entries, PATH and odd programs": "builtin `LauncherNew` has no value at compile time",
+    "std/process.ignite::adversary: grandchildren do not hold the result": "builtin `LauncherNew` has no value at compile time",
+    "std/process.ignite::adversary: kill after the end keeps the exit status": "builtin `LauncherNew` has no value at compile time",
+    "std/process.ignite::adversary: output exactly at and one past the limit, both streams": "builtin `LauncherNew` has no value at compile time",
+    "std/process.ignite::every count of the bound is drawn, a count past it refused": "builtin `EntropyNew` has no value at compile time",
+    "std/process.ignite::output past the limit is counted, not kept": "builtin `LauncherNew` has no value at compile time",
+    "std/process.ignite::the launcher refuses what it cannot run": "builtin `LauncherNew` has no value at compile time",
+    "std/process.ignite::two draws differ": "builtin `EntropyNew` has no value at compile time",
+    "std/protocol/http.ignite::HEAD is answered as GET without content": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::Http chunks only an HTTP/1.1 response with content": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::OWS is SP and HTAB only": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a 2xx answer to CONNECT answered inline ends by closing the connection": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a 2xx answer to CONNECT answered inline has no Content-Length": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a 304 answered inline sends no content, so a pipelined response is not misread": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a Content-Length longer than the body, then close, gets no answer": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a Content-Length shorter than the body leaves the rest as the next head": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a Transfer-Encoding Http cannot frame is 400 and an unknown coding 501": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a binary body is sent as its bytes": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a body of exactly the default 1 MiB is served": "exceeds the evaluator's limit Nodes(1000000)",
+    "std/protocol/http.ignite::a body over 1 MiB is 413": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a body split across three deliveries": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a chunked body over the body limit is 413 however many digits its size has": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a chunked request body is decoded": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a head of exactly HttpLimits.head is served, one byte more is 431": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a head over 8 KiB is 431": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a head split across deliveries at its blank line": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a malformed head or Content-Length is 400": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a pipe client gets 400, 413 and 431": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a pipelined request over the head limit after two within it": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a request after Connection: close is not answered": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a request line alone at the head limit": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a request-target longer than the head limit is 414": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a response with the close option ends the connection": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a streamed 304 is the head only and the connection goes on": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a streamed 3xx answer to CONNECT is chunked": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a streamed response is sent in chunks as its pieces come": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::an HTTP/1.1 request has exactly one valid Host or is 400": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::an absolute-form target is accepted and its authority replaces Host": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::an application Transfer-Encoding is 500": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::an empty piece is skipped and does not end a chunked body": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::an empty write delivers nothing and the closed connection gets no answer": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::an error of piece ends a chunked body before its last chunk and the connection with it": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::chunk extensions are ignored": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::every status of RFC 9110 has its reason phrase": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::next_request ends on a connection closed before a whole request": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::next_request reads a head, its body and keeps the rest": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::next_request takes a pipelined request from the buffer": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::pipelined bodies whose total crosses the body limit are each within it": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::pipelined heads whose total crosses the head limit are each within it": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::the HTTP idle timeout alone ends a pipe connection": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::the default head of exactly 8192 bytes is served, 8193 is 431": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::the limits record bounds the body": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::the server answers a rejected request and closes": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::the server answers pipelined requests until one asks to close": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::three pipelined requests over a pipe are answered in one batch": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::trailer fields are checked and discarded and never merged into the header section": "builtin `PipePair` has no value at compile time",
+    "std/protocol/jsonrpc.ignite::a batch that holds only notifications is not answered": "builtin `PipePair` has no value at compile time",
+    "std/protocol/jsonrpc.ignite::a body over the limit and a header over the limit are their own errors": "builtin `PipePair` has no value at compile time",
+    "std/protocol/jsonrpc.ignite::a body that is not UTF-8 is answered with the parse error": "builtin `PipePair` has no value at compile time",
+    "std/protocol/jsonrpc.ignite::a message split over many small writes is read as one": "builtin `PipePair` has no value at compile time",
+    "std/protocol/jsonrpc.ignite::a missing or non-numeric Content-Length is its own error": "builtin `PipePair` has no value at compile time",
+    "std/protocol/jsonrpc.ignite::a notification with a fractional or exponent param is not answered": "builtin `PipePair` has no value at compile time",
+    "std/protocol/jsonrpc.ignite::a request whose id is a fraction or has 20 digits is answered under that id": "builtin `PipePair` has no value at compile time",
+    "std/protocol/jsonrpc.ignite::a request with a fractional param is answered under its id": "builtin `PipePair` has no value at compile time",
+    "std/protocol/jsonrpc.ignite::a stream that ends between messages is closed, inside one truncated": "builtin `PipePair` has no value at compile time",
+    "std/protocol/jsonrpc.ignite::a written message is read back byte-identical, its length in bytes": "builtin `PipePair` has no value at compile time",
+    "std/protocol/jsonrpc.ignite::an empty or unparsable batch is answered with one error object": "builtin `PipePair` has no value at compile time",
+    "std/protocol/jsonrpc.ignite::an id of 19 digits that fits Int is a NumberId and -0 comes back as sent": "builtin `PipePair` has no value at compile time",
+    "std/protocol/jsonrpc.ignite::an invalid request is answered under the id it holds, null when none can be read": "builtin `PipePair` has no value at compile time",
+    "std/protocol/jsonrpc.ignite::serve answers each request, an undecodable one with its error, until the stream ends": "builtin `PipePair` has no value at compile time",
+    "std/protocol/jsonrpc.ignite::serve does not write a response to a notification": "builtin `PipePair` has no value at compile time",
+    "std/protocol/jsonrpc.ignite::serve ends on a framing error": "builtin `PipePair` has no value at compile time",
+    "std/protocol/jsonrpc.ignite::two messages back to back are read as two": "builtin `PipePair` has no value at compile time",
+    "std/protocol/telnet.ignite::CR at the end of one delivery, LF in the next, is one line end": "builtin `PipePair` has no value at compile time",
+    "std/protocol/telnet.ignite::Ctrl+D on a partial line sends it without a line end": "builtin `PipePair` has no value at compile time",
+    "std/protocol/telnet.ignite::IAC IAC split across deliveries is one data byte": "builtin `PipePair` has no value at compile time",
+    "std/protocol/telnet.ignite::a Synch discards the data before its Data Mark": "builtin `PipePair` has no value at compile time",
+    "std/protocol/telnet.ignite::a client closing mid-line gets no answer for the partial line": "builtin `PipePair` has no value at compile time",
+    "std/protocol/telnet.ignite::a line of exactly maximum_line 4096 is answered, 4097 is too long": "builtin `PipePair` has no value at compile time",
+    "std/protocol/telnet.ignite::a lone CR ends a line": "builtin `PipePair` has no value at compile time",
+    "std/protocol/telnet.ignite::a pipe session answers IAC DO ECHO with IAC WONT ECHO": "builtin `PipePair` has no value at compile time",
+    "std/protocol/telnet.ignite::a pipe session ends on its idle timeout": "builtin `PipePair` has no value at compile time",
+    "std/protocol/telnet.ignite::a session limit bounds the subnegotiation": "builtin `PipePair` has no value at compile time",
+    "std/protocol/telnet.ignite::a session sends its prompt and replies as NVT data": "builtin `PipePair` has no value at compile time",
+    "std/protocol/telnet.ignite::a subnegotiation at exactly the limit, split across three deliveries": "builtin `PipePair` has no value at compile time",
+    "std/protocol/telnet.ignite::a telnet server runs a declared console, a client its session": "builtin `TcpListenerBind` has no value at compile time",
+    "std/protocol/telnet.ignite::an IAC at the end of one delivery, its command in the next": "builtin `PipePair` has no value at compile time",
+    "std/protocol/telnet.ignite::an interrupt is IAC IP followed by the Synch": "builtin `PipePair` has no value at compile time",
+    "std/protocol/telnet.ignite::await_prompt returns the text before each prompt and fails when the server closes": "builtin `TcpListenerBind` has no value at compile time",
+    "std/protocol/telnet.ignite::over a pipe IAC IAC is one data byte": "builtin `PipePair` has no value at compile time",
+    "std/protocol/telnet.ignite::the Telnet idle timeout alone ends a pipe session": "builtin `PipePair` has no value at compile time",
+    "std/protocol/telnet.ignite::the default subnegotiation limit is 1024 bytes over a pipe": "builtin `PipePair` has no value at compile time",
+    "std/protocol/telnet.ignite::the server answers each line and ends on the console's close": "builtin `PipePair` has no value at compile time",
+    "std/protocol/telnet.ignite::the server answers options and AYT between lines": "builtin `PipePair` has no value at compile time",
+    "std/protocol/telnet.ignite::the server closes on an overlong line, IAC IP and an overlong subnegotiation": "builtin `PipePair` has no value at compile time",
+    "std/protocol/telnet.ignite::the server sends IAC GA after each prompt and the AYT answer": "builtin `PipePair` has no value at compile time",
+    "std/text.ignite::Int.parse reads bytes from any receiver and leaves them as they were": "builtin `StoreNew` has no value at compile time",
+    "std/text.ignite::List.map takes a fn with the effects of its caller": "builtin `StoreNew` has no value at compile time",
+    "std/text.ignite::List.map takes a local holding an effectful fn": "builtin `StoreNew` has no value at compile time",
+    "std/text.ignite::a slice that is kept, stored or put does not see later changes of its receiver": "builtin `StoreNew` has no value at compile time"
+  },
+  "eval_slow": {
+    "crates/ignite/tests/fixtures/slice16/moves_scale.ignite::200000 steps through a call": "value-semantics copies make the evaluator quadratic here (50,000 steps measured 185 s); story:quality-ratchet, 2026-11-07: run by task quality only, with the 60 s limit",
+    "crates/ignite/tests/fixtures/slice16/moves_scale.ignite::50000 steps through a call": "value-semantics copies make the evaluator quadratic here (50,000 steps measured 185 s); story:quality-ratchet, 2026-11-07: run by task quality only, with the 60 s limit"
+  },
+  "intermittent_decisions": {
+    "crates/ignite/tests/fixtures/tests/store_load.ignite::values under updates of one shard: every id, values grow, no long wait, no lost write": "story:llvm-store-update-off-lock, 2026-11-07: the 500 ms wait assertion fails on LLVM at load 35 to 39, also when run alone, and passes at lower load"
+  },
+  "known_differences": {
+    "crates/ignite/tests/fixtures/tests/basics.ignite::try on err fails": {
+      "consumer": "eval",
+      "story": "story:eval-try-report",
+      "what": "both targets report `? failed at basics.ignite:50:21: Err(not a number: x)`; the evaluator reports column 11 and `Err(IoError(\"not a number: x\"))` (differential::the_evaluator_reports_a_failed_try_as_the_targets_do)"
+    },
+    "crates/ignite/tests/fixtures/tests/basics.ignite::try on none fails": {
+      "consumer": "eval",
+      "story": "story:eval-try-report",
+      "what": "both targets report `? failed at basics.ignite:55:25: None`; the evaluator reports column 11 (differential::the_evaluator_reports_a_failed_try_as_the_targets_do)"
+    },
+    "crates/ignite/tests/fixtures/tests/store_load.ignite::values under updates of one shard: every id, values grow, no long wait, no lost write": {
+      "consumer": "llvm",
+      "intermittent": true,
+      "story": "story:llvm-store-update-off-lock",
+      "what": "under load the LLVM target fails the 500 ms wait assertion and Rust passes, also when re-run alone (task gate at load 35 to 39, 2026-11-07); passes at lower load (ignite_test::store_values_under_updates_of_one_shard_on_both_targets, ignored for the same story)"
+    },
+    "std/text.ignite::a later bound that changes the bytes leaves the slice before it as it was": {
+      "consumer": "eval",
+      "story": "story:eval-receiver-order",
+      "what": "both targets pass; the evaluator slices the receiver after a bound changed it, `n` is Some(99) not Some(23) (differential::the_evaluator_reads_a_receiver_before_its_arguments)"
+    },
+    "std/text.ignite::a start bound, both bounds or a bound in a loop that change the receiver": {
+      "consumer": "eval",
+      "story": "story:eval-receiver-order",
+      "what": "both targets pass; the evaluator slices the receiver after a bound changed it, `t` is 99 not 23 (differential::the_evaluator_reads_a_receiver_before_its_arguments)"
+    }
+  },
+  "metrics": {
+    "1.1": {
+      "area": "Semantics: one meaning across the three consumers",
+      "bars": {
+        "eval": {
+          "value": 4
+        },
+        "llvm": {
+          "value": 0
+        }
+      },
+      "direction": "lower",
+      "instrument": "`differential::corpus_agrees_across_rust_llvm_and_the_evaluator` (every merge): units of the corpus whose exit, stdout or failure text differs from the Rust target's",
+      "kind": "gate",
+      "name": "programs whose result differs between Rust, LLVM and the evaluator",
+      "source": "differential",
+      "tolerance": 0,
+      "unit": "count"
+    },
+    "1.2": {
+      "area": "Semantics: one meaning across the three consumers",
+      "bars": {
+        "eval": {
+          "value": 420
+        },
+        "llvm": {
+          "value": 614
+        },
+        "rust": {
+          "value": 614
+        }
+      },
+      "direction": "higher",
+      "instrument": "the differential runner: units (inline tests and executables) each consumer ran",
+      "kind": "ratchet",
+      "name": "differential corpus size",
+      "source": "differential",
+      "tolerance": 0,
+      "unit": "count"
+    },
+    "1.3": {
+      "area": "Semantics: one meaning across the three consumers",
+      "bars": {
+        "eval/builtins": {
+          "value": 112
+        },
+        "eval/patterns": {
+          "value": 13
+        },
+        "llvm/builtins": {
+          "value": 12
+        },
+        "llvm/patterns": {
+          "value": 30
+        },
+        "rust/builtins": {
+          "value": 43
+        },
+        "rust/patterns": {
+          "value": 71
+        }
+      },
+      "direction": "lower",
+      "goal": "one implementation per rule: after story:mid-level-ir the backends name no `PatternKind` and no `Builtin` the IR lowers",
+      "instrument": "`quality::static_metrics_hold_the_bar`: per consumer crate, `PatternKind::` mentions (patterns) and distinct `Builtin::` variants named (builtins)",
+      "kind": "hill-climb",
+      "name": "rules implemented more than once (patterns, builtins)",
+      "source": "static",
+      "tolerance": 0,
+      "unit": "count"
+    },
+    "1.4": {
+      "area": "Semantics: one meaning across the three consumers",
+      "bars": {
+        "all": {
+          "value": 0
+        }
+      },
+      "direction": "lower",
+      "instrument": "`quality::static_metrics_hold_the_bar`: golden `.rs` and `.ll` outputs changed against the merge base with main while `CODEGEN_REVISION` is unchanged",
+      "kind": "gate",
+      "name": "generated-code goldens changed without a `CODEGEN_REVISION` bump",
+      "source": "static",
+      "tolerance": 0,
+      "unit": "count"
+    },
+    "1.5": {
+      "area": "Semantics: one meaning across the three consumers",
+      "direction": "lower",
+      "instrument": "a typed program generator, N seeds per gate",
+      "kind": "gate",
+      "name": "random programs on which the consumers disagree",
+      "tolerance": 0,
+      "unit": "count",
+      "unmeasured": "no program generator yet (out of scope of story:quality-ratchet)"
+    },
+    "1.6": {
+      "area": "Semantics: one meaning across the three consumers",
+      "bars": {
+        "eval": {
+          "value": 194
+        }
+      },
+      "direction": "lower",
+      "instrument": "the differential runner: units the evaluator has no rule for (IO, tasks, fuel), each listed with its reason in `quality/baseline.json` `eval_cannot_run`",
+      "kind": "ratchet",
+      "name": "corpus units the evaluator cannot run",
+      "source": "differential",
+      "tolerance": 0,
+      "unit": "count"
+    },
+    "1.7": {
+      "area": "Semantics: one meaning across the three consumers",
+      "bars": {
+        "all": {
+          "value": 1
+        }
+      },
+      "direction": "lower",
+      "instrument": "`quality::check_differential` (every merge): entries of `known_differences` marked `intermittent`, each naming a story of the planning store; a difference so marked may show or not in a run",
+      "kind": "gate",
+      "name": "known differences marked intermittent",
+      "source": "differential",
+      "tolerance": 0,
+      "unit": "count"
+    },
+    "2.1": {
+      "area": "Front end: the checker refuses exactly the wrong programs",
+      "bars": {
+        "all": {
+          "value": 11
+        }
+      },
+      "direction": "lower",
+      "instrument": "`quality::static_metrics_hold_the_bar`: codes `docs/slice.md` names, less the retired ones, that no file under a crate's `tests/`, `std/` or `examples/` mentions",
+      "kind": "gate",
+      "name": "diagnostic codes without a test",
+      "source": "static",
+      "tolerance": 0,
+      "unit": "count"
+    },
+    "2.2": {
+      "area": "Front end: the checker refuses exactly the wrong programs",
+      "bars": {
+        "llvm": {
+          "value": 0
+        },
+        "rust": {
+          "value": 0
+        }
+      },
+      "direction": "lower",
+      "instrument": "the differential runner: corpus programs that check and do not build on a target",
+      "kind": "gate",
+      "name": "accepted programs that fail in a backend",
+      "source": "differential",
+      "tolerance": 0,
+      "unit": "count"
+    },
+    "2.3": {
+      "area": "Front end: the checker refuses exactly the wrong programs",
+      "direction": "lower",
+      "instrument": "count of open stories that are soundness holes",
+      "kind": "ratchet",
+      "name": "soundness holes open (effects, ownership, exhaustiveness)",
+      "tolerance": 0,
+      "unit": "count",
+      "unmeasured": "the planning store tags no story as a soundness hole; known open: story:map-put-handle-roots, story:immutable-binding-e006"
+    },
+    "2.4": {
+      "area": "Front end: the checker refuses exactly the wrong programs",
+      "direction": "lower",
+      "instrument": "fuzz the parser and checker on a mutated corpus",
+      "kind": "gate",
+      "name": "compiler panics on any input",
+      "tolerance": 0,
+      "unit": "count",
+      "unmeasured": "no fuzzer yet (out of scope of story:quality-ratchet)"
+    },
+    "2.5": {
+      "area": "Front end: the checker refuses exactly the wrong programs",
+      "bars": {
+        "all": {
+          "value": 319
+        }
+      },
+      "direction": "higher",
+      "instrument": "`quality::static_metrics_hold_the_bar`: `.expected` diagnostic fixtures; each is compared by its crate's fixture test every merge",
+      "kind": "ratchet",
+      "name": "diagnostic fixtures (one diagnostic per error site, its span)",
+      "source": "static",
+      "tolerance": 0,
+      "unit": "count"
+    },
+    "2.6": {
+      "area": "Front end: the checker refuses exactly the wrong programs",
+      "bars": {
+        "all": {
+          "value": 5
+        }
+      },
+      "direction": "higher",
+      "instrument": "`quality::static_metrics_hold_the_bar`: the `limits::` tests of `ignite-check` and `ignite-types`, each a linearity bound run every merge",
+      "kind": "gate",
+      "name": "checking time stays linear (limit tests)",
+      "source": "static",
+      "tolerance": 0,
+      "unit": "count"
+    },
+    "3.1": {
+      "area": "Generated code and runtime behaviour",
+      "bars": {
+        "llvm": {
+          "value": 90
+        },
+        "rust": {
+          "value": 168
+        }
+      },
+      "direction": "lower",
+      "instrument": "`quality::static_metrics_hold_the_bar`: `.clone()` in the Rust generator's goldens, calls of `copy.*` in the LLVM goldens",
+      "kind": "ratchet",
+      "name": "copies in the generated code of the golden corpus",
+      "source": "static",
+      "tolerance": 0,
+      "unit": "count"
+    },
+    "3.2": {
+      "area": "Generated code and runtime behaviour",
+      "bars": {
+        "llvm/terminald/dev": {
+          "value": 7563720
+        },
+        "llvm/terminald/release": {
+          "value": 1468648
+        },
+        "llvm/todod/dev": {
+          "value": 8230560
+        },
+        "llvm/todod/release": {
+          "value": 2042752
+        },
+        "rust/terminald/dev": {
+          "value": 6223520
+        },
+        "rust/terminald/release": {
+          "value": 681368
+        },
+        "rust/todod/dev": {
+          "value": 7405864
+        },
+        "rust/todod/release": {
+          "value": 961880
+        }
+      },
+      "direction": "lower",
+      "instrument": "`ignite-perf quality` (task quality): size of `todod` and `terminald` per target and profile",
+      "kind": "ratchet",
+      "name": "binary size",
+      "source": "perf",
+      "tolerance": "5%",
+      "unit": "bytes"
+    },
+    "3.3": {
+      "area": "Generated code and runtime behaviour",
+      "direction": "higher",
+      "instrument": "`ignite-load matrix` (`task bench-throughput`)",
+      "kind": "ratchet",
+      "name": "throughput and p99 latency of terminald and todod",
+      "tolerance": "10%",
+      "unit": "count",
+      "unmeasured": "no load baseline yet (out of scope of story:quality-ratchet)"
+    },
+    "3.4": {
+      "area": "Generated code and runtime behaviour",
+      "direction": "lower",
+      "instrument": "`llvm_memory::` and `terminal::idle_terminald_runs_one_thread` (every merge)",
+      "kind": "gate",
+      "name": "peak RSS, leaked handles and threads after a load run",
+      "tolerance": 0,
+      "unit": "count",
+      "unmeasured": "no number: the named tests gate it in task gate"
+    },
+    "3.5": {
+      "area": "Generated code and runtime behaviour",
+      "bars": {
+        "llvm": {
+          "value": 0
+        }
+      },
+      "direction": "lower",
+      "instrument": "`quality::static_metrics_hold_the_bar`, the rule of `contain::tests::every_entry_is_guarded`: `extern \"C\"` entries of `ignite-rt` not run through `crate::entry`",
+      "kind": "gate",
+      "name": "runtime entries that can unwind a panic across `extern \"C\"`",
+      "source": "static",
+      "tolerance": 0,
+      "unit": "count"
+    },
+    "3.6": {
+      "area": "Generated code and runtime behaviour",
+      "bars": {
+        "llvm": {
+          "value": 73
+        },
+        "rust": {
+          "value": 7
+        }
+      },
+      "direction": "lower",
+      "instrument": "`quality::static_metrics_hold_the_bar`: `unsafe` blocks, fns, impls and extern blocks; rust counts `ignite-io`, llvm `ignite-io` and `ignite-rt`",
+      "kind": "ratchet",
+      "name": "`unsafe` sites in the substrate a target links",
+      "source": "static",
+      "tolerance": 0,
+      "unit": "count"
+    },
+    "4.1": {
+      "area": "Standard library and protocols",
+      "bars": {
+        "llvm": {
+          "value": 3
+        },
+        "rust": {
+          "value": 3
+        }
+      },
+      "direction": "higher",
+      "instrument": "`quality::conformance_claims_hold_the_bar` (every merge): claim lines `yes` of `ignite conformance` over std/protocol/telnet, http and jsonrpc",
+      "kind": "ratchet",
+      "name": "conformance claims that hold",
+      "source": "conformance",
+      "tolerance": 0,
+      "unit": "count"
+    },
+    "4.2": {
+      "area": "Standard library and protocols",
+      "bars": {
+        "llvm/jsonrpc-2.0": {
+          "value": 0
+        },
+        "llvm/rfc854": {
+          "value": 0
+        },
+        "llvm/rfc855": {
+          "value": 0
+        },
+        "llvm/rfc9110": {
+          "value": 1
+        },
+        "llvm/rfc9112": {
+          "value": 1
+        },
+        "rust/jsonrpc-2.0": {
+          "value": 0
+        },
+        "rust/rfc854": {
+          "value": 0
+        },
+        "rust/rfc855": {
+          "value": 0
+        },
+        "rust/rfc9110": {
+          "value": 1
+        },
+        "rust/rfc9112": {
+          "value": 1
+        }
+      },
+      "direction": "lower",
+      "instrument": "same: the gap count of each claim line, per claimed spec",
+      "kind": "ratchet",
+      "name": "gaps per claimed spec",
+      "source": "conformance",
+      "tolerance": 0,
+      "unit": "count"
+    },
+    "4.3": {
+      "area": "Standard library and protocols",
+      "bars": {
+        "eval": {
+          "value": 191
+        },
+        "llvm": {
+          "value": 309
+        },
+        "rust": {
+          "value": 309
+        }
+      },
+      "direction": "higher",
+      "instrument": "the differential runner: inline tests of std/ and examples/ each consumer ran",
+      "kind": "ratchet",
+      "name": "inline tests per target",
+      "source": "differential",
+      "tolerance": 0,
+      "unit": "count"
+    },
+    "4.4": {
+      "area": "Standard library and protocols",
+      "direction": "lower",
+      "instrument": "typed program against the test bodies",
+      "kind": "ratchet",
+      "name": "std functions with no inline test",
+      "tolerance": 0,
+      "unit": "count",
+      "unmeasured": "no instrument yet: needs the call graph of the test bodies"
+    },
+    "5.1": {
+      "area": "Operations: run, apply, host",
+      "direction": "lower",
+      "instrument": "the `run::` and `control_trace::` suites (every merge)",
+      "kind": "gate",
+      "name": "replay mismatches (E127) on recorded journals",
+      "tolerance": 0,
+      "unit": "count",
+      "unmeasured": "no number: the named suites gate it in task gate"
+    },
+    "5.2": {
+      "area": "Operations: run, apply, host",
+      "direction": "lower",
+      "instrument": "the `apply*::` suites (every merge)",
+      "kind": "gate",
+      "name": "crash-recovery matrix rows failing (docs/slice.md 17.7)",
+      "tolerance": 0,
+      "unit": "count",
+      "unmeasured": "no number: the named suites gate it in task gate"
+    },
+    "5.3": {
+      "area": "Operations: run, apply, host",
+      "bars": {
+        "llvm": {
+          "value": 384
+        }
+      },
+      "direction": "lower",
+      "instrument": "`ignite-perf quality` (task quality): `verify-llvm-readiness`'s real-clock restart of the terminal design, bound 100 to 500 ms",
+      "kind": "ratchet",
+      "name": "restart readiness, real clock",
+      "source": "perf",
+      "tolerance": "20%",
+      "unit": "ms"
+    },
+    "5.4": {
+      "area": "Operations: run, apply, host",
+      "direction": "lower",
+      "instrument": "`ignite-perf apply-cycle`",
+      "kind": "ratchet",
+      "name": "apply cycle time of the todo, per target",
+      "tolerance": "10%",
+      "unit": "ms",
+      "unmeasured": "not in task quality: `ignite-perf apply-cycle` exports and builds the benchmark trees and runs about 15 minutes; it is measured per slice (docs/performance/)"
+    },
+    "6.1": {
+      "area": "Compiler speed",
+      "bars": {
+        "all/check": {
+          "value": 176
+        },
+        "all/plan": {
+          "value": 153
+        }
+      },
+      "direction": "lower",
+      "instrument": "`ignite-perf quality` (task quality): median of 15 runs of `ignite check` and `ignite plan` of the terminal design file",
+      "kind": "ratchet",
+      "name": "check and plan of the design file",
+      "source": "perf",
+      "tolerance": "10%",
+      "unit": "ms"
+    },
+    "6.2": {
+      "area": "Compiler speed",
+      "bars": {
+        "llvm": {
+          "value": 993
+        },
+        "rust": {
+          "value": 3081
+        }
+      },
+      "direction": "lower",
+      "goal": "LLVM dev build at most 0.15 of the Rust dev build",
+      "instrument": "`ignite-perf quality` (task quality): median of 3 dev builds of the todo example, fresh output each",
+      "kind": "ratchet",
+      "name": "todo build, dev profile",
+      "source": "perf",
+      "tolerance": "10%",
+      "unit": "ms"
+    },
+    "6.3": {
+      "area": "Compiler speed",
+      "direction": "lower",
+      "instrument": "the gate's wall time",
+      "kind": "ratchet",
+      "name": "`task gate` wall time",
+      "tolerance": "10%",
+      "unit": "ms",
+      "unmeasured": "no instrument records the gate's wall time; waves note it in their close (AGENTS.md § Gate time)"
+    },
+    "7.1": {
+      "area": "Engineering health",
+      "direction": "lower",
+      "instrument": "gate logs",
+      "kind": "ratchet",
+      "name": "flaky tests per gate",
+      "tolerance": 0,
+      "unit": "count",
+      "unmeasured": "no instrument reads the gate logs; known: apply_transition::a_failed_start_first_replacement, slice10::executable_component_main"
+    },
+    "7.2": {
+      "area": "Engineering health",
+      "bars": {
+        "all": {
+          "value": 21
+        }
+      },
+      "direction": "lower",
+      "instrument": "`quality::static_metrics_hold_the_bar`: `#[ignore` attributes under crates/ and tools/",
+      "kind": "ratchet",
+      "name": "ignored tests",
+      "source": "static",
+      "tolerance": 0,
+      "unit": "count"
+    },
+    "7.3": {
+      "area": "Engineering health",
+      "bars": {
+        "all": {
+          "value": 4
+        }
+      },
+      "direction": "lower",
+      "instrument": "`quality::static_metrics_hold_the_bar`: Rust files under crates/*/src and tools/*/src and std modules over 3,000 lines",
+      "kind": "ratchet",
+      "name": "source files over 3,000 lines",
+      "source": "static",
+      "tolerance": 0,
+      "unit": "count"
+    },
+    "7.4": {
+      "area": "Engineering health",
+      "bars": {
+        "all": {
+          "value": 34
+        }
+      },
+      "direction": "lower",
+      "instrument": "`quality::static_metrics_hold_the_bar`: rows of the Open table of docs/friction.md",
+      "kind": "ratchet",
+      "name": "language friction rows open",
+      "source": "static",
+      "tolerance": 0,
+      "unit": "count"
+    },
+    "7.5": {
+      "area": "Engineering health",
+      "direction": "lower",
+      "instrument": "`cargo mutants` sample",
+      "kind": "ratchet",
+      "name": "mutants that survive the suite on the compiler crates",
+      "tolerance": 0,
+      "unit": "count",
+      "unmeasured": "no mutation testing yet (out of scope of story:quality-ratchet)"
+    },
+    "8.1": {
+      "area": "Documentation and users",
+      "direction": "lower",
+      "instrument": "`site::` (every merge)",
+      "kind": "gate",
+      "name": "`ignite` blocks in the book that fail to check",
+      "tolerance": 0,
+      "unit": "count",
+      "unmeasured": "no number: `site::` gates it in task gate"
+    },
+    "8.2": {
+      "area": "Documentation and users",
+      "direction": "lower",
+      "instrument": "`site::ux::ratchet` against ux/baseline.json (task ux, every merge)",
+      "kind": "ratchet",
+      "name": "website UI ratchet",
+      "tolerance": 0,
+      "unit": "count",
+      "unmeasured": "its own baseline: ux/baseline.json"
+    },
+    "8.3": {
+      "area": "Documentation and users",
+      "direction": "lower",
+      "instrument": "review rule",
+      "kind": "gate",
+      "name": "public APIs or diagnostics changed without a docs/slice.md change",
+      "tolerance": 0,
+      "unit": "count",
+      "unmeasured": "a review rule; no test"
+    }
+  }
+}

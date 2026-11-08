@@ -58,6 +58,23 @@ tasks:
       - task: test
       - task: ux
 
+  quality:
+    desc: Measure every instrumented metric of docs/quality.md once and append the run to quality/history.jsonl (RUN=vX.Y.Z for a release, which is refused when worse than the last)
+    vars:
+      WORK:
+        sh: echo "${IGNITE_QUALITY_WORK:-${XDG_CACHE_HOME:-$HOME/.cache}/ignite/quality}"
+      T: '{{.CARGO_TARGET_DIR | default "target"}}'
+    env:
+      RUST_TEST_THREADS: "4"
+      IGNITE_QUALITY_RUN: '{{.RUN | default "run"}}'
+      IGNITE_DIFFERENTIAL_SLOW: "1"
+    cmds:
+      - cargo build -q -p ignite -p ignite-perf
+      - cargo build -q -p ignite-rt --features runner --target-dir {{.T}}/ignite-test/rt
+      - cargo test -q -p ignite --test main -- differential::corpus quality::static_metrics_hold_the_bar quality::conformance_claims_hold_the_bar
+      - '{{.T}}/debug/ignite-perf quality --runtime {{.T}}/ignite-test/rt/debug/libignite_rt.a --work {{.WORK}} --out target/quality/perf-metrics.json'
+      - cargo test -q -p ignite --test main -- --ignored --exact quality::record
+
   compile:
     desc: Compile the terminal example with ignite --target rust into target/ignite/terminal
     cmds:
