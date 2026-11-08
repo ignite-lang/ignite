@@ -3,8 +3,9 @@
 //! `IGNITE_BITWISE_SEED` to change it) applies every operator to every
 //! pair, and the evaluator, a Rust-target build and an LLVM-target build
 //! must each print the values Rust's `i64` gives under 29.2's shift rule.
-//! `fixtures/bitwise/codecs.ignite` holds SHA-1 and base64 written with
-//! the operators: its inline tests are the vectors of RFC 3174 and
+//! `fixtures/bitwise/codecs.ignite` calls std's SHA-1 and base64
+//! (`std.digest`, `std.encoding`), written with the operators: its inline
+//! tests are the vectors of RFC 3174 and
 //! RFC 4648 on both targets, and the ignored
 //! `codecs_within_3x_of_hand_written_rust` times it against
 //! `fixtures/bitwise/codecs.rs` on a 1 MiB input (29.5).

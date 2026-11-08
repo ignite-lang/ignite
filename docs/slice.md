@@ -9746,7 +9746,7 @@ tree every data format reads into and writes from; the codecs, YAML, TOML and th
 | `type DecodeError` | `path`, `expected`, `found`, all `Text`; `describe(error)` (UFCS `error.describe()`) is `<path>: expected <expected>, found <found>` |
 | `type FormatError` | `message: Text`, `line`, `column`, `offset: Int`: the first bad byte of a read, `line` and `column` 1-based, `column` in characters, `offset` in bytes (the positions of 1.1); a write gives 0 for all three |
 | `format_error(text, message, offset)` | the `FormatError` at byte `offset` of `text`, line and column counted |
-| `base64(bytes)` | RFC 4648 section 4 with `=` padding: the text of `Value.Bytes` in a format without bytes |
+| `base64(bytes)` | moved to `std.encoding` (section NN); `std.json` imports it from there for the text of `Value.Bytes` |
 
 `describe` is a fn, not a `DecodeError.describe` hook: a hook of 16.16 is not callable as a
 method. `Value`'s variants share names with `Json`'s (`Null`, `Bool`, `Decimal`), so a module
@@ -9771,7 +9771,7 @@ of a later step decodes the text into the field's type.
 
 ### 27.3 Layering
 
-`std.data` is in the base layer and imports nothing; `std.json` imports it
+`std.data` is in the base layer and imports nothing; `std.json` imports it and `std.encoding`
 (`docs/layering.md`, `layering::` in `crates/ignite-check/tests/layering.rs`).
 
 ### 27.4 Not covered
@@ -9783,7 +9783,7 @@ refused duplicate member follow `docs/serde.md` goal 5 and section 4.
 
 ### 27.5 Tests
 
-- `std/data.ignite`: the default `Shape`, `describe`, `base64` against RFC 4648's vectors,
+- `std/data.ignite`: the default `Shape`, `describe` (the `base64` vectors are in `std/encoding.ignite`, NN),
   `format_error`'s line and column (`task test-ignite`, both targets).
 - `std/json.ignite`: `of_data(to_data(j)) == j` for every `Json` variant, nested; `Bytes` as
   base64 and `Moment` as text; `read` of every kind; line, column and offset of a format error;
@@ -9956,7 +9956,8 @@ tests 1 to 4 (test 3 is a million `a`; plus the empty message) and the seven vec
 section 10; `bitwise::sha1_and_base64_vectors_on_both_targets` runs them with `ignite test` on
 both targets. Reading a byte by index and `push` lower to an inline load or store behind a
 bounds check on both targets (no call), so the story's "byte get/set cheaply" needs no new
-builtin.
+builtin. Since section NN the code is `std.digest.sha1` and `std.encoding.base64`, which the
+fixture imports.
 
 The file's executable `codecs` builds 1 MiB (`byte i = (31 i + 7) mod 256`) and runs 16 rounds
 of SHA-1 and base64 over it, changing the first byte each round; it prints the last digest and
@@ -10400,3 +10401,85 @@ counted object holds (both targets). Release builds ignore the variable.
   `leak::g30_soaks_pass_on_rust_and_are_known_failures_on_llvm` asserts both pass on Rust and
   both fail on LLVM naming `handles` and `channels`. `story:channel-release-on-close` turns the
   LLVM half green and moves the two tests into `std/sync.ignite`.
+
+## NN. SHA-1, SHA-256 and base64 in std (`std.digest`, `std.encoding`)
+
+**Status: implemented in `story:std-digest`.**
+
+Case-study gap G22 (`docs/research/case-study-gaps.md`): a WebSocket handshake, a token check
+or a content hash wrote its digest and its base64 by hand with bit arithmetic. Both are std
+modules, written in Ignite on 29's operators and 32's `U32`; no builtin and no substrate code is
+added, so the compiler and both backends are unchanged.
+
+### NN.1 `std.encoding`
+
+RFC 4648. Encoding is total; decoding returns `Result<Bytes, EncodingError>`.
+
+| item | meaning |
+|---|---|
+| `type EncodingError` | `offset: Int`, `message: Text`: the byte offset of the first character refused, the text's length when only the length is wrong |
+| `base64(data) -> Text` | section 4, `=` padding to a multiple of four characters |
+| `base64url(data) -> Text` | section 5 (`-` and `_` for `+` and `/`), padded |
+| `base64url_unpadded(data) -> Text` | section 5 without padding, which section 3.2 allows when the referring specification says so (JWS, RFC 7515) |
+| `base64_decode(text)`, `base64url_decode(text)` | the bytes of a padded text in that alphabet |
+| `base64url_unpadded_decode(text)` | the bytes of an unpadded base64url text |
+| `hex(data) -> Text` | section 8 in lowercase, two digits per byte, as a digest is printed |
+
+Decoding refuses, in this order: a padded text whose length is no multiple of 4 (`the length
+of padded base64 is a multiple of 4`, at the length); an unpadded one whose length is 1 more
+than a multiple of 4 (`no base64 text has this length`); a `=` that is not one of the last two
+characters of a padded text (`` `=` only as the last one or two characters ``); any character
+outside the alphabet, the other alphabet's two and a `=` in an unpadded text included (section
+3.3, `not a base64 character`); non-zero bits after the last byte (section 3.5's canonical
+encoding, `the bits after the last byte are not zero`, at the last character). Line breaks and
+white space are characters outside the alphabet.
+
+`std.data.base64` (27.1) is gone: the function moved here unchanged in output, and `std.json`
+imports it from `std.encoding` for the text of `Value.Bytes`.
+
+### NN.2 `std.digest`
+
+| item | meaning |
+|---|---|
+| `sha1(data) -> Bytes` | the 20-byte SHA-1 digest (RFC 3174) |
+| `sha256(data) -> Bytes` | the 32-byte SHA-256 digest (FIPS 180-4 section 6.2) |
+| `enum Algorithm` | `Sha1`, `Sha256` |
+| `type Digest` | `algorithm`, `state: List<U32>` (the words after the last whole block), `pending: Bytes` (fewer than 64), `length: Int` (bytes taken) |
+| `Digest.sha1()`, `Digest.sha256()` | the state before any input |
+| `update(self: Digest, data) -> Digest` | the state after `data`; by UFCS, `d.update(data)` |
+| `finish(self: Digest) -> Bytes` | the digest of everything taken |
+
+`sha1(data)` is `Digest.sha1().update(data).finish()`. `update` fills the pending block first,
+then compresses every whole block of `data` where it lies (no copy of the input), and keeps
+the rest; the one-shot form therefore copies at most 63 bytes of its input. `update` and
+`finish` are free fns because an associated fn `Digest.update` is not callable as a method
+(E041 on `d.update(..)`; `describe` in 27.1 is a fn for the same reason): a caller imports `std.digest.{Digest, update, finish}`. Input
+lengths are counted in `Int`; `length * 8` fails past 2^60 bytes as every `Int` overflow does.
+
+### NN.3 Layering
+
+Both are in the base layer (`docs/layering.md`, `LAYERS` in
+`crates/ignite-check/tests/layering.rs`). `std.encoding` imports nothing; `std.digest` imports
+`std.encoding.hex` for its tests only.
+
+### NN.4 The codecs fixture
+
+`crates/ignite/tests/fixtures/bitwise/codecs.ignite` (29.5, 32.5) no longer writes SHA-1 and
+base64 itself: it imports `std.digest.sha1` and `std.encoding.{base64, hex}`, keeps its four
+inline tests and its executable `codecs`, which prints the same two lines as
+`fixtures/bitwise/codecs.rs`. `bitwise::sha1_and_base64_vectors_on_both_targets` runs it on
+both targets; `bitwise::codecs_within_3x_of_hand_written_rust` (`#[ignore]`) is the
+acceptance's 1 MiB timing and now times std's code. Not recorded in this story: timing runs
+happen on the dedicated measurement host, not on the shared workstation; the numbers of 32.5
+are the last record and were taken over the same SHA-1 rounds.
+
+### NN.5 Tests
+
+- `std/encoding.ignite` (both targets): RFC 4648 section 10's vectors in base64; base64url
+  padded and unpadded; every decoder reverses its encoder on those vectors; each refusal of
+  NN.1 with its offset; `hex`.
+- `std/digest.ignite` (both targets): RFC 3174's tests 1 to 4 (test 3 is a million `a`) and the
+  empty message; FIPS 180-4's SHA-256 examples (`abc`, the 448-bit and 896-bit messages), the
+  empty message and a million `a`; `Digest` fed in pieces of 1, 3, 55, 56, 63, 64, 65, 128 and
+  300 bytes gives the one-shot digest of a 300-byte message for both algorithms.
+- `layering::` with the two new rows; `bitwise::` over the rewritten fixture.

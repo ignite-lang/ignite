@@ -2,7 +2,8 @@ package std.json
 
 import std.text.{digit_value, is_digit, repeat}
 import std.option.{and_then, unwrap_or}
-import std.data.{base64, format_error, DataLimits, FormatError, Value}
+import std.data.{format_error, DataLimits, FormatError, Value}
+import std.encoding.base64
 
 // JSON values (RFC 8259): `encode` writes the compact form, `parse` reads
 // one value surrounded by optional whitespace, and the accessors read
