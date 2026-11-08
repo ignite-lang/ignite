@@ -231,6 +231,61 @@
 - Workaround in the service: the parser returns its errors as `Text` instead of `IoError`. Inside Ignite: compare `error.message` (`docs/slice.md` 4.4).
 - Blocks: no.
 
+
+## G19 No HTTP client; the server role does not fit the service
+
+- Version: ignite 0.13.0. Target: both. Hand-written in the service: 738 lines (request parsing, chunked bodies, keep-alive, URL parsing, a client for the auth backend call).
+- Kind: missing-feature.
+- What std has: the server role `Http.serve` in `std/protocol/http.ignite` reads requests with `Content-Length` or chunked bodies (RFC 9112 6.1, 6.3), keeps connections alive and streams chunked responses (`docs/slice.md` 19.23).
+- What is missing: a client role (requests, response bodies, keep-alive, timeouts), a URL type, and a server hook to take over the connection (the WebSocket upgrade, a long-poll held past the handler).
+- Stories: `story:http-client-role` (client and URL), `story:std-websocket` (the upgrade hook).
+- Blocks: no.
+
+## G20 JSON was hand-written although std.json exists
+
+- Version: ignite 0.13.0. Hand-written in the service: 389 lines.
+- Kind: not a gap of std. `std.json` (`std/json.ignite`) has `Json`, `parse` and `encode` (RFC 8259, `docs/slice.md` 19.20) since before 0.13.0.
+- Since wave 7 (`story:data-value-model`): `read`, `write`, `write_pretty`, `to_data`, `of_data` over the `std.data` value model; typed codecs follow in `story:data-codec-combinators` (wave 8) and the derived `codec<T>()` later (`docs/serde.md`).
+- Blocks: no.
+
+## G21 No WebSocket server
+
+- Version: ignite 0.13.0. Hand-written in the service: about 121 lines plus parts of the server module (handshake, framing, masking, ping/pong, close echo).
+- Kind: missing-feature.
+- Story: `story:std-websocket` (wave 8) covers the server and the client role, the upgrade through `std.protocol.http`, control frames and the close handshake.
+- Blocks: no.
+
+## G22 No SHA-1 and no base64
+
+- Version: ignite 0.13.0. Hand-written in the service with bit arithmetic: part of a 288-line module that also works around G7.
+- Kind: missing-feature.
+- Since wave 7: bitwise operators (`story:bitwise-operators`); `std.data` has a `base64` helper (`story:data-value-model`).
+- Story: `story:std-digest` (wave 8): SHA-1 and SHA-256, base64 and base64url as std modules with the RFC test vectors.
+- Blocks: no.
+
+## G23 No NATS client
+
+- Version: ignite 0.13.0. Hand-written in the service: 163 lines (CONNECT, PUB, SUB, PING/PONG, reconnect with a bounded buffer and drop-on-stale).
+- Kind: missing-feature.
+- Story: `story:std-nats-client` (wave 8), with the bounded reconnect buffer and drop-on-stale.
+- Blocks: no.
+
+## G24 No Redis client
+
+- Version: ignite 0.13.0. Hand-written in the service: 442 lines (RESP2/3, pipelining, Sentinel master discovery and failover).
+- Kind: missing-feature.
+- Story: `story:std-resp-client` (wave 8).
+- Blocks: no.
+
+## G25 No TLS client
+
+- Version: ignite 0.13.0. Target: both.
+- Kind: missing-feature.
+- What the service needs: reach an https auth backend or a broker behind TLS; today it refuses https backend URLs at start.
+- Rule: the TLS engine (rustls) may live in `crates/ignite-io`, the `Tls<T>` layer is Ignite (AGENTS.md, Timo 2026-11-01).
+- Story: `story:tls-client` (wave 8).
+- Blocks: yes, for an https backend.
+
 ## G13 (update) Missing flush hit in the stop path
 
 - `close()` sends only its own stream (`crates/ignite-io/src/net.rs:438`). A write made just before `main` returns is never sent while draining, because `ignite_rt_exit` waits for tasks without flushing first.
