@@ -1,14 +1,13 @@
-//! One waiter for every wait of the substrate (`docs/readiness-io.md` 4.2,
-//! phase R0).
+//! One waiter for every wait of the substrate (`docs/readiness-io.md` 4.2).
 //!
-//! Every place `ignite-io` waits for something another thread does (a value
-//! in a channel, bytes in a pipe, a child's end, a free slot in a `Store`,
-//! the end of the live tasks, an idle worker's next task, a pause, a
-//! listener's next connection) parks a [`Waiter`] with [`park`] and is
-//! made runnable by [`wake`]. A [`WaitList`] holds the waiters of one
-//! condition; it lives in the state the condition is about, under that
-//! state's lock, so a waiter queued before the lock is released cannot
-//! miss a wake given after it.
+//! Every place `ignite-io` waits for something another thread or task does
+//! (a value in a channel, bytes in a pipe or a socket, room to send, a
+//! child's end, a free slot in a `Store`, the end of the live tasks, an
+//! idle worker's next task, a pause, a listener's next connection) parks a
+//! [`Waiter`] with [`park`] and is made runnable by [`wake`]. A
+//! [`WaitList`] holds the waiters of one condition; it lives in the state
+//! the condition is about, under that state's lock, so a waiter queued
+//! before the lock is released cannot miss a wake given after it.
 //!
 //! The pattern, as [`park_in`] runs it: lock the state, test the condition,
 //! queue [`Waiter::current`] on the list, unlock, [`park`], lock again, take
@@ -19,31 +18,39 @@
 //! park), so every caller tests its condition again; the condition, not
 //! the return value, says whether to go on.
 //!
-//! A waiter today is an OS thread: `park` blocks the thread on its futex
-//! (`std::thread::park`), as one thread per task always did. That is one
-//! implementation of the seam, not a stage to remove: a later waiter kind
-//! (a stackful task on a worker, `story:readiness-scheduler`) is a second
-//! variant of [`Kind`], and the IO mode (`threads` or `readiness`,
-//! `story:io-mode-setting`) chooses between them. Callers of this module
-//! do not know which kind they park.
+//! A waiter is one of two kinds, and callers of this module do not know
+//! which they park. An OS thread (`main`, the drain, a watcher, every task
+//! in the IO mode `threads`) blocks on its futex (`std::thread::park`). A
+//! stackful task on a worker (the IO mode `readiness`, `crate::sched`)
+//! switches to its worker's loop, which runs other tasks until a wake, a
+//! readiness event or the deadline makes it runnable again. The IO mode
+//! chooses between them (`crate::sched::readiness`); both pass the same
+//! tests.
 //!
 //! A wait for a descriptor goes through the reactor interface
 //! ([`crate::reactor::Reactor`]): off a worker, [`wait_descriptor`]
 //! registers the descriptor with the thread's own
 //! [`crate::reactor::PollReactor`] (`poll` on the descriptor and the
 //! thread's `eventfd`), so a [`wake`] from any thread ends the wait as it
-//! ends a [`park`]. That is how the drain wakes `main` in `accept`.
+//! ends a [`park`]; on a worker it registers with the worker's reactor and
+//! parks the task. That is how the drain wakes `main` in `accept`.
+//!
+//! A lock held across a park must be a [`Lock`], which parks a task that
+//! waits for it: a `std::sync::Mutex` would block the worker's thread, and
+//! with it the task that holds the lock and runs on the same worker.
 
 use std::collections::VecDeque;
 use std::fmt;
 use std::io;
+use std::ops::{Deref, DerefMut};
 use std::os::fd::RawFd;
-use std::sync::atomic::{AtomicU8, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
+use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError, TryLockError};
 use std::thread::Thread;
 use std::time::{Duration, Instant};
 
 use crate::reactor::{Event, Interest, PollReactor, Reactor};
+use crate::sched;
 
 /// Why a [`park`] returned.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -67,7 +74,7 @@ struct Inner {
     kind: Kind,
 }
 
-/// The waiter kinds. A task on a worker is the variant R1 adds.
+/// The waiter kinds.
 enum Kind {
     /// An OS thread: parked on its futex, or in `poll` on its own reactor
     /// while it waits for a descriptor.
@@ -75,6 +82,12 @@ enum Kind {
         thread: Thread,
         reactor: OnceLock<PollReactor>,
     },
+    /// A stackful task on a worker (`crate::sched`).
+    Task(sched::Task),
+    /// A descriptor registered with workers' reactors (`crate::sched`): a
+    /// readiness event wakes the tasks waiting to read or to write it. It
+    /// never parks.
+    Descriptor(sched::Descriptor),
 }
 
 /// A wake arrived that no park has consumed yet.
@@ -89,31 +102,54 @@ thread_local! {
 
 impl Waiter {
     fn for_thread(thread: Thread) -> Waiter {
+        Waiter::of(Kind::Thread {
+            thread,
+            reactor: OnceLock::new(),
+        })
+    }
+
+    fn of(kind: Kind) -> Waiter {
         Waiter {
             inner: Arc::new(Inner {
                 state: AtomicU8::new(0),
-                kind: Kind::Thread {
-                    thread,
-                    reactor: OnceLock::new(),
-                },
+                kind,
             }),
         }
     }
 
-    /// The waiter of the calling thread (later: of the calling task). Every
-    /// call on one thread gives the same waiter.
+    /// The waiter of a task the scheduler starts.
+    pub(crate) fn for_task(task: sched::Task) -> Waiter {
+        Waiter::of(Kind::Task(task))
+    }
+
+    /// The waiter a descriptor is registered with.
+    pub(crate) fn for_descriptor(descriptor: sched::Descriptor) -> Waiter {
+        Waiter::of(Kind::Descriptor(descriptor))
+    }
+
+    /// The waiter of the calling task, or of the calling thread off a
+    /// task. Every call in one task, or on one thread outside a task,
+    /// gives the same waiter.
     pub fn current() -> Waiter {
+        if let Some(task) = sched::running() {
+            return task;
+        }
         CURRENT
             .try_with(Waiter::clone)
             .unwrap_or_else(|_| Waiter::for_thread(std::thread::current()))
     }
 
-    /// The thread a thread waiter parks; `None` for a later waiter kind
-    /// that is no thread.
+    /// The thread a thread waiter parks; `None` for a task.
     pub fn thread(&self) -> Option<std::thread::ThreadId> {
         match &self.inner.kind {
             Kind::Thread { thread, .. } => Some(thread.id()),
+            Kind::Task(_) | Kind::Descriptor(_) => None,
         }
+    }
+
+    /// Whether the waiter is a task on a worker.
+    pub fn is_task(&self) -> bool {
+        matches!(self.inner.kind, Kind::Task(_))
     }
 
     /// Whether `self` and `other` are the same waiter.
@@ -122,8 +158,29 @@ impl Waiter {
     }
 
     /// Take a pending wake; whether there was one.
-    fn take_wake(&self) -> bool {
-        self.inner.state.fetch_and(!NOTIFIED, Ordering::Acquire) & NOTIFIED != 0
+    pub(crate) fn take_wake(&self) -> bool {
+        self.inner.state.fetch_and(!NOTIFIED, Ordering::SeqCst) & NOTIFIED != 0
+    }
+
+    /// Whether a wake is pending, without taking it.
+    pub(crate) fn has_wake(&self) -> bool {
+        self.inner.state.load(Ordering::SeqCst) & NOTIFIED != 0
+    }
+
+    /// The task of a task waiter.
+    pub(crate) fn task(&self) -> Option<&sched::Task> {
+        match &self.inner.kind {
+            Kind::Task(task) => Some(task),
+            _ => None,
+        }
+    }
+
+    /// The descriptor of a descriptor waiter.
+    pub(crate) fn descriptor(&self) -> Option<&sched::Descriptor> {
+        match &self.inner.kind {
+            Kind::Descriptor(descriptor) => Some(descriptor),
+            _ => None,
+        }
     }
 }
 
@@ -134,6 +191,8 @@ impl fmt::Debug for Waiter {
                 .debug_struct("Waiter")
                 .field("thread", &thread.id())
                 .finish(),
+            Kind::Task(_) => f.debug_struct("Waiter").field("task", &true).finish(),
+            Kind::Descriptor(_) => f.debug_struct("Waiter").field("descriptor", &true).finish(),
         }
     }
 }
@@ -141,7 +200,7 @@ impl fmt::Debug for Waiter {
 /// Park the caller, whose waiter `waiter` is, until a [`wake`] or
 /// `deadline` (`None`: no deadline). A wake given before the park is not
 /// lost: the park returns at once. On a thread this blocks the thread (a
-/// futex wait).
+/// futex wait); a task switches to its worker's loop.
 pub fn park(waiter: &Waiter, deadline: Option<Instant>) -> Woken {
     match &waiter.inner.kind {
         Kind::Thread { thread, .. } => {
@@ -166,6 +225,8 @@ pub fn park(waiter: &Waiter, deadline: Option<Instant>) -> Woken {
                 }
             }
         }
+        Kind::Task(task) => sched::park(waiter, task, deadline),
+        Kind::Descriptor(_) => Woken::Notified,
     }
 }
 
@@ -173,7 +234,11 @@ pub fn park(waiter: &Waiter, deadline: Option<Instant>) -> Woken {
 /// keeps the wake for its next park. A second wake before that park adds
 /// nothing and costs one atomic operation.
 pub fn wake(waiter: &Waiter) {
-    let before = waiter.inner.state.fetch_or(NOTIFIED, Ordering::Release);
+    if let Kind::Descriptor(descriptor) = &waiter.inner.kind {
+        descriptor.ready(Interest::READ | Interest::WRITE);
+        return;
+    }
+    let before = waiter.inner.state.fetch_or(NOTIFIED, Ordering::SeqCst);
     if before & NOTIFIED != 0 {
         return;
     }
@@ -186,6 +251,22 @@ pub fn wake(waiter: &Waiter) {
             }
             thread.unpark();
         }
+        Kind::Task(task) => sched::schedule(waiter, task),
+        Kind::Descriptor(_) => {}
+    }
+}
+
+/// [`wake`] for a readiness event: a task waiting for a descriptor learns
+/// what it is ready for, and a descriptor waiter wakes the tasks waiting
+/// to read it or to write it, as `ready` says.
+pub(crate) fn wake_ready(waiter: &Waiter, ready: Interest) {
+    match &waiter.inner.kind {
+        Kind::Descriptor(descriptor) => descriptor.ready(ready),
+        Kind::Task(task) => {
+            task.note_ready(ready);
+            wake(waiter);
+        }
+        Kind::Thread { .. } => wake(waiter),
     }
 }
 
@@ -323,15 +404,22 @@ pub enum DescriptorWait {
 /// Wait until `descriptor` is ready for one of `interest`, a [`wake`] of
 /// the caller's waiter, or `deadline`. Off a worker the wait goes through
 /// the thread's own [`PollReactor`]: `poll` on the descriptor and the
-/// thread's `eventfd`, which a wake writes. The descriptor stays open for
-/// the call.
+/// thread's `eventfd`, which a wake writes. On a worker the descriptor is
+/// registered with the worker's reactor for the wait and the task parks.
+/// The descriptor stays open for the call.
 pub fn wait_descriptor(
     descriptor: RawFd,
     interest: Interest,
     deadline: Option<Instant>,
 ) -> io::Result<DescriptorWait> {
     let me = Waiter::current();
-    let Kind::Thread { reactor, .. } = &me.inner.kind;
+    let reactor = match &me.inner.kind {
+        Kind::Thread { reactor, .. } => reactor,
+        Kind::Task(task) => {
+            return sched::wait_descriptor(&me, task, descriptor, interest, deadline);
+        }
+        Kind::Descriptor(_) => return Ok(DescriptorWait::Woken),
+    };
     let reactor = match reactor.get() {
         Some(reactor) => reactor,
         None => {
@@ -360,4 +448,126 @@ pub fn wait_descriptor(
     me.inner.state.fetch_and(!POLLING, Ordering::SeqCst);
     let _ = reactor.deregister(token);
     outcome
+}
+
+/// A mutual-exclusion lock that may be held across a [`park`]: a task
+/// that waits for it parks instead of blocking its worker's thread, so the
+/// task holding it, on the same worker, can run on and release it. A
+/// stream's read and write locks are one (a read waits for input holding
+/// its read lock, a send for room holding the write lock). Not poisoned
+/// by a panic.
+///
+/// The value sits in a `std::sync::Mutex` that is only ever taken with
+/// `try_lock`, so no thread blocks in it; a guard is dropped on the thread
+/// that took it, because a task never moves to another worker.
+pub struct Lock<T> {
+    value: Mutex<T>,
+    /// Waiters queued on `waiters`, so an unlock looks at the list only
+    /// when someone waits.
+    waiting: AtomicUsize,
+    waiters: Mutex<WaitList>,
+}
+
+/// The holder of a [`Lock`]; dropping it releases the lock.
+pub struct LockGuard<'a, T> {
+    guard: Option<MutexGuard<'a, T>>,
+    lock: &'a Lock<T>,
+}
+
+impl<T> Lock<T> {
+    pub const fn new(value: T) -> Lock<T> {
+        Lock {
+            value: Mutex::new(value),
+            waiting: AtomicUsize::new(0),
+            waiters: Mutex::new(WaitList::new()),
+        }
+    }
+
+    fn acquire(&self) -> Option<LockGuard<'_, T>> {
+        let guard = match self.value.try_lock() {
+            Ok(guard) => guard,
+            Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+            Err(TryLockError::WouldBlock) => return None,
+        };
+        Some(LockGuard {
+            guard: Some(guard),
+            lock: self,
+        })
+    }
+
+    /// The lock, waited for as long as another holder keeps it.
+    pub fn lock(&self) -> LockGuard<'_, T> {
+        if let Some(guard) = self.acquire() {
+            return guard;
+        }
+        loop {
+            let list = self.waiters.lock().unwrap_or_else(PoisonError::into_inner);
+            self.waiting.fetch_add(1, Ordering::SeqCst);
+            if let Some(guard) = self.acquire() {
+                self.waiting.fetch_sub(1, Ordering::SeqCst);
+                return guard;
+            }
+            let (list, _) = park_in(&self.waiters, list, |list| list, None);
+            self.waiting.fetch_sub(1, Ordering::SeqCst);
+            drop(list);
+            if let Some(guard) = self.acquire() {
+                return guard;
+            }
+        }
+    }
+
+    /// The lock if no one holds it now.
+    pub fn try_lock(&self) -> Option<LockGuard<'_, T>> {
+        self.acquire()
+    }
+
+    /// The value, through the exclusive borrow that proves no guard is out.
+    pub fn get_mut(&mut self) -> &mut T {
+        self.value.get_mut().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+impl<T: Default> Default for Lock<T> {
+    fn default() -> Lock<T> {
+        Lock::new(T::default())
+    }
+}
+
+impl<T: fmt::Debug> fmt::Debug for Lock<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Lock")
+            .field(
+                "held",
+                &matches!(self.value.try_lock(), Err(TryLockError::WouldBlock)),
+            )
+            .finish_non_exhaustive()
+    }
+}
+
+impl<T> Deref for LockGuard<'_, T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        self.guard.as_deref().expect("a lock guard holds its lock")
+    }
+}
+
+impl<T> DerefMut for LockGuard<'_, T> {
+    fn deref_mut(&mut self) -> &mut T {
+        self.guard
+            .as_deref_mut()
+            .expect("a lock guard holds its lock")
+    }
+}
+
+impl<T> Drop for LockGuard<'_, T> {
+    fn drop(&mut self) {
+        drop(self.guard.take());
+        if self.lock.waiting.load(Ordering::SeqCst) > 0 {
+            self.lock
+                .waiters
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .wake_one();
+        }
+    }
 }

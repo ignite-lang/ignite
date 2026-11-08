@@ -421,8 +421,18 @@ position, even with no buffer.
   Functions take no mark of their own: whatever a call allocates is released by the
   caller's loop.
 - A task is the process's main thread, or a task `ignite_io::try_spawn` started for a
-  `spawn`. It reuses idle threads (`docs/slice.md` section 7). A task's arena is freed when
-  it ends (`task_end`), except for one chunk that the thread keeps for its next task.
+  `spawn`: a thread of its own in IO mode `threads`, a stackful task on a worker in
+  `readiness` (`docs/slice.md` section 7, IO modes). A task's arena is freed when it ends
+  (`task_end`), except for one chunk that the thread keeps for its next task. In
+  `readiness` several tasks share a worker thread, so the runtime's per-task
+  thread-locals (the arena and its bump state, the failure handlers and kept report, the
+  owned handles and the cached stream, the pending `spawn_ready`) are exchanged at every
+  switch (`ignite_io::set_task_locals`, `crates/ignite-rt/src/task.rs`): a new task starts
+  with one spare chunk taken from its worker (up to 4 kept per worker) and gives its spare
+  chunks back when it ends. The bump state's address that generated code caches is the
+  worker's, and the swap writes the running task's state into it, so a task that resumes
+  sees its own. A task's `setjmp` and the failure's `longjmp` both run on the task's own
+  stack, so a failure ends only that task.
   A task whose arenas held more than 1 MiB of large blocks at `task_end` calls `ignite_io::released_memory`,
   as a `Store` does when it drops a value, and the substrate returns the free heap pages
   with glibc's `malloc_trim(0)` when a later task or an idle thread ends (`docs/slice.md`
@@ -436,8 +446,9 @@ position, even with no buffer.
   argument (a temporary or a moved place) moved into a block in the parent's frame, a
   borrowed aggregate (a variable, a field, a constant) as its place's pointer, not copied.
   The task deep-copies them into its own arena and calls `ignite_rt_spawn_ready()` before
-  the parent continues (`ignite_rt_spawn` blocks until then and returns 1), so the places
-  are unchanged while the task reads them.
+  the parent continues (`ignite_rt_spawn` parks its caller's waiter until then and returns
+  1; a parent that is a task on a worker lets the worker run the child meanwhile), so the
+  places are unchanged while the task reads them.
 
   A stream lives as long as on the Rust target, where each task and binding holds a clone
   of an `Arc` (story `llvm-stream-ownership`). Each handle-table entry counts its owners:

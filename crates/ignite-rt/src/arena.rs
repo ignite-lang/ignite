@@ -427,6 +427,75 @@ fn state() -> *mut State {
     STATE.with(UnsafeCell::get)
 }
 
+/// Chunks a worker thread keeps between its tasks (IO mode `readiness`),
+/// for the arenas of the tasks it starts next.
+const SPARE_PER_WORKER: usize = 4;
+
+/// A task's arenas and bump state while another task runs on its worker
+/// (`ignite_io::TaskLocals`, IO mode `readiness`): [`TaskArena::swap`]
+/// exchanges them with this thread's, so `TASK` and `STATE` always hold
+/// the running task's. The address of `STATE` stays the thread's, which
+/// generated code may keep for the life of a function: a task never moves
+/// to another worker, and its state is back in `STATE` whenever it runs.
+pub(crate) struct TaskArena {
+    task: Task,
+    state: State,
+}
+
+impl TaskArena {
+    /// A new task's arenas, with one chunk the worker kept from an earlier
+    /// task (the reuse `SPARE_AFTER_TASK` gives a thread in the IO mode
+    /// `threads`). Runs on the worker, outside any task.
+    pub(crate) fn new() -> TaskArena {
+        let mut task = Task::new();
+        let _ = TASK.try_with(|kept| {
+            if let Ok(mut kept) = kept.try_borrow_mut() {
+                move_spare(&mut kept.arena, &mut task.arena, SPARE_AFTER_TASK);
+            }
+        });
+        TaskArena {
+            task,
+            state: State::EMPTY,
+        }
+    }
+
+    /// Exchange the saved arenas and bump state with this thread's.
+    pub(crate) fn swap(&mut self) {
+        TASK.with(|task| {
+            let mut task = task
+                .try_borrow_mut()
+                .unwrap_or_else(|_| crate::process::die("a task switch inside the arena"));
+            std::mem::swap(&mut *task, &mut self.task);
+        });
+        with_state(|state| std::mem::swap(state, &mut self.state));
+    }
+}
+
+/// After the task ended: the chunks it kept go to the worker for its next
+/// tasks, up to [`SPARE_PER_WORKER`]; the rest go back to the kernel.
+impl Drop for TaskArena {
+    fn drop(&mut self) {
+        let _ = TASK.try_with(|kept| {
+            if let Ok(mut kept) = kept.try_borrow_mut() {
+                let room = SPARE_PER_WORKER.saturating_sub(kept.arena.spare.len());
+                move_spare(&mut self.task.arena, &mut kept.arena, room);
+            }
+        });
+    }
+}
+
+/// Move up to `count` spare chunks from `from` to `to`.
+fn move_spare(from: &mut Arena, to: &mut Arena, count: usize) {
+    for _ in 0..count {
+        let Some(chunk) = from.spare.pop() else {
+            return;
+        };
+        from.reserved -= CHUNK;
+        to.spare.push(chunk);
+        to.reserved += CHUNK;
+    }
+}
+
 /// Run `f` on this thread's bump state. `f` must not call back into the
 /// runtime or generated code.
 #[inline]

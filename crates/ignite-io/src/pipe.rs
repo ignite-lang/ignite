@@ -33,7 +33,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use crate::net::{Buffered, lock_until, register};
-use crate::wait::{WaitList, park_in};
+use crate::wait::{Lock, LockGuard, WaitList, park_in};
 use crate::{Input, IoError, SEND_BUFFER, flush, read_input};
 
 /// Unread bytes a receive queue holds before a delivery into it fails.
@@ -94,8 +94,8 @@ struct End {
     incoming: Arc<Queue>,
     /// The peer's `incoming`, which this end's deliveries fill.
     outgoing: Arc<Queue>,
-    reading: Mutex<()>,
-    writing: Mutex<Out>,
+    reading: Lock<()>,
+    writing: Lock<Out>,
     /// A delivery by a flush failed; the error waits in `Out::failed`.
     failed: AtomicBool,
     /// `close` was called on some handle.
@@ -160,8 +160,8 @@ impl Queue {
 }
 
 impl End {
-    fn out(&self) -> MutexGuard<'_, Out> {
-        lock(&self.writing)
+    fn out(&self) -> LockGuard<'_, Out> {
+        self.writing.lock()
     }
 
     /// Deliver the buffer; the caller holds the write lock.
@@ -214,11 +214,7 @@ impl Buffered for End {
 /// write half, and fail every later delivery into this end's queue.
 impl Drop for End {
     fn drop(&mut self) {
-        let mut out = std::mem::take(
-            self.writing
-                .get_mut()
-                .unwrap_or_else(PoisonError::into_inner),
-        );
+        let mut out = std::mem::take(self.writing.get_mut());
         let _ = self.send(&mut out);
         self.outgoing.end();
         let mut incoming = lock(&self.incoming.state);
@@ -234,8 +230,8 @@ impl PipeStream {
             end: Arc::new(End {
                 incoming,
                 outgoing,
-                reading: Mutex::new(()),
-                writing: Mutex::new(Out::default()),
+                reading: Lock::new(()),
+                writing: Lock::new(Out::default()),
                 failed: AtomicBool::new(false),
                 closed: AtomicBool::new(false),
                 idle: AtomicI64::new(0),
@@ -257,7 +253,7 @@ impl PipeStream {
         flush();
         let end = &self.end;
         end.check_failure()?;
-        let _reading = lock(&end.reading);
+        let _reading = end.reading.lock();
         let deadline = idle(end.idle.load(Ordering::Acquire)).map(|wait| Instant::now() + wait);
         let queue = &end.incoming;
         let mut state = lock(&queue.state);

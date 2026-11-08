@@ -77,6 +77,16 @@ impl Interest {
         self.0 == 0
     }
 
+    /// The bits, to keep in an atomic.
+    pub(crate) fn bits(self) -> u8 {
+        self.0
+    }
+
+    /// The interests of `bits` as [`Interest::bits`] gave them.
+    pub(crate) fn from_bits(bits: u8) -> Interest {
+        Interest(bits & 31)
+    }
+
     fn epoll(self) -> EpollFlags {
         let mut flags = EpollFlags::empty();
         if self.contains(Interest::READ) {
@@ -114,7 +124,7 @@ impl Interest {
         ready
     }
 
-    fn poll(self) -> PollFlags {
+    pub(crate) fn poll(self) -> PollFlags {
         let mut flags = PollFlags::empty();
         if self.contains(Interest::READ) {
             flags |= PollFlags::POLLIN;
@@ -272,13 +282,49 @@ impl EpollReactor {
     pub fn new() -> io::Result<EpollReactor> {
         let epoll = Epoll::new(EpollCreateFlags::EPOLL_CLOEXEC)?;
         let wakes = eventfd()?;
-        epoll.add(&wakes, EpollEvent::new(EpollFlags::EPOLLIN, WAKE))?;
+        // Edge-triggered: every write to an eventfd raises a new edge, also
+        // while its counter is not zero, so `wait` never reads it back (one
+        // system call less per wake). The counter cannot fill: at one per
+        // wake it reaches its limit of 2^64 - 2 in no lifetime.
+        epoll.add(
+            &wakes,
+            EpollEvent::new(EpollFlags::EPOLLIN | EpollFlags::EPOLLET, WAKE),
+        )?;
         Ok(EpollReactor {
             epoll,
             wakes,
             entries: Mutex::new(HashMap::new()),
             next: AtomicU64::new(WAKE + 1),
         })
+    }
+}
+
+impl EpollReactor {
+    /// Wait on the calling thread, past the epoll instance, until
+    /// `descriptor` may be ready for `interest`, [`Reactor::wake`] is
+    /// called or `deadline` passes; whether the descriptor is ready. The
+    /// wait of a worker's only task (`crate::sched`): one `poll`, as a
+    /// blocked thread's, instead of a switch to the worker's loop and its
+    /// `epoll_wait`. The descriptor may also be registered here; its edge
+    /// then waits in the epoll instance for the next `wait`.
+    pub(crate) fn poll_one(
+        &self,
+        descriptor: BorrowedFd<'_>,
+        interest: Interest,
+        deadline: Option<Instant>,
+    ) -> io::Result<bool> {
+        let mut fds = [
+            PollFd::new(descriptor, interest.poll()),
+            PollFd::new(self.wakes.as_fd(), PollFlags::POLLIN),
+        ];
+        match nix::poll::poll(&mut fds, timeout(deadline)) {
+            Ok(_) | Err(Errno::EINTR) => {}
+            Err(error) => return Err(error.into()),
+        }
+        if fds[1].revents().is_some_and(|ready| !ready.is_empty()) {
+            drain(&self.wakes);
+        }
+        Ok(fds[0].revents().is_some_and(|ready| !ready.is_empty()))
     }
 }
 
@@ -333,7 +379,6 @@ impl Reactor for EpollReactor {
         let entries = lock(&self.entries);
         for event in &ready[..count] {
             if event.data() == WAKE {
-                drain(&self.wakes);
                 continue;
             }
             if let Some(entry) = entries.get(&event.data()) {

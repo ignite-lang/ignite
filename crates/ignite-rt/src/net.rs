@@ -305,27 +305,49 @@ thread_local! {
 /// `f` applied to the stream `handle` names: this thread's cached clone
 /// when it is that handle's and the handle is live, else a clone from the
 /// table that replaces the cached one.
+///
+/// The clone is taken out of the cache while `f` runs and put back after:
+/// `f` may wait (a read, a send), and a task waiting on a worker must not
+/// hold a borrow of a thread-local another task of the worker uses
+/// (`ignite_io::TaskLocals`).
 fn with_stream<R>(
     handle: i64,
     f: impl FnOnce(&TcpStream) -> Result<R, IoError>,
 ) -> Result<R, IoError> {
-    let mut f = Some(f);
-    let cached = CACHED.try_with(|cell| {
-        let mut cached = cell.try_borrow_mut().ok()?;
-        let hit = matches!(&*cached, Some((held, _)) if *held == handle) && is_live(handle);
-        if !hit {
-            match stream(handle) {
-                Ok(found) => *cached = Some((handle, found)),
-                Err(error) => return Some(Err(error)),
-            }
+    let cached = CACHED
+        .try_with(|cell| {
+            cell.try_borrow_mut()
+                .ok()
+                .and_then(|mut cached| cached.take())
+        })
+        .ok()
+        .flatten();
+    let found = match cached {
+        Some((held, found)) if held == handle && is_live(handle) => found,
+        _ => stream(handle)?,
+    };
+    let result = f(&found);
+    let _ = CACHED.try_with(|cell| {
+        if let Ok(mut cached) = cell.try_borrow_mut() {
+            *cached = Some((handle, found));
         }
-        let (_, found) = cached.as_ref()?;
-        f.take().map(|f| f(found))
     });
-    match (cached, f) {
-        (Ok(Some(result)), _) => result,
-        (_, Some(f)) => f(&stream(handle)?),
-        (_, None) => Err(IoError::new(String::from("the stream was lost"))),
+    result
+}
+
+/// A task's owned handles and cached stream while another task runs on
+/// its worker (`ignite_io::TaskLocals`, IO mode `readiness`).
+#[derive(Default)]
+pub(crate) struct TaskHandles {
+    owned: Vec<i64>,
+    cached: Option<(i64, TcpStream)>,
+}
+
+impl TaskHandles {
+    /// Exchange the saved handles with this thread's.
+    pub(crate) fn swap(&mut self) {
+        OWNED.with(|owned| std::mem::swap(&mut *owned.borrow_mut(), &mut self.owned));
+        CACHED.with(|cached| std::mem::swap(&mut *cached.borrow_mut(), &mut self.cached));
     }
 }
 
@@ -530,7 +552,8 @@ pub extern "C" fn ignite_rt_tcp_read(
 ) -> i32 {
     crate::entry(move || {
         let read = with_stream(handle, |stream| {
-            read_into_arena(maximum, |buffer| stream.read_into(buffer))
+            let read = stream.read_with(|receive| read_into_arena(maximum, receive))?;
+            Ok(read.unwrap_or_else(IgniteInput::eof))
         });
         status(read, out, err)
     })
@@ -557,10 +580,10 @@ thread_local! {
 /// bytes and leaves no chunk for the inline allocator), and a smaller one
 /// would start a new chunk for headroom it mostly gives back (a server
 /// reading 16 KiB at a time held two touched chunks per connection).
-pub(crate) fn read_into_arena(
+pub(crate) fn read_into_arena<E>(
     maximum: i64,
-    read_into: impl FnOnce(&mut [u8]) -> Result<usize, IoError>,
-) -> Result<IgniteInput, IoError> {
+    read_into: impl FnOnce(&mut [u8]) -> Result<usize, E>,
+) -> Result<IgniteInput, E> {
     let size = usize::try_from(maximum.max(1))
         .unwrap_or(MAX_READ)
         .min(MAX_READ);
@@ -594,11 +617,11 @@ pub(crate) fn read_into_arena(
 /// thread's read buffer, or a buffer of its own for a size over 64 KiB
 /// or while the thread's buffer is in use, then `count` bytes copied into
 /// the arena.
-fn read_through_buffer(
+fn read_through_buffer<E>(
     size: usize,
-    read_into: impl FnOnce(&mut [u8]) -> Result<usize, IoError>,
-) -> Result<IgniteInput, IoError> {
-    let read = |buffer: &mut Vec<u8>| -> Result<IgniteInput, IoError> {
+    read_into: impl FnOnce(&mut [u8]) -> Result<usize, E>,
+) -> Result<IgniteInput, E> {
+    let read = |buffer: &mut Vec<u8>| -> Result<IgniteInput, E> {
         if buffer.len() < size {
             buffer.resize(size, 0);
         }
@@ -624,7 +647,7 @@ fn read_through_buffer(
     }
     match read.take() {
         Some(read) => read(&mut Vec::new()),
-        None => Err(IoError::new(String::from("the read buffer was lost"))),
+        None => unreachable!("a read that ran returned its result above"),
     }
 }
 
@@ -914,7 +937,7 @@ mod tests {
         crate::arena::ignite_rt_alloc(60_000, 1);
         let read = read_into_arena(16_384, |buffer| {
             buffer[..5].copy_from_slice(b"hello");
-            Ok(5)
+            Ok::<usize, IoError>(5)
         })
         .unwrap();
         assert_eq!(bytes(&read.data), b"hello");
@@ -923,7 +946,7 @@ mod tests {
         let first_again = crate::arena::ignite_rt_alloc(8, 8);
         let in_place = read_into_arena(16_384, |buffer| {
             buffer[..2].copy_from_slice(b"hi");
-            Ok(2)
+            Ok::<usize, IoError>(2)
         })
         .unwrap();
         assert_eq!(in_place.data.ptr as usize, first_again as usize + 8);

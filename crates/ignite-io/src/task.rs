@@ -155,6 +155,28 @@ where
 {
     let job: Job = Box::new(task);
     task_started();
+    if crate::sched::readiness() {
+        return match crate::sched::spawn(job) {
+            Ok(()) => {
+                FAILING.store(false, Ordering::Relaxed);
+                Ok(())
+            }
+            Err(error) => {
+                task_ended();
+                let error = IoError::new(format!("cannot start a task: {error}"));
+                if !FAILING.swap(true, Ordering::Relaxed) {
+                    crate::log(&error.to_string());
+                }
+                Err(error)
+            }
+        };
+    }
+    spawn_thread(job)
+}
+
+/// [`try_spawn`] in the IO mode `threads`: `job` on an idle worker thread
+/// or a new one.
+fn spawn_thread(job: Job) -> Result<(), IoError> {
     let worker = lock(&IDLE).pop();
     if let Some(worker) = worker {
         *lock(&worker.next) = Some(job);
@@ -246,6 +268,24 @@ fn trim_heap() {}
 /// A thread failed to start since the last one that started.
 static FAILING: AtomicBool = AtomicBool::new(false);
 
+/// Mark the calling thread as one that runs tasks (`crate::sched`'s
+/// workers), so a wait on a kept listener does not hold up the drain.
+pub(crate) fn mark_task_thread() {
+    IN_TASK.with(|in_task| in_task.set(true));
+}
+
+/// A task on a worker ended (`crate::sched`): count it and trim the heap
+/// when due, as a task thread does after its task.
+pub(crate) fn task_finished() {
+    task_ended();
+    trim_if_released(&RELEASED, &LAST_TRIM, TRIM_INTERVAL);
+}
+
+/// A worker ends after lingering: trim what is still marked.
+pub(crate) fn trim_after_linger() {
+    trim_if_released(&RELEASED, &LAST_TRIM, Duration::ZERO);
+}
+
 /// Run `job`, then the tasks `spawn` hands this thread, until it lingered.
 fn work(mut job: Job) {
     IN_TASK.with(|in_task| in_task.set(true));
@@ -293,6 +333,17 @@ fn work(mut job: Job) {
 mod tests {
     use super::*;
     use std::sync::mpsc::channel;
+
+    /// These tests are of the IO mode `threads`, whatever mode the test
+    /// process runs in: [`spawn`] here starts a task on a thread. The
+    /// readiness mode's tests are `crates/ignite-io/tests/scheduler.rs`.
+    fn spawn<F>(task: F)
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        task_started();
+        let _ = spawn_thread(Box::new(task));
+    }
 
     /// One test: the idle stack is global, so a parallel test would hand
     /// its own workers to these tasks.

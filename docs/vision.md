@@ -58,7 +58,7 @@ One table for the layers every document agrees on. "Home" says which language it
 
 | layer | contents | home | source |
 |---|---|---|---|
-| L0 substrate | sockets, TLS engine (rustls), stdio, terminal mode, tasks, timers, bounded mailboxes and one-shot slots, `Store`, `Buffer`, process entry and exit; files under a root (`Directory`), child processes (`Launcher`, `ChildProcess`), random bytes (`Entropy`) and program arguments (`Setting`) since slice 17; tokio event loop in slice 5 | Rust: `crates/ignite-io`, C ABI in `crates/ignite-rt` | `AGENTS.md`; `slice.md` §7; `actors.md` §8.4; `wasm.md` §4.2, G2 |
+| L0 substrate | sockets, TLS engine (rustls), stdio, terminal mode, tasks, timers, bounded mailboxes and one-shot slots, `Store`, `Buffer`, process entry and exit; files under a root (`Directory`), child processes (`Launcher`, `ChildProcess`), random bytes (`Entropy`) and program arguments (`Setting`) since slice 17; stackful tasks on epoll workers since R1 (T8), one OS thread per task in IO mode `threads` | Rust: `crates/ignite-io`, C ABI in `crates/ignite-rt` | `AGENTS.md`; `slice.md` §7; `actors.md` §8.4; `wasm.md` §4.2, G2 |
 | L1 language | values with value semantics, capability effects, generics; later bounds and interfaces, closures, `Map`, machine scalars, indexed assignment, rest patterns, ranges | Rust compiler until M6, then Ignite | `slice.md`; `protocols.md` §2; `wasm.md` §4.3; `friction.md` |
 | L2 std | text, json; `transport/` (Pipe, Tcp, Tls); `protocol/` (Telnet, Http, later WebSocket, Http3); `actor/` (Step, Topic, Supervisor, Table); `rfc/` catalogues; `check/explore`; `wasm/` decoder, validator, interpreter | Ignite | `protocols.md` §4; `actors.md` §8.4; `wasm.md` §4.1 |
 | L3 systems | `resource` kinds (TcpListener, Store, Topic, Listener with a transport), component kinds (Service, Client, Actor, Supervisor, application components), contracts, policies, assemblies | Ignite declarations, library kinds | design §3.2, §11.3; `actors.md` §2; `protocols.md` §2.3 |
@@ -117,7 +117,7 @@ counts. Sizes marked "estimate" are this document's.
 | A language gaps (done: slices 9, 10 and 16) | closures (`friction` 9, 13; actors P4; slice 9, calls of fn-typed expressions slice 16); `Option.unwrap_or` and `!=` on Option (7; slice 9); rest patterns `..` (protocols §5.2; slice 16); ranges in patterns (8; slice 9); raw strings (2; slice 9); tuple field access (10; slice 9); `break` as expression (4; slice 9); recursive enums by boxing (15; slice 9); `Map<K, V>` (design §3.3; slice 10); last-use moves (actors R1; slice 16); T1 failure rule (section 7; slice 10). Where each holds: `docs/slice.md` 20.1 | M, estimate | A0 | B, C, E, H |
 | B protocols P1 | `Pipe.pair()` and `PipeStream` in the substrate; `ByteStream` bound with one compiler-known interface; `Telnet` and `Http` roles generic over the stream with a `Limits` record; in-process protocol tests | S | slice 8 (done) | C's tests, G, TLS |
 | C actors P1 to P3 | `Address`, `ReplyTo`, `Outbox`; `Actor` kind; mailboxes and dispatch in the substrate; `std/actor`, `std/table`; `Topic`, `Sink`, `Supervisor`, monitors; exit status 5; todo example on an actor (D4) | M + S + L | A (last-use moves), T1 | events for the ESS bridge (`research/ess.md` option c), F |
-| D slice 5 async | tokio inside `ignite-io`; Rust-target futures; LLVM-target coroutines; `Task.yield_now` (wasm G6) | L | B, C stable | E (host suspension), actors P5, 10,000 idle actors |
+| D readiness IO (T8; was slice 5 async) | stackful tasks on a few epoll workers inside `ignite-io`, neither backend changes its lowering (R1 landed 2026-11-08, `docs/readiness-io.md`; IO mode `readiness` the default, `threads` kept); later phases: `main` on a worker, the blocking pool, stack trimming; `Task.yield_now` (wasm G6) | L | B, C stable | E (host suspension), actors P5, 10,000 idle actors |
 | E wasm P0 to P4 | machine scalars, `Buffer`, indexed assignment, `switch` lowering (wasm P0); `--target wasm` through `ignite-llvm` and a Wasmtime scaffold (P1); runtime in Ignite (P2); `ignite run --watch`, quiescent swap (P3); stored encoding, `migrate`, E080, E081, rollback, drain swap (P4). Prerequisite: the system surface moves to design §11.3's form (application as a component, D6) | P0 2 to 3k Rust; P1 2 to 3k Rust; P2 7 to 10k Ignite; P3 1.5k Ignite and 1k Rust; P4 1.5 to 2k Ignite and 0.5k Rust | A, D | hot reload, actors P6, P7 |
 | F operations layer (design P0) | quantity literals, `contract`, `policy`, `assembly`, probes as protocol clients, controller reducers as actors, journal, `ignite run`, `plan`, `apply`, `explain`; canonical IR (D7) | not estimated; larger than any single phase above | C (reducers, supervision), B (probes), D | PRD02 to PRD04, PRD09; `terminal.design.ignite` compiles |
 | G protocols P2 to P5 | RFC catalogues and `ignite conformance`; ABNF `grammar` and `matches`; user `interface` and `impl`, TLS and Unix transports; `std.check.explore`, Q-method negotiation | M + L + L + M | B, A (bounds need the generics work) | RFC-backed claims, HTTP/1.1 without MUST gaps |
@@ -130,7 +130,9 @@ Notes on the order:
   in-process and deterministic, and B is the smallest wave.
 - D is placed after B and C. `actors.md` §8.1 says threads suffice for tens of actors; protocols
   P1 does not need an event loop. `wasm.md` §7 needs D for suspension in the host, so D precedes
-  E. D8 asks whether Timo wants D earlier, as declared on 2026-11-01.
+  E. D8 asks whether Timo wants D earlier, as declared on 2026-11-01. T8 (2026-11-08) replaced
+  tokio, futures and coroutine lowering with stackful tasks over epoll; its phase R1 landed with
+  `story:readiness-scheduler`.
 - F after C because the design's controller machines (design §11.8) have the reducer shape of
   actors (`actors.md` R8) and probes are protocol clients. Building F before C would build a
   second reducer runtime. D1 asks whether F should move up anyway.
@@ -305,8 +307,8 @@ lowering per target stays an alternative, gated on task failure ending by return
 run (Timo, 2026-11-08) the program chooses its IO mode, `threads` (one OS thread per task) or
 `readiness`, as a build or executable setting, never by syntax: no `async` or `await`, user
 code reads the same in both modes, and both pass the same tests with the same results; only
-cost differs (`story:io-mode-setting`). `story:readiness-scheduler` rewrites wave D, D2 and D3
-when it lands.
+cost differs (`story:io-mode-setting`). `story:readiness-scheduler` rewrote wave D, D2 and D3
+when R1 landed (2026-11-08).
 
 ## 8 Open decisions
 
@@ -336,6 +338,11 @@ recovery at P0. The implementation built the language and two native targets fir
 | B LLVM primary from slice 5 | LLVM becomes the default `--target`; the Rust target stays the test oracle and may lag; wasm and self-hosting build on LLVM | slice 5 on the LLVM target needs coroutine lowering with no Rust fallback | yes |
 | C Rust primary | drop LLVM coroutines; wasm through rustc's wasm32 target | contradicts `wasm.md` §2.1 (reuse `ignite-llvm`) and design §8.1; self-hosting then emits Rust and needs cargo | |
 
+As landed (T8, R1, 2026-11-08): B stands without its cost. Tasks are stackful in
+`crates/ignite-io` (`docs/slice.md` section 7, IO modes), so neither target lowers coroutines or
+futures and suspension is implemented once, in the substrate both targets call; the LLVM
+runtime only exchanges its per-task thread-locals at a switch (`docs/llvm.md` section 4).
+
 **D3. Slice 5 timing.** Declared on 2026-11-01 as the next substrate step.
 
 | option | what it does | cost | recommended |
@@ -343,6 +350,12 @@ recovery at P0. The implementation built the language and two native targets fir
 | A before B and C | async substrate now; actors and pipe land on tokio | the largest wave first; B and C wait | |
 | B after B and C | threads carry protocols P1 and actors P1 to P3; tokio before wasm | actors P5 and 10,000 idle actors wait | yes |
 | C never | threads only | blocks `wasm.md` §7 and design §8.7 | |
+
+As landed (T8, R1, 2026-11-08): B, with readiness IO in place of tokio. Protocols, actors and
+the operations layer ran on threads first; R1 then moved spawned tasks onto epoll workers, with
+the IO mode `threads` kept as an implementation (`IGNITE_IO=threads`). `main` stays on its
+thread, stdin reads park on readiness, and connect, files and child starts run inline on the
+worker (`docs/readiness-io.md` 4.4 lists the later phases).
 
 **D4. The todo example.**
 
