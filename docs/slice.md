@@ -9533,3 +9533,74 @@ positive`. `connect(address, port)` keeps waiting for the kernel's retries.
   `tcp::timed_out_tells_an_idle_timeout_from_a_close`, `tcp::connect_within_bounds_the_wait`;
   `ignite-rt` `abi::peer_timed_out_and_connect_within`; `ignite-types`
   `builtins::tests::substrate_methods_name_net_for_peer`.
+
+## 27 The data value model (`std.data`) and the JSON bridge
+
+**Status: implemented in `story:data-value-model`.**
+
+Source: `docs/serde.md` sections 4, 5.1, 5.2 and 6, step 1 of its section 8. Std only: no
+compiler, backend, runtime or evaluator change, so `CODEGEN_REVISION` stays. `std.data` is the
+tree every data format reads into and writes from; the codecs, YAML, TOML and the derived
+`codec<T>()` of the design are later steps.
+
+### 27.1 `std.data`
+
+| item | definition |
+|---|---|
+| `enum Value` | `Null`, `Bool(Bool)`, `Int(Int)`, `Decimal(Text)` (any number `Int` cannot hold, its exact text), `Text(Text)`, `Bytes(Bytes)`, `Moment(Text)` (RFC 3339 text), `List(List<Value>)`, `Map(List<(Text, Value)>)` (members in document order) |
+| `enum Case` | `Same`, `Camel`, `Pascal`, `Kebab`, `ScreamingSnake` |
+| `enum Tagging` | `External`, `Internal(Text)` |
+| `enum Unknown` | `Ignore`, `Deny` |
+| `type DataLimits` | `depth: Int = 64`, `size: ByteSize = 16 MiB`, `entries: Int = 1000000` (items or members of one list or map) |
+| `type Shape` | `keys: Case = Same`, `variants: Case = Same`, `tagging: Tagging = External`, `unknown: Unknown = Ignore`, `renames: List<(Text, Text)> = []`, `limits: DataLimits = DataLimits {}`; `Shape.default()` is `Shape {}` |
+| `type DecodeError` | `path`, `expected`, `found`, all `Text`; `describe(error)` (UFCS `error.describe()`) is `<path>: expected <expected>, found <found>` |
+| `type FormatError` | `message: Text`, `line`, `column`, `offset: Int`: the first bad byte of a read, `line` and `column` 1-based, `column` in characters, `offset` in bytes (the positions of 1.1); a write gives 0 for all three |
+| `format_error(text, message, offset)` | the `FormatError` at byte `offset` of `text`, line and column counted |
+| `base64(bytes)` | RFC 4648 section 4 with `=` padding: the text of `Value.Bytes` in a format without bytes |
+
+`describe` is a fn, not a `DecodeError.describe` hook: a hook of 16.16 is not callable as a
+method. `Value`'s variants share names with `Json`'s (`Null`, `Bool`, `Decimal`), so a module
+that imports both writes `Value.Null` or `Json.Null` where the expected type does not decide
+(E005, section 4).
+
+### 27.2 The bridge in `std.json`
+
+| fn | meaning |
+|---|---|
+| `to_data(json) -> Value` | `Number` is `Int`, `Str` is `Text`, `Array` is `List`, `Object` is `Map`; `Null`, `Bool`, `Decimal` as they are |
+| `of_data(value) -> Json` | the inverse; `Bytes` becomes `Str` of its `base64`, `Moment` `Str` of its text. `of_data(to_data(j)) == j` for every `j` |
+| `read(text) -> Result<Value, FormatError>` | `read_with(text, DataLimits {})` |
+| `read_with(text, limits)` | the one value of `text` as `parse` reads it, then `to_data`; refused: more than `limits.size` bytes (`document larger than <n> bytes` at offset `n`), nesting deeper than `limits.depth` (`nested deeper than <n>` at the bracket), more than `limits.entries` items or members in one array or object (`more than <n> entries` at the first one too many), a member name twice in one object (``duplicate member `<name>` `` at its opening quote) |
+| `write(value) -> Result<Text, FormatError>` | `encode(of_data(value))`; refused: a `Decimal` whose text is no JSON number token (``decimal `<text>` is not a JSON number``, checked by `decimal`) |
+| `write_pretty(value)` | as `write`, one item or member per line, two spaces per level, `"name": value`, `[]` and `{}` for empty ones |
+
+`parse` and `encode` keep their behaviour: `parse` keeps a repeated member name and bounds only
+the depth (64), as before. Both go through one parser, `parse_bounded(text, Bounds)`.
+A text read back from a written `Bytes` or `Moment` is `Text`: JSON has neither, and the codec
+of a later step decodes the text into the field's type.
+
+### 27.3 Layering
+
+`std.data` is in the base layer and imports nothing; `std.json` imports it
+(`docs/layering.md`, `layering::` in `crates/ignite-check/tests/layering.rs`).
+
+### 27.4 Not covered
+
+`Codec<T>` and its combinators, `Shape`'s effect on names and tags, `Unknown.Deny` and
+`renames` (`story:data-codec-combinators`); YAML and TOML (`story:data-yaml`,
+`story:data-toml`); `codec<T>()` (`story:data-derived-codec`). `DataLimits.entries` and the
+refused duplicate member follow `docs/serde.md` goal 5 and section 4.
+
+### 27.5 Tests
+
+- `std/data.ignite`: the default `Shape`, `describe`, `base64` against RFC 4648's vectors,
+  `format_error`'s line and column (`task test-ignite`, both targets).
+- `std/json.ignite`: `of_data(to_data(j)) == j` for every `Json` variant, nested; `Bytes` as
+  base64 and `Moment` as text; `read` of every kind; line, column and offset of a format error;
+  the duplicate member; one test each for `depth`, `size` and `entries`; `write`,
+  `write_pretty` and their round trip through `read`; the refused decimal.
+- `data_json::read_and_write_agree_across_the_evaluator_and_both_targets`
+  (`crates/ignite/tests/data_json.rs`, `fixtures/data_json.ignite`): ten documents, eight that
+  read and two that give a format error, read and written in the evaluator and by the program
+  built for each target; the debug texts of the values, the compact and indented texts and the
+  round trips agree.
