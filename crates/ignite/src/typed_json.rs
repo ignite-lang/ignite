@@ -761,6 +761,7 @@ impl Writer<'_> {
                     text(match op {
                         UnaryOp::Not => "!",
                         UnaryOp::Neg => "-",
+                        UnaryOp::BitNot => "~",
                     }),
                 ),
                 ("operand", self.expr(operand)),

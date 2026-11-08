@@ -3782,6 +3782,10 @@ impl<'a> Typer<'a> {
                 self.check(operand, &Ty::Bool);
                 Some(Ty::Bool)
             }
+            UnaryOp::BitNot => {
+                self.check(operand, &Ty::Int);
+                Some(Ty::Int)
+            }
             UnaryOp::Neg => {
                 if let ExprKind::Int(value) = operand.kind
                     && expected == Some(&Ty::Byte)
@@ -3830,6 +3834,7 @@ impl<'a> Typer<'a> {
         let hint_for = |op: BinaryOp, expected: Option<Ty>| -> Option<Ty> {
             match op {
                 BinaryOp::And | BinaryOp::Or => Some(Ty::Bool),
+                op if op.is_bitwise() => Some(Ty::Int),
                 BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem => {
                     expected.filter(|t| matches!(t, Ty::Int | Ty::Byte))
                 }
@@ -3882,6 +3887,15 @@ impl<'a> Typer<'a> {
             }
             self.check(right, &Ty::Bool);
             return Some(Ty::Bool);
+        }
+        if op.is_bitwise() {
+            if let Some(found) = &left_ty
+                && !compatible(found, &Ty::Int)
+            {
+                self.mismatch(left.span, &Ty::Int, found);
+            }
+            self.check(right, &Ty::Int);
+            return Some(Ty::Int);
         }
         let arithmetic = matches!(
             op,
@@ -3940,6 +3954,11 @@ impl<'a> Typer<'a> {
             self.check(left, &Ty::Bool);
             self.check(right, &Ty::Bool);
             return Some(Ty::Bool);
+        }
+        if op.is_bitwise() {
+            self.check(left, &Ty::Int);
+            self.check(right, &Ty::Int);
+            return Some(Ty::Int);
         }
         let arithmetic = matches!(
             op,

@@ -72,8 +72,15 @@ pub enum TokenKind {
     OrOr,
     /// `;`, the statement separator of `docs/slice.md` section 3.
     Semicolon,
-    /// `|`, between the alternatives of an or-pattern.
+    /// `|`, between the alternatives of an or-pattern, and bitwise or
+    /// (`docs/slice.md` 27).
     Pipe,
+    /// `&`, bitwise and (`docs/slice.md` 27).
+    Amp,
+    /// `^`, bitwise exclusive or (`docs/slice.md` 27).
+    Caret,
+    /// `~`, bitwise not (`docs/slice.md` 27).
+    Tilde,
     /// `b"..."`: the bytes of a byte-string literal.
     ByteStr(Vec<u8>),
     /// A string literal with at least one `{expr}` interpolation, in source
@@ -181,6 +188,9 @@ impl TokenKind {
             TokenKind::OrOr => "||",
             TokenKind::Semicolon => ";",
             TokenKind::Pipe => "|",
+            TokenKind::Amp => "&",
+            TokenKind::Caret => "^",
+            TokenKind::Tilde => "~",
             TokenKind::DotDot => "..",
             TokenKind::DotDotEq => "..=",
             TokenKind::Ident(_)
@@ -435,6 +445,9 @@ fn lex_into(text: &str, tokens: &mut Vec<Token>, depth: usize) -> Result<(), Dia
                     (b'&', Some(b'&')) => (TokenKind::AndAnd, 2),
                     (b'|', Some(b'|')) => (TokenKind::OrOr, 2),
                     (b'|', _) => (TokenKind::Pipe, 1),
+                    (b'&', _) => (TokenKind::Amp, 1),
+                    (b'^', _) => (TokenKind::Caret, 1),
+                    (b'~', _) => (TokenKind::Tilde, 1),
                     (b'(', _) => (TokenKind::LParen, 1),
                     (b')', _) => (TokenKind::RParen, 1),
                     (b'{', _) => (TokenKind::LBrace, 1),

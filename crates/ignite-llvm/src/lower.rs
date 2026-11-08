@@ -1548,6 +1548,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 let x = self.scalar(&v);
                 match op {
                     UnaryOp::Not => Val::Scalar(self.f.val(format!("xor i1 {x}, true"))),
+                    UnaryOp::BitNot => Val::Scalar(self.f.val(format!("xor i64 {x}, -1"))),
                     UnaryOp::Neg => {
                         let t = scalar_type(&self.ty(operand)).unwrap_or("i64");
                         if t == "i64" && !matches!(operand.kind, ExprKind::Int(_)) {
@@ -3221,6 +3222,9 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         let t = scalar_type(&ty).unwrap_or("i64");
         let (a, b) = (self.scalar(&l), self.scalar(&r));
         let signed = ty != Ty::Byte;
+        if op.is_bitwise() {
+            return Val::Scalar(self.bitwise(op, &a, &b));
+        }
         let instr = match op {
             BinaryOp::Eq => "icmp eq",
             BinaryOp::Ne => "icmp ne",
@@ -3273,7 +3277,13 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                     (_, false) => "urem",
                 }
             }
-            BinaryOp::And | BinaryOp::Or => unreachable!("handled above"),
+            BinaryOp::And
+            | BinaryOp::Or
+            | BinaryOp::BitAnd
+            | BinaryOp::BitOr
+            | BinaryOp::BitXor
+            | BinaryOp::Shl
+            | BinaryOp::Shr => unreachable!("handled above"),
         };
         Val::Scalar(self.f.val(format!("{instr} {t} {a}, {b}")))
     }
@@ -3309,6 +3319,30 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         let lenp = self.gep(&p, 8);
         self.f.ins(format!("store i64 {next}, ptr {lenp}, align 8"));
         out
+    }
+
+    /// `a op b` on `i64` for a bitwise `op` (`docs/slice.md` 27.2). LLVM's
+    /// `shl` and `ashr` are poison for an amount outside `0..64`, so `<<`
+    /// selects 0 for one (the unselected poison does not propagate) and
+    /// `>>` shifts by at most 63, the sign fill; an amount is compared
+    /// unsigned, so a negative one counts as too large.
+    fn bitwise(&mut self, op: BinaryOp, a: &str, b: &str) -> String {
+        match op {
+            BinaryOp::BitAnd => self.f.val(format!("and i64 {a}, {b}")),
+            BinaryOp::BitOr => self.f.val(format!("or i64 {a}, {b}")),
+            BinaryOp::BitXor => self.f.val(format!("xor i64 {a}, {b}")),
+            BinaryOp::Shl => {
+                let fits = self.f.val(format!("icmp ult i64 {b}, 64"));
+                let shifted = self.f.val(format!("shl i64 {a}, {b}"));
+                self.f
+                    .val(format!("select i1 {fits}, i64 {shifted}, i64 0"))
+            }
+            _ => {
+                let fits = self.f.val(format!("icmp ult i64 {b}, 64"));
+                let amount = self.f.val(format!("select i1 {fits}, i64 {b}, i64 63"));
+                self.f.val(format!("ashr i64 {a}, {amount}"))
+            }
+        }
     }
 
     /// `a op b` for `+`, `-` and `*` through `llvm.*.with.overflow`: an

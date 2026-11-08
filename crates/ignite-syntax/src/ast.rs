@@ -914,6 +914,8 @@ pub struct FieldInit {
 pub enum UnaryOp {
     Not,
     Neg,
+    /// `~`, bitwise not of an `Int` (`docs/slice.md` 27).
+    BitNot,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -931,9 +933,24 @@ pub enum BinaryOp {
     Mul,
     Div,
     Rem,
+    /// `&`, `|`, `^`, `<<`, `>>` on `Int` (`docs/slice.md` 27).
+    BitAnd,
+    BitOr,
+    BitXor,
+    Shl,
+    Shr,
 }
 
 impl BinaryOp {
+    /// `&`, `|`, `^`, `<<` and `>>`: both operands and the result are
+    /// `Int`, and none fails (`docs/slice.md` 27).
+    pub fn is_bitwise(self) -> bool {
+        matches!(
+            self,
+            BinaryOp::BitAnd | BinaryOp::BitOr | BinaryOp::BitXor | BinaryOp::Shl | BinaryOp::Shr
+        )
+    }
+
     pub fn symbol(self) -> &'static str {
         match self {
             BinaryOp::Or => "||",
@@ -949,6 +966,11 @@ impl BinaryOp {
             BinaryOp::Mul => "*",
             BinaryOp::Div => "/",
             BinaryOp::Rem => "%",
+            BinaryOp::BitAnd => "&",
+            BinaryOp::BitOr => "|",
+            BinaryOp::BitXor => "^",
+            BinaryOp::Shl => "<<",
+            BinaryOp::Shr => ">>",
         }
     }
 }

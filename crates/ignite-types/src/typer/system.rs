@@ -306,7 +306,7 @@ impl Typer<'_> {
                 (Some(k), None) if int(right) => Some(Ty::Quantity(k)),
                 _ => None,
             },
-            Rem | And | Or => None,
+            Rem | And | Or | BitAnd | BitOr | BitXor | Shl | Shr => None,
         };
         let comparison = matches!(op, Eq | Ne | Lt | Gt | Le | Ge);
         match result {
