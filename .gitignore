@@ -5,3 +5,4 @@ core.*
 __pycache__/
 /target-runner/
 /ux/node_modules
+/bench/native/rust/target/

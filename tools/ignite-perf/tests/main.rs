@@ -3,6 +3,7 @@
 //! are `<file>::<test>`.
 
 mod args;
+mod bench;
 mod common;
 mod compare;
 mod cycle;
@@ -10,4 +11,5 @@ mod export;
 mod json;
 mod readiness;
 mod records;
+mod remote;
 mod source;
