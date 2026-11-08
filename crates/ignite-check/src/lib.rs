@@ -3257,6 +3257,11 @@ impl Checker {
                 .get(&ty.name.name)
                 .cloned()
                 .unwrap_or_default();
+            if let Some(home) = self.symbols.imported.get(&ty.name.name)
+                && !self.means_the_same_here(target, home, &params)
+            {
+                break;
+            }
             ty = Cow::Owned(substitute_type(target, &params, &ty.args));
         }
         ty
@@ -3274,7 +3279,36 @@ impl Checker {
             .get(&record.name.name)
             .cloned()
             .unwrap_or_default();
+        if let Some(home) = self.symbols.imported.get(&record.name.name)
+            && !self.means_the_same_here(ty, home, &params)
+        {
+            return None;
+        }
         Some(self.expand(&substitute_type(ty, &params, &record.args)))
+    }
+
+    /// Whether `ty`, the type of a field of a record or the target of an
+    /// alias as the module `home` declared it, means the same in this
+    /// module: every name in it is builtin, one of the declaration's type
+    /// parameters `params`, or imported here from `home`. A name this
+    /// module declares, imports from elsewhere or does not know could
+    /// stand for another type here, so the field has no static type and
+    /// the alias is not expanded (E042 at an effect of it) rather than
+    /// a wrong one (`docs/slice.md` 11.7).
+    fn means_the_same_here(&self, ty: &Type, home: &str, params: &[String]) -> bool {
+        let name = ty.name.name.as_str();
+        let known = ty.is_fn()
+            || ty.is_tuple()
+            || params.iter().any(|p| p == name)
+            || (BUILTIN_TYPES.contains(&name)
+                && !self.symbols.alias_targets.contains_key(name)
+                && !self.symbols.records.contains(name))
+            || self.symbols.imported.get(name).is_some_and(|m| m == home);
+        known
+            && ty
+                .args
+                .iter()
+                .all(|arg| self.means_the_same_here(arg, home, params))
     }
 
     /// The declared type of the value of `expr`, where it follows from

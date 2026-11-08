@@ -13,6 +13,7 @@ mod fixtures;
 mod generics;
 mod infer_adversary;
 mod infer_adversary2;
+mod infer_imports;
 mod inline_tests;
 mod lent;
 mod limits;

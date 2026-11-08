@@ -1525,7 +1525,12 @@ and `to_text`.
   value a call returns, 20.4.3), and the names a `match` arm binds from a scrutinee of such a
   type (the value itself, tuple elements, the payload of `Some(x)` of an `Option<T>` and of
   `Ok(x)` and `Err(e)` of a `Result<T, E>`: `match senders.get(id) { Some(tx) => tx.send(1),
-  .. }` with `senders: Store<Sender<Int>>`; case-study gap G32). Where it cannot, the type
+  .. }` with `senders: Store<Sender<Int>>`; case-study gap G32). An imported record's field
+  types and an imported alias's target are written in the exporting module's namespace: a field
+  of such a record has no static type, and such an alias is not expanded, unless every name in
+  the declared type is builtin, a type parameter of the declaration, or imported from that same
+  module (a name the importer declares, imports from elsewhere or does not know could mean
+  another type). Where it cannot, the type
   checker reports E042 at the call (``cannot check the effects of `get`: the type of its
   receiver is not declared; annotate the binding``).
 
