@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:data-value-model
 kind: story
-status: draft
+status: proposed
 title: std.data value model and the Json bridge
 relations:
 - decomposes: epic:data-formats
@@ -21,7 +21,9 @@ scope:
   path: std/data.ignite
 - confidence: inferred
   path: std/json.ignite
-revision: 3
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-08T01:26:00Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"review_outcome":2}}}
 ---
 # Story: data-value-model
 

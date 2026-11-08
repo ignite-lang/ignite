@@ -2,9 +2,11 @@
 format: aep.planning-md/3
 id: story:ioerror-assert-equality
 kind: story
-status: draft
+status: proposed
 title: IoError equality inside assert
-revision: 1
+revision: 2
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-08T01:26:00Z", actor: "human:timo", revision: 2}
 ---
 # Story: ioerror-assert-equality
 

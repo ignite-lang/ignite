@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:data-codec-combinators
 kind: story
-status: draft
+status: proposed
 title: std.data Codec<T> and combinators, std only
 relations:
 - decomposes: epic:data-formats
@@ -16,7 +16,9 @@ scope:
   path: docs/slice.md
 - confidence: inferred
   path: std/data.ignite
-revision: 2
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-08T01:26:00Z", actor: "human:timo", revision: 3, decided_on: {"recorded":{"review_outcome":1}}}
 ---
 # Story: data-codec-combinators
 
