@@ -7677,6 +7677,25 @@ then checks the component with `fstatat(.., AT_SYMLINK_NOFOLLOW)` and reports `s
 missing for an instant) is an ordinary `Err`; it never reaches outside the root. Symlinks that
 stay inside the root are refused too; following them is 21.15's.
 
+As landed by story `fs-resolve-beneath` (2026-11-08): where the kernel has `openat2` (Linux
+5.6), a path is first opened from the root descriptor in one call with `RESOLVE_BENEATH |
+RESOLVE_NO_SYMLINKS`, which fails on a symlink at any component, magic links included, and on
+any step out of the root, so it confines exactly as the walk does. `read_file` opens the whole
+path that way, `read_directory` the listed directory, `create_directory` returns at once when
+the path is an existing directory, and `write_file`, `remove` and `remove_tree` open the parent
+once and act on the last component relative to it (the root's own descriptor when the parent is
+the root). When that call fails for any reason the operation walks as above, which either
+succeeds (the path changed in between) or gives the error this section words, naming the
+component; the walk is also the whole resolution once `openat2` answered `ENOSYS` or `EPERM` (a
+kernel before 5.6, a seccomp filter). A listing reads the directory with `getdents64` itself.
+Every behaviour above, its errors included, is the same in both resolutions; the substrate's
+tests run on both (`fs::tests`, `Scratch::both`). Measured with `strace -c` on the todo example's
+patch workload (16 connections on one todo, LLVM, release): 108.5 syscalls per reply before,
+45.8 after, the plain-Rust reference 16.0. Of the 45.8, 8.1 are failed `remove`s of versions a
+concurrent save already removed (`unlinkat` `ENOENT`, 3 syscalls each with the parent's
+`openat2` and `close`); the reference fails 0.3 per reply. That count is set by how many saves
+of one todo overlap, not by the resolution.
+
 Errors from the operating system are `IoError` values whose message is `path <p>: <reason>` with
 the OS reason text.
 
@@ -7951,7 +7970,7 @@ Changed codes:
 | D1 | capabilities are resource handles passed in values | ambient statics with effects such as `fs.write` | P3: a handler may act only on its state; vision invariant 4 |
 | D2 | four kinds, one per authority, each with its own op names | one `Host` capability with all four | a handler that only reads files should not be able to run programs; the state record composes them (probe p4), and distinct ops keep `requires [b.read]` from granting more than reads (21.3) |
 | D3 | effects checked by the receiver's declared type, with `static_type` arms for the constructors and `start` | by method name in `EFFECTFUL_METHODS` | a by-name table would capture user fns named `start`, `value`, `wait`, `kill` or `execute` (F5); the arms spare tests the annotations `Store` needs |
-| D4 | confinement by an `openat` walk with `O_NOFOLLOW`, every symlink refused | `openat2` with `RESOLVE_BENEATH` (follows inside links); `canonicalize` and a prefix check | the walk needs no kernel 5.6 feature; the prefix check races (row 4); inside links are rare in a workspace |
+| D4 | confinement by an `openat` walk with `O_NOFOLLOW`, every symlink refused | `openat2` with `RESOLVE_BENEATH` (follows inside links); `canonicalize` and a prefix check | the walk needs no kernel 5.6 feature; the prefix check races (row 4); inside links are rare in a workspace. Since story `fs-resolve-beneath` the walk is the fallback: `openat2` with `RESOLVE_BENEATH \| RESOLVE_NO_SYMLINKS` refuses inside links as the walk does and resolves in one call (21.4) |
 | D5 | no `Directory.subdirectory` (attenuation) in this slice | `open(path) -> Directory` sharing the receiver's roots | on LLVM every call would hold a table slot until exit (F10), unbounded in a handler; relative paths cover the playground |
 | D6 | `execute` beside `start` | only `start` and `wait` | `execute` allocates no LLVM slot and is what a run button does |
 | D7 | one watcher thread per child, which also starts it | one shared reaper thread with `poll` over every pipe | the test runner's loop already works per child (F12); `PR_SET_PDEATHSIG` needs the starting thread to live as long as the child; `maximum_children` bounds the threads |
