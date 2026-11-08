@@ -1,0 +1,206 @@
+package fixtures.bitwise.codecs
+
+// SHA-1 (RFC 3174) and base64 (RFC 4648) written with the bitwise
+// operators of docs/slice.md 27. crates/ignite/tests/bitwise.rs runs the
+// tests below on both targets and times the executable `codecs` against
+// the hand-written Rust of codecs.rs beside this file (27.5); the two
+// print the same lines.
+
+const MASK: Int = 0xFFFFFFFF
+
+/// `x` rotated left by `n` within 32 bits; `x` lies in 0 to 2^32 - 1.
+fn rotl(x: Int, n: Int) -> Int = (x << n | x >> 32 - n) & MASK
+
+/// The low 8 bits of `n`.
+fn byte(n: Int) -> Byte = match (n & 255).to_byte() {
+  Some(b) => b
+  None => 0
+}
+
+/// The five 32-bit words of the SHA-1 digest of `message`.
+fn sha1(message: Bytes) -> List<Int> {
+  var h0 = 0x67452301
+  var h1 = 0xEFCDAB89
+  var h2 = 0x98BADCFE
+  var h3 = 0x10325476
+  var h4 = 0xC3D2E1F0
+  let length = message.len()
+  var data = message
+  data.push(0x80)
+  while data.len() % 64 != 56 {
+    data.push(0)
+  }
+  var shift = 56
+  while shift >= 0 {
+    data.push(byte(length * 8 >> shift))
+    shift = shift - 8
+  }
+  var w: List<Int> = []
+  while w.len() < 80 {
+    w.push(0)
+  }
+  var block = 0
+  while block < data.len() {
+    var t = 0
+    while t < 16 {
+      let at = block + t * 4
+      w.set(t, data[at].to_int() << 24 | data[at + 1].to_int() << 16 | data[at + 2].to_int() << 8 | data[at + 3].to_int())
+      t = t + 1
+    }
+    while t < 80 {
+      w.set(t, rotl(w[t - 3] ^ w[t - 8] ^ w[t - 14] ^ w[t - 16], 1))
+      t = t + 1
+    }
+    var a = h0
+    var b = h1
+    var c = h2
+    var d = h3
+    var e = h4
+    t = 0
+    while t < 80 {
+      var f = b ^ c ^ d
+      var k = 0xCA62C1D6
+      if t < 20 {
+        f = b & c | ~b & d
+        k = 0x5A827999
+      } else if t < 40 {
+        k = 0x6ED9EBA1
+      } else if t < 60 {
+        f = b & c | b & d | c & d
+        k = 0x8F1BBCDC
+      }
+      let temp = (rotl(a, 5) + f + e + k + w[t]) & MASK
+      e = d
+      d = c
+      c = rotl(b, 30)
+      b = a
+      a = temp
+      t = t + 1
+    }
+    h0 = (h0 + a) & MASK
+    h1 = (h1 + b) & MASK
+    h2 = (h2 + c) & MASK
+    h3 = (h3 + d) & MASK
+    h4 = (h4 + e) & MASK
+    block = block + 64
+  }
+  [h0, h1, h2, h3, h4]
+}
+
+/// The words as 40 lowercase hex digits.
+fn hex(words: List<Int>) -> Text {
+  let digits = b"0123456789abcdef"
+  var out = Bytes.empty()
+  for word in words {
+    var shift = 28
+    while shift >= 0 {
+      out.push(digits[word >> shift & 15])
+      shift = shift - 4
+    }
+  }
+  out.to_text()
+}
+
+/// `data` in base64 with padding (RFC 4648 section 4).
+fn base64(data: Bytes) -> Text {
+  let alphabet = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+  var out = Bytes.empty()
+  let n = data.len()
+  var i = 0
+  while i + 3 <= n {
+    let v = data[i].to_int() << 16 | data[i + 1].to_int() << 8 | data[i + 2].to_int()
+    out.push(alphabet[v >> 18])
+    out.push(alphabet[v >> 12 & 63])
+    out.push(alphabet[v >> 6 & 63])
+    out.push(alphabet[v & 63])
+    i = i + 3
+  }
+  if n - i == 1 {
+    let v = data[i].to_int() << 16
+    out.push(alphabet[v >> 18])
+    out.push(alphabet[v >> 12 & 63])
+    out.push(b'=')
+    out.push(b'=')
+  } else if n - i == 2 {
+    let v = data[i].to_int() << 16 | data[i + 1].to_int() << 8
+    out.push(alphabet[v >> 18])
+    out.push(alphabet[v >> 12 & 63])
+    out.push(alphabet[v >> 6 & 63])
+    out.push(b'=')
+  }
+  out.to_text()
+}
+
+fn repeated(text: Text, times: Int) -> Bytes {
+  let piece = text.to_bytes()
+  var out = Bytes.empty()
+  var i = 0
+  while i < times {
+    out.append(piece)
+    i = i + 1
+  }
+  out
+}
+
+test "sha1 of RFC 3174 tests 1 and 2" {
+  assert hex(sha1("abc".to_bytes())) == "a9993e364706816aba3e25717850c26c9cd0d89d"
+  assert hex(sha1("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq".to_bytes())) == "84983e441c3bd26ebaae4aa1f95129e5e54670f1"
+  assert hex(sha1(Bytes.empty())) == "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+}
+
+test "sha1 of RFC 3174 test 3" {
+  assert hex(sha1(repeated("a", 1000000))) == "34aa973cd4c4daa4f61eeb2bdbad27316534016f"
+}
+
+test "sha1 of RFC 3174 test 4" {
+  assert hex(sha1(repeated("0123456701234567012345670123456701234567012345670123456701234567", 10))) == "dea356a2cddd90c7a7ecedc5ebb563934f460452"
+}
+
+test "base64 of RFC 4648 section 10" {
+  assert base64(Bytes.empty()) == ""
+  assert base64("f".to_bytes()) == "Zg=="
+  assert base64("fo".to_bytes()) == "Zm8="
+  assert base64("foo".to_bytes()) == "Zm9v"
+  assert base64("foob".to_bytes()) == "Zm9vYg=="
+  assert base64("fooba".to_bytes()) == "Zm9vYmE="
+  assert base64("foobar".to_bytes()) == "Zm9vYmFy"
+  assert base64(Bytes.of([0xFF, 0xEF, 0x00])) == "/+8A"
+}
+
+// The timed program: 16 rounds over 1 MiB, each with its first byte
+// changed, so no round repeats the one before.
+
+fn show(text: Text) -> Result<Unit, IoError> requires [stdout.write] {
+  var bytes = text.to_bytes()
+  bytes.push(10)
+  return Stdout.write_all(bytes)
+}
+
+type Bench {
+  executable: Text
+}
+
+fn Bench.main(self: Bench) -> Result<Unit, IoError> {
+  var data = Bytes.empty()
+  var i = 0
+  while i < 1048576 {
+    data.push(byte(i * 31 + 7))
+    i = i + 1
+  }
+  var digest = ""
+  var encoded = 0
+  var round = 0
+  while round < 16 {
+    data.set(0, byte(round))
+    digest = hex(sha1(data))
+    encoded = encoded + base64(data).len()
+    round = round + 1
+  }
+  show(digest)?
+  show(Int.to_text(encoded))?
+  Ok(Unit)
+}
+
+system Codecs {
+  component codecs: Bench { executable = "codecs" }
+}
