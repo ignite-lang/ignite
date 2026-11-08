@@ -164,6 +164,7 @@ pub const BUILTIN_STATICS: &[(&str, &str)] = &[
     ("Clock", "sleep"),
     ("Clock", "now"),
     ("Process", "flush"),
+    ("Process", "open_files_limit"),
     ("TcpStream", "connect_within"),
 ];
 
@@ -311,6 +312,7 @@ const BUILTIN_STATIC_ARITIES: &[(&str, &str, usize)] = &[
     ("Clock", "sleep", 1),
     ("Clock", "now", 0),
     ("Process", "flush", 0),
+    ("Process", "open_files_limit", 0),
     ("TcpStream", "connect_within", 3),
 ];
 
@@ -328,6 +330,7 @@ const EFFECTFUL_STATICS: &[(&str, &str)] = &[
     ("Endpoint", "of"),
     ("Clock", "sleep"),
     ("Clock", "now"),
+    ("Process", "open_files_limit"),
     ("TcpStream", "connect_within"),
 ];
 
@@ -515,6 +518,7 @@ pub fn static_effect(owner: &str, name: &str) -> Option<&'static str> {
         ("Clock", "monotonic") => Some("clock.read"),
         ("Clock", "sleep") => Some("clock.sleep"),
         ("Clock", "now") => Some("clock.read"),
+        ("Process", "open_files_limit") => Some("process.limit"),
         ("Endpoint", "of") => Some("process.args"),
         ("TcpStream", "connect_within") => Some("net.connect"),
         _ => None,

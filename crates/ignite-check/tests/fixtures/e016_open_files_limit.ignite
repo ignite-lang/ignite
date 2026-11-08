@@ -1,0 +1,7 @@
+fn limit() -> Int requires [] {
+  return Process.open_files_limit()
+}
+
+fn declared() -> Int requires [process.limit] {
+  return Process.open_files_limit()
+}

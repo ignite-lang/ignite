@@ -4505,6 +4505,10 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 self.m.declare("ignite_rt_clock_now", "i64", &[]);
                 Val::Scalar(self.f.val("call i64 @ignite_rt_clock_now()"))
             }
+            ProcessOpenFilesLimit => {
+                self.m.declare("ignite_rt_open_files_limit", "i64", &[]);
+                Val::Scalar(self.f.val("call i64 @ignite_rt_open_files_limit()"))
+            }
             ProcessFlush => {
                 self.m.declare("ignite_rt_flush", "void", &[]);
                 self.f.ins("call void @ignite_rt_flush()");

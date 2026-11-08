@@ -4103,6 +4103,7 @@ impl<'a> Generator<'a> {
             ("Clock", "sleep", [duration]) => format!("::ignite_io::clock::sleep({duration})"),
             ("Clock", "now", []) => "::ignite_io::clock::now()".to_string(),
             ("Process", "flush", []) => "::ignite_io::flush()".to_string(),
+            ("Process", "open_files_limit", []) => "::ignite_io::open_files_limit()".to_string(),
             ("Int", "to_text", [value]) => {
                 format!("{}.to_string()", wrap(&args[0], value.clone()))
             }

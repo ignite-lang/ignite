@@ -380,6 +380,7 @@ pub(crate) fn static_fn(owner: &str, name: &str) -> Option<Sig> {
         ),
         ("Clock", "now") => sig(ClockNow, vec![], Ty::Quantity(QuantityKind::Duration)),
         ("Process", "flush") => sig(ProcessFlush, vec![], Ty::Unit),
+        ("Process", "open_files_limit") => sig(ProcessOpenFilesLimit, vec![], Ty::Int),
         ("TcpStream", "connect_within") => sig(
             TcpStreamConnectWithin,
             vec![Ty::Text, Ty::Int, Ty::Quantity(QuantityKind::Duration)],

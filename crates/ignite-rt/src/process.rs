@@ -84,13 +84,15 @@ pub(crate) fn die(message: &str) -> ! {
 }
 
 /// `void init(i32 argc, ptr argv)`: the first call in every `main`. Stores
-/// the arguments, ignores `SIGPIPE` (a write to a closed socket or pipe is
-/// an error, as in a Rust program), and installs, once per process, a panic
-/// hook (exit status 101, terminal restored) and an `atexit` terminal
-/// restore.
+/// the arguments, raises the open-files soft limit to the hard limit
+/// (`ignite_io::raise_open_files_limit`, `docs/slice.md` 28), ignores
+/// `SIGPIPE` (a write to a closed socket or pipe is an error, as in a Rust
+/// program), and installs, once per process, a panic hook (exit status
+/// 101, terminal restored) and an `atexit` terminal restore.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_init(argc: i32, argv: *const *const c_char) {
     store_args(decode_args(argc, argv));
+    ignite_io::raise_open_files_limit();
     ignite_io::drain();
     HOOKS.call_once(|| {
         // SAFETY: ignoring a signal installs no handler code.
@@ -336,6 +338,13 @@ pub extern "C" fn ignite_rt_environment_get(
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_flush() {
     crate::entry(ignite_io::flush)
+}
+
+/// `i64 open_files_limit()`: `Process.open_files_limit()` (27): the current
+/// open-files soft limit (`ignite_io::open_files_limit`).
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_open_files_limit() -> i64 {
+    crate::entry(ignite_io::open_files_limit)
 }
 
 /// `i32 endpoint_of(Text* reference, Endpoint* out, IoError* err)`: the
@@ -726,5 +735,12 @@ mod tests {
     #[test]
     fn flush_without_writes_returns() {
         ignite_rt_flush();
+    }
+
+    /// 27: `Process.open_files_limit()` reads the soft limit `init` raised.
+    #[test]
+    fn open_files_limit_reads_the_soft_limit() {
+        assert_eq!(ignite_rt_open_files_limit(), ignite_io::open_files_limit());
+        assert!(ignite_rt_open_files_limit() > 0);
     }
 }

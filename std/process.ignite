@@ -29,6 +29,10 @@ package std.process
 //   Clock.sleep(duration: Duration) -> Unit                        effect clock.sleep; flushes the task's writes first
 //   Clock.now() -> Duration                                        effect clock.read; since 1970-01-01T00:00:00Z (std.time)
 //   Process.flush() -> Unit                                        pure, as log; sends what the task wrote
+//   Process.open_files_limit() -> Int                              effect process.limit; the open-files soft limit (28)
+//
+// A program raises its open-files soft limit to the hard limit before
+// `K.main` runs, on both targets (27).
 //
 // Under `ignite run --clock manual` both clocks stay real: the manual clock
 // times the driver's reducers only (21.20).
@@ -384,6 +388,10 @@ test "the wall clock is an instant of std.time after 2026-01-01" {
   assert now > 1767225600 seconds
   assert now.to_ms() > 1767225600000
   assert now - Clock.now() < 1 seconds
+}
+
+test "the open-files soft limit is a positive count" {
+  assert Process.open_files_limit() > 0
 }
 
 test "a flush sends what the task wrote before its next write" {
