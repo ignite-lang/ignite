@@ -6,6 +6,7 @@ status: proposed
 title: SHA-1, SHA-256 and base64 in std
 relations:
 - depends_on: story:bitwise-operators
+- depends_on: story:u32-words
 revision: 2
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T03:04:57Z", actor: "human:timo", revision: 2}
