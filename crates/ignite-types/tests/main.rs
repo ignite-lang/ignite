@@ -11,6 +11,7 @@ mod common;
 mod effectful_map_adversary;
 mod fixtures;
 mod generics;
+mod infer_adversary;
 mod inline_tests;
 mod lent;
 mod limits;
