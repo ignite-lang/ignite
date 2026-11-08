@@ -57,6 +57,7 @@
   This costs two fds and a loopback connect per waiter.
 - Blocks: no (costly).
 - Closed in wave 7 by story `channels-and-timers` (`docs/slice.md` 30): bounded channels with `receive_within` wake a waiter on a message or a deadline; the sleep part was closed by the process builtins story (21.20).
+- Confirmed closed by the case study on v0.15.0 (2026-11-08); a leak it then found in channels is G30.
 
 ## G4 An idle timeout reads as Eof, so it cannot be told from the peer closing
 
@@ -108,6 +109,7 @@
   bound after the drain began is not released.
 - Blocks: no.
 - Closed in wave 7 by story `drain-keeps-listeners` (`docs/slice.md` 16.13): a `TcpListener` with `keep_through_drain = true` keeps accepting through the drain.
+- Partly closed, per the case study on v0.15.0 (2026-11-08): it works for a listener resource with a fixed port; a listener bound at run time is still released (G31).
 
 ## G7 No bitwise operators
 
@@ -121,6 +123,7 @@
 - Workaround: bit-by-bit arithmetic over Int, in a hand-written module.
 - Blocks: no (slow per frame).
 - Closed in wave 7 by story `bitwise-operators` (`docs/slice.md` 29).
+- Confirmed closed by the case study on v0.15.0 (2026-11-08).
 
 ## G8 No wall clock
 
@@ -151,6 +154,7 @@
 - Workaround: none; the container default applies.
 - Blocks: no (it caps connections under the benchmark).
 - Closed in wave 7 by story `open-files-limit` (`docs/slice.md` 28): every program raises its open-files soft limit to the hard limit at start.
+- Confirmed by the case study on v0.15.0 (2026-11-08): works as needed.
 
 ## G11 No FFI
 
@@ -236,6 +240,7 @@
 - Blocks: no.
 
 - Closed in wave 7 by story `ioerror-assert-equality` (`docs/slice.md` 12.3): two `IoError`s compare equal inside `assert` when their messages are.
+- Confirmed closed by the case study on v0.15.0 (2026-11-08).
 
 ## G19 No HTTP client; the server role does not fit the service
 
@@ -325,6 +330,68 @@
 - What happens: for `{"channel":"/a","channel":"/meta/handshake"}`, `get` returns `/a`; ECMAScript's `JSON.parse` keeps the last member, so a server interoperating with JavaScript clients must use `/meta/handshake`. RFC 8259 section 4 leaves the choice open.
 - Story: `story:json-duplicate-keys` (last member wins, documented, plus an accessor for every member).
 - Blocks: no.
+
+## G30 A closed channel's memory is never freed
+
+- Version: ignite 0.15.0. Target: as reported, not stated.
+- Kind: leak.
+- What happens: a spawned task running `let (r, b) = Channel.bounded(1); r.close(); b.receive_within(0 ms)` grows the resident size by about 370 B per task; 200,000 such tasks take it from 14 MB to 88 MB.
+- Minimal example, spawned 200,000 times by a `main` that waits for each `done`:
+
+  ```
+  fn poll(done: Sender<Int>) -> Result<Unit, IoError> {
+    let (r, b) = Channel.bounded(1)
+    r.close()
+    let none: Option<Int> = b.receive_within(0 ms)
+    done.send(1)
+    Ok(())
+  }
+  ```
+
+- Not reproduced on `main` (05574a7c8, no runtime change since v0.15.0), 2026-11-08: that example spawned one at a time and 1,000 at once, and the three lines looped 200,000 times inside one task, peak at 2.0 to 6.5 MB on both targets, dev, `--release` and `--static`, the same as the control without a channel. The leak needs something the reduced form does not have; the service's own shape is the next reproducer.
+- Workaround in the service: closed channels go on an idle list and are reused.
+- Code: `crates/ignite-io/src/channel.rs` (`Shared` behind the two ends' `Arc<End>`, freed when both ends' handles are dropped); `crates/ignite-rt/src/channel.rs` (`ignite_rt_channel_bounded` registers each end as `Handle::Sender` or `Handle::Receiver`); the handle table in `crates/ignite-rt/src/net.rs` (`register`, `release_owner`, the task's `OWNED` list with its tombstones, `ignite_rt_own_release`; segments are never freed, slots are reused through `FREE`); the LLVM target's ownership of ends in `crates/ignite-llvm/src/lower.rs` (`own_streams`, `release_owned`, `is_stream`) and `own.rs`; `docs/slice.md` 30.3 (an end sent as a value on another channel is never released).
+- Story: `story:channel-release-on-close`.
+- Blocks: no (with the workaround).
+
+## G31 A listener bound at run time cannot be kept through the drain
+
+- Version: ignite 0.15.0. Target: both.
+- Kind: missing-feature.
+- What the service needs: its admin and internal ports come from the environment or configuration, and those listeners must keep accepting through the SIGTERM drain (G6).
+- What Ignite does: `keep_through_drain = true` is a property of a `TcpListener` resource whose port is fixed in the system (the Rust target needs a literal, E020; `docs/slice.md` 16.13). `TcpListener.bind(address, port)` has no such form, so its listener is released at the drain.
+- Minimal example: `let admin = TcpListener.bind("0.0.0.0", port_from_env)?` in `main`; after SIGTERM, `admin.accept()` fails with `draining`.
+- Workaround: on `draining`, bind the port again (G6's workaround); a listener bound after the drain began is not released.
+- Code: `crates/ignite-io/src/net.rs` (`TcpListener::bind`, and `bind_kept`/`bind_with`, which exist but only the resource path reaches), `crates/ignite-io/src/drain.rs` (a kept listener is never registered); `crates/ignite-rt/src/net.rs` (`ignite_rt_tcp_bind`, `ignite_rt_tcp_bind_kept`); the builtin `TcpListenerBind` (`crates/ignite-check/src/lib.rs` tables, `crates/ignite-llvm/src/lower.rs`, `crates/ignite-rustgen/src/lib.rs`); the resource property in `crates/ignite-types/src/typer/system.rs`, `crates/ignite-llvm/src/lib.rs` and `crates/ignite-rustgen/src/lib.rs`.
+- Story: `story:drain-keeps-bound-listeners`.
+- Blocks: no (with the workaround).
+
+## G32 A channel end from a Store lookup or a returned record needs a type annotation
+
+- Version: ignite 0.15.0, reproduced on `main` 05574a7c8. Target: both (a frontend error).
+- Kind: refusal-of-valid-program.
+- What happens: both are `error[E042]: cannot check the effects of `try_send`: the type of its receiver is not declared; annotate the binding`:
+
+  ```
+  fn from_store(senders: Store<Sender<Int>>, id: Int) -> Bool requires [senders.read] {
+    match senders.get(id) {
+      Some(tx) => tx.try_send(1)
+      None => false
+    }
+  }
+
+  type Ends { tx: Sender<Int>, rx: Receiver<Int> }
+  fn ends() -> Ends { let (tx, rx) = Channel.bounded(1); Ends { tx = tx, rx = rx } }
+  fn from_record() -> Bool {
+    let d = ends()
+    d.tx.try_send(1)
+  }
+  ```
+
+- Workaround: `let tx: Sender<Int> = …` inside the arm, `let d: Ends = ends()`.
+- Code: the effect check takes a receiver's type from declarations alone (`docs/slice.md` 11.7): `static_type` in `crates/ignite-check/src/lib.rs` resolves no call of a declared fn (`ExprKind::Call` covers only `Owner.constructor(..)`), and `pattern` binds a `PatternKind::Binding` without a type from the scrutinee (`Option<T>` of `Store.get`). The type checker reports the missing effect site: `effect_site` and `unchecked_effects` in `crates/ignite-types/src/typer.rs`. Same class as G15.
+- Story: `story:infer-channel-ends`.
+- Blocks: no (with the workaround).
 
 ## G20 (correction)
 
