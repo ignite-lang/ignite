@@ -25,7 +25,7 @@ declare void @ignite_rt_arena_scratch_clear()
 declare ptr @ignite_rt_arena_state() nounwind willreturn speculatable memory(none)
 declare i32 @ignite_rt_args_port(ptr, ptr, ptr)
 declare void @ignite_rt_exit(i32) noreturn
-declare void @ignite_rt_fail(ptr) noreturn
+declare void @ignite_rt_fail(ptr) cold noreturn
 declare void @ignite_rt_log(ptr)
 declare i32 @ignite_rt_tcp_bind(ptr, i64, ptr, ptr)
 declare i32 @ignite_rt_tcp_accept(i64, ptr, ptr)
@@ -68,7 +68,7 @@ declare { i8, i1 } @llvm.uadd.with.overflow.i8(i8, i8)
 declare { i8, i1 } @llvm.usub.with.overflow.i8(i8, i8)
 declare { i8, i1 } @llvm.umul.with.overflow.i8(i8, i8)
 declare i32 @_setjmp(ptr) returns_twice
-declare void @"ignite_rt_fail_match"(ptr, i64, i64)
+declare void @"ignite_rt_fail_match"(ptr, i64, i64) cold noreturn
 declare void @"ignite_rt_guard_pop"()
 declare void @"ignite_rt_guard_push"(ptr)
 declare i64 @"ignite_rt_own_mark"()
@@ -81,7 +81,7 @@ declare i32 @ignite_rt_pipe_write_all(i64, ptr, ptr)
 declare void @"ignite_rt_tcp_own"(i64)
 declare void @"ignite_rt_tcp_retain"(i64)
 
-define internal void @ignite.reserve(ptr %list, i64 %extra, i64 %size, i64 %align) {
+define internal void @ignite.reserve(ptr %list, i64 %extra, i64 %size, i64 %align) alwaysinline {
 entry:
   %lenp = getelementptr inbounds i8, ptr %list, i64 8
   %len = load i64, ptr %lenp, align 8
@@ -91,6 +91,18 @@ entry:
   %fits = icmp sle i64 %need, %cap
   br i1 %fits, label %done, label %grow
 grow:
+  call void @ignite.grow(ptr %list, i64 %need, i64 %size, i64 %align)
+  br label %done
+done:
+  ret void
+}
+
+define internal void @ignite.grow(ptr %list, i64 %need, i64 %size, i64 %align) noinline cold {
+entry:
+  %lenp = getelementptr inbounds i8, ptr %list, i64 8
+  %len = load i64, ptr %lenp, align 8
+  %capp = getelementptr inbounds i8, ptr %list, i64 16
+  %cap = load i64, ptr %capp, align 8
   %double = mul i64 %cap, 2
   %big = icmp sgt i64 %double, %need
   %c1 = select i1 %big, i64 %double, i64 %need
@@ -103,8 +115,6 @@ grow:
   call void @llvm.memcpy.p0.p0.i64(ptr %new, ptr %old, i64 %used, i1 false)
   store ptr %new, ptr %list, align 8
   store i64 %newcap, ptr %capp, align 8
-  br label %done
-done:
   ret void
 }
 
@@ -364,7 +374,7 @@ L14:
   ret void
 }
 
-define void @"tests.bounds.Hub.main"(ptr %sret, ptr %p0) !dbg !24 {
+define void @"tests.bounds.Hub.main"(ptr %sret, ptr noalias readonly %p0) !dbg !24 {
 entry:
   %t6 = alloca [40 x i8], align 8
   %t7 = alloca [8 x i8], align 8
@@ -428,7 +438,7 @@ L4:
   ret void, !dbg !25
 }
 
-define linkonce_odr void @"tests.bounds.Echo.serve<TcpStream>"(ptr %sret, i64 %p0, ptr %p1) comdat !dbg !32 {
+define linkonce_odr void @"tests.bounds.Echo.serve<TcpStream>"(ptr %sret, i64 %p0, ptr noalias readonly %p1) comdat !dbg !32 {
 entry:
   %t1 = alloca [8 x i8], align 8
   %t3 = alloca [40 x i8], align 8
@@ -465,7 +475,7 @@ L14:
   ret void, !dbg !36
 }
 
-define linkonce_odr void @"tests.bounds.Echo.serve<PipeStream>"(ptr %sret, i64 %p0, ptr %p1) comdat !dbg !39 {
+define linkonce_odr void @"tests.bounds.Echo.serve<PipeStream>"(ptr %sret, i64 %p0, ptr noalias readonly %p1) comdat !dbg !39 {
 entry:
   %t1 = alloca [8 x i8], align 8
   %t3 = alloca [40 x i8], align 8

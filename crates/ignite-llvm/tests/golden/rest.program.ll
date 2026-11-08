@@ -20,7 +20,7 @@ declare void @ignite_rt_arena_scratch_clear()
 declare ptr @ignite_rt_arena_state() nounwind willreturn speculatable memory(none)
 declare i32 @ignite_rt_args_port(ptr, ptr, ptr)
 declare void @ignite_rt_exit(i32) noreturn
-declare void @ignite_rt_fail(ptr) noreturn
+declare void @ignite_rt_fail(ptr) cold noreturn
 declare void @ignite_rt_log(ptr)
 declare i32 @ignite_rt_tcp_bind(ptr, i64, ptr, ptr)
 declare i32 @ignite_rt_tcp_accept(i64, ptr, ptr)
@@ -62,10 +62,10 @@ declare { i64, i1 } @llvm.smul.with.overflow.i64(i64, i64)
 declare { i8, i1 } @llvm.uadd.with.overflow.i8(i8, i8)
 declare { i8, i1 } @llvm.usub.with.overflow.i8(i8, i8)
 declare { i8, i1 } @llvm.umul.with.overflow.i8(i8, i8)
-declare void @"ignite_rt_fail_arith"(ptr, ptr, i64, i64, i64, i64)
-declare void @"ignite_rt_fail_match"(ptr, i64, i64)
+declare void @"ignite_rt_fail_arith"(ptr, ptr, i64, i64, i64, i64) cold noreturn
+declare void @"ignite_rt_fail_match"(ptr, i64, i64) cold noreturn
 
-define internal void @ignite.reserve(ptr %list, i64 %extra, i64 %size, i64 %align) {
+define internal void @ignite.reserve(ptr %list, i64 %extra, i64 %size, i64 %align) alwaysinline {
 entry:
   %lenp = getelementptr inbounds i8, ptr %list, i64 8
   %len = load i64, ptr %lenp, align 8
@@ -75,6 +75,18 @@ entry:
   %fits = icmp sle i64 %need, %cap
   br i1 %fits, label %done, label %grow
 grow:
+  call void @ignite.grow(ptr %list, i64 %need, i64 %size, i64 %align)
+  br label %done
+done:
+  ret void
+}
+
+define internal void @ignite.grow(ptr %list, i64 %need, i64 %size, i64 %align) noinline cold {
+entry:
+  %lenp = getelementptr inbounds i8, ptr %list, i64 8
+  %len = load i64, ptr %lenp, align 8
+  %capp = getelementptr inbounds i8, ptr %list, i64 16
+  %cap = load i64, ptr %capp, align 8
   %double = mul i64 %cap, 2
   %big = icmp sgt i64 %double, %need
   %c1 = select i1 %big, i64 %double, i64 %need
@@ -87,8 +99,6 @@ grow:
   call void @llvm.memcpy.p0.p0.i64(ptr %new, ptr %old, i64 %used, i1 false)
   store ptr %new, ptr %list, align 8
   store i64 %newcap, ptr %capp, align 8
-  br label %done
-done:
   ret void
 }
 
@@ -173,7 +183,7 @@ done:
   ret void
 }
 
-define i64 @"tests.rest.shape"(ptr %p0) !dbg !4 {
+define i64 @"tests.rest.shape"(ptr noalias readonly %p0) !dbg !4 {
 entry:
   %t1 = alloca [8 x i8], align 8
   %t20 = alloca [24 x i8], align 8
@@ -215,7 +225,7 @@ L2:
   ret i64 %t23, !dbg !6
 }
 
-define void @"tests.rest.tail"(ptr %sret, ptr %p0) !dbg !12 {
+define void @"tests.rest.tail"(ptr %sret, ptr noalias readonly %p0) !dbg !12 {
 entry:
   %t1 = alloca [24 x i8], align 8
   %t11 = alloca [24 x i8], align 8
@@ -264,7 +274,7 @@ L2:
   ret void, !dbg !14
 }
 
-define i64 @"tests.rest.ends"(ptr %p0) !dbg !19 {
+define i64 @"tests.rest.ends"(ptr noalias readonly %p0) !dbg !19 {
 entry:
   %t1 = alloca [8 x i8], align 8
   %t10 = alloca [8 x i8], align 8
@@ -340,7 +350,7 @@ L2:
   ret i64 %t45, !dbg !21
 }
 
-define void @"tests.rest.after_command"(ptr %sret, ptr %p0) !dbg !28 {
+define void @"tests.rest.after_command"(ptr %sret, ptr noalias readonly %p0) !dbg !28 {
 entry:
   %t1 = alloca [24 x i8], align 8
   %t14 = alloca [24 x i8], align 8
@@ -382,7 +392,7 @@ L2:
   ret void, !dbg !30
 }
 
-define i64 @"tests.rest.status"(ptr %p0) !dbg !35 {
+define i64 @"tests.rest.status"(ptr noalias readonly %p0) !dbg !35 {
 entry:
   %t1 = alloca [8 x i8], align 8
   %t13 = alloca [24 x i8], align 8
