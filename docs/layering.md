@@ -40,8 +40,8 @@ A component kind that speaks one protocol (a server, a client, a probe) lives in
 protocol's module: `TelnetServer`, `TelnetClient` and `TelnetPrompt` are in
 `std.protocol.telnet`, `HttpServer` in `std.protocol.http`.
 
-`crates/ignite-load` is exempt from rule 5. It is a load client of the terminal example's
-server, linked into neither the compiler nor a compiled program, and it has to speak Telnet
+`crates/ignite-load` is exempt from rule 5. It is a load client of the example servers
+(terminal and todo), linked into neither the compiler nor a compiled program, and it has to speak Telnet and HTTP
 to measure the server. The layout rule names `crates/` in its wording; its purpose is that the
 compiler and the substrate know no protocol, which `ignite-load` does not touch.
 

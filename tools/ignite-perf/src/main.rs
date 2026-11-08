@@ -18,6 +18,16 @@ fn main() {
         Mode::Quality(args) => {
             std::process::exit(readiness::exit_status(ignite_perf::quality::measure(&args)))
         }
+        Mode::QualityRemote(args) => match ignite_perf::remote::main(&args) {
+            Ok(code) => std::process::exit(code),
+            Err(error) => {
+                eprintln!("{error}");
+                std::process::exit(1)
+            }
+        },
+        Mode::QualityHost(args) => std::process::exit(readiness::exit_status(
+            ignite_perf::remote::host_main(&args),
+        )),
         Mode::Smoke(args) => ("smoke", args),
         Mode::Prepare(args) => ("prepare", args),
         Mode::Cold(args) => ("cold", args),

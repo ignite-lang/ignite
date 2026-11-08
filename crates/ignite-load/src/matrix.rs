@@ -1,16 +1,21 @@
-//! `ignite-load matrix`: the throughput matrix of one or more `terminald`
-//! builds, as `task bench-throughput` runs it.
+//! `ignite-load matrix`: the throughput matrix of one or more servers of one
+//! program (`terminald` builds, as `task bench-throughput` runs it, or the
+//! todo servers of the native benchmark, `docs/quality.md` row 3.3).
 //!
 //! ```text
 //! ignite-load matrix --server NAME=PATH [--server NAME=PATH ...] [--runs 3]
 //!                   [--cells rr:1,rr:16,...] [--port 2451] [--duration 10]
-//!                   [--warmup 1] [--stock] [--out FILE]
+//!                   [--warmup 1] [--stock] [--out FILE] [--work DIR]
+//!                   [--server-cpus LIST --load-cpus LIST]
 //! ```
 //!
 //! Every run is one `ignite-load` process (this executable) that starts the
-//! server, measures and prints one JSON line. Runs are ordered run by run,
-//! cell by cell, server by server, so a drift in machine load hits every
-//! server alike. Before each run the matrix waits, up to two minutes, until
+//! server, measures and prints one JSON line, with its pass (`--pass`, the
+//! run number). Runs are ordered run by run, cell by cell, and within a cell
+//! server by server forward in odd runs and backward in even ones (ABBA), so
+//! a drift in machine load hits every server alike. `--work DIR` gives each
+//! run a fresh working directory under `DIR`; the CPU lists pin every run's
+//! server and load generator. Before each run the matrix waits, up to two minutes, until
 //! the mean runnable-task count is at most half of `nproc`. A run that still
 //! starts above that is contended; it is repeated up to twice more, and the
 //! last attempt counts. Each cell is the median of its runs, every metric
@@ -46,6 +51,19 @@ struct Options {
     warmup: String,
     stock: bool,
     out: Option<String>,
+    work: Option<String>,
+    server_cpus: Option<String>,
+    load_cpus: Option<String>,
+}
+
+/// The order of `servers` servers in run `pass` (from 1): forward in odd runs, backward in
+/// even ones.
+pub fn order(pass: usize, servers: usize) -> Vec<usize> {
+    if pass % 2 == 1 {
+        (0..servers).collect()
+    } else {
+        (0..servers).rev().collect()
+    }
 }
 
 /// One measured run: the fields of its JSON line the tables use.
@@ -60,6 +78,7 @@ struct Run {
     errors: f64,
     runnable_mean: f64,
     contended: bool,
+    json: String,
 }
 
 fn usage(message: &str) -> ! {
@@ -77,7 +96,7 @@ fn parse_cells(text: &str) -> Vec<(String, usize)> {
             let (workload, connections) = cell
                 .split_once(':')
                 .unwrap_or_else(|| usage(&format!("cell {cell}: expected WORKLOAD:CONNECTIONS")));
-            if !matches!(workload, "rr" | "pipe" | "connect") {
+            if crate::check::Program::of(workload).is_none() {
                 usage(&format!("cell {cell}: unknown workload {workload}"));
             }
             let connections = connections
@@ -103,6 +122,9 @@ fn parse_options(args: impl Iterator<Item = String>) -> Options {
         warmup: "1".to_string(),
         stock: false,
         out: None,
+        work: None,
+        server_cpus: None,
+        load_cpus: None,
     };
     let mut args = args;
     while let Some(flag) = args.next() {
@@ -136,11 +158,25 @@ fn parse_options(args: impl Iterator<Item = String>) -> Options {
             "--warmup" => options.warmup = value(),
             "--stock" => options.stock = true,
             "--out" => options.out = Some(value()),
+            "--work" => options.work = Some(value()),
+            "--server-cpus" => options.server_cpus = Some(value()),
+            "--load-cpus" => options.load_cpus = Some(value()),
             other => usage(&format!("unknown argument {other}")),
         }
     }
     if options.servers.is_empty() {
         usage("at least one --server is needed");
+    }
+    if options.server_cpus.is_some() != options.load_cpus.is_some() {
+        usage("--server-cpus and --load-cpus go together");
+    }
+    let programs: Vec<_> = options
+        .cells
+        .iter()
+        .map(|(w, _)| crate::check::Program::of(w))
+        .collect();
+    if programs.windows(2).any(|p| p[0] != p[1]) {
+        usage("the cells of one matrix drive one program");
     }
     options
 }
@@ -205,7 +241,7 @@ impl Matrix {
         port
     }
 
-    fn run_once(&mut self, server: usize, workload: &str, connections: usize) -> Run {
+    fn run_once(&mut self, server: usize, workload: &str, connections: usize, pass: usize) -> Run {
         wait_for_quiet(self.limit);
         let port = self.next_port();
         let (name, path) = self.options.servers[server].clone();
@@ -216,12 +252,16 @@ impl Matrix {
             .args(["--connections", &connections.to_string()])
             .args(["--duration", &self.options.duration])
             .args(["--warmup", &self.options.warmup])
-            .args(["--label", &name]);
+            .args(["--label", &name])
+            .args(["--pass", &pass.to_string()]);
         if !self.options.stock {
             command.arg("--quickack");
         }
-        if let Some(out) = &self.options.out {
-            command.args(["--out", out]);
+        if let Some(work) = &self.options.work {
+            command.args(["--workdir", &format!("{work}/{name}-{port}")]);
+        }
+        if let (Some(server), Some(load)) = (&self.options.server_cpus, &self.options.load_cpus) {
+            command.args(["--server-cpus", server, "--load-cpus", load]);
         }
         let output = command
             .output()
@@ -249,6 +289,7 @@ impl Matrix {
             errors: number(json, "errors"),
             runnable_mean,
             contended: runnable_mean > self.limit,
+            json: json.to_string(),
         };
         eprintln!(
             "  {name:>6} {workload:>7} {connections:>4}  {:>10}/s  runnable {:.1}{}",
@@ -259,14 +300,25 @@ impl Matrix {
         run
     }
 
-    /// One run, repeated while it was contended, up to [`RETRIES`] times.
-    fn run(&mut self, server: usize, workload: &str, connections: usize) -> Run {
-        let mut run = self.run_once(server, workload, connections);
+    /// One run, repeated while it was contended, up to [`RETRIES`] times; the attempt that
+    /// counts is appended to `--out`.
+    fn run(&mut self, server: usize, workload: &str, connections: usize, pass: usize) -> Run {
+        let mut run = self.run_once(server, workload, connections, pass);
         for _ in 0..RETRIES {
             if !run.contended {
                 break;
             }
-            run = self.run_once(server, workload, connections);
+            run = self.run_once(server, workload, connections, pass);
+        }
+        if let Some(out) = &self.options.out
+            && !run.json.is_empty()
+        {
+            let mut file = fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(out)
+                .unwrap_or_else(|e| usage(&format!("cannot open {out}: {e}")));
+            let _ = writeln!(file, "{}", run.json);
         }
         run
     }
@@ -389,8 +441,9 @@ pub fn main(args: impl Iterator<Item = String>) {
     for round in 1..=matrix.options.runs {
         eprintln!("run {round} of {}", matrix.options.runs);
         for (cell, (workload, connections)) in cells.iter().enumerate() {
-            for (server, runs) in results[cell].iter_mut().enumerate() {
-                runs.push(matrix.run(server, workload, *connections));
+            for server in order(round, servers) {
+                let run = matrix.run(server, workload, *connections, round);
+                results[cell][server].push(run);
             }
         }
     }
