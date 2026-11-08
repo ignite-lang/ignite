@@ -47,7 +47,7 @@ Each has a design document or a row in the plan; none of it is implemented.
 | D async | tokio inside the substrate, Rust-target futures, LLVM-target coroutines, `Task.yield_now` | [`PLAN.md`](https://github.com/ignite-lang/ignite/blob/main/PLAN.md), [`docs/vision.md`](https://github.com/ignite-lang/ignite/blob/main/docs/vision.md) |
 | E WebAssembly P0 to P4 | machine scalars, `Buffer`, `--target wasm`, a runtime written in Ignite, `ignite run --watch`, hot reload with `migrate` | [`docs/wasm.md`](https://github.com/ignite-lang/ignite/blob/main/docs/wasm.md) |
 | G protocols P3 to P5 | ABNF grammars, user `interface` and `impl`, TLS and Unix transports | [`docs/protocols.md`](https://github.com/ignite-lang/ignite/blob/main/docs/protocols.md) |
-| x.web | a web framework shipped with Ignite under `x.*`: routes as data, typed handlers over `std.data` codecs, problem+json errors, OpenAPI from the route table, a test client without a socket ([page](planned/web.md)) | [`docs/web.md`](https://github.com/ignite-lang/ignite/blob/main/docs/web.md) |
+| x.web | a web framework shipped with Ignite under `x.*`: the web app declared in the system, routes, JSON, OpenAPI, live pages, caching and contracts derived; markup literals and other language extensions ([page](planned/web.md)) | [`docs/web.md`](https://github.com/ignite-lang/ignite/blob/main/docs/web.md) |
 | H self-hosting M5 to M7 | packages and manifests, the frontend in Ignite, an emitter in Ignite, a bootstrap chain | [`docs/design.md`](https://github.com/ignite-lang/ignite/blob/main/docs/design.md) section 12 |
 
 [`docs/syntax.md`](https://github.com/ignite-lang/ignite/blob/main/docs/syntax.md) is a
