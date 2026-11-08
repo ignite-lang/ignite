@@ -1,0 +1,14 @@
+{
+  "at": "2026-11-08T15:08:45Z",
+  "actor": "human:timo",
+  "artifact": "story:leak-census",
+  "kind": "story",
+  "revision": 8,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "review-result:leak-guard-acceptance-round-1",
+    "review": "review-result:leak-guard-acceptance-round-1",
+    "outcome": "fixed"
+  }
+}
