@@ -357,8 +357,8 @@ test "every count of the bound is drawn, a count past it refused" {
 // ---- environment tests ----
 
 test "an environment gives a variable's value, the last entry of a name winning" {
-  let environment = Environment.of(["PUSHER_SESSION_STORE=redis", "EMPTY=", "A=b=c", "PUSHER_SESSION_STORE=nats", "NO_EQUALS"])
-  assert environment.get("PUSHER_SESSION_STORE") == Some("nats")
+  let environment = Environment.of(["SESSION_STORE=redis", "EMPTY=", "A=b=c", "SESSION_STORE=nats", "NO_EQUALS"])
+  assert environment.get("SESSION_STORE") == Some("nats")
   assert environment.get("EMPTY") == Some("")
   assert environment.get("A") == Some("b=c")
   assert environment.get("NO_EQUALS") == None

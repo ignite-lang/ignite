@@ -1,6 +1,6 @@
 package peer
 
-// `docs/research/pusher-gaps/G1.ignite` with the chosen name: the server
+// the case study's reproducer G1 with the chosen name: the server
 // logs the peer of the one connection it accepts (`docs/slice.md` 26.1).
 // No `Endpoint` is named or imported; `peer()` makes `std.net` a
 // dependency, and the call sits in an interpolation.

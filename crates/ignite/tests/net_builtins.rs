@@ -1,8 +1,8 @@
-//! Story `pusher-net-builtins` (`docs/slice.md` 26) end to end: the
-//! reproducers G1, G4 and G5 of `docs/research/pusher-gaps.md` with the
-//! chosen names, `tests/fixtures/pusher_net/`, built with `ignite::build`
+//! The network builtins story (`docs/slice.md` 26) end to end: the
+//! reproducers G1, G4 and G5 of the case study with the
+//! chosen names, `tests/fixtures/net_builtins/`, built with `ignite::build`
 //! on both targets and run as real processes over real sockets
-//! (`pusher_net::rust::<case>`, `pusher_net::llvm::<case>`).
+//! (`net_builtins::rust::<case>`, `net_builtins::llvm::<case>`).
 
 use std::io::{BufRead, BufReader, Read};
 use std::net::TcpStream;
@@ -20,7 +20,7 @@ const TIMEOUT: Duration = Duration::from_secs(15);
 
 fn fixture(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/pusher_net")
+        .join("tests/fixtures/net_builtins")
         .join(format!("{name}.ignite"))
 }
 
@@ -31,7 +31,7 @@ fn build(name: &str, target: Target) -> PathBuf {
         Target::Llvm => "llvm",
     };
     let out = Path::new(env!("CARGO_TARGET_TMPDIR"))
-        .join("pusher_net")
+        .join("net_builtins")
         .join(format!("{name}-{suffix}"));
     let options = ignite::BuildOptions {
         target,
@@ -144,7 +144,7 @@ fn connect_within_gives_up_in_time(target: Target) {
     wait_success(&mut child);
 }
 
-/// The adversary's edges (`fixtures/pusher_net/adversary.ignite`) as
+/// The adversary's edges (`fixtures/net_builtins/adversary.ignite`) as
 /// inline tests on both targets: a dual-stack listener's IPv4 peer, the
 /// flag before any read and after a partial read, a negative and a huge
 /// timeout, a refused port, a name with several addresses, IPv6.
@@ -154,7 +154,7 @@ fn adversary_edges_pass(target: Target) {
         Target::Llvm => "llvm",
     };
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
-        .join("pusher_net")
+        .join("net_builtins")
         .join(format!("adversary-{name}"));
     let output = Command::new(env!("CARGO_BIN_EXE_ignite"))
         .arg("test")

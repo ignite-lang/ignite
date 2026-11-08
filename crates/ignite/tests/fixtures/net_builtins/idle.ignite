@@ -1,6 +1,6 @@
 package idle
 
-// `docs/research/pusher-gaps/G4.ignite` with `timed_out` (`docs/slice.md`
+// the case study's reproducer G4 with `timed_out` (`docs/slice.md`
 // 26.2): both reads return `Eof`, the first because the idle timeout
 // passed, the second because the peer closed.
 type App {

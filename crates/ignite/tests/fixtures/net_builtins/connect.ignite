@@ -1,6 +1,6 @@
 package connect
 
-// `docs/research/pusher-gaps/G5.ignite` with `connect_within`
+// the case study's reproducer G5 with `connect_within`
 // (`docs/slice.md` 26.3): a connect to an address that never answers
 // gives up after its timeout.
 type App {

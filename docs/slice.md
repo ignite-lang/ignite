@@ -1455,7 +1455,7 @@ and `to_text`.
 - `ignite-check` finds Store receivers and the fn types of called values from declared types:
   parameter types, `let` annotations, record field types (generic arguments substituted,
   aliases expanded), `x.f`, `x.copy()`, `e?`, `l[i]`, Store results, `for` over a list, a
-  literal of a record without type parameters (`let w = World { .. }`, pusher gap G15). Where
+  literal of a record without type parameters (`let w = World { .. }`, case-study gap G15). Where
   it cannot, the type checker reports E042 at the call (``cannot check the effects of `get`:
   the type of its receiver is not declared; annotate the binding``).
 
@@ -1751,7 +1751,7 @@ unless a row below changes them.
 | 2 | `r"…"`, `r#"…"#` (any number of `#`, closed by `"` and as many `#`), `br"…"` | no escapes, no interpolation, line breaks kept; a raw byte string is ASCII (E001) | none: `ExprKind::Str` and the byte-string desugaring |
 | 3 | none | `[]`, `List.empty()`, `Store.new()`, `None`, `Ok(x)` and `Err(e)` bound by a `let`/`var` without annotation take the type later uses in the same body give them: an argument, a `return`, an assignment, a pushed element, any position with an expected type. The typer walks such a body once more with inference holes and then types the `let` as if annotated; E042 only when neither the expected type nor a use decides | none: every `Ty` the backends read is resolved |
 | 4 | `break` and `continue` in expression position (`None => break`) | `ExprKind::Break`/`Continue`, type `Never`; `break` marks the innermost loop as broken | as the statements |
-| 5 | none | `x.f(..)` is the builtin `f` when it applies to `x`'s type, else a UFCS call of the user fn `f` (`Callee::Fn`). A user fn may share the name of a builtin method of its first parameter's type: method syntax on that type calls the builtin, a plain call `f(x, ..)` the user fn (pusher gap G14; until 0.13 it was E041 at the declaration) | none: `callee()` says which |
+| 5 | none | `x.f(..)` is the builtin `f` when it applies to `x`'s type, else a UFCS call of the user fn `f` (`Callee::Fn`). A user fn may share the name of a builtin method of its first parameter's type: method syntax on that type calls the builtin, a plain call `f(x, ..)` the user fn (case-study gap G14; until 0.13 it was E041 at the declaration) | none: `callee()` says which |
 | 6 | `import std.text.*` | every non-test public item of the module; an explicit import and an own declaration win; a name two globs provide is E041 at its use | `Import::is_glob()`, `Import::module()`; a Rust `use` of every item (or of the names `Symbols::imported` lists from that module) |
 | 7 | none | `==`/`!=` on every comparable type (13.5); E045 otherwise | general equality glue, the slice-8 assert glue generalised |
 | 8 | `b'0'..=b'9' => …`, `LIMIT..=99` | 13.7 | `range_bounds(pattern)`: `lo <= v && v <= hi` |
@@ -3657,7 +3657,7 @@ The drain on SIGTERM:
 - After `K.main` returns, `run` sends what `main`'s task wrote, waits for the live tasks to
   end, then exits 0.
 - `Process.exit(code)` during the drain sends what the calling task wrote and exits with
-  `code` at once; live tasks are not waited for (story `drain-exit`, the pusher's G16). On
+  `code` at once; live tasks are not waited for (story `drain-exit`, the case study's G16). On
   the LLVM target it lowers to the runtime entry `ignite_rt_process_exit`, not to the
   `ignite_rt_exit` the generated main calls when `K.main` returns.
 - `Process.exit`'s send is bounded, draining or not: it waits for a write lock another task
@@ -8165,8 +8165,8 @@ in `std/process.ignite`; `e051_command_line_of` (ignite-check).
 
 ### 21.20 Environment, sleep, wall clock and flush, added after the slice
 
-Added 2026-11-07 by `story:pusher-process-builtins`. The pusher case study
-(`docs/research/pusher-gaps.md` G2, G3 (sleep only), G8, G13; `docs/friction.md` rows 61, 62,
+Added 2026-11-07 by the process builtins story. The case study
+(its gaps G2, G3 (sleep only), G8, G13; `docs/friction.md` rows 61, 62,
 67, 72) needed environment variables, a sleep, a wall clock and an explicit flush.
 
 | builtin | type | effect | behaviour |
@@ -8180,19 +8180,19 @@ Added 2026-11-07 by `story:pusher-process-builtins`. The pusher case study
 Resource kind `Environment`, no properties (E047 for any):
 
 ```ignite
-type Pusher {
+type Relay {
   environment: Environment
   executable: Text
 }
 
-fn Pusher.main(self: Pusher) -> Result<Unit, IoError> {
-  let store = self.environment.get("PUSHER_SESSION_STORE").unwrap_or("memory")
+fn Relay.main(self: Relay) -> Result<Unit, IoError> {
+  let store = self.environment.get("SESSION_STORE").unwrap_or("memory")
   ...
 }
 
-system PusherService {
+system RelayService {
   resource environment: Environment
-  component pusher: Pusher { environment = environment, executable = "pusher" }
+  component relay: Relay { environment = environment, executable = "relay" }
 }
 ```
 
@@ -8265,7 +8265,7 @@ Tests:
   targets.
 - `process_builtins::{rust,llvm}::g2_reads_an_environment_variable`, `g3_sleeps` and
   `g8_reads_the_wall_clock`, and `process_builtins::g13_flush_is_callable_on_both_targets`.
-  These run the reproducers adapted to these names (`fixtures/process_builtins/pusher_gaps.ignite`).
+  These run the reproducers adapted to these names (`fixtures/process_builtins/case_gaps.ignite`).
 - `run::a_member_sleeps_and_reads_the_wall_clock_in_real_time_under_the_manual_clock`
   (fixture `run_clock.ignite`).
 - The ignite-check fixtures `e016_process_builtins` and `e051_environment_of`.
@@ -9443,9 +9443,9 @@ executable. Before, a sibling module was built into the test executable with its
 
 ## 26 Peer address, timed-out reads and connect timeouts
 
-**Status: implemented on `story:pusher-net-builtins`.**
+**Status: implemented in the network builtins story.**
 
-Sources: `docs/research/pusher-gaps.md` G1, G4 and G5 (the pusher written in Ignite);
+Sources: the case study's G1, G4 and G5 (the service written in Ignite);
 `docs/friction.md` rows 60, 63 and 64. Three builtins of `TcpStream`, all additive: `read`,
 `Input` and `connect` keep their meaning, and no `match` on `Input` gains a variant.
 
@@ -9522,13 +9522,13 @@ positive`. `connect(address, port)` keeps waiting for the kernel's retries.
   peer of both ends in IPv4 and IPv6 and after `close`; a timed-out `Eof` against a closed one;
   `connect_within` to `10.255.255.1:80` failing with `connection timed out` after 180 to 300 ms
   of a 200 ms timeout, and to a loopback listener succeeding.
-- `pusher_net::{rust,llvm}::*` (`crates/ignite/tests/pusher_net.rs`,
-  `fixtures/pusher_net/`): G1, G4 and G5 with these names, built and run as processes. The
+- `net_builtins::{rust,llvm}::*` (`crates/ignite/tests/net_builtins.rs`,
+  `fixtures/net_builtins/`): G1, G4 and G5 with these names, built and run as processes. The
   server logs the address and port the test's client connected from; the two reads of G4 log
   `Eof timed_out=true` and `Eof timed_out=false`; G5 logs `connection timed out` after 480 to
   600 ms of a 500 ms timeout.
-- `pusher_net::{rust,llvm}::adversary_edges_pass` runs the eight inline tests of
-  `fixtures/pusher_net/adversary.ignite` (the review's edges) on each target.
+- `net_builtins::{rust,llvm}::adversary_edges_pass` runs the eight inline tests of
+  `fixtures/net_builtins/adversary.ignite` (the review's edges) on each target.
 - `ignite-io` `tcp::peer_is_the_other_end_in_both_families`,
   `tcp::timed_out_tells_an_idle_timeout_from_a_close`, `tcp::connect_within_bounds_the_wait`;
   `ignite-rt` `abi::peer_timed_out_and_connect_within`; `ignite-types`

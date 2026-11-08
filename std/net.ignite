@@ -14,7 +14,7 @@ package std.net
 // (implemented by `TcpStream`, `PipeStream` and a type parameter bounded
 // by it), the test-only `Pipe.pair()` and its ends, `PipeStream`.
 //
-// Since story `pusher-net-builtins` (`docs/slice.md` 26) a `TcpStream`
+// Since the network builtins story (`docs/slice.md` 26) a `TcpStream`
 // also has:
 //
 // - `stream.peer() -> Endpoint`: the other end of the connection, its

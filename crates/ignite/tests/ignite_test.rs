@@ -437,7 +437,7 @@ fn store_upsert_is_atomic_on_both_targets() {
 }
 
 /// Two refusals the checker made from declared types alone, on both
-/// targets (`fixtures/tests/checker_names.ignite`, pusher gaps G14 and
+/// targets (`fixtures/tests/checker_names.ignite`, case-study gaps G14 and
 /// G15): a user fn named like a builtin `List` method is called by a plain
 /// call while method syntax keeps the builtin, and a `Store` field of an
 /// unannotated record-literal binding is changed and read.

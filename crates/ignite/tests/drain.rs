@@ -386,7 +386,7 @@ fn build_fixture(fixture: &str, executable: &str, target: &str) -> PathBuf {
         .unwrap_or_else(|| panic!("{target}: no {executable} in\n{stdout}"))
 }
 
-/// Story `drain-exit` (the pusher's G16 and its G13 update): after
+/// Story `drain-exit` (the case study's G16 and its G13 update): after
 /// SIGTERM, `Process.exit(3)` ends the process with status 3 within
 /// [`EXIT`] while one task waits in `accept` on a listener bound after the
 /// drain began and another in an idle read, and the line written just
@@ -426,7 +426,7 @@ fn process_exit_during_the_drain_exits_with_its_code_at_once() {
     });
 }
 
-/// Story `drain-exit` (the pusher's G13 update): a line written just
+/// Story `drain-exit` (the case study's G13 update): a line written just
 /// before `main` returns during the drain reaches the peer while the
 /// process still waits for a task in an idle read; the process exits 0
 /// once that read ends.
