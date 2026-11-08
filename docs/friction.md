@@ -42,21 +42,32 @@ names the row in its contract.
 | 57 | `List` has no `contains` | ignite-codespec story ignite-writer (`src/write.ignite:177` `has`), 2026-11-06; `story:codespec-friction`, recorded only | a hand-written `has(names, name)` loop |
 | 58 | `for` and assignment are not expressions, so neither is a match arm body or a block's value | ignite-codespec story ignite-writer, 2026-11-06; `story:codespec-friction`, recorded only | an arm body in braces, `{ x = v }` (row 38 for assignment) |
 | 59 | A sibling module needs the main file's package as its prefix (`import codespec.cir.{…}` in package `codespec`) | ignite-codespec story cir-model (`src/cir_json.ignite:7`), 2026-11-06; `story:codespec-friction`, recorded only | each sibling import names the full path |
-| 60 | `TcpStream` has no peer address (E041 `peer_address`); `ignite-io` `TcpListener::accept` drops it | case study G1 (`docs/research/case-study-gaps.md`), 2026-11-07; blocked the `/push` allow list | a diff of `/proc/self/net/tcp` after each accept: O(open sockets), Linux only, 403 when ambiguous |
-| 61 | No environment variables (`docs/slice.md` 21.6 offers flags only) | case study G2, 2026-11-07 | `/proc/self/environ` read through a `Directory` |
-| 62 | No sleep, timer, condition variable or channel | case study G3, 2026-11-07 | a loopback TCP pair per waiter read with an idle timeout ("bells"): two fds and a connect each |
-| 63 | A read that times out returns `Eof`, so it cannot be told from the peer closing (`crates/ignite-io/src/net.rs:388`) | case study G4, 2026-11-07 | the read is timed; an `Eof` well before the timeout is a close |
-| 64 | `TcpStream.connect` has no timeout (about 2 min of SYN retries to an unreachable host) | case study G5, 2026-11-07 | none for connect |
+| 62 | No timer, condition variable or channel (`Clock.sleep` exists since `docs/slice.md` 21.20) | case study G3, 2026-11-07 | a waiter that must wake on a message, not only after a time, still reads a loopback TCP pair with an idle timeout ("bells"): two fds and a connect each |
 | 65 | The SIGTERM drain releases every listener, internal ones included (`crates/ignite-io/src/drain.rs`) | case study G6, 2026-11-07 | rebind the admin, ingress and internal ports after "draining" |
 | 66 | No bitwise operators: and, or, xor, shifts (`^` is E001) | case study G7 (SHA-1, base64, WebSocket masking), 2026-11-07 | bit-by-bit Int arithmetic, slow per frame |
-| 67 | No wall clock (`Clock.now`, E003) | case study G8, 2026-11-07 | `btime` from `/proc/stat` plus `Clock.monotonic()`, about 1 s accurate |
 | 68 | No YAML or regex in std; no WebSocket, NATS or Redis client | case study G9, 2026-11-07 | rules as Ignite data, a hand-written URL matcher, the three protocols over `TcpStream` |
 | 69 | No `setrlimit` (`RLIMIT_NOFILE`) | case study G10, 2026-11-07 | none: the container default caps connections |
 | 70 | No FFI | case study G11, 2026-11-07 | none of rows 60 to 69 can be closed by a thin binding |
 | 71 | `ess generate` has no Ignite target (ESS tooling, not the language) | case study G12, 2026-11-07 | hand-written code |
-| 72 | No `flush()` builtin although `ignite_io::flush` exists (`docs/slice.md` 7); a write just before `main` returns while draining is never sent | case study G13, 2026-11-07 | write order chosen so a later `connect` flushes |
 | 73 | No `ignite fmt` and no format check | case study G17, 2026-11-08 | none; the format gate is a no-op |
 | 74 | `IoError` has no `==`, not even in an `assert` (E045) | case study G18, 2026-11-08 | compare `error.message`, or return errors as `Text` |
+
+## Solved in the process builtins story (`docs/slice.md` 21.20)
+
+| # | friction | seen by | where the fix is tested |
+|---|---|---|---|
+| 61 | No environment variables (`docs/slice.md` 21.6 offered flags only); the workaround read `/proc/self/environ` through a `Directory` | case study G2, 2026-11-07 | `process_builtins::{rust,llvm}::g2_reads_an_environment_variable` (the `Environment` resource) and the inline test "an environment gives a variable's value, …" of `std/process.ignite` |
+| 62, in part | No sleep; the workaround slept by reading a loopback "bell" nobody rang | case study G3, 2026-11-07 | `process_builtins::{rust,llvm}::g3_sleeps` (`Clock.sleep`), the inline tests "a sleep waits at least its duration, …" and "a sleep sends what the task wrote first", `run::a_member_sleeps_and_reads_the_wall_clock_in_real_time_under_the_manual_clock` |
+| 67 | No wall clock (`Clock.now`, E003); the workaround was `btime` from `/proc/stat` plus `Clock.monotonic()` | case study G8, 2026-11-07 | `process_builtins::{rust,llvm}::g8_reads_the_wall_clock` and the inline test "the wall clock is an instant of std.time after 2026-01-01" |
+| 72 | No flush builtin although `ignite_io::flush` exists (`docs/slice.md` 7); a write just before `main` returns while draining was never sent, and the program had nothing to call to send it (the drain itself is not changed here) | case study G13, 2026-11-07 | `Process.flush()`: the inline test "a flush sends what the task wrote before its next write" and `process_builtins::g13_flush_is_callable_on_both_targets` |
+
+## Solved in the network builtins story (`docs/slice.md` 26)
+
+| # | friction | seen by | where the fix is tested |
+|---|---|---|---|
+| 60 | `TcpStream` had no peer address (E041 `peer_address`); `ignite-io` `TcpListener::accept` dropped it | case study G1, 2026-11-07; blocked the `/push` allow list | `stream.peer() -> Endpoint` (26.1): the inline test of `std/net.ignite` (IPv4, IPv6, after `close`) and `net_builtins::{rust,llvm}::peer_is_the_connecting_end` |
+| 63 | A read that timed out returned `Eof`, so it could not be told from the peer closing | case study G4, 2026-11-07 | `stream.timed_out()` (26.2), `read` unchanged: the inline test of `std/net.ignite` and `net_builtins::{rust,llvm}::a_timeout_is_told_from_a_close` |
+| 64 | `TcpStream.connect` had no timeout (about 2 min of SYN retries to an unreachable host) | case study G5, 2026-11-07 | `TcpStream.connect_within(address, port, timeout)` (26.3): the inline test of `std/net.ignite` and `net_builtins::{rust,llvm}::connect_within_gives_up_in_time` |
 
 ## Solved in story codespec-friction (`docs/slice.md` 25)
 

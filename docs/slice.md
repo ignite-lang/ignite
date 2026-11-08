@@ -357,8 +357,12 @@ this order:
 3. a module-level fn `f` in scope (own or imported, not a local) whose first parameter
    accepts the receiver: it is called with `(x, args..)` (uniform function call syntax).
 
-A builtin method name (`len`, `to_text`, ...) is never resolved by 2 or 3: on a receiver type
-without that builtin it is E041. A field of fn type and a fn with the same name both
+A builtin method name (`len`, `to_text`, `set`, ...) on a receiver type that has that builtin
+is always resolved by 1; on a receiver type without it, it is resolved by 3 when a module-level
+fn of that name is in scope (section 13.1 row 5) and is E041 otherwise. A user fn may share the
+name of a builtin method of its first parameter's type: no declaration is refused for it,
+method syntax on that type calls the builtin (`pairs.set(0, p)` and `l[i] = v` on a `List`),
+and a plain call `set(pairs, k, v)` calls the user fn. A field of fn type and a fn with the same name both
 matching is E041 (ambiguous). A fn whose first parameter does not accept the receiver, or no
 candidate at all, is E041. `ignite-check` checks the arity of a call by 3 (E003, receiver
 counted) and its effects; the type checker decides between 2 and 3.
@@ -413,6 +417,8 @@ A function without `requires` gets it added to its inferred set.
 | `TcpListener.bind(a, p)` | `net.listen` |
 | `TcpStream.connect(a, p)` | `net.connect` |
 | `f(a, ..)`, `a.f(..)`, `P.role(a, ..)`, called or spawned | each entry `q.op` of the callee's declared or inferred set whose `q` is a parameter of the callee becomes `r.op` for each root `r` of the argument passed for `q` (the receiver of `a.f(..)` is the first argument); every other entry (`stdin.read`) is needed unchanged |
+| `TcpStream.connect_within(a, p, t)` (26.3) | `net.connect` |
+| `x.timed_out()` (26.2) | `r.read` for each root `r` of `x` |
 
 `x.local_port()` is pure and needs nothing. `x.set_idle_timeout(ms)` needs `r.write`; the
 `Store` methods, calls of values of effectful fn type and `x.*` are in section 11.7.
@@ -961,7 +967,7 @@ record-literal field names.
 Codes of the type stage (`docs/llvm.md` section 7), reported by `ignite check` and both build
 targets: E003 bare variant of an enum out of scope that the expected type does not decide,
 or a payload variant used bare (section 4), E005 ambiguous variant, E040 type mismatch,
-E041 unknown method or field for the receiver type (also an ambiguous or inapplicable method call, section 4.8; a tuple index past the tuple; a fn named like a builtin method of its first parameter's type, section 13.1 row 5), E042 type cannot
+E041 unknown method or field for the receiver type (also an ambiguous or inapplicable method call, section 4.8; a tuple index past the tuple), E042 type cannot
 be inferred (also a type parameter neither the expected type nor later uses in the body decide, a closure parameter without type, and an effectful operation
 whose effects `ignite-check` could not check, section 11.7), E043 wrong number of arguments (also a range pattern whose start is above its end), E044 integer literal out of range for `Byte`,
 E045 operator not defined for the operand type (also `==` on a type that is not comparable, section 13.5, a constant pattern of a type without
@@ -1448,7 +1454,8 @@ and `to_text`.
   fixtures are under `crates/ignite-types/tests/fixtures`.
 - `ignite-check` finds Store receivers and the fn types of called values from declared types:
   parameter types, `let` annotations, record field types (generic arguments substituted,
-  aliases expanded), `x.f`, `x.copy()`, `e?`, `l[i]`, Store results, `for` over a list. Where
+  aliases expanded), `x.f`, `x.copy()`, `e?`, `l[i]`, Store results, `for` over a list, a
+  literal of a record without type parameters (`let w = World { .. }`, case-study gap G15). Where
   it cannot, the type checker reports E042 at the call (``cannot check the effects of `get`:
   the type of its receiver is not declared; annotate the binding``).
 
@@ -1744,7 +1751,7 @@ unless a row below changes them.
 | 2 | `r"…"`, `r#"…"#` (any number of `#`, closed by `"` and as many `#`), `br"…"` | no escapes, no interpolation, line breaks kept; a raw byte string is ASCII (E001) | none: `ExprKind::Str` and the byte-string desugaring |
 | 3 | none | `[]`, `List.empty()`, `Store.new()`, `None`, `Ok(x)` and `Err(e)` bound by a `let`/`var` without annotation take the type later uses in the same body give them: an argument, a `return`, an assignment, a pushed element, any position with an expected type. The typer walks such a body once more with inference holes and then types the `let` as if annotated; E042 only when neither the expected type nor a use decides | none: every `Ty` the backends read is resolved |
 | 4 | `break` and `continue` in expression position (`None => break`) | `ExprKind::Break`/`Continue`, type `Never`; `break` marks the innermost loop as broken | as the statements |
-| 5 | none | `x.f(..)` is the builtin `f` when it applies to `x`'s type, else a UFCS call of the user fn `f` (`Callee::Fn`). A user fn whose first parameter type has a builtin method of the fn's name is E041 at the declaration | none: `callee()` says which |
+| 5 | none | `x.f(..)` is the builtin `f` when it applies to `x`'s type, else a UFCS call of the user fn `f` (`Callee::Fn`). A user fn may share the name of a builtin method of its first parameter's type: method syntax on that type calls the builtin, a plain call `f(x, ..)` the user fn (case-study gap G14; until 0.13 it was E041 at the declaration) | none: `callee()` says which |
 | 6 | `import std.text.*` | every non-test public item of the module; an explicit import and an own declaration win; a name two globs provide is E041 at its use | `Import::is_glob()`, `Import::module()`; a Rust `use` of every item (or of the names `Symbols::imported` lists from that module) |
 | 7 | none | `==`/`!=` on every comparable type (13.5); E045 otherwise | general equality glue, the slice-8 assert glue generalised |
 | 8 | `b'0'..=b'9' => …`, `LIMIT..=99` | 13.7 | `range_bounds(pattern)`: `lo <= v && v <= hi` |
@@ -1915,7 +1922,7 @@ target's symbol writes every `_` of owner and name as `_0` and joins them with `
 | E056 | new: a parameter named like an ambient capability (13.11) |
 | E057 | new: an unused type parameter of a generic record, enum or alias (13.11) |
 | E017 | also: an effectful closure where a pure fn type, or an effectful fn type not covering its effects, is expected |
-| E041 | also: a name two glob imports provide; a fn whose first parameter type has a builtin method of the fn's name; a tuple index past the tuple |
+| E041 | also: a name two glob imports provide; a tuple index past the tuple |
 | E042 | also: a closure parameter without annotation or expected type; no longer for a generic value later uses decide (row 3) |
 | E043 | also: a range pattern whose start is above its end |
 | E045 | `==`/`!=` on a type that is not comparable; a range bound that is neither a literal nor a constant with a literal value |
@@ -3647,7 +3654,17 @@ The drain on SIGTERM:
 - It shuts down the read side of every listener and prints `released <address>:<port>` on
   stderr for each one once it is closed (A5; as landed, P2: stderr, not stdout).
 - A pending `accept` fails with "draining".
-- After `K.main` returns, `run` waits for the live tasks to end, then exits 0.
+- After `K.main` returns, `run` sends what `main`'s task wrote, waits for the live tasks to
+  end, then exits 0.
+- `Process.exit(code)` during the drain sends what the calling task wrote and exits with
+  `code` at once; live tasks are not waited for (story `drain-exit`, the case study's G16). On
+  the LLVM target it lowers to the runtime entry `ignite_rt_process_exit`, not to the
+  `ignite_rt_exit` the generated main calls when `K.main` returns.
+- `Process.exit`'s send is bounded, draining or not: it waits for a write lock another task
+  holds and for room in a socket's buffers, in all at most 100 ms after the call. A stream
+  whose lock is still held then (a task stalled in a send to a peer that does not read) is
+  skipped, and what a socket still has no room for is lost. When `K.main` returns, `Ok` or
+  `Err`, both targets send `main`'s writes without that bound, as before.
 - A second SIGTERM exits at once.
 - As landed (P2): a SIGTERM's in-flight guard ends at `released`; a SIGTERM to a program
   without a listener (`tn`) drains too: it waits for `main`, and a second SIGTERM ends it.
@@ -7530,6 +7547,7 @@ the receiver's declared type as `Store` methods are (F5):
 | `ChildProcess` | `kill` | `kill` |
 | `Entropy` | `random_bytes` | `draw` |
 | `Setting` | `value` | `argument` |
+| `Environment` (21.20) | `get` | `variable` |
 
 - The op is `launch`, not `spawn`, because `spawn` is a keyword.
 - The ops differ per kind (`read`, `write`, `launch`, `draw`, `argument`), so `requires
@@ -8144,6 +8162,114 @@ Tests: `slice17::{rust,llvm}::the_command_line_reaches_the_program` and
 `slice17::the_command_line_parse_runs_inline_on_both_targets` runs that file's inline tests,
 which parse `CommandLine.of(..)`; the inline test "a command line keeps its arguments in order"
 in `std/process.ignite`; `e051_command_line_of` (ignite-check).
+
+### 21.20 Environment, sleep, wall clock and flush, added after the slice
+
+Added 2026-11-07 by the process builtins story. The case study
+(its gaps G2, G3 (sleep only), G8, G13; `docs/friction.md` rows 61, 62,
+67, 72) needed environment variables, a sleep, a wall clock and an explicit flush.
+
+| builtin | type | effect | behaviour |
+|---|---|---|---|
+| `environment.get(name: Text)` | `Option<Text>` | `<root>.variable` | the value of the variable `name` when the program was launched; `None` when it was not set |
+| `Environment.of(entries: List<Text>)` | `Environment` | test-only (E051) | entries `NAME=value`, split at the first `=`; the last entry of a name wins; an entry without `=` or with an empty name is skipped |
+| `Clock.sleep(duration: Duration)` | `Unit` | `clock.sleep` | sends what the calling task wrote, then blocks the task for `duration`; zero or less does not block |
+| `Clock.now()` | `Duration` | `clock.read` | the wall clock since 1970-01-01T00:00:00Z in nanoseconds, the instant of `std.time`; `Clock.now().to_ms()` is epoch milliseconds |
+| `Process.flush()` | `Unit` | none | sends what the calling task wrote (section 7), as a wait or the end of the task would |
+
+Resource kind `Environment`, no properties (E047 for any):
+
+```ignite
+type Relay {
+  environment: Environment
+  executable: Text
+}
+
+fn Relay.main(self: Relay) -> Result<Unit, IoError> {
+  let store = self.environment.get("SESSION_STORE").unwrap_or("memory")
+  ...
+}
+
+system RelayService {
+  resource environment: Environment
+  component relay: Relay { environment = environment, executable = "relay" }
+}
+```
+
+- The generated `main` reads the environment once at launch, in the first group of 21.8's
+  order (settings, command lines and environments; directories; launchers; entropy). Later
+  changes to the process environment are not seen.
+- A variable whose name or value is not UTF-8 is skipped: it cannot be a `Text`, and refusing
+  it would end a program over a variable it never reads. The launch never fails.
+- `ignite run` and `ignite apply` start an executable with the environment of the driver or of
+  the host process, unchanged.
+
+Decisions:
+
+- `Environment` is a capability, not an ambient static (G2 guessed `Env.get`): 21.3 (P3) and D11
+  hold, so there is no new ambient head, and a handler reaches the environment only through its
+  state. Its op is `variable`, not `argument`: the environment and the command line are
+  separate authorities (D2), and `requires [b.argument]` grants no variable.
+- `get` returns `Option<Text>`, so an unset variable differs from an empty one.
+- `Environment.of` takes the `NAME=value` form of `Invocation.environment` (21.5).
+- `Clock.sleep` and `Clock.now` are statics of `Clock`, beside `Clock.monotonic`, with ambient
+  effects under the existing head `clock` (E056 already names it). `Clock.now` needs
+  `clock.read`, as `Clock.monotonic` does: both read a clock. `Clock.sleep` needs
+  `clock.sleep`. As with `Clock.monotonic`, an `HttpApp` handler cannot call them: its fn type
+  grants `state.*` only (E017, probe p2 of 21.0). A program sleeps in `K.main` or in a spawned
+  task.
+- `Clock.now` returns a `Duration`, not a new instant type: `std.time` already reads an instant
+  as a `Duration` since 1970-01-01T00:00:00Z, so `month_start(zone, Clock.now())` works. It is
+  negative before 1970 and saturates at the bounds of `Int`.
+- `Clock.sleep` flushes first. Section 7 sends a task's writes before every operation that may
+  wait, and a sleep is one. G3's waiter that writes and then sleeps sends its bytes.
+- The flush is `Process.flush()`, not a free `flush()`. A builtin free function name is E004 for
+  every user fn of that name (`BUILTIN_FUNCTIONS`), and programs declare `fn flush`: the
+  examples repository's ember does. `Process` is already a static owner, so the new name breaks
+  nothing.
+- `Process.flush()` is pure, as `log` is: it grants no authority and only sends bytes that the
+  task was already allowed to write. So a handler may call it, and the evaluator returns `Unit`.
+- The manual clock. `ignite run --clock manual` (16.4) times the reducers; no program reads it.
+  - Under either `--clock`, a program's `Clock.sleep` waits in real time, and `Clock.now`
+    reads the real wall clock. `Clock.monotonic` already behaved this way.
+  - The journal holds only what the driver observes, at the manual instant at which it
+    observes it. A member that sleeps changes when its exit is seen in real time, not the
+    exit's `at`.
+  - Replay re-steps the journal and reads no program clock, so `ignite run --clock manual`
+    and `ignite replay` stay deterministic.
+  - A probe attempt that sleeps longer than the settle wait stays in flight (16.4).
+
+Layers:
+
+- `ignite-io`: `clock::sleep`, `clock::now`, and `environment::Environment` (`of`, `launch`,
+  `from_os_vars`, `get`), re-exported as `ignite_io::Environment`.
+- `ignite-rt`: the `Handle` variant `Environment` and the entries
+  `ignite_rt_environment_launch`, `ignite_rt_environment_of`, `ignite_rt_environment_get`,
+  `ignite_rt_clock_sleep`, `ignite_rt_clock_now` and `ignite_rt_flush`.
+- `ignite-types`: `Capability::Environment` and the builtins `EnvironmentOf`,
+  `EnvironmentGet`, `ClockSleep`, `ClockNow` and `ProcessFlush`.
+- `ignite-check`: the rows of `BUILTIN_TYPES`, `BUILTIN_STATICS`, `EFFECTFUL_STATICS`,
+  `static_effect`, `CAPABILITY_METHODS` and `CAPABILITY_TYPES`.
+- E020's resource text ends ``…, `Setting`, `CommandLine` or `Environment` ``.
+- `apply::plan::CODEGEN_REVISION` becomes `ignite-codegen/0.1.0-40`.
+- The model (15.5) is unchanged in format.
+
+Out of scope: timers, condition variables and channels (the rest of G3, `docs/actors.md`), and
+`setrlimit` (G10).
+
+Tests:
+
+- The inline tests "an environment gives a variable's value, …", "a sleep waits at least its
+  duration, …", "the wall clock is an instant of std.time …", "a flush sends what the task
+  wrote …" and "a sleep sends what the task wrote first" in `std/process.ignite`, on both
+  targets.
+- `process_builtins::{rust,llvm}::g2_reads_an_environment_variable`, `g3_sleeps` and
+  `g8_reads_the_wall_clock`, and `process_builtins::g13_flush_is_callable_on_both_targets`.
+  These run the reproducers adapted to these names (`fixtures/process_builtins/case_gaps.ignite`).
+- `run::a_member_sleeps_and_reads_the_wall_clock_in_real_time_under_the_manual_clock`
+  (fixture `run_clock.ignite`).
+- The ignite-check fixtures `e016_process_builtins` and `e051_environment_of`.
+- The ignite-io and ignite-rt unit tests of the new functions.
 
 ## 22 Slice 18: one service operated end to end (F5)
 
@@ -9314,3 +9440,96 @@ executable. Before, a sibling module was built into the test executable with its
   `Int`, on literal operands and on operands read from text, `None` past a bound and `Some`
   within it; `int_checked` of `fixtures/eval_equivalence.ignite` prints the same in the
   evaluator and on both targets.
+
+## 26 Peer address, timed-out reads and connect timeouts
+
+**Status: implemented in the network builtins story.**
+
+Sources: the case study's G1, G4 and G5 (the service written in Ignite);
+`docs/friction.md` rows 60, 63 and 64. Three builtins of `TcpStream`, all additive: `read`,
+`Input` and `connect` keep their meaning, and no `match` on `Input` gains a variant.
+
+| Ignite | type | effect | builtin |
+|---|---|---|---|
+| `s.peer()` | `Endpoint` (`std.net`) | none | `TcpStreamPeer` |
+| `s.timed_out()` | `Bool` | `r.read` for each root `r` of `s` | `TcpStreamTimedOut` |
+| `TcpStream.connect_within(address, port, timeout)` | `(Text, Int, Duration) -> Result<TcpStream, IoError>` | `net.connect` | `TcpStreamConnectWithin` |
+
+The names are `ignite_check::BUILTIN_METHODS` (`peer`, `timed_out`) and `BUILTIN_STATICS`
+(`connect_within`, arity 3), so on a `TcpStream` receiver the builtin wins over a user fn of the
+same name (13, row 5). They are not `ByteStream` methods: a `PipeStream` and a
+`ByteStream`-bounded receiver have none of them. Being builtin method names, `peer` and
+`timed_out` cannot be called as fn-typed record fields: `hooks.peer(1)` is E041, as
+`hooks.local_port(1)` already is.
+
+### 26.1 `peer`
+
+`s.peer()` is the other end of the connection: `Endpoint { address, port }`, the address as
+text the way its family writes it (`127.0.0.1`, `::1`, `fe80::1`; no brackets, no zone). An
+IPv4 peer of an IPv6 socket (`::ffff:a.b.c.d`) is written as IPv4. The substrate reads it once,
+when `accept` or `connect` made the stream (`getpeername`), so `peer` never fails, never waits,
+and stays the same after `close` and after the peer went away. A stream whose address the
+operating system could not report then has `Endpoint { address = "", port = 0 }`.
+
+A module that calls `peer` depends on `std.net` for `Endpoint`'s fields without importing it:
+`ignite_types::builtin_method_std_modules` names the modules of the builtin methods of
+`TcpStream`, `TcpListener` and `PipeStream`, and the loader's walk of a module's expressions
+(`module_dependencies` in `crates/ignite/src/lib.rs`) adds them for every method call of that
+name, one inside an interpolation included. The token scan of 16.22 does not see a call inside
+an interpolation, and it would load `std.net` for any binding named `peer`.
+
+### 26.2 `timed_out`
+
+A read that waited longer than the idle timeout (`set_idle_timeout`, 11.5) still returns `Eof`.
+`s.timed_out()` holds when the last read of the stream returned because the idle timeout
+passed, and not when the peer closed or data arrived. Every read sets it anew, on any handle of
+the stream (a clone shares it); it is false before the first read. With two tasks reading one
+stream, "last" is the read that ended last: the flag is set under the stream's read lock from
+that read's own outcome. It never fails and never waits; on the LLVM target
+a handle that is no stream gives false.
+
+```ignite
+match stream.read(4096)? {
+  Data(bytes) => handle(bytes)
+  Eof => if stream.timed_out() { ping(stream)? } else { return Ok(()) }
+}
+```
+
+### 26.3 `connect_within`
+
+`TcpStream.connect_within(address, port, timeout)` is `connect` that gives up after `timeout`.
+Each address the name resolves to is tried in turn with the time that is left; resolving the
+name itself is not bounded. Past the deadline the error is `connect <address>:<port>: <the
+operating system's message>` (`connection timed out`, exit code 1); a `timeout` that is not
+positive is refused before any attempt with `connect <address>:<port>: the timeout must be
+positive`. `connect(address, port)` keeps waiting for the kernel's retries.
+
+### 26.4 Lowering
+
+| layer | `peer` | `timed_out` | `connect_within` |
+|---|---|---|---|
+| `ignite-io` | `TcpStream::peer(&self) -> (String, i64)` | `TcpStream::timed_out(&self) -> bool` | `TcpStream::connect_within(String, i64, i64 ns)` |
+| Rust target | `{ let (address, port) = s.peer(); Endpoint { address, port } }` | `s.timed_out()` | `::ignite_io::TcpStream::connect_within(a, p, t)` |
+| LLVM runtime | `void ignite_rt_tcp_peer(Endpoint* out, i64 stream)`, the address in the task's arena | `i8 ignite_rt_tcp_timed_out(i64 stream)` | `i32 ignite_rt_tcp_connect_within(Text* address, i64 port, i64 timeout_ns, i64* out, IoError* err)` |
+| LLVM target | `rt_out` into an `Endpoint` temporary | the `i8` compared with 0 | `rt_result` as `tcp_connect`; the binding owns the stream as one of `connect` (`own.rs`) |
+| evaluator | no value at compile time, as every stream builtin | same | same |
+
+`CODEGEN_REVISION` is `ignite-codegen/0.1.0-40`.
+
+### 26.5 Tests
+
+- `std/net.ignite`: three inline tests over loopback on both targets (`task test-ignite`): the
+  peer of both ends in IPv4 and IPv6 and after `close`; a timed-out `Eof` against a closed one;
+  `connect_within` to `10.255.255.1:80` failing with `connection timed out` after 180 to 300 ms
+  of a 200 ms timeout, and to a loopback listener succeeding.
+- `net_builtins::{rust,llvm}::*` (`crates/ignite/tests/net_builtins.rs`,
+  `fixtures/net_builtins/`): G1, G4 and G5 with these names, built and run as processes. The
+  server logs the address and port the test's client connected from; the two reads of G4 log
+  `Eof timed_out=true` and `Eof timed_out=false`; G5 logs `connection timed out` after 480 to
+  600 ms of a 500 ms timeout.
+- `net_builtins::{rust,llvm}::adversary_edges_pass` runs the eight inline tests of
+  `fixtures/net_builtins/adversary.ignite` (the review's edges) on each target.
+- `ignite-io` `tcp::peer_is_the_other_end_in_both_families`,
+  `tcp::timed_out_tells_an_idle_timeout_from_a_close`, `tcp::connect_within_bounds_the_wait`;
+  `ignite-rt` `abi::peer_timed_out_and_connect_within`; `ignite-types`
+  `builtins::tests::substrate_methods_name_net_for_peer`.

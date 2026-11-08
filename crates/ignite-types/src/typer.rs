@@ -1027,22 +1027,6 @@ impl<'a> Typer<'a> {
                 }
                 Decl::Fn(decl) => {
                     let sig = self.fn_sig(decl, false);
-                    if decl.owner.is_none()
-                        && let Some(first) = sig.params.first()
-                        && (builtins::method(first, &decl.name.name).is_some()
-                            || matches!(first, Ty::Param(param)
-                                if decl.bounds.iter().any(|b| b.param.name == *param)
-                                    && builtins::stream_method(&decl.name.name).is_some()))
-                    {
-                        self.error(
-                            "E041",
-                            decl.name.span,
-                            format!(
-                                "fn `{0}` takes a `{first}` first, and `{first}` has the builtin method `{0}`, so `x.{0}(..)` could never call it; rename it",
-                                decl.name.name
-                            ),
-                        );
-                    }
                     self.own.fns.entry(decl.qualified_name()).or_insert(sig);
                     self.own
                         .param_names
@@ -1224,6 +1208,7 @@ impl<'a> Typer<'a> {
             "Entropy" => Ty::Capability(Capability::Entropy),
             "Setting" => Ty::Capability(Capability::Setting),
             "CommandLine" => Ty::Capability(Capability::CommandLine),
+            "Environment" => Ty::Capability(Capability::Environment),
             "TcpStream" => Ty::TcpStream,
             "PipeStream" => Ty::PipeStream,
             "IoError" => Ty::IoError,

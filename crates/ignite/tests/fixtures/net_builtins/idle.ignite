@@ -1,0 +1,27 @@
+package idle
+
+// the case study's reproducer G4 with `timed_out` (`docs/slice.md`
+// 26.2): both reads return `Eof`, the first because the idle timeout
+// passed, the second because the peer closed.
+type App {
+  bell: TcpListener
+  executable: Text
+}
+
+fn App.main(self: App) -> Result<Unit, IoError> {
+  let s = TcpStream.connect("127.0.0.1", self.bell.local_port())?
+  let peer = self.bell.accept()?
+  s.set_idle_timeout(200)?
+  let t0 = Clock.monotonic()
+  let first = s.read(1)?
+  log("after {(Clock.monotonic() - t0).to_ms()} ms: {first.debug()} timed_out={s.timed_out().to_text()}")
+  peer.close()?
+  let second = s.read(1)?
+  log("peer closed: {second.debug()} timed_out={s.timed_out().to_text()}")
+  Ok(())
+}
+
+system Idle {
+  resource bell: TcpListener { address = "127.0.0.1", port = 0 }
+  component app: App { bell = bell, executable = "idle" }
+}

@@ -206,7 +206,8 @@ pub enum Ty {
     SystemRef,
     /// `Protocol`: the value of a protocol name (`endpoint(Echo)`).
     Protocol,
-    /// `Directory`, `Launcher`, `ChildProcess`, `Entropy`, `Setting` or `CommandLine`
+    /// `Directory`, `Launcher`, `ChildProcess`, `Entropy`, `Setting`, `CommandLine` or
+    /// `Environment`
     /// (`docs/slice.md` 21.3): a handle like `TcpListener`, passed in values.
     Capability(Capability),
 }
@@ -226,17 +227,20 @@ pub enum Capability {
     Setting,
     /// The whole command line of the executable (21.19).
     CommandLine,
+    /// The environment variables of the executable (21.20).
+    Environment,
 }
 
 impl Capability {
     /// Every capability, in the order of 21.8.
-    pub const ALL: [Capability; 6] = [
+    pub const ALL: [Capability; 7] = [
         Capability::Directory,
         Capability::Launcher,
         Capability::ChildProcess,
         Capability::Entropy,
         Capability::Setting,
         Capability::CommandLine,
+        Capability::Environment,
     ];
 
     /// The type name.
@@ -248,6 +252,7 @@ impl Capability {
             Capability::Entropy => "Entropy",
             Capability::Setting => "Setting",
             Capability::CommandLine => "CommandLine",
+            Capability::Environment => "Environment",
         }
     }
 
@@ -280,6 +285,28 @@ pub fn builtin_std_modules() -> BTreeMap<&'static str, std::collections::BTreeSe
                 .map(|(owner, _)| *owner),
         )
         .map(|name| (name, builtins::std_modules_of(name)))
+        .filter(|(_, modules)| !modules.is_empty())
+        .collect()
+}
+
+/// Whether `receiver.name(..)` on a receiver of type `receiver` resolves to
+/// a builtin method (`docs/slice.md` 4.8 rule 1), as the type checker and
+/// both backends resolve it; a `ByteStream`-bounded parameter is not
+/// covered. `ignite_check::builtin_applies` must agree by type name
+/// (`builtin_tables::` in this crate's tests).
+pub fn is_builtin_method(receiver: &Ty, name: &str) -> bool {
+    builtins::method(receiver, name).is_some() || (matches!(receiver, Ty::List(_)) && name == "map")
+}
+
+/// The standard-library modules that the builtin methods of the
+/// substrate's streams and listener name, by method name (`stream.peer()`:
+/// `std.net`, `docs/slice.md` 26.1). A program can call such a method on a
+/// stream whose type it never names, so a module that calls one depends on
+/// the modules. Only names with at least one module are keys.
+pub fn builtin_method_std_modules() -> BTreeMap<&'static str, std::collections::BTreeSet<String>> {
+    ignite_check::BUILTIN_METHODS
+        .iter()
+        .map(|method| (*method, builtins::substrate_method_std_modules(method)))
         .filter(|(_, modules)| !modules.is_empty())
         .collect()
 }
@@ -777,6 +804,29 @@ pub enum Builtin {
     CommandLineOf,
     /// `c.arguments() -> List<Text>`; `<root>.argument`.
     CommandLineArguments,
+    /// `Environment.of(entries) -> Environment`: test-only (21.20).
+    EnvironmentOf,
+    /// `e.get(name) -> Option<Text>`; `<root>.variable`.
+    EnvironmentGet,
+    /// `Clock.sleep(d: Duration) -> Unit`: flush the task's writes, then
+    /// block it for `d` (21.20); effect `clock.sleep`.
+    ClockSleep,
+    /// `Clock.now() -> Duration`: the wall clock since
+    /// 1970-01-01T00:00:00Z (21.20); effect `clock.read`.
+    ClockNow,
+    /// `Process.flush() -> Unit`: send what the calling task wrote (21.20);
+    /// pure, as `log`.
+    ProcessFlush,
+    /// `s.peer() -> std.net.Endpoint` on a `TcpStream`: the other end's
+    /// address and port; pure (`docs/slice.md` 26.1).
+    TcpStreamPeer,
+    /// `s.timed_out() -> Bool` on a `TcpStream`: whether the last read
+    /// ended because the idle timeout passed; effect `<root>.read` (26.2).
+    TcpStreamTimedOut,
+    /// `TcpStream.connect_within(address, port, timeout: Duration) ->
+    /// Result<TcpStream, IoError>`: `connect` bounded by `timeout`; effect
+    /// `net.connect` (26.3).
+    TcpStreamConnectWithin,
 }
 
 /// What a `Call` or `Method` expression calls.

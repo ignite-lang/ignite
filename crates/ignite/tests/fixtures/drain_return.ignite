@@ -1,0 +1,32 @@
+package tests.drain_return
+
+// Built for both targets and run by tests/drain.rs (`docs/slice.md`
+// 16.13, story `drain-exit`, the case study's G13 update): a line written
+// just before `main` returns during the drain reaches the peer while the
+// process still waits for the task that holds the same stream in an idle
+// read: the stream outlives `main`, so no drop sends it.
+
+fn idle_read(stream: TcpStream) -> Result<Unit, IoError> requires [stream.read] {
+  let input = stream.read(64)?
+  return Ok(Unit)
+}
+
+type Server {
+  listener: TcpListener
+  executable: Text
+}
+
+fn Server.main(self: Server) -> Result<Unit, IoError> {
+  let reading = self.listener.accept()?
+  spawn idle_read(reading)
+  log("waiting")
+  let refused = self.listener.accept()
+  reading.write_all("bye\n".to_bytes())?
+  log("returning")
+  return Ok(Unit)
+}
+
+system DrainReturn {
+  resource listener: TcpListener { address = "127.0.0.1", port = 0 }
+  component server: Server { listener = listener, executable = "drainreturn" }
+}

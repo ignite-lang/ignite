@@ -1,0 +1,4 @@
+e016_process_builtins.ignite:2:10: error[E016]: missing effect `environment.variable` for `environment.get`; add it to the `requires` of `variable`
+e016_process_builtins.ignite:6:3: error[E016]: missing effect `clock.sleep` for `Clock.sleep`; add it to the `requires` of `pause`
+e016_process_builtins.ignite:10:10: error[E016]: missing effect `clock.read` for `Clock.now`; add it to the `requires` of `stamp`
+e016_process_builtins.ignite:23:10: error[E016]: missing effect `environment.variable` for `environment.get`; add it to the `requires` of `other_op`

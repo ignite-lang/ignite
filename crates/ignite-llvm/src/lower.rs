@@ -4189,6 +4189,23 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 let c = handle(self);
                 self.rt_out("command_line_arguments", &texts, &[format!("i64 {c}")])
             }
+            EnvironmentOf => {
+                self.m.declare("ignite_rt_environment_of", "i64", &[ptr()]);
+                let entries = self.read_arg(&args[0]);
+                Val::Scalar(
+                    self.f
+                        .val(format!("call i64 @ignite_rt_environment_of(ptr {entries})")),
+                )
+            }
+            EnvironmentGet => {
+                self.m
+                    .declare("ignite_rt_environment_get", "i8", &[i64(), ptr(), ptr()]);
+                let e = handle(self);
+                let name = self.read_arg(&args[0]);
+                self.option_from("environment_get", &Ty::Text, |payload| {
+                    format!("i64 {e}, ptr {name}, ptr {payload}")
+                })
+            }
             other => unreachable!("`{other:?}` is no capability builtin"),
         }
     }
@@ -4473,7 +4490,26 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             | SettingOf
             | SettingValue
             | CommandLineOf
-            | CommandLineArguments => self.capability(b, receiver, args),
+            | CommandLineArguments
+            | EnvironmentOf
+            | EnvironmentGet => self.capability(b, receiver, args),
+            ClockSleep => {
+                self.m
+                    .declare("ignite_rt_clock_sleep", "void", &["i64".to_string()]);
+                let duration = self.scalar_arg(&args[0]);
+                self.f
+                    .ins(format!("call void @ignite_rt_clock_sleep(i64 {duration})"));
+                Val::Unit
+            }
+            ClockNow => {
+                self.m.declare("ignite_rt_clock_now", "i64", &[]);
+                Val::Scalar(self.f.val("call i64 @ignite_rt_clock_now()"))
+            }
+            ProcessFlush => {
+                self.m.declare("ignite_rt_flush", "void", &[]);
+                self.f.ins("call void @ignite_rt_flush()");
+                Val::Unit
+            }
             ClockMonotonic => {
                 self.m.declare("ignite_rt_clock_monotonic", "i64", &[]);
                 Val::Scalar(self.f.val("call i64 @ignite_rt_clock_monotonic()"))
@@ -4550,6 +4586,47 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 let l = self.scalar(&r);
                 self.rt_result("tcp_accept", &[format!("i64 {l}")], Ty::TcpStream)
             }
+            TcpStreamConnectWithin => {
+                let ptr = "ptr".to_string();
+                let i64 = "i64".to_string();
+                self.m.declare(
+                    "ignite_rt_tcp_connect_within",
+                    "i32",
+                    &[ptr.clone(), i64.clone(), i64, ptr.clone(), ptr],
+                );
+                let address = self.read_arg(&args[0]);
+                let port = self.scalar_arg(&args[1]);
+                let timeout = self.scalar_arg(&args[2]);
+                self.rt_result(
+                    "tcp_connect_within",
+                    &[
+                        format!("ptr {address}"),
+                        format!("i64 {port}"),
+                        format!("i64 {timeout}"),
+                    ],
+                    Ty::TcpStream,
+                )
+            }
+            TcpStreamPeer => {
+                self.m.declare(
+                    "ignite_rt_tcp_peer",
+                    "void",
+                    &["ptr".to_string(), "i64".to_string()],
+                );
+                let r = recv(self);
+                let s = self.scalar(&r);
+                self.rt_out("tcp_peer", &ignite_types::endpoint(), &[format!("i64 {s}")])
+            }
+            TcpStreamTimedOut => {
+                self.m
+                    .declare("ignite_rt_tcp_timed_out", "i8", &["i64".to_string()]);
+                let r = recv(self);
+                let s = self.scalar(&r);
+                let flag = self
+                    .f
+                    .val(format!("call i8 @ignite_rt_tcp_timed_out(i64 {s})"));
+                Val::Scalar(self.f.val(format!("icmp ne i8 {flag}, 0")))
+            }
             TcpListenerLocalPort => {
                 let r = recv(self);
                 let l = self.scalar(&r);
@@ -4607,7 +4684,12 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             ProcessExit => {
                 let code = self.scalar_arg(&args[0]);
                 let c = self.f.val(format!("trunc i64 {code} to i32"));
-                self.f.ins(format!("call void @ignite_rt_exit(i32 {c})"));
+                self.m.declare_raw(
+                    "ignite_rt_process_exit",
+                    "declare void @ignite_rt_process_exit(i32) noreturn",
+                );
+                self.f
+                    .ins(format!("call void @ignite_rt_process_exit(i32 {c})"));
                 self.f.term("unreachable");
                 Val::Never
             }

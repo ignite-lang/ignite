@@ -1,0 +1,23 @@
+package connect
+
+// the case study's reproducer G5 with `connect_within`
+// (`docs/slice.md` 26.3): a connect to an address that never answers
+// gives up after its timeout.
+type App {
+  executable: Text
+}
+
+fn App.main(self: App) -> Result<Unit, IoError> {
+  let t0 = Clock.monotonic()
+  let s = TcpStream.connect_within("10.255.255.1", 80, 500 ms)
+  let outcome = match s {
+    Ok(_) => "connected: no error"
+    Err(e) => "failed: ".concat(e.message)
+  }
+  log("connect after {(Clock.monotonic() - t0).to_ms()} ms {outcome}")
+  Ok(())
+}
+
+system Connect {
+  component app: App { executable = "connect" }
+}

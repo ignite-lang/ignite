@@ -95,6 +95,8 @@ pub(crate) fn method(receiver: &Ty, name: &str) -> Option<Sig> {
         (Ty::TcpStream, "urgent_pending") => sig(TcpStreamUrgentPending, vec![], io(Ty::Bool)),
         (Ty::PipeStream, "write_urgent") => sig(PipeStreamWriteUrgent, vec![bytes()], io(Ty::Unit)),
         (Ty::PipeStream, "urgent_pending") => sig(PipeStreamUrgentPending, vec![], io(Ty::Bool)),
+        (Ty::TcpStream, "peer") => sig(TcpStreamPeer, vec![], endpoint()),
+        (Ty::TcpStream, "timed_out") => sig(TcpStreamTimedOut, vec![], Ty::Bool),
         (Ty::Capability(kind), _) => capability_method(*kind, name),
         _ => None,
     }
@@ -140,6 +142,11 @@ fn capability_method(kind: Capability, name: &str) -> Option<Sig> {
         (Capability::CommandLine, "arguments") => {
             sig(CommandLineArguments, vec![], Ty::List(Box::new(Ty::Text)))
         }
+        (Capability::Environment, "get") => sig(
+            EnvironmentGet,
+            vec![Ty::Text],
+            Ty::Option(Box::new(Ty::Text)),
+        ),
         _ => None,
     }
 }
@@ -173,6 +180,22 @@ pub(crate) fn std_modules_of(name: &str) -> BTreeSet<String> {
         for sig in sigs {
             for ty in sig.params.iter().chain(std::iter::once(&sig.ret)) {
                 named_in(ty, &mut modules, &mut pending);
+            }
+        }
+    }
+    modules
+}
+
+/// [`crate::builtin_std_modules`] of the builtin method `name`: the modules
+/// of the records and enums in its signatures on `TcpStream`, `TcpListener`
+/// and `PipeStream` (`peer`: `std.net`, `docs/slice.md` 26.1).
+pub(crate) fn substrate_method_std_modules(name: &str) -> BTreeSet<String> {
+    let mut modules = BTreeSet::new();
+    let mut capabilities = Vec::new();
+    for receiver in [Ty::TcpStream, Ty::TcpListener, Ty::PipeStream] {
+        if let Some(sig) = method(&receiver, name) {
+            for ty in sig.params.iter().chain(std::iter::once(&sig.ret)) {
+                named_in(ty, &mut modules, &mut capabilities);
             }
         }
     }
@@ -345,6 +368,23 @@ pub(crate) fn static_fn(owner: &str, name: &str) -> Option<Sig> {
             vec![Ty::List(Box::new(Ty::Text))],
             Ty::Capability(Capability::CommandLine),
         ),
+        ("Environment", "of") => sig(
+            EnvironmentOf,
+            vec![Ty::List(Box::new(Ty::Text))],
+            Ty::Capability(Capability::Environment),
+        ),
+        ("Clock", "sleep") => sig(
+            ClockSleep,
+            vec![Ty::Quantity(QuantityKind::Duration)],
+            Ty::Unit,
+        ),
+        ("Clock", "now") => sig(ClockNow, vec![], Ty::Quantity(QuantityKind::Duration)),
+        ("Process", "flush") => sig(ProcessFlush, vec![], Ty::Unit),
+        ("TcpStream", "connect_within") => sig(
+            TcpStreamConnectWithin,
+            vec![Ty::Text, Ty::Int, Ty::Quantity(QuantityKind::Duration)],
+            io(Ty::TcpStream),
+        ),
         _ => None,
     }
 }
@@ -401,5 +441,14 @@ mod tests {
                 ("Launcher", process),
             ]
         );
+    }
+
+    #[test]
+    fn substrate_methods_name_net_for_peer() {
+        let modules: Vec<(&str, Vec<String>)> = crate::builtin_method_std_modules()
+            .into_iter()
+            .map(|(name, modules)| (name, modules.into_iter().collect()))
+            .collect();
+        assert_eq!(modules, [("peer", vec!["std.net".to_string()])]);
     }
 }

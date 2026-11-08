@@ -168,15 +168,22 @@ impl Process {
     }
 }
 
-/// Send the current task's pending writes ([`flush`]), restore the terminal
-/// attributes saved by [`Stdin::set_raw`] and end the process at once with
-/// status `code`. Other tasks and pending reads are not waited for, and
-/// standard output is not locked: `Stdout::write_all` flushes on every call,
-/// so there is nothing to send, and a task stalled in one must not hold up
-/// the exit.
+/// Send the current task's pending writes with a bound
+/// (`net::flush_at_exit`), restore the terminal attributes saved by
+/// [`Stdin::set_raw`] and end the process with status `code`. Other tasks
+/// and pending reads are not waited for, and standard output is not
+/// locked: `Stdout::write_all` flushes on every call, so there is nothing to
+/// send, and a task stalled in one must not hold up the exit. Streams
+/// follow the same rule with a deadline: exit waits for a write lock
+/// another task holds and for room in a socket's buffers, in all at most
+/// 100 ms (`net::EXIT_FLUSH`) after the call; a stream whose lock is still
+/// held then (a task stalled in a send to a peer that does not read) is
+/// skipped, and what a socket still has no room for is lost. This is
+/// `Process.exit`; `run`, and the LLVM runtime when `main` returns, send
+/// with [`flush`], which waits.
 pub fn exit(code: i32) -> ! {
     run_exit_hooks();
-    flush();
+    net::flush_at_exit();
     terminal::restore();
     std::process::exit(code)
 }
@@ -1074,6 +1081,9 @@ pub use args::{CommandLine, Setting};
 pub use child::{ChildExit, ChildProcess, Invocation, Launcher};
 pub use entropy::Entropy;
 pub use fs::Directory;
+// `docs/slice.md` 21.20: the capability `Environment`.
+pub mod environment;
+pub use environment::Environment;
 
 static EXIT_HOOKS: std::sync::Mutex<Vec<fn()>> = std::sync::Mutex::new(Vec::new());
 

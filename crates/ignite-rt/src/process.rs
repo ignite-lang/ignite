@@ -273,6 +273,71 @@ pub extern "C" fn ignite_rt_command_line_arguments(out: *mut IgniteList, handle:
     })
 }
 
+/// `i32 environment_launch(i64* out, IoError* err)`: the resource
+/// `Environment` at launch (21.20): the process environment, a variable
+/// whose name or value is not UTF-8 skipped. Never fails.
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_environment_launch(out: *mut i64, err: *mut IgniteIoError) -> i32 {
+    crate::entry(move || {
+        let made = ignite_io::Environment::launch();
+        status(
+            made.map(|environment| {
+                crate::net::register(crate::net::Handle::Environment(environment))
+            }),
+            out,
+            err,
+        )
+    })
+}
+
+/// `i64 environment_of(List<Text>* entries)`: `Environment.of(entries)`.
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_environment_of(entries: *const IgniteList) -> i64 {
+    crate::entry(move || {
+        let environment = ignite_io::Environment::of(
+            crate::text::texts(entries)
+                .iter()
+                .map(|entry| String::from_utf8_lossy(bytes(entry)).into_owned())
+                .collect(),
+        );
+        crate::net::register(crate::net::Handle::Environment(environment))
+    })
+}
+
+/// `i8 environment_get(i64 e, Text* name, Text* out)`: `environment.get(name)`;
+/// 1 with the value in `out`, 0 when the variable is not set or the handle
+/// is no environment.
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_environment_get(
+    handle: i64,
+    name: *const IgniteList,
+    out: *mut IgniteList,
+) -> i8 {
+    crate::entry(move || {
+        let name = String::from_utf8_lossy(bytes(name)).into_owned();
+        let value = crate::net::capability(handle, "environment", |found| match found {
+            crate::net::Handle::Environment(environment) => Some(environment.get(&name)),
+            _ => None,
+        })
+        .ok()
+        .flatten();
+        match value {
+            Some(value) => {
+                put(out, IgniteList::from_bytes(value.as_bytes()));
+                1
+            }
+            None => 0,
+        }
+    })
+}
+
+/// `void flush()`: `Process.flush()` (21.20): send what the calling task
+/// wrote (`ignite_io::flush`).
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_flush() {
+    crate::entry(ignite_io::flush)
+}
+
 /// `i32 endpoint_of(Text* reference, Endpoint* out, IoError* err)`: the
 /// `--ref <path>=<address>:<port>` argument `init` stored whose path is
 /// `reference` (`docs/slice.md` 16.9, 16.13), as an `Endpoint` whose
@@ -299,13 +364,24 @@ pub extern "C" fn ignite_rt_endpoint_of(
     })
 }
 
-/// `void exit(i32 code)`: `ignite_io::exit`: restore the terminal, flush
-/// standard output, exit. Called by the generated main when `K.main`
-/// returns `Ok`; while the process drains (`docs/slice.md` 16.13) it
-/// waits for the live tasks first and exits 0, as `ignite_io::run` does.
+/// `void process_exit(i32 code)`: `Process.exit(code)`, which is
+/// `ignite_io::exit` on both targets: the calling task's writes are sent
+/// and the process ends with `code` at once, draining or not; live tasks
+/// are not waited for (`docs/slice.md` 16.13).
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_process_exit(code: i32) -> ! {
+    crate::entry_never(move || ignite_io::exit(code))
+}
+
+/// `void exit(i32 code)`: send what `main`'s task wrote, waiting for the
+/// write locks (`ignite_io::flush`, as `ignite_io::run` does), then
+/// `ignite_io::exit`: restore the terminal, exit. Called by the generated
+/// main when `K.main` returns `Ok`; while the process drains
+/// (`docs/slice.md` 16.13) it waits for the live tasks first and exits 0.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_exit(code: i32) -> ! {
     crate::entry_never(move || {
+        ignite_io::flush();
         if ignite_io::draining() {
             drained();
         }
@@ -314,10 +390,12 @@ pub extern "C" fn ignite_rt_exit(code: i32) -> ! {
 }
 
 /// `void fail(IoError* error)`: `error: <message>` to stderr, restore the
-/// terminal, exit with the error's exit code. Called by the generated main
-/// when `K.main` returns `Err`; while the process drains, an error other
-/// than `draining` (the refused `accept`) is printed, then the live tasks
-/// are waited for and the status is 0 (16.13).
+/// terminal, exit with the error's exit code; what `main`'s task wrote
+/// is sent first (`ignite_io::flush`, as `ignite_io::run` does). Called by
+/// the generated main when `K.main` returns `Err`; while the process
+/// drains, an error other than `draining` (the refused `accept`) is
+/// printed, then the live tasks are waited for and the status is 0
+/// (16.13).
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_fail(error: *const IgniteIoError) -> ! {
     crate::entry_never(move || {
@@ -326,6 +404,7 @@ pub extern "C" fn ignite_rt_fail(error: *const IgniteIoError) -> ! {
             Some(error) => (unsafe { error.message.as_bytes() }, error.exit_code),
             None => (&b""[..], 1),
         };
+        ignite_io::flush();
         if ignite_io::draining() {
             if message != ignite_io::DRAINING.as_bytes() {
                 let mut line = b"error: ".to_vec();
@@ -341,7 +420,8 @@ pub extern "C" fn ignite_rt_fail(error: *const IgniteIoError) -> ! {
     })
 }
 
-/// The end of a drained process: wait for the live tasks, exit 0.
+/// The end of a drained process: wait for the live tasks, exit 0, as
+/// `ignite_io::run` does; the caller has sent what `main`'s task wrote.
 fn drained() -> ! {
     ignite_io::wait_for_tasks();
     ignite_io::exit(0)
@@ -596,5 +676,55 @@ mod tests {
         assert_eq!(out.exit_code, 1);
         // SAFETY: arena memory of this task.
         assert_eq!(unsafe { out.message.as_bytes() }, b"boom");
+    }
+
+    /// `environment.get(name)` over `handle`: the value, `None` when unset.
+    fn variable(handle: i64, name: &str) -> Option<String> {
+        let name = IgniteList::from_bytes(name.as_bytes());
+        let mut out = IgniteList::from_bytes(b"untouched");
+        match ignite_rt_environment_get(handle, &name, &mut out) {
+            // SAFETY: written by the runtime in this task's arena.
+            1 => Some(String::from_utf8(unsafe { out.as_bytes() }.to_vec()).unwrap()),
+            found => {
+                assert_eq!(found, 0);
+                None
+            }
+        }
+    }
+
+    /// 21.20: `Environment.of(entries)` and `get`, the last entry of a name
+    /// winning; a handle that is no environment has no variables.
+    #[test]
+    fn environment_of_gives_its_entries() {
+        let entries = IgniteList::from_texts(&["A=1", "B=x=y", "NO", "A=2"].map(String::from));
+        let handle = ignite_rt_environment_of(&entries);
+        assert_eq!(variable(handle, "A").as_deref(), Some("2"));
+        assert_eq!(variable(handle, "B").as_deref(), Some("x=y"));
+        assert_eq!(variable(handle, "NO"), None);
+        assert_eq!(variable(handle, "UNSET"), None);
+        let setting = ignite_rt_setting_of(
+            &IgniteList::from_bytes(b"--a"),
+            &IgniteList::from_bytes(b"b"),
+        );
+        assert_eq!(variable(setting, "A"), None);
+    }
+
+    /// 21.20: the resource at launch holds the process environment.
+    #[test]
+    fn environment_launch_reads_the_process_environment() {
+        let mut handle = -7i64;
+        let mut err = IgniteIoError {
+            message: IgniteList::from_bytes(b"untouched"),
+            exit_code: -1,
+        };
+        assert_eq!(ignite_rt_environment_launch(&mut handle, &mut err), 0);
+        assert_eq!(variable(handle, "PATH"), std::env::var("PATH").ok());
+    }
+
+    /// 21.20: `Process.flush()` sends the task's writes; with none it
+    /// returns.
+    #[test]
+    fn flush_without_writes_returns() {
+        ignite_rt_flush();
     }
 }

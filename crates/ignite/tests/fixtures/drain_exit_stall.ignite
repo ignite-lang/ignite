@@ -1,0 +1,42 @@
+package tests.drain_exit_stall
+
+// Adversary, story `drain-exit`: `main` writes a line to a peer that never
+// reads, a task then floods the same stream and stalls in its send, and
+// `main` calls `Process.exit(3)` during the drain. The exit's flush of
+// `main`'s writes waits for the stream's write lock, which the stalled
+// task holds.
+
+fn spin(limit: Duration) {
+  let started = Clock.monotonic()
+  while Clock.monotonic() - started < limit {
+  }
+}
+
+fn flood(stream: TcpStream) -> Result<Unit, IoError> {
+  spin(1 seconds)
+  log("flooding")
+  loop {
+    stream.write_all(b"0123456789abcdef0123456789abcdef")?
+  }
+}
+
+type Server {
+  listener: TcpListener
+  executable: Text
+}
+
+fn Server.main(self: Server) -> Result<Unit, IoError> {
+  let slow = self.listener.accept()?
+  log("waiting")
+  let refused = self.listener.accept()
+  spawn flood(slow)
+  slow.write_all(b"bye\n")?
+  spin(3 seconds)
+  log("exiting")
+  Process.exit(3)
+}
+
+system DrainExitStall {
+  resource listener: TcpListener { address = "127.0.0.1", port = 0 }
+  component server: Server { listener = listener, executable = "drainexitstall" }
+}

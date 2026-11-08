@@ -131,6 +131,7 @@ pub const BUILTIN_TYPES: &[&str] = &[
     "Entropy",
     "Setting",
     "CommandLine",
+    "Environment",
 ];
 
 /// Static builtin calls written `Type.name(...)`.
@@ -159,6 +160,11 @@ pub const BUILTIN_STATICS: &[(&str, &str)] = &[
     ("Entropy", "new"),
     ("Setting", "of"),
     ("CommandLine", "of"),
+    ("Environment", "of"),
+    ("Clock", "sleep"),
+    ("Clock", "now"),
+    ("Process", "flush"),
+    ("TcpStream", "connect_within"),
 ];
 
 /// Owners of [`BUILTIN_STATICS`] that are records of the standard library,
@@ -179,6 +185,7 @@ pub const EFFECTFUL_METHODS: &[&str] = &[
     "received_batches",
     "write_urgent",
     "urgent_pending",
+    "timed_out",
 ];
 
 /// Every builtin method name (`docs/slice.md` sections 6, 7, 10 and 13).
@@ -232,6 +239,8 @@ pub const BUILTIN_METHODS: &[&str] = &[
     "received_batches",
     "write_urgent",
     "urgent_pending",
+    "peer",
+    "timed_out",
 ];
 
 /// Free builtin functions.
@@ -298,6 +307,11 @@ const BUILTIN_STATIC_ARITIES: &[(&str, &str, usize)] = &[
     ("Entropy", "new", 0),
     ("Setting", "of", 2),
     ("CommandLine", "of", 1),
+    ("Environment", "of", 1),
+    ("Clock", "sleep", 1),
+    ("Clock", "now", 0),
+    ("Process", "flush", 0),
+    ("TcpStream", "connect_within", 3),
 ];
 
 /// Builtin statics that are effectful substrate operations.
@@ -312,6 +326,9 @@ const EFFECTFUL_STATICS: &[(&str, &str)] = &[
     ("Process", "exit"),
     ("Clock", "monotonic"),
     ("Endpoint", "of"),
+    ("Clock", "sleep"),
+    ("Clock", "now"),
+    ("TcpStream", "connect_within"),
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -344,13 +361,13 @@ impl EffectSig {
 }
 
 /// The effect a substrate method needs on the value it is called on, by
-/// method name: `read`, `received_batches` and `urgent_pending` need
+/// method name: `read`, `received_batches`, `urgent_pending` and `timed_out` need
 /// `<root>.read`, `write_all`, `write_urgent`, `set_idle_timeout` and
 /// `close` (which shuts down the write half) need `<root>.write`,
 /// `accept` needs `<root>.accept`.
 pub fn method_effect(method: &str) -> Option<&'static str> {
     match method {
-        "read" | "received_batches" | "urgent_pending" => Some("read"),
+        "read" | "received_batches" | "urgent_pending" | "timed_out" => Some("read"),
         "write_all" | "close" | "set_idle_timeout" | "write_urgent" => Some("write"),
         "accept" => Some("accept"),
         _ => None,
@@ -402,6 +419,7 @@ pub const CAPABILITY_METHODS: &[(&str, &str, Option<&str>)] = &[
     ("Entropy", "random_bytes", Some("draw")),
     ("Setting", "value", Some("argument")),
     ("CommandLine", "arguments", Some("argument")),
+    ("Environment", "get", Some("variable")),
 ];
 
 /// The capability types of `docs/slice.md` 21.3: handles a system declares
@@ -413,6 +431,7 @@ pub const CAPABILITY_TYPES: &[&str] = &[
     "Entropy",
     "Setting",
     "CommandLine",
+    "Environment",
 ];
 
 /// What an in-place builtin changes (`docs/slice.md` 20.3.3).
@@ -494,7 +513,10 @@ pub fn static_effect(owner: &str, name: &str) -> Option<&'static str> {
         ("TcpListener", "bind") => Some("net.listen"),
         ("TcpStream", "connect") => Some("net.connect"),
         ("Clock", "monotonic") => Some("clock.read"),
+        ("Clock", "sleep") => Some("clock.sleep"),
+        ("Clock", "now") => Some("clock.read"),
         ("Endpoint", "of") => Some("process.args"),
+        ("TcpStream", "connect_within") => Some("net.connect"),
         _ => None,
     }
 }
@@ -2227,7 +2249,8 @@ impl Checker {
 
     /// Whether a value of declared type `ty` may hold a `TcpStream`,
     /// `PipeStream`, `TcpListener`, `Store`, `Stdin`, `Stdout`, `Stderr` or a capability
-    /// (`Directory`, `Launcher`, `ChildProcess`, `Entropy`, `Setting`, `CommandLine`),
+    /// (`Directory`, `Launcher`, `ChildProcess`, `Entropy`, `Setting`, `CommandLine`,
+    /// `Environment`),
     /// directly or in a
     /// field, payload, element or type argument. Unknown types may.
     fn can_hold_handle(&self, ty: &Type, depth: usize) -> bool {
@@ -2245,7 +2268,7 @@ impl Checker {
             }
             "TcpStream" | "PipeStream" | "TcpListener" | "Store" | "Stdin" | "Stdout"
             | "Stderr" | "Directory" | "Launcher" | "ChildProcess" | "Entropy" | "Setting"
-            | "CommandLine" => {
+            | "CommandLine" | "Environment" => {
                 return true;
             }
             "List" | "Option" | "Result" | "Tuple" => {
@@ -3114,7 +3137,8 @@ impl Checker {
     /// The declared type of the value of `expr`, where it follows from
     /// declarations alone (`docs/slice.md` section 11.7): a local with a
     /// known type, a field of a value of known record type, `copy()`, `e?`,
-    /// `l[i]` and the results of `Store` methods. `None` otherwise.
+    /// `l[i]`, the results of `Store` methods and a literal of a record
+    /// without type parameters. `None` otherwise.
     fn static_type(&self, expr: &Expr) -> Option<Type> {
         let named = |name: &str, args: Vec<Type>| {
             let ident = Ident {
@@ -3181,6 +3205,13 @@ impl Checker {
                 tuple.args.get(*index)?.clone()
             }
             ExprKind::Closure(closure) => return Some(self.closure_type(expr, closure)),
+            ExprKind::Record { name: record, .. }
+                if self.symbols.records.contains(&record.name)
+                    && !self.symbols.type_params.contains_key(&record.name)
+                    && !self.type_params.contains(&record.name) =>
+            {
+                Type::named(record.clone(), Vec::new(), record.span)
+            }
             ExprKind::Index { receiver, .. } => {
                 let list = self.static_type(receiver)?;
                 match list.name.name.as_str() {
@@ -3247,8 +3278,8 @@ impl Checker {
     /// The result type of a test-only capability constructor
     /// (`docs/slice.md` 21.3, 21.8): `Directory.temporary()` is a
     /// `Result<Directory, IoError>`, `Launcher.new()`, `Entropy.new()`,
-    /// `Setting.of(..)` and `CommandLine.of(..)` (21.19) the capability
-    /// itself. `None` for any other static
+    /// `Setting.of(..)`, `CommandLine.of(..)` (21.19) and `Environment.of(..)`
+    /// (21.20) the capability itself. `None` for any other static
     /// or when a declaration shadows the owner.
     fn constructor_type(&self, owner: &str, name: &str, span: Span) -> Option<Type> {
         if self.type_params.contains(owner) || self.symbols.records.contains(owner) {
@@ -3269,7 +3300,8 @@ impl Checker {
             ("Launcher", "new")
             | ("Entropy", "new")
             | ("Setting", "of")
-            | ("CommandLine", "of") => Some(named(owner, Vec::new())),
+            | ("CommandLine", "of")
+            | ("Environment", "of") => Some(named(owner, Vec::new())),
             _ => None,
         }
     }
@@ -4160,13 +4192,22 @@ fn is_stream_method(method: &str) -> bool {
 /// type `ty` (`docs/slice.md` sections 6, 7 and 13): the table of
 /// `ignite-types`' builtins by type name. A type parameter or a fn type
 /// takes none but `copy`; [`Checker::builtin_method`] gives a
-/// `ByteStream`-bounded one the stream methods.
-fn builtin_applies(ty: &Type, method: &str) -> bool {
+/// `ByteStream`-bounded one the stream methods. Public so that
+/// `ignite-types` can compare it with its own table
+/// (`builtins::tests::checker_table_matches_the_type_checker`).
+pub fn builtin_applies(ty: &Type, method: &str) -> bool {
     let name = ty.name.name.as_str();
     if method == "copy" || method == "debug" {
         return true;
     }
     let text = ty.args.first().is_some_and(|a| a.name.name == "Text");
+    let byte = ty.args.first().is_some_and(|a| a.name.name == "Byte");
+    if CAPABILITY_METHODS
+        .iter()
+        .any(|(owner, m, _)| *owner == name && *m == method)
+    {
+        return true;
+    }
     match name {
         "Text" => matches!(
             method,
@@ -4210,13 +4251,15 @@ fn builtin_applies(ty: &Type, method: &str) -> bool {
                 method,
                 "len" | "is_empty" | "at" | "slice" | "push" | "set" | "append" | "clear" | "map"
             ) || (method == "join" && text)
+                || (method == "to_text" && byte)
         }
+        "Ref" | "Signal" => method == "to_text",
         "Store" => matches!(
             method,
             "next_id" | "get" | "put" | "remove" | "values" | "update" | "upsert"
         ),
         "TcpListener" => matches!(method, "accept" | "local_port"),
-        "TcpStream" => is_stream_method(method),
+        "TcpStream" => is_stream_method(method) || matches!(method, "peer" | "timed_out"),
         "PipeStream" => is_stream_method(method) || method == "received_batches",
         "Map" => matches!(
             method,

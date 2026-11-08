@@ -351,6 +351,270 @@ fn an_open_session_survives_sigterm_and_new_connects_are_refused() {
     });
 }
 
+/// The longest `Process.exit` may take to end a draining process (story
+/// `drain-exit`).
+const EXIT: Duration = Duration::from_secs(1);
+
+/// `ignite build` of `tests/fixtures/<fixture>.ignite` for `target`; the
+/// path of its executable `executable`.
+fn build_fixture(fixture: &str, executable: &str, target: &str) -> PathBuf {
+    let out = tmp(format!("{fixture}-build-{target}"));
+    let mut command = Command::new(env!("CARGO_BIN_EXE_ignite"));
+    command
+        .arg("build")
+        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("tests/fixtures/{fixture}.ignite")))
+        .args(["--target", target, "--out"])
+        .arg(&out)
+        .current_dir(repo());
+    if target == "llvm" {
+        command.arg("--runtime").arg(common::runtime_archive());
+    } else {
+        command.arg("--target-dir").arg(cargo_target_dir());
+    }
+    let output = command.output().expect("run ignite build");
+    let stdout = text(&output.stdout);
+    assert!(
+        output.status.success(),
+        "{target}: ignite build failed\n{stdout}\n{}",
+        text(&output.stderr)
+    );
+    stdout
+        .lines()
+        .filter_map(|line| line.strip_prefix("built "))
+        .find(|path| path.ends_with(&format!("/{executable}")))
+        .map(PathBuf::from)
+        .unwrap_or_else(|| panic!("{target}: no {executable} in\n{stdout}"))
+}
+
+/// Story `drain-exit` (the case study's G16 and its G13 update): after
+/// SIGTERM, `Process.exit(3)` ends the process with status 3 within
+/// [`EXIT`] while one task waits in `accept` on a listener bound after the
+/// drain began and another in an idle read, and the line written just
+/// before it reaches the peer.
+#[test]
+fn process_exit_during_the_drain_exits_with_its_code_at_once() {
+    on_both_targets(|target| {
+        let drainexit = build_fixture("drain_exit", "drainexit", target);
+        let mut server = Server::start(&drainexit);
+        let _reading = TcpStream::connect(("127.0.0.1", server.port)).expect("connect reading");
+        let mut peer = TcpStream::connect(("127.0.0.1", server.port)).expect("connect peer");
+        peer.set_read_timeout(Some(TIMEOUT)).expect("read timeout");
+        wait_line(&server.stderr, "waiting", &mut server.skipped, |l| {
+            l == "waiting"
+        });
+        signal(server.pid(), Signal::SIGTERM);
+        wait_line(&server.stderr, "exiting", &mut server.skipped, |l| {
+            l == "exiting"
+        });
+        let exiting = Instant::now();
+        let status = loop {
+            if let Some(status) = server.child.try_wait().expect("wait") {
+                break status;
+            }
+            assert!(
+                exiting.elapsed() < EXIT,
+                "{target}: still running {EXIT:?} after `exiting`; lines:\n{}",
+                server.skipped.join("\n")
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        assert_eq!(status.code(), Some(3), "{target}: {status:?}");
+        let mut received = Vec::new();
+        peer.read_to_end(&mut received)
+            .unwrap_or_else(|e| panic!("{target}: read the peer: {e}"));
+        assert_eq!(text(&received), "bye\n", "{target}");
+    });
+}
+
+/// Story `drain-exit` (the case study's G13 update): a line written just
+/// before `main` returns during the drain reaches the peer while the
+/// process still waits for a task in an idle read; the process exits 0
+/// once that read ends.
+#[test]
+fn a_write_before_main_returns_during_the_drain_reaches_the_peer() {
+    on_both_targets(|target| {
+        let drainreturn = build_fixture("drain_return", "drainreturn", target);
+        let mut server = Server::start(&drainreturn);
+        let mut peer = TcpStream::connect(("127.0.0.1", server.port)).expect("connect peer");
+        peer.set_read_timeout(Some(TIMEOUT)).expect("read timeout");
+        wait_line(&server.stderr, "waiting", &mut server.skipped, |l| {
+            l == "waiting"
+        });
+        signal(server.pid(), Signal::SIGTERM);
+        wait_line(&server.stderr, "returning", &mut server.skipped, |l| {
+            l == "returning"
+        });
+        let mut received = [0u8; 4];
+        peer.read_exact(&mut received)
+            .unwrap_or_else(|e| panic!("{target}: read the peer: {e}"));
+        assert_eq!(text(&received), "bye\n", "{target}");
+        let early = server.child.try_wait().expect("wait");
+        assert!(
+            early.is_none(),
+            "{target}: exited with a task in a read: {early:?}"
+        );
+        peer.shutdown(std::net::Shutdown::Write)
+            .expect("end the task's read");
+        let status = wait_exit(&mut server.child, "the drained server");
+        assert_eq!(status.code(), Some(0), "{target}: {status:?}");
+    });
+}
+
+/// Adversary, story `drain-exit`: `Process.exit(263)` from a spawned task
+/// during the drain, while `main` waits in an idle read, ends the process
+/// with status 7 (263 modulo 256) on both targets within [`EXIT`], and the
+/// child started after the drain began is killed (`at_exit`).
+#[test]
+fn adversary_process_exit_from_a_task_during_the_drain() {
+    on_both_targets(|target| {
+        let binary = build_fixture("drain_exit_task", "drainexittask", target);
+        let mut server = Server::start(&binary);
+        let _reading = TcpStream::connect(("127.0.0.1", server.port)).expect("connect reading");
+        let mut trigger = TcpStream::connect(("127.0.0.1", server.port)).expect("connect trigger");
+        wait_line(&server.stderr, "waiting", &mut server.skipped, |l| {
+            l == "waiting"
+        });
+        signal(server.pid(), Signal::SIGTERM);
+        let child = wait_line(&server.stderr, "child", &mut server.skipped, |l| {
+            l.starts_with("child ")
+        });
+        let child: i32 = child["child ".len()..]
+            .parse()
+            .unwrap_or_else(|e| panic!("{target}: {child}: {e}"));
+        trigger.write_all(b"go\n").expect("trigger");
+        wait_line(&server.stderr, "task exiting", &mut server.skipped, |l| {
+            l == "task exiting"
+        });
+        let exiting = Instant::now();
+        let status = loop {
+            if let Some(status) = server.child.try_wait().expect("wait") {
+                break status;
+            }
+            assert!(
+                exiting.elapsed() < EXIT,
+                "{target}: still running {EXIT:?} after `task exiting`; lines:\n{}",
+                server.skipped.join("\n")
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        assert_eq!(status.code(), Some(7), "{target}: {status:?}");
+        let gone = Instant::now();
+        while kill(Pid::from_raw(child), None).is_ok() {
+            assert!(
+                gone.elapsed() < GONE,
+                "{target}: child {child} still alive {GONE:?} after the exit"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    });
+}
+
+/// Adversary, story `drain-exit`: `Process.exit(3)` during the drain ends
+/// the process within 5 s (five times [`EXIT`], for load) although a task
+/// that floods the same stream to a peer that never reads is stalled in
+/// its send. `main`'s own line `bye` is pending on that stream, so the
+/// exit's flush waits for the write lock the stalled task holds.
+#[test]
+fn adversary_process_exit_during_the_drain_with_a_stalled_writer() {
+    on_both_targets(|target| {
+        let binary = build_fixture("drain_exit_stall", "drainexitstall", target);
+        let mut server = Server::start(&binary);
+        let _slow = TcpStream::connect(("127.0.0.1", server.port)).expect("connect slow");
+        wait_line(&server.stderr, "waiting", &mut server.skipped, |l| {
+            l == "waiting"
+        });
+        signal(server.pid(), Signal::SIGTERM);
+        wait_line(&server.stderr, "exiting", &mut server.skipped, |l| {
+            l == "exiting"
+        });
+        let exiting = Instant::now();
+        let limit = EXIT * 5;
+        let status = loop {
+            if let Some(status) = server.child.try_wait().expect("wait") {
+                break status;
+            }
+            assert!(
+                exiting.elapsed() < limit,
+                "{target}: still running {limit:?} after `exiting`; lines:\n{}",
+                server.skipped.join("\n")
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        assert_eq!(status.code(), Some(3), "{target}: {status:?}");
+    });
+}
+
+/// Runs of a `flood_*` fixture per target.
+const FLOOD_RUNS: usize = 30;
+
+/// Run `binary` [`FLOOD_RUNS`] times with a peer that reads everything at
+/// full speed; the runs whose peer never received `MARK\n`, and the exit
+/// statuses seen.
+fn flood_runs_losing_mark(binary: &Path) -> (usize, Vec<Option<i32>>) {
+    let mut lost = 0;
+    let mut codes = Vec::new();
+    for _ in 0..FLOOD_RUNS {
+        let mut server = Server::start(binary);
+        let mut peer = TcpStream::connect(("127.0.0.1", server.port)).expect("connect peer");
+        peer.set_read_timeout(Some(TIMEOUT)).expect("read timeout");
+        let reader = std::thread::spawn(move || {
+            let mut received = Vec::new();
+            let _ = peer.read_to_end(&mut received);
+            received
+        });
+        let status = wait_exit(&mut server.child, "flood");
+        codes.push(status.code());
+        let received = reader.join().expect("reader");
+        if !received.windows(5).any(|w| w == b"MARK\n") {
+            lost += 1;
+        }
+    }
+    (lost, codes)
+}
+
+/// Adversary, story `drain-exit`, pass 2: `Process.exit(3)` after `main`
+/// wrote `MARK` on a stream that another task writes to in a loop, with a
+/// peer that reads everything. The other task holds the write lock for
+/// one append at a time, not stalled; before round 2 exit's flush waited
+/// for the lock and sent `MARK`. `flush_at_exit` skips the stream when the
+/// lock is held at that instant.
+#[test]
+fn adversary_process_exit_sends_main_s_write_beside_a_busy_writer() {
+    on_both_targets(|target| {
+        let binary = build_fixture("flood_exit", "floodexit", target);
+        let (lost, codes) = flood_runs_losing_mark(&binary);
+        assert!(
+            codes.iter().all(|code| *code == Some(3)),
+            "{target}: {codes:?}"
+        );
+        assert_eq!(
+            lost, 0,
+            "{target}: MARK lost in {lost} of {FLOOD_RUNS} runs with a reading peer"
+        );
+    });
+}
+
+/// Adversary, story `drain-exit`, pass 2: the same, but `main` returns
+/// `Ok` (no drain). The Rust target's `run` waits for the lock
+/// (`ignite_io::flush`); the LLVM target's `ignite_rt_exit` ends in
+/// `ignite_io::exit`, now `flush_at_exit`, which skips a held lock. The
+/// targets must agree.
+#[test]
+fn adversary_main_return_sends_main_s_write_beside_a_busy_writer() {
+    on_both_targets(|target| {
+        let binary = build_fixture("flood_return", "floodreturn", target);
+        let (lost, codes) = flood_runs_losing_mark(&binary);
+        assert!(
+            codes.iter().all(|code| *code == Some(0)),
+            "{target}: {codes:?}"
+        );
+        assert_eq!(
+            lost, 0,
+            "{target}: MARK lost in {lost} of {FLOOD_RUNS} runs with a reading peer"
+        );
+    });
+}
+
 // ---- 16.0 item 6: DrainRollout under `ignite run` -------------------------
 
 /// A running `ignite run` with its journal records as they arrive.

@@ -398,7 +398,10 @@ fn builtin_dependencies(source: &SourceFile, own: Option<&str>) -> BTreeSet<Stri
 /// module records resolve their functions without an accompanying import.
 /// Walk expression chains iteratively, including defaults and test bodies.
 /// The modules builtins name are dependencies too
-/// ([`builtin_dependencies`]).
+/// ([`builtin_dependencies`]), and so are those of a builtin stream method
+/// called anywhere, an interpolation included
+/// ([`ignite_types::builtin_method_std_modules`]: `s.peer()` names
+/// `std.net`, `docs/slice.md` 26.1).
 fn module_dependencies(program: &Program, source: &SourceFile) -> BTreeSet<String> {
     use ignite_syntax::ast::{Block, Decl, Expr, ExprKind, StmtKind};
 
@@ -449,6 +452,7 @@ fn module_dependencies(program: &Program, source: &SourceFile) -> BTreeSet<Strin
     }
     let own = program.package.as_ref().map(|p| p.dotted());
     dependencies.extend(builtin_dependencies(source, own.as_deref()));
+    let methods = ignite_types::builtin_method_std_modules();
     while let Some(node) = pending.pop() {
         match node {
             Node::Block(block) => {
@@ -489,7 +493,19 @@ fn module_dependencies(program: &Program, source: &SourceFile) -> BTreeSet<Strin
                     pending.push(Node::Expr(callee));
                     pending.extend(args.iter().map(Node::Expr));
                 }
-                ExprKind::Method { receiver, args, .. } => {
+                ExprKind::Method {
+                    receiver,
+                    name,
+                    args,
+                } => {
+                    if let Some(modules) = methods.get(name.name.as_str()) {
+                        dependencies.extend(
+                            modules
+                                .iter()
+                                .filter(|module| own.as_ref() != Some(*module))
+                                .cloned(),
+                        );
+                    }
                     pending.push(Node::Expr(receiver));
                     pending.extend(args.iter().map(Node::Expr));
                 }

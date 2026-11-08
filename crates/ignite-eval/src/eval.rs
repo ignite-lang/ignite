@@ -1069,7 +1069,7 @@ impl<'p> Evaluator<'p> {
                 }),
                 _ => Err(internal("IoError.new of a non-Text")),
             },
-            Builtin::Log => Ok(Value::Unit),
+            Builtin::Log | Builtin::ProcessFlush => Ok(Value::Unit),
             Builtin::ModuleRecord => {
                 let record = cx
                     .types()
@@ -1354,7 +1354,10 @@ impl<'p> Evaluator<'p> {
                 | Builtin::ChildProcessKill
                 | Builtin::EntropyRandomBytes
                 | Builtin::SettingValue
-                | Builtin::CommandLineArguments,
+                | Builtin::CommandLineArguments
+                | Builtin::EnvironmentGet
+                | Builtin::TcpStreamPeer
+                | Builtin::TcpStreamTimedOut,
                 _,
             ) => Err(internal(format!(
                 "builtin `{builtin:?}` has no value at compile time"
@@ -2196,6 +2199,11 @@ fn is_static(builtin: Builtin) -> bool {
             | Builtin::EntropyNew
             | Builtin::SettingOf
             | Builtin::CommandLineOf
+            | Builtin::EnvironmentOf
+            | Builtin::ClockSleep
+            | Builtin::ClockNow
+            | Builtin::ProcessFlush
+            | Builtin::TcpStreamConnectWithin
     )
 }
 

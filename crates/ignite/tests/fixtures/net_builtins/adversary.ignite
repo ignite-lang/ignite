@@ -1,0 +1,83 @@
+package adversary
+
+import std.net.{Endpoint}
+
+// Adversary pass 1 of the network builtins story (`docs/slice.md` 26):
+// edges of `peer`, `timed_out` and `connect_within` on both targets.
+// Run with `ignite test crates/ignite/tests/fixtures/net_builtins/adversary.ignite --target=all`.
+
+test "adv: an IPv4 peer of a dual-stack listener is written as IPv4" {
+  let listener = TcpListener.bind("::", 0)?
+  let client = TcpStream.connect("127.0.0.1", listener.local_port())?
+  let server = listener.accept()?
+  assert server.peer().address == "127.0.0.1"
+  assert server.peer().port > 0
+}
+
+test "adv: timed_out is false before a read, also with an idle timeout set" {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let client = TcpStream.connect("127.0.0.1", listener.local_port())?
+  let server = listener.accept()?
+  assert !server.timed_out()
+  server.set_idle_timeout(50)?
+  assert !server.timed_out()
+}
+
+test "adv: a partial read after a timeout clears timed_out" {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let client = TcpStream.connect("127.0.0.1", listener.local_port())?
+  let server = listener.accept()?
+  client.set_idle_timeout(50)?
+  assert client.read(1)? == Eof
+  assert client.timed_out()
+  server.write_all(b"xy")?
+  server.close()?
+  assert client.read(1)? == Data(b"x")
+  assert !client.timed_out()
+  assert client.read(1)? == Data(b"y")
+  assert !client.timed_out()
+}
+
+test "adv: a negative timeout is refused before any attempt" {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let port = listener.local_port()
+  let refused = TcpStream.connect_within("127.0.0.1", port, 0 ms - 5 ms)
+  assert match refused {
+    Ok(_) => false
+    Err(e) => e.message == "connect 127.0.0.1:".concat(port.to_text()).concat(": the timeout must be positive")
+  }
+}
+
+test "adv: a huge timeout still connects" {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let client = TcpStream.connect_within("127.0.0.1", listener.local_port(), 100000 days)?
+  let server = listener.accept()?
+  assert server.peer().address == "127.0.0.1"
+}
+
+test "adv: a refused port fails at once, not after the timeout" {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let port = listener.local_port()
+  let started = Clock.monotonic()
+  let near = TcpStream.connect_within("127.0.0.1", 1, 5 seconds)
+  assert Clock.monotonic() - started < 2 seconds
+  assert match near {
+    Ok(_) => false
+    Err(_) => true
+  }
+}
+
+test "adv: a name with several addresses tries the next one" {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let client = TcpStream.connect_within("localhost", listener.local_port(), 2 seconds)?
+  let server = listener.accept()?
+  assert client.peer() == Endpoint { address = "127.0.0.1", port = listener.local_port() }
+}
+
+test "adv: an IPv6 connect_within reports the peer without brackets" {
+  let listener = TcpListener.bind("::1", 0)?
+  let client = TcpStream.connect_within("::1", listener.local_port(), 1 seconds)?
+  let server = listener.accept()?
+  assert client.peer() == Endpoint { address = "::1", port = listener.local_port() }
+  assert server.peer().address == "::1"
+}
