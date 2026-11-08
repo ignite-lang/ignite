@@ -305,3 +305,22 @@ fn reachable_handles_stay_usable_and_stored_reads_are_released() {
         );
     });
 }
+
+/// Adversary cases, pass 2 (`fixtures/leak/attack2.ignite`): an aliased end
+/// handed to a task stays usable through nested records and branches, an end
+/// a broadcast hands to a task stays the task's, and the stored ends a server
+/// reads through `for` (left by `break`, `continue`, `return`), nested
+/// `match`es, `is_some`, a bare `remove` or a record literal `put` keep the
+/// census flat.
+#[test]
+fn stored_ends_read_in_every_form_are_released() {
+    on_both_targets(|target| {
+        let run = ignite_test(target, "attack2.ignite", "", None);
+        assert_eq!(run.status, 0, "{target}:\n{}", run.output);
+        assert!(
+            run.output.contains("16 passed; 0 failed"),
+            "{target}:\n{}",
+            run.output
+        );
+    });
+}
