@@ -708,6 +708,130 @@ fn a_listener_bound_kept_at_run_time_accepts_through_the_drain() {
     });
 }
 
+/// Every `.ll` file under `dir`, recursively.
+fn ll_files(dir: &Path, found: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            ll_files(&path, found);
+        } else if path.extension().is_some_and(|e| e == "ll") {
+            found.push(path);
+        }
+    }
+}
+
+/// Adversary of story `drain-keeps-bound-listeners`: several listeners at
+/// once. Two bound with `TcpListener.bind` are both `released`; two bound
+/// with `bind_kept`, the `keep_through_drain` resource `admin` and one
+/// bound with `bind_kept` after the drain began all answer through the
+/// drain, none of them is `released`, and the process exits 0. On LLVM,
+/// every IR module declares `ignite_rt_tcp_bind_kept` at most once.
+#[test]
+fn adversary_several_kept_and_released_listeners_at_once() {
+    on_both_targets(|target| {
+        let binary = build_fixture("drain_bind_kept_many", "drainbindkeptmany", target);
+        if target == "llvm" {
+            let mut files = Vec::new();
+            ll_files(
+                &tmp(format!("drain_bind_kept_many-build-{target}")),
+                &mut files,
+            );
+            assert!(!files.is_empty(), "{target}: no .ll files");
+            for file in files {
+                let ir = std::fs::read_to_string(&file).expect("read ir");
+                let declared = ir
+                    .lines()
+                    .map(|l| l.replace('"', ""))
+                    .filter(|l| l.starts_with("declare") && l.contains("@ignite_rt_tcp_bind_kept("))
+                    .count();
+                assert!(declared <= 1, "{}: {declared} declarations", file.display());
+            }
+        }
+        let mut child = Command::new(&binary)
+            .env("PLAIN_A_PORT", "0")
+            .env("KEPT_A_PORT", "0")
+            .env("PLAIN_B_PORT", "0")
+            .env("KEPT_B_PORT", "0")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap_or_else(|e| panic!("start {}: {e}", binary.display()));
+        let stderr = lines_of(child.stderr.take().expect("stderr"));
+        let mut server = Server {
+            child,
+            stderr,
+            skipped: Vec::new(),
+            port: 0,
+        };
+        let admin = next_listening_port(&mut server);
+        let plain_a = bound_port(&server.stderr, "plain_a", &mut server.skipped);
+        let kept_a = bound_port(&server.stderr, "kept_a", &mut server.skipped);
+        let plain_b = bound_port(&server.stderr, "plain_b", &mut server.skipped);
+        let kept_b = bound_port(&server.stderr, "kept_b", &mut server.skipped);
+        let held = TcpStream::connect(("127.0.0.1", plain_a)).expect("connect plain_a");
+        wait_line(&server.stderr, "waiting", &mut server.skipped, |l| {
+            l == "waiting"
+        });
+        let _idle = greeted_by_internal(target, kept_a, "kept_a before the drain");
+        signal(server.pid(), Signal::SIGTERM);
+        for port in [plain_a, plain_b] {
+            server.port = port;
+            let expected = format!("released 127.0.0.1:{port}");
+            if !server.skipped.contains(&expected) {
+                server.wait_released();
+            }
+        }
+        let late = match server.skipped.iter().find(|l| l.starts_with("late on ")) {
+            Some(line) => line["late on ".len()..]
+                .parse()
+                .unwrap_or_else(|e| panic!("{line}: {e}")),
+            None => bound_port(&server.stderr, "late", &mut server.skipped),
+        };
+        for (name, port) in [("plain_a", plain_a), ("plain_b", plain_b)] {
+            assert!(
+                TcpStream::connect(("127.0.0.1", port)).is_err(),
+                "{target}: a connect to {name} after `released` succeeded"
+            );
+        }
+        for round in 0..2 {
+            for (name, port) in [
+                ("kept_a", kept_a),
+                ("kept_b", kept_b),
+                ("admin", admin),
+                ("late", late),
+            ] {
+                greeted_by_internal(target, port, &format!("{name} in the drain, round {round}"));
+            }
+        }
+        let early = server.child.try_wait().expect("wait");
+        assert!(
+            early.is_none(),
+            "{target}: exited with the plain_a connection open: {early:?}"
+        );
+        held.shutdown(std::net::Shutdown::Write)
+            .expect("end the plain_a connection");
+        let status = wait_exit(&mut server.child, "the drained server");
+        assert_eq!(status.code(), Some(0), "{target}: {status:?}");
+        server.skipped.extend(server.stderr.iter());
+        let released: Vec<&String> = server
+            .skipped
+            .iter()
+            .filter(|l| l.starts_with("released "))
+            .collect();
+        for port in [kept_a, kept_b, admin, late] {
+            let kept = format!("released 127.0.0.1:{port}");
+            assert!(
+                !released.iter().any(|l| **l == kept),
+                "{target}: kept listener {port} was released: {released:?}"
+            );
+        }
+    });
+}
+
 /// Runs of a `flood_*` fixture per target.
 const FLOOD_RUNS: usize = 30;
 

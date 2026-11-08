@@ -1,0 +1,7 @@
+fn open_plain() -> Result<TcpListener, IoError> requires [] = TcpListener.bind("127.0.0.1", 0)
+
+fn open_kept() -> Result<TcpListener, IoError> requires [] = TcpListener.bind_kept("127.0.0.1", 0)
+
+fn open_kept_ok() -> Result<TcpListener, IoError> requires [net.listen] = TcpListener.bind_kept("127.0.0.1", 0)
+
+fn open_kept_wrong() -> Result<TcpListener, IoError> requires [net.connect] = TcpListener.bind_kept("127.0.0.1", 0)
