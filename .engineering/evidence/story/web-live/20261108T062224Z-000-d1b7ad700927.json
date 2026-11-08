@@ -1,0 +1,14 @@
+{
+  "at": "2026-11-08T06:22:24Z",
+  "actor": "human:timo",
+  "artifact": "story:web-live",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "review-result:x-web-scope-round-2",
+    "review": "review-result:x-web-scope-round-2",
+    "outcome": "fixed"
+  }
+}
