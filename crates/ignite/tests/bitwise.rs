@@ -267,6 +267,9 @@ const WORD_AMOUNTS: [i64; 10] = [-1, 0, 31, 32, 33, 1, 7, 64, i64::MIN, i64::MAX
 
 /// One generated fn: its name, the Ignite operator or expression, and Rust's answer.
 type Case<F> = (&'static str, &'static str, F);
+type WordCase = Case<fn(u32, u32) -> u32>;
+type CompareCase = Case<fn(&u32, &u32) -> bool>;
+type ShiftCase = Case<fn(u32, i64) -> u32>;
 
 /// 32.1: a shift by an amount outside `0..32` gives 0; `>>` is logical.
 fn word_shift(op: &str, a: u32, n: i64) -> u32 {
@@ -331,7 +334,7 @@ fn word_program(seed: u64) -> (String, Vec<(String, String)>) {
             word_list(&rights)
         )
     };
-    let words: [Case<fn(u32, u32) -> u32>; 6] = [
+    let words: [WordCase; 6] = [
         ("add_all", "+", u32::wrapping_add),
         ("sub_all", "-", u32::wrapping_sub),
         ("mul_all", "*", u32::wrapping_mul),
@@ -352,7 +355,7 @@ fn word_program(seed: u64) -> (String, Vec<(String, String)>) {
         let results: Vec<u32> = nonzero.iter().map(|&(a, b)| f(a, b)).collect();
         expected.push((name.to_string(), shown_words(&results)));
     }
-    let comparisons: [Case<fn(&u32, &u32) -> bool>; 6] = [
+    let comparisons: [CompareCase; 6] = [
         ("eq_all", "==", u32::eq),
         ("ne_all", "!=", u32::ne),
         ("lt_all", "<", u32::lt),
@@ -376,7 +379,7 @@ fn word_program(seed: u64) -> (String, Vec<(String, String)>) {
             ns.join(", ")
         )
     };
-    let shifts: [Case<fn(u32, i64) -> u32>; 4] = [
+    let shifts: [ShiftCase; 4] = [
         ("shl_all", "words[i] << amounts[i]", |a, n| {
             word_shift("<<", a, n)
         }),

@@ -33,9 +33,9 @@ Current values: run `v0.15.0` on 2026-11-08, commit `6e144f76`.
 |---|---|---|---|---|---|---|
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | eval | 4 | 4 | = |
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | llvm | 0 | 0 | = |
-| 1.2 | differential corpus size | ratchet | eval | 452 | 452 | +29 better |
-| 1.2 | differential corpus size | ratchet | llvm | 688 | 688 | +45 better |
-| 1.2 | differential corpus size | ratchet | rust | 688 | 688 | +45 better |
+| 1.2 | differential corpus size | ratchet | eval | 454 | 452 | +29 better |
+| 1.2 | differential corpus size | ratchet | llvm | 690 | 688 | +45 better |
+| 1.2 | differential corpus size | ratchet | rust | 690 | 688 | +45 better |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/builtins | 112 | 133 | +13 worse |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/patterns | 13 | 13 | = |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | llvm/builtins | 12 | 14 | +1 worse |
@@ -56,7 +56,7 @@ Current values: run `v0.15.0` on 2026-11-08, commit `6e144f76`.
 | 2.2 | accepted programs that fail in a backend | gate | rust | 0 | 0 | = |
 | 2.3 | soundness holes open (effects, ownership, exhaustiveness) | ratchet | | unmeasured: the planning store tags no story as a soundness hole; known open: story:map-put-handle-roots, story:immutable-binding-e006 | | |
 | 2.4 | compiler panics on any input | gate | | unmeasured: no fuzzer yet (out of scope of story:quality-ratchet) | | |
-| 2.5 | diagnostic fixtures (one diagnostic per error site, its span) | ratchet | all | 329 | 329 | +6 better |
+| 2.5 | diagnostic fixtures (one diagnostic per error site, its span) | ratchet | all | 332 | 329 | +6 better |
 | 2.6 | checking time stays linear (limit tests) | gate | all | 5 | 5 | = |
 
 ## 3 Generated code and runtime behaviour
