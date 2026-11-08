@@ -151,9 +151,30 @@ fn syntax_program() {
     compiles("syntax_main", &generated.mains[0].ir);
 }
 
+/// The inline `@ignite.arena_due` of every module releases at the
+/// runtime's threshold, `ignite_rt_arena_due`'s (`ignite_rt::ARENA_DUE`).
+#[test]
+fn the_inline_release_threshold_is_the_runtimes() {
+    let due = ignite_rt::ARENA_DUE;
+    let generated = lower("small");
+    for (name, ir) in [
+        ("program", &generated.program),
+        ("main", &generated.mains[0].ir),
+    ] {
+        for line in [
+            format!("%big = icmp sgt i64 %four, {due}\n"),
+            format!("%limit = select i1 %big, i64 %four, i64 {due}\n"),
+        ] {
+            assert!(ir.contains(&line), "{name} has no {line}");
+        }
+    }
+}
+
 /// `docs/llvm.md` section 4: a loop that modifies `out` copies it across a
-/// due release; a loop that modifies only scalars releases at every
-/// back-edge.
+/// due release; the loop over the bytes, which allocates nothing, releases
+/// nothing (`loops_that_allocate_nothing_take_no_region_check` covers the
+/// release at every back-edge of a loop that allocates and modifies only
+/// scalars).
 #[test]
 fn loops_release_their_region() {
     let generated = lower("small");
@@ -184,7 +205,7 @@ fn loops_release_their_region() {
         repeat
             .matches("call void @ignite.arena_release(i64 ")
             .count(),
-        1
+        0
     );
     let main = &generated.mains[0].ir;
     let entry = &main[main.find("define i32 @main").expect("main is defined")..];
@@ -302,7 +323,7 @@ fn symbols_are_module_qualified() {
     let generated = lower("small");
     let program = &generated.program;
     for symbol in [
-        "define i64 @\"tests.small.area\"(ptr %p0)",
+        "define i64 @\"tests.small.area\"(ptr noalias readonly %p0)",
         "define void @\"tests.small.label\"(ptr %sret, ptr %p0)",
         "define void @\"tests.small.checked\"(ptr %sret, i64 %p0)",
         "define i64 @\"tests.small.SCALE\"()",
@@ -1668,4 +1689,79 @@ fn capabilities() {
             "capabilities_main",
         ],
     );
+}
+
+/// `docs/llvm.md` section 4: a loop whose body calls nothing that can
+/// allocate (inline code, intrinsics, the failure entries and fns of the
+/// module already found not to allocate) takes no region check at its
+/// back-edge; a loop that allocates keeps its release or its due check.
+#[test]
+fn loops_that_allocate_nothing_take_no_region_check() {
+    let generated = lower("hot");
+    let program = &generated.program;
+    for symbol in ["tests.hot.sum", "tests.hot.fill"] {
+        let body = function(program, symbol);
+        assert!(!body.contains("arena_release"), "{body}");
+        assert!(!body.contains("@ignite.arena_due("), "{body}");
+    }
+    let grow = function(program, "tests.hot.grow");
+    assert!(grow.contains("call i1 @ignite.arena_due(i64 "), "{grow}");
+    let widths = function(program, "tests.hot.widths");
+    assert!(
+        widths.contains("call void @ignite.arena_release(i64 "),
+        "{widths}"
+    );
+    compiles("hot_program", program);
+}
+
+/// `docs/llvm.md` section 3: an aggregate parameter the callee only reads
+/// (not consumed, `docs/slice.md` 20.3.3) is `noalias readonly`; a
+/// consumed one carries neither.
+#[test]
+fn read_only_parameters_are_noalias() {
+    let generated = lower("hot");
+    let program = &generated.program;
+    let header = |symbol: &str| {
+        function(program, symbol)
+            .lines()
+            .next()
+            .unwrap()
+            .to_string()
+    };
+    let sum = header("tests.hot.sum");
+    assert!(sum.contains("(ptr noalias readonly %p0)"), "{sum}");
+    let first = header("tests.hot.first");
+    assert!(
+        first.contains("(ptr noalias readonly %p0, ptr noalias readonly %p1)"),
+        "{first}"
+    );
+    for symbol in ["tests.hot.fill", "tests.hot.appended"] {
+        let line = header(symbol);
+        assert!(!line.contains("noalias"), "{line}");
+        assert!(!line.contains("readonly"), "{line}");
+    }
+}
+
+/// `docs/llvm.md` section 5: the failure entries of the runtime are
+/// declared `cold noreturn`, so the checks that call them stay off the
+/// hot path.
+#[test]
+fn failure_entries_are_cold() {
+    let generated = lower("hot");
+    let program = &generated.program;
+    for entry in [
+        "ignite_rt_fail_arith",
+        "ignite_rt_fail_index",
+        "ignite_rt_fail",
+    ] {
+        let line = program
+            .lines()
+            .find(|line| {
+                line.starts_with("declare ")
+                    && (line.contains(&format!("@{entry}("))
+                        || line.contains(&format!("@\"{entry}\"(")))
+            })
+            .unwrap_or_else(|| panic!("{entry} is not declared"));
+        assert!(line.ends_with(") cold noreturn"), "{line}");
+    }
 }

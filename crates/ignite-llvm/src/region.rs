@@ -1,9 +1,64 @@
-//! Mentions of a name and the stream handles a `spawn` moves to its task
-//! (`docs/llvm.md` section 4). The names a body changes in place, which a
+//! Mentions of a name, the stream handles a `spawn` moves to its task and
+//! whether emitted code can allocate (`docs/llvm.md` section 4). The names
+//! a body changes in place, which a
 //! loop deep-copies across a release of its region, and the variable a
 //! place is rooted at are `ignite_types::ownership`'s.
 
 use ignite_syntax::ast::{Expr, ExprKind, Pattern, PatternKind, Stmt, StmtKind};
+
+/// Whether the IR `text` (a function's definition, or what a loop emitted
+/// from its head to its back-edge) holds a call that can allocate in the
+/// arena (`docs/llvm.md` section 4): an indirect call, an `invoke`, or a
+/// direct call of anything but an intrinsic, the inline helpers that only
+/// read the bump state, a runtime entry that never returns or only
+/// compares, and a function `quiet` names (one of the module already found
+/// to allocate nothing). A loop whose body allocates nothing has nothing
+/// to release at its back-edge.
+pub fn allocates(text: &str, quiet: impl Fn(&str) -> bool) -> bool {
+    text.lines().any(|line| {
+        if line.contains(" invoke ") {
+            return true;
+        }
+        let Some(at) = line.find(" call ") else {
+            return false;
+        };
+        let rest = &line[at + " call ".len()..];
+        let Some(start) = rest.find(['@', '%']) else {
+            return true;
+        };
+        let Some(name) = rest[start..].strip_prefix('@') else {
+            return true;
+        };
+        let name = match name.strip_prefix('"') {
+            Some(quoted) => quoted.split('"').next().unwrap_or(""),
+            None => {
+                let end = name
+                    .find(|c: char| !(c.is_ascii_alphanumeric() || "._$-".contains(c)))
+                    .unwrap_or(name.len());
+                &name[..end]
+            }
+        };
+        !(quiet_entry(name) || quiet(name))
+    })
+}
+
+/// The callees every module may call without allocating: intrinsics, the
+/// inline helpers that read the bump state, the runtime entries that end
+/// the task or the process, and the text comparisons.
+fn quiet_entry(name: &str) -> bool {
+    name.starts_with("llvm.")
+        || name.starts_with("ignite_rt_fail")
+        || matches!(
+            name,
+            "ignite.arena_mark"
+                | "ignite.arena_due"
+                | "ignite_rt_arena_state"
+                | "ignite_rt_exit"
+                | "ignite_rt_process_exit"
+                | "ignite_rt_text_eq"
+                | "ignite_rt_text_starts_with"
+        )
+}
 
 /// Whether any of `stmts` mentions the name `name` anywhere (nested blocks,
 /// arms, closures and patterns included). Shadowing is not resolved: a

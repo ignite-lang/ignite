@@ -1,0 +1,51 @@
+package tests.hot
+
+fn mix(a: Int, b: Int) -> Int = a * 31 + b
+
+fn sum(xs: List<Int>) -> Int {
+  var total = 0
+  var i = 0
+  while i < xs.len() {
+    total = mix(total, xs[i])
+    i = i + 1
+  }
+  return total
+}
+
+fn fill(xs: List<Int>) -> List<Int> {
+  var out = xs
+  var i = 0
+  while i < out.len() {
+    out.set(i, i)
+    i = i + 1
+  }
+  return out
+}
+
+fn grow(n: Int) -> List<Int> {
+  var out: List<Int> = []
+  var i = 0
+  while i < n {
+    out.push(i)
+    i = i + 1
+  }
+  return out
+}
+
+fn widths(n: Int) -> Int {
+  var total = 0
+  var i = 0
+  while i < n {
+    total = total + Int.to_text(i).len()
+    i = i + 1
+  }
+  return total
+}
+
+fn first(name: Text, rest: List<Text>) -> Int = name.len() + rest.len()
+
+fn appended(xs: List<Int>, x: Int) -> List<Int> {
+  var out = xs
+  out.push(x)
+  return out
+}

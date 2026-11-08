@@ -21,9 +21,15 @@
 //! socket and no handle value is issued twice. A slot whose generation is
 //! used up is not reused again. Free slots wait on a list behind one lock,
 //! taken only by `register` and `tcp_release`.
+//!
+//! The stream operations take no slot lock at all: each thread reuses a
+//! clone of the stream it used last while the slot's `live` value still
+//! names its handle ([`with_stream`]). The lock and the reference count
+//! per read and write were 4.75 % of the terminal server's user time
+//! (2026-11-08).
 
 use std::cell::RefCell;
-use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicI64, AtomicPtr, AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use ignite_io::{
@@ -111,7 +117,7 @@ pub extern "C" fn ignite_rt_tcp_retain(handle: i64) {
         let Some(slot) = slot_at(index, false) else {
             return;
         };
-        let mut entry = lock(slot);
+        let mut entry = lock(&slot.entry);
         if entry.generation == generation && entry.handle.is_some() {
             entry.owners += 1;
         }
@@ -170,7 +176,13 @@ struct Entry {
     owners: u32,
 }
 
-type Slot = Mutex<Entry>;
+/// One slot: its entry behind a lock, and the value of the handle it holds
+/// (0 when empty), which [`with_stream`] reads without the lock.
+#[derive(Default)]
+struct Slot {
+    live: AtomicI64,
+    entry: Mutex<Entry>,
+}
 
 /// Slots in segment 0.
 const FIRST: usize = 64;
@@ -209,9 +221,7 @@ fn slot_at(index: usize, create: bool) -> Option<&'static Slot> {
         if !create {
             return None;
         }
-        let fresh: Box<[Slot]> = (0..segment_len(segment))
-            .map(|_| Mutex::new(Entry::default()))
-            .collect();
+        let fresh: Box<[Slot]> = (0..segment_len(segment)).map(|_| Slot::default()).collect();
         let fresh = Box::into_raw(fresh) as *mut Slot;
         match cell.compare_exchange(
             std::ptr::null_mut(),
@@ -265,10 +275,85 @@ pub(crate) fn register(handle: Handle) -> i64 {
         crate::process::die("handle table full");
     }
     let slot = slot_at(index, true).unwrap_or_else(|| crate::process::die("handle table full"));
-    let mut entry = lock(slot);
+    let mut entry = lock(&slot.entry);
     entry.handle = Some(handle);
     entry.owners = 1;
-    encode(index, entry.generation)
+    let value = encode(index, entry.generation);
+    slot.live.store(value, Ordering::Release);
+    value
+}
+
+/// Whether `handle` is the handle its slot holds now. A handle value is
+/// issued once, so a match means the same registration is still open.
+fn is_live(handle: i64) -> bool {
+    decode(handle)
+        .and_then(|(index, _)| slot_at(index, false))
+        .is_some_and(|slot| slot.live.load(Ordering::Acquire) == handle)
+}
+
+thread_local! {
+    /// The stream this thread used last, by handle: a clone taken from the
+    /// table once and reused while its handle stays live, so a read or
+    /// write takes no slot lock and moves no reference count. Dropped when
+    /// this thread releases that handle ([`release_owner`]) and when its
+    /// task ends ([`task_ended`]); a task uses only the streams it owns,
+    /// and releases them on its own thread, so the clone never keeps a
+    /// socket open past its last owner's release.
+    static CACHED: RefCell<Option<(i64, TcpStream)>> = const { RefCell::new(None) };
+}
+
+/// `f` applied to the stream `handle` names: this thread's cached clone
+/// when it is that handle's and the handle is live, else a clone from the
+/// table that replaces the cached one.
+fn with_stream<R>(
+    handle: i64,
+    f: impl FnOnce(&TcpStream) -> Result<R, IoError>,
+) -> Result<R, IoError> {
+    let mut f = Some(f);
+    let cached = CACHED.try_with(|cell| {
+        let mut cached = cell.try_borrow_mut().ok()?;
+        let hit = matches!(&*cached, Some((held, _)) if *held == handle) && is_live(handle);
+        if !hit {
+            match stream(handle) {
+                Ok(found) => *cached = Some((handle, found)),
+                Err(error) => return Some(Err(error)),
+            }
+        }
+        let (_, found) = cached.as_ref()?;
+        f.take().map(|f| f(found))
+    });
+    match (cached, f) {
+        (Ok(Some(result)), _) => result,
+        (_, Some(f)) => f(&stream(handle)?),
+        (_, None) => Err(IoError::new(String::from("the stream was lost"))),
+    }
+}
+
+/// Drop this thread's cached clone of `handle`'s stream, if it holds one.
+fn forget(handle: i64) {
+    let _ = CACHED.try_with(|cell| {
+        if let Ok(mut cached) = cell.try_borrow_mut()
+            && matches!(&*cached, Some((held, _)) if *held == handle)
+        {
+            *cached = None;
+        }
+    });
+}
+
+/// The end of the current task on this thread: the cached stream and the
+/// kept read buffer go, so an idle worker holds neither a socket nor
+/// 64 KiB of buffer.
+pub(crate) fn task_ended() {
+    let _ = CACHED.try_with(|cell| {
+        if let Ok(mut cached) = cell.try_borrow_mut() {
+            *cached = None;
+        }
+    });
+    let _ = READ_BUFFER.try_with(|cell| {
+        if let Ok(mut buffer) = cell.try_borrow_mut() {
+            *buffer = Vec::new();
+        }
+    });
 }
 
 /// [`lookup`], for the channel entries (`crate::channel`).
@@ -283,7 +368,7 @@ fn lookup(handle: i64) -> Result<Handle, IoError> {
         decode(handle).ok_or_else(|| IoError::new(format!("{handle} is not a handle")))?;
     let slot =
         slot_at(index, false).ok_or_else(|| IoError::new(format!("{handle} is not a handle")))?;
-    let entry = lock(slot);
+    let entry = lock(&slot.entry);
     if entry.generation == generation
         && let Some(found) = &entry.handle
     {
@@ -427,7 +512,7 @@ pub extern "C" fn ignite_rt_tcp_peer(out: *mut crate::IgniteEndpoint, handle: i6
 /// 26.2).
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_tcp_timed_out(handle: i64) -> i8 {
-    crate::entry(move || i8::from(stream(handle).is_ok_and(|s| s.timed_out())))
+    crate::entry(move || i8::from(with_stream(handle, |s| Ok(s.timed_out())).unwrap_or(false)))
 }
 
 /// Largest buffer a single read allocates, as in `ignite-io`.
@@ -444,30 +529,34 @@ pub extern "C" fn ignite_rt_tcp_read(
     err: *mut IgniteIoError,
 ) -> i32 {
     crate::entry(move || {
-        let read = stream(handle)
-            .and_then(|stream| read_into_arena(maximum, |buffer| stream.read_into(buffer)));
+        let read = with_stream(handle, |stream| {
+            read_into_arena(maximum, |buffer| stream.read_into(buffer))
+        });
         status(read, out, err)
     })
 }
 
-/// Read buffers up to this size stay with their thread for the next read
-/// over [`arena::LARGE`] (a server commonly reads 64 KiB at a time).
+/// Read buffers up to this size stay with their thread, until its task
+/// ends, for the next read that does not go in place (the std servers
+/// read 16 to 64 KiB at a time).
 const KEPT_READ_BUFFER: usize = 64 * 1024;
 
 thread_local! {
-    /// The buffer a read over [`arena::LARGE`] goes to before its bytes
-    /// are copied into the arena.
+    /// The buffer a read that does not go in place goes to before its
+    /// bytes are copied into the arena.
     static READ_BUFFER: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
 }
 
 /// One read by `read_into` of up to `maximum` bytes (clamped to `1..=1
-/// MiB`). Zero bytes is `Eof`. Up to [`arena::LARGE`] the bytes go straight
-/// into the task's arena: a block of `maximum` bytes in the current chunk
-/// whose unused tail goes back to it. A larger request would be a block of
-/// its own (a zeroed `malloc` block that keeps all `maximum` bytes and
-/// leaves no chunk for the inline allocator), so it reads into this
-/// thread's buffer (kept up to 64 KiB) and copies the bytes read into the
-/// arena.
+/// MiB`). Zero bytes is `Eof`. When `maximum` fits in what is left of the
+/// current chunk the bytes go straight into it: a block of `maximum`
+/// bytes whose unused tail goes back. Otherwise the read goes into this
+/// thread's buffer (kept up to 64 KiB until the task ends) and the bytes
+/// read are copied into the arena: a request over [`arena::LARGE`] would
+/// be a block of its own (a zeroed `malloc` block that keeps all `maximum`
+/// bytes and leaves no chunk for the inline allocator), and a smaller one
+/// would start a new chunk for headroom it mostly gives back (a server
+/// reading 16 KiB at a time held two touched chunks per connection).
 pub(crate) fn read_into_arena(
     maximum: i64,
     read_into: impl FnOnce(&mut [u8]) -> Result<usize, IoError>,
@@ -475,7 +564,7 @@ pub(crate) fn read_into_arena(
     let size = usize::try_from(maximum.max(1))
         .unwrap_or(MAX_READ)
         .min(MAX_READ);
-    if size > arena::LARGE {
+    if size > arena::LARGE || size > arena::room() {
         return read_through_buffer(size, read_into);
     }
     let block = arena::alloc(size, 1);
@@ -501,7 +590,7 @@ pub(crate) fn read_into_arena(
     })
 }
 
-/// [`read_into_arena`] of `size` bytes over [`arena::LARGE`]: into the
+/// [`read_into_arena`] of `size` bytes that does not go in place: into the
 /// thread's read buffer, or a buffer of its own for a size over 64 KiB
 /// or while the thread's buffer is in use, then `count` bytes copied into
 /// the arena.
@@ -547,7 +636,7 @@ pub extern "C" fn ignite_rt_tcp_write_all(
     err: *mut IgniteIoError,
 ) -> i32 {
     crate::entry(move || {
-        let written = stream(handle).and_then(|stream| stream.write_from(bytes(data)));
+        let written = with_stream(handle, |stream| stream.write_from(bytes(data)));
         status(written, std::ptr::null_mut(), err)
     })
 }
@@ -562,7 +651,7 @@ pub extern "C" fn ignite_rt_tcp_set_idle_timeout(
     err: *mut IgniteIoError,
 ) -> i32 {
     crate::entry(move || {
-        let set = stream(handle).and_then(|stream| stream.set_idle_timeout(ms));
+        let set = with_stream(handle, |stream| stream.set_idle_timeout(ms));
         status(set, std::ptr::null_mut(), err)
     })
 }
@@ -577,7 +666,7 @@ pub extern "C" fn ignite_rt_tcp_write_urgent(
     err: *mut IgniteIoError,
 ) -> i32 {
     crate::entry(move || {
-        let written = stream(handle).and_then(|stream| stream.write_urgent_from(bytes(data)));
+        let written = with_stream(handle, |stream| stream.write_urgent_from(bytes(data)));
         status(written, std::ptr::null_mut(), err)
     })
 }
@@ -592,7 +681,7 @@ pub extern "C" fn ignite_rt_tcp_urgent_pending(
     err: *mut IgniteIoError,
 ) -> i32 {
     crate::entry(move || {
-        let pending = stream(handle).and_then(|stream| stream.urgent_pending());
+        let pending = with_stream(handle, |stream| stream.urgent_pending());
         status(pending.map(i8::from), out, err)
     })
 }
@@ -602,7 +691,7 @@ pub extern "C" fn ignite_rt_tcp_urgent_pending(
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_tcp_close(handle: i64, err: *mut IgniteIoError) -> i32 {
     crate::entry(move || {
-        let closed = stream(handle).and_then(|stream| stream.close());
+        let closed = with_stream(handle, |stream| stream.close());
         status(closed, std::ptr::null_mut(), err)
     })
 }
@@ -631,7 +720,7 @@ pub(crate) fn release_waited_child(handle: i64, id: i64) {
 /// The process id kept for `handle` by [`release_waited_child`].
 pub(crate) fn waited_child_id(handle: i64) -> Option<i64> {
     let (index, generation) = decode(handle)?;
-    let entry = lock(slot_at(index, false)?);
+    let entry = lock(&slot_at(index, false)?.entry);
     entry
         .waited
         .iter()
@@ -657,15 +746,17 @@ fn release(handle: i64, waited_child: Option<i64>) {
     release_owner(handle, waited_child);
 }
 
-/// Drop one owner of `handle`; the last empties its slot.
+/// Drop one owner of `handle`; the last empties its slot. This thread's
+/// cached clone of it goes first, so the last release closes the socket.
 fn release_owner(handle: i64, waited_child: Option<i64>) {
+    forget(handle);
     let Some((index, generation)) = decode(handle) else {
         return;
     };
     let Some(slot) = slot_at(index, false) else {
         return;
     };
-    let mut entry = lock(slot);
+    let mut entry = lock(&slot.entry);
     if entry.generation != generation || entry.handle.is_none() {
         return;
     }
@@ -676,6 +767,7 @@ fn release_owner(handle: i64, waited_child: Option<i64>) {
     if let Some(id) = waited_child {
         entry.waited.push((generation, id));
     }
+    slot.live.store(0, Ordering::Release);
     let released = entry.handle.take();
     entry.generation += 1;
     let reusable = entry.generation < GENERATIONS;
@@ -780,6 +872,138 @@ mod tests {
         assert_eq!(ignite_rt_own_mark(), inner_mark);
         ignite_rt_own_release(outer_mark);
         assert_eq!(ignite_rt_own_mark(), outer_mark);
+    }
+
+    /// A connected pair: the server end registered as a stream handle and
+    /// the client end as a plain socket.
+    fn stream_pair() -> (i64, std::net::TcpStream) {
+        let listener = TcpListener::bind("127.0.0.1".to_string(), 0).unwrap();
+        let client =
+            std::net::TcpStream::connect(("127.0.0.1", listener.local_port() as u16)).unwrap();
+        let server = listener.accept().unwrap();
+        (register(Handle::Stream(server)), client)
+    }
+
+    /// One `tcp_read` of up to 64 bytes: the bytes, empty on `Eof`, or the
+    /// error's message.
+    fn read(handle: i64) -> Result<Vec<u8>, String> {
+        let mut input = IgniteInput::eof();
+        let mut error = IgniteIoError {
+            message: IgniteList::from_bytes(b""),
+            exit_code: 0,
+        };
+        if ignite_rt_tcp_read(handle, 64, &mut input, &mut error) != 0 {
+            return Err(String::from_utf8_lossy(bytes(&error.message)).into_owned());
+        }
+        Ok(if input.tag == 0 {
+            bytes(&input.data).to_vec()
+        } else {
+            Vec::new()
+        })
+    }
+
+    /// A read whose maximum does not fit in what is left of the current
+    /// chunk does not start a new chunk for it: its bytes go through the
+    /// thread's buffer into the current one. One that fits reads in place.
+    #[test]
+    fn a_read_takes_no_new_chunk_for_its_headroom() {
+        let reserved = crate::arena::arena_reserved;
+        crate::arena::ignite_rt_task_end();
+        let first = crate::arena::ignite_rt_alloc(8, 8);
+        let held = reserved();
+        crate::arena::ignite_rt_alloc(60_000, 1);
+        let read = read_into_arena(16_384, |buffer| {
+            buffer[..5].copy_from_slice(b"hello");
+            Ok(5)
+        })
+        .unwrap();
+        assert_eq!(bytes(&read.data), b"hello");
+        assert_eq!(reserved(), held, "a chunk was taken for the read");
+        crate::arena::ignite_rt_task_end();
+        let first_again = crate::arena::ignite_rt_alloc(8, 8);
+        let in_place = read_into_arena(16_384, |buffer| {
+            buffer[..2].copy_from_slice(b"hi");
+            Ok(2)
+        })
+        .unwrap();
+        assert_eq!(in_place.data.ptr as usize, first_again as usize + 8);
+        let _ = first;
+        crate::arena::ignite_rt_task_end();
+    }
+
+    /// A stream operation does not take its slot's lock: a read on a
+    /// handle this thread used before goes ahead while another thread
+    /// holds the slot.
+    #[test]
+    fn a_stream_operation_takes_no_slot_lock() {
+        use std::io::Write;
+        use std::sync::mpsc::channel;
+        let (handle, mut client) = stream_pair();
+        let (warm, warmed) = channel();
+        let (go, went) = channel::<()>();
+        let (done, finished) = channel();
+        let reader = std::thread::spawn(move || {
+            let first = read(handle);
+            warm.send(first).unwrap();
+            went.recv().unwrap();
+            done.send(read(handle)).unwrap();
+        });
+        client.write_all(b"one").unwrap();
+        assert_eq!(warmed.recv().unwrap(), Ok(b"one".to_vec()));
+        let (index, _) = decode(handle).unwrap();
+        let held = lock(&slot_at(index, false).unwrap().entry);
+        go.send(()).unwrap();
+        client.write_all(b"two").unwrap();
+        let second = finished.recv_timeout(std::time::Duration::from_secs(5));
+        drop(held);
+        reader.join().unwrap();
+        assert_eq!(
+            second,
+            Ok(Ok(b"two".to_vec())),
+            "the read waited for the slot"
+        );
+        ignite_rt_tcp_release(handle);
+    }
+
+    /// Releasing the last owner closes the socket also after the handle
+    /// was used, here by two owners on two threads, the other of which
+    /// stays alive; a later use is the released error on both threads.
+    #[test]
+    fn a_used_stream_closes_at_its_last_release() {
+        use std::io::{Read, Write};
+        use std::sync::mpsc::channel;
+        let (handle, mut client) = stream_pair();
+        ignite_rt_tcp_retain(handle);
+        client.write_all(b"ping").unwrap();
+        assert_eq!(read(handle), Ok(b"ping".to_vec()));
+        let (used, uses) = channel();
+        let (check, checks) = channel::<()>();
+        let other = std::thread::spawn(move || {
+            used.send(read(handle)).unwrap();
+            ignite_rt_tcp_release(handle);
+            checks.recv().unwrap();
+            read(handle)
+        });
+        client.write_all(b"pong").unwrap();
+        assert_eq!(uses.recv().unwrap(), Ok(b"pong".to_vec()));
+        ignite_rt_tcp_release(handle);
+        let stale = read(handle).expect_err("a released stream is an error");
+        assert!(stale.contains("was released"), "{stale}");
+        client
+            .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+            .unwrap();
+        let mut rest = Vec::new();
+        assert_eq!(
+            client.read_to_end(&mut rest).unwrap(),
+            0,
+            "the socket closed"
+        );
+        check.send(()).unwrap();
+        let stale = other
+            .join()
+            .unwrap()
+            .expect_err("released on the other thread");
+        assert!(stale.contains("was released"), "{stale}");
     }
 
     #[test]

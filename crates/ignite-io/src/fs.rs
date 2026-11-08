@@ -2,22 +2,25 @@
 //! `Directory`, its resource launch and its test-only constructor.
 //!
 //! Confinement is lexical first (an absolute path, a `..` component or a
-//! NUL is refused before any IO) and then structural: every path is walked
-//! from the root's descriptor one component at a time with `openat` and
+//! NUL is refused before any IO) and then structural: a path is opened
+//! from the root's descriptor by one `openat2` with `RESOLVE_BENEATH |
+//! RESOLVE_NO_SYMLINKS`, which fails on a symbolic link at any component
+//! and on any step out of the root. Where that call fails, or the kernel
+//! lacks it, the path is walked one component at a time with `openat` and
 //! `O_NOFOLLOW`, so no step follows a symbolic link and a component
 //! swapped for one between two steps is refused at the step that opens it
-//! (D4, row 4). Every symbolic link is refused, inside links too (21.15).
+//! (D4, row 4); the walk also names the component an error is about.
+//! Every symbolic link is refused, inside links too (21.15).
 
 use std::ffi::{CStr, CString};
 use std::io::Read;
-use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
 use std::os::unix::fs::PermissionsExt;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use nix::dir::{Dir, Type};
 use nix::errno::Errno;
-use nix::fcntl::{AtFlags, OFlag, openat, renameat};
+use nix::fcntl::{AtFlags, OFlag, OpenHow, ResolveFlag, openat, openat2, renameat};
 use nix::sys::stat::{FileStat, Mode, SFlag, fstat, fstatat, mkdirat};
 use nix::unistd::{UnlinkatFlags, unlinkat};
 
@@ -44,6 +47,33 @@ pub struct Directory {
 struct Root {
     descriptor: OwnedFd,
     path: String,
+    /// Resolve by the walk alone, as on a kernel without `openat2`; set
+    /// by tests only.
+    walk_only: bool,
+}
+
+/// Set once `openat2` answered `ENOSYS` (a kernel before 5.6) or `EPERM`
+/// (a seccomp filter that refuses it): from then on every path is walked.
+static BENEATH_REFUSED: AtomicBool = AtomicBool::new(false);
+
+/// The `openat2` resolution: no symbolic link at any component, magic
+/// links included, and no step out of the starting directory.
+const BENEATH: ResolveFlag = ResolveFlag::RESOLVE_BENEATH.union(ResolveFlag::RESOLVE_NO_SYMLINKS);
+
+/// The directory an operation acts in: the root's own descriptor, or one
+/// opened for the path.
+enum Parent<'d> {
+    Root(BorrowedFd<'d>),
+    Opened(OwnedFd),
+}
+
+impl Parent<'_> {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        match self {
+            Parent::Root(fd) => *fd,
+            Parent::Opened(fd) => fd.as_fd(),
+        }
+    }
 }
 
 /// A path checked lexically: its components without empty ones and `.`.
@@ -64,6 +94,20 @@ impl Checked<'_> {
     /// The path up to and including component `index`.
     fn prefix(&self, index: usize) -> String {
         self.components[..=index].join("/")
+    }
+
+    /// The path as given up to the end of its first `count` components,
+    /// `.` for none: the same directories, with the empty and `.`
+    /// components the kernel skips as well.
+    fn through(&self, count: usize) -> &str {
+        match count.checked_sub(1) {
+            None => ".",
+            Some(index) => {
+                let last = self.components[index];
+                let end = last.as_ptr() as usize - self.given.as_ptr() as usize + last.len();
+                &self.given[..end]
+            }
+        }
     }
 
     fn link(&self, index: usize) -> IoError {
@@ -135,33 +179,72 @@ fn reopen(parent: BorrowedFd<'_>, path: &Checked<'_>) -> Result<OwnedFd, IoError
 
 /// The names in `directory` without `.` and `..`, as the raw bytes the OS
 /// gave, each with whether it is a directory (never following a link), in
-/// byte order; at most `limit` when one is given.
+/// byte order; at most `limit` when one is given. Read from the
+/// descriptor's current offset with `getdents64` itself: `fdopendir` would
+/// add an `fstat` and two `fcntl` to every listing, and its iterator a
+/// `lseek` back.
 fn entries(
-    directory: OwnedFd,
+    directory: BorrowedFd<'_>,
     path: &Checked<'_>,
     limit: Option<usize>,
 ) -> Result<Vec<(CString, bool)>, IoError> {
-    let mut dir = Dir::from_fd(directory).map_err(|e| path.os(e))?;
-    let mut read = Vec::new();
-    for entry in dir.iter() {
-        let entry = entry.map_err(|e| path.os(e))?;
-        let name = entry.file_name();
-        if name.to_bytes() == b"." || name.to_bytes() == b".." {
-            continue;
+    // `struct linux_dirent64`: `d_ino` (8 bytes), `d_off` (8), `d_reclen`
+    // (2), `d_type` (1), then the name and its NUL; records are 8-aligned,
+    // so the buffer is made of `u64`.
+    const RECORD_LENGTH: usize = 16;
+    const TYPE: usize = 18;
+    const NAME: usize = 19;
+    let mut buffer = vec![0u64; 2048];
+    let mut read: Vec<(CString, u8)> = Vec::new();
+    loop {
+        // SAFETY: the kernel writes at most the buffer's length in bytes
+        // into it, and the buffer outlives the call.
+        let filled = unsafe {
+            nix::libc::syscall(
+                nix::libc::SYS_getdents64,
+                directory.as_raw_fd(),
+                buffer.as_mut_ptr(),
+                buffer.len() * size_of::<u64>(),
+            )
+        };
+        let filled = Errno::result(filled).map_err(|e| path.os(e))? as usize;
+        if filled == 0 {
+            break;
         }
-        if limit == Some(read.len()) {
-            return Err(path.error(format_args!("more than {ENTRY_LIMIT} entries")));
+        // SAFETY: the first `filled` bytes of the buffer were written by
+        // the call above, and `u8` has no alignment.
+        let bytes = unsafe { std::slice::from_raw_parts(buffer.as_ptr().cast::<u8>(), filled) };
+        let mut offset = 0;
+        while offset < filled {
+            let malformed = || path.error("malformed directory entry");
+            let record = bytes
+                .get(offset + RECORD_LENGTH..offset + TYPE)
+                .map(|b| usize::from(u16::from_ne_bytes([b[0], b[1]])))
+                .filter(|&length| length > NAME && offset + length <= filled)
+                .ok_or_else(malformed)?;
+            let name = CStr::from_bytes_until_nul(&bytes[offset + NAME..offset + record])
+                .map_err(|_| malformed())?;
+            let kind = bytes[offset + TYPE];
+            offset += record;
+            if name.to_bytes() == b"." || name.to_bytes() == b".." {
+                continue;
+            }
+            if limit == Some(read.len()) {
+                return Err(path.error(format_args!("more than {ENTRY_LIMIT} entries")));
+            }
+            read.push((name.to_owned(), kind));
         }
-        read.push((name.to_owned(), entry.file_type()));
     }
     let mut found: Vec<(CString, bool)> = read
         .into_iter()
         .map(|(name, kind)| {
             let directory = match kind {
-                Some(Type::Directory) => true,
-                Some(_) => false,
-                None => fstatat(dir.as_fd(), name.as_c_str(), AtFlags::AT_SYMLINK_NOFOLLOW)
-                    .is_ok_and(|stat| is_directory(&stat)),
+                nix::libc::DT_DIR => true,
+                nix::libc::DT_UNKNOWN => {
+                    fstatat(directory, name.as_c_str(), AtFlags::AT_SYMLINK_NOFOLLOW)
+                        .is_ok_and(|stat| is_directory(&stat))
+                }
+                _ => false,
             };
             (name, directory)
         })
@@ -218,7 +301,11 @@ impl Directory {
                 .into_string()
                 .map_err(|_| refuse(&"not UTF-8"))?;
             Ok(Directory {
-                root: Arc::new(Root { descriptor, path }),
+                root: Arc::new(Root {
+                    descriptor,
+                    path,
+                    walk_only: false,
+                }),
             })
         })();
         opened.map_err(|e: IoError| e.with_exit_code(2))
@@ -260,17 +347,65 @@ impl Directory {
         }
     }
 
+    /// The same root resolved by the walk alone, as on a kernel without
+    /// `openat2`.
+    #[cfg(test)]
+    fn walking(&self) -> Directory {
+        let descriptor = self.root.descriptor.try_clone().unwrap();
+        Directory {
+            root: Arc::new(Root {
+                descriptor,
+                path: self.root.path.clone(),
+                walk_only: true,
+            }),
+        }
+    }
+
     fn descriptor(&self) -> BorrowedFd<'_> {
         self.root.descriptor.as_fd()
     }
 
-    /// The descriptor of the directory holding the last component, walked
-    /// from the root; `None` when the path names the root.
-    fn parent<'p>(&self, path: &Checked<'p>) -> Result<Option<(OwnedFd, &'p str)>, IoError> {
+    /// `relative` opened under the root with `flags` by one `openat2` that
+    /// refuses a symbolic link at any component and any step out of the
+    /// root. `None` when it fails or the kernel lacks it: the caller then
+    /// walks, which either succeeds after all (the path changed in
+    /// between) or fails with the reason 21.4 words, naming the component.
+    fn beneath(&self, relative: &str, flags: OFlag) -> Option<OwnedFd> {
+        if self.root.walk_only || BENEATH_REFUSED.load(Ordering::Relaxed) {
+            return None;
+        }
+        let how = OpenHow::new()
+            .flags(flags | OFlag::O_CLOEXEC)
+            .resolve(BENEATH);
+        match openat2(self.descriptor(), relative, how) {
+            Ok(fd) => Some(fd),
+            Err(Errno::ENOSYS | Errno::EPERM) => {
+                BENEATH_REFUSED.store(true, Ordering::Relaxed);
+                None
+            }
+            Err(_) => None,
+        }
+    }
+
+    /// A descriptor of the directory made of the first `count` components,
+    /// with an offset of its own.
+    fn directory(&self, path: &Checked<'_>, count: usize) -> Result<OwnedFd, IoError> {
+        match self.beneath(path.through(count), DIRECTORY_FLAGS) {
+            Some(fd) => Ok(fd),
+            None => self.walk(path, count),
+        }
+    }
+
+    /// The directory holding the last component, the root's own descriptor
+    /// when that is the root; `None` when the path names the root.
+    fn parent<'p>(&self, path: &Checked<'p>) -> Result<Option<(Parent<'_>, &'p str)>, IoError> {
         let Some((last, _)) = path.components.split_last() else {
             return Ok(None);
         };
-        let parent = self.walk(path, path.components.len() - 1)?;
+        let parent = match path.components.len() - 1 {
+            0 => Parent::Root(self.descriptor()),
+            count => Parent::Opened(self.directory(path, count)?),
+        };
         Ok(Some((parent, last)))
     }
 
@@ -286,15 +421,23 @@ impl Directory {
     /// The file's bytes, at most 16 MiB.
     pub fn read_file(&self, path: impl AsRef<str>) -> Result<Vec<u8>, IoError> {
         let path = check(path.as_ref())?;
-        let Some((parent, name)) = self.parent(&path)? else {
+        if path.components.is_empty() {
             return Err(path.error("not a regular file"));
-        };
+        }
         let last = path.components.len() - 1;
         let flags = OFlag::O_RDONLY | OFlag::O_NOFOLLOW | OFlag::O_NONBLOCK | OFlag::O_CLOEXEC;
-        let fd = match openat(parent.as_fd(), name, flags, Mode::empty()) {
-            Ok(fd) => fd,
-            Err(Errno::ELOOP) => return Err(path.link(last)),
-            Err(errno) => return Err(path.os(errno)),
+        let fd = match self.beneath(path.through(last + 1), flags) {
+            Some(fd) => fd,
+            None => {
+                let Some((parent, name)) = self.parent(&path)? else {
+                    return Err(path.error("not a regular file"));
+                };
+                match openat(parent.as_fd(), name, flags, Mode::empty()) {
+                    Ok(fd) => fd,
+                    Err(Errno::ELOOP) => return Err(path.link(last)),
+                    Err(errno) => return Err(path.os(errno)),
+                }
+            }
         };
         let stat = fstat(&fd).map_err(|e| path.os(e))?;
         if !is_regular(&stat) {
@@ -370,8 +513,8 @@ impl Directory {
     /// (`path <p>: entry <name> is not UTF-8`).
     pub fn read_directory(&self, path: impl AsRef<str>) -> Result<Vec<String>, IoError> {
         let path = check(path.as_ref())?;
-        let directory = self.walk(&path, path.components.len())?;
-        entries(directory, &path, Some(ENTRY_LIMIT))?
+        let directory = self.directory(&path, path.components.len())?;
+        entries(directory.as_fd(), &path, Some(ENTRY_LIMIT))?
             .into_iter()
             .map(|(name, directory)| {
                 let text = name.into_string().map_err(|e| {
@@ -386,9 +529,17 @@ impl Directory {
             .collect()
     }
 
-    /// Create the directory and its missing parents.
+    /// Create the directory and its missing parents. A path that is a
+    /// directory already, with no link on the way, is one `openat2`.
     pub fn create_directory(&self, path: impl AsRef<str>) -> Result<(), IoError> {
         let path = check(path.as_ref())?;
+        let existing = OFlag::O_PATH | OFlag::O_DIRECTORY;
+        if self
+            .beneath(path.through(path.components.len()), existing)
+            .is_some()
+        {
+            return Ok(());
+        }
         let mut current = reopen(self.descriptor(), &path)?;
         for (index, name) in path.components.iter().enumerate() {
             match mkdirat(current.as_fd(), *name, Mode::from_bits_truncate(0o755)) {
@@ -454,8 +605,7 @@ struct Level {
 
 impl Level {
     fn open(descriptor: OwnedFd, path: &Checked<'_>) -> Result<Level, IoError> {
-        let listing = descriptor.try_clone().map_err(|e| path.error(reason(&e)))?;
-        let pending = entries(listing, path, None)?;
+        let pending = entries(descriptor.as_fd(), path, None)?;
         Ok(Level {
             descriptor,
             pending,
@@ -554,6 +704,7 @@ mod tests {
     /// removed with its contents when dropped.
     struct Scratch {
         path: PathBuf,
+        walk: bool,
     }
 
     impl Scratch {
@@ -565,7 +716,16 @@ mod tests {
             let _ = std::fs::remove_dir_all(&path);
             std::fs::create_dir_all(path.join("root")).unwrap();
             std::fs::create_dir_all(path.join("outside")).unwrap();
-            Scratch { path }
+            Scratch { path, walk: false }
+        }
+
+        /// Two scratch directories: the first's `Directory` resolves with
+        /// `openat2` where the kernel has it, the second's is forced onto
+        /// the `openat` walk, the fallback of kernels before 5.6.
+        fn both(name: &str) -> [Scratch; 2] {
+            let mut walking = Scratch::new(&format!("{name}-walk"));
+            walking.walk = true;
+            [Scratch::new(name), walking]
         }
 
         fn root(&self) -> PathBuf {
@@ -577,7 +737,12 @@ mod tests {
         }
 
         fn directory(&self) -> Directory {
-            Directory::open(self.root().to_str().unwrap(), false).unwrap()
+            let directory = Directory::open(self.root().to_str().unwrap(), false).unwrap();
+            if self.walk {
+                directory.walking()
+            } else {
+                directory
+            }
         }
     }
 
@@ -604,141 +769,145 @@ mod tests {
     /// every component, and `remove` removes a link, not its target.
     #[test]
     fn symlinks_out_are_refused() {
-        let scratch = Scratch::new("links");
-        std::fs::create_dir(scratch.outside().join("dir")).unwrap();
-        std::fs::write(scratch.outside().join("dir/secret"), b"secret").unwrap();
-        std::fs::write(scratch.outside().join("file"), b"outside bytes").unwrap();
-        std::os::unix::fs::symlink(scratch.outside().join("dir"), scratch.root().join("out"))
-            .unwrap();
-        std::os::unix::fs::symlink(scratch.outside().join("file"), scratch.root().join("f"))
-            .unwrap();
-        let d = scratch.directory();
-        assert_eq!(
-            message(d.read_file("out/secret")),
-            "path out/secret: symbolic link out"
-        );
-        assert_eq!(
-            message(d.write_file("out/new", b"x")),
-            "path out/new: symbolic link out"
-        );
-        assert_eq!(
-            message(d.read_directory("out")),
-            "path out: symbolic link out"
-        );
-        assert_eq!(
-            message(d.create_directory("out/d")),
-            "path out/d: symbolic link out"
-        );
-        assert_eq!(message(d.read_file("f")), "path f: symbolic link f");
-        assert_eq!(message(d.write_file("f", b"x")), "path f: symbolic link f");
-        assert_eq!(names(&scratch.outside().join("dir")), ["secret"]);
-        assert_eq!(
-            std::fs::read(scratch.outside().join("file")).unwrap(),
-            b"outside bytes"
-        );
-        d.remove("f").unwrap();
-        assert!(std::fs::symlink_metadata(scratch.root().join("f")).is_err());
-        assert_eq!(
-            std::fs::read(scratch.outside().join("file")).unwrap(),
-            b"outside bytes"
-        );
-        assert_eq!(names(&scratch.root()), ["out"]);
+        for scratch in Scratch::both("links") {
+            std::fs::create_dir(scratch.outside().join("dir")).unwrap();
+            std::fs::write(scratch.outside().join("dir/secret"), b"secret").unwrap();
+            std::fs::write(scratch.outside().join("file"), b"outside bytes").unwrap();
+            std::os::unix::fs::symlink(scratch.outside().join("dir"), scratch.root().join("out"))
+                .unwrap();
+            std::os::unix::fs::symlink(scratch.outside().join("file"), scratch.root().join("f"))
+                .unwrap();
+            let d = scratch.directory();
+            assert_eq!(
+                message(d.read_file("out/secret")),
+                "path out/secret: symbolic link out"
+            );
+            assert_eq!(
+                message(d.write_file("out/new", b"x")),
+                "path out/new: symbolic link out"
+            );
+            assert_eq!(
+                message(d.read_directory("out")),
+                "path out: symbolic link out"
+            );
+            assert_eq!(
+                message(d.create_directory("out/d")),
+                "path out/d: symbolic link out"
+            );
+            assert_eq!(message(d.read_file("f")), "path f: symbolic link f");
+            assert_eq!(message(d.write_file("f", b"x")), "path f: symbolic link f");
+            assert_eq!(names(&scratch.outside().join("dir")), ["secret"]);
+            assert_eq!(
+                std::fs::read(scratch.outside().join("file")).unwrap(),
+                b"outside bytes"
+            );
+            d.remove("f").unwrap();
+            assert!(std::fs::symlink_metadata(scratch.root().join("f")).is_err());
+            assert_eq!(
+                std::fs::read(scratch.outside().join("file")).unwrap(),
+                b"outside bytes"
+            );
+            assert_eq!(names(&scratch.root()), ["out"]);
+        }
     }
 
     /// Row 3: a FIFO is not opened for a blocking read.
     #[test]
     fn a_fifo_is_not_read() {
-        let scratch = Scratch::new("fifo");
-        nix::unistd::mkfifo(
-            &scratch.root().join("p"),
-            nix::sys::stat::Mode::from_bits_truncate(0o600),
-        )
-        .unwrap();
-        let d = scratch.directory();
-        let (sender, receiver) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            let _ = sender.send(d.read_file("p").map_err(|e| e.message));
-        });
-        let read = receiver
-            .recv_timeout(std::time::Duration::from_secs(1))
-            .expect("read_file of a FIFO returned within 1 s");
-        assert_eq!(read, Err("path p: not a regular file".to_string()));
+        for scratch in Scratch::both("fifo") {
+            nix::unistd::mkfifo(
+                &scratch.root().join("p"),
+                nix::sys::stat::Mode::from_bits_truncate(0o600),
+            )
+            .unwrap();
+            let d = scratch.directory();
+            let (sender, receiver) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                let _ = sender.send(d.read_file("p").map_err(|e| e.message));
+            });
+            let read = receiver
+                .recv_timeout(std::time::Duration::from_secs(1))
+                .expect("read_file of a FIFO returned within 1 s");
+            assert_eq!(read, Err("path p: not a regular file".to_string()));
+        }
     }
 
     /// Row 4: a directory component exchanged with a link to an outside
     /// directory never lets a read reach the outside bytes.
     #[test]
     fn a_swapped_component_never_escapes() {
-        let scratch = Scratch::new("swap");
-        std::fs::create_dir(scratch.root().join("d")).unwrap();
-        std::fs::write(scratch.root().join("d/inner"), b"inside").unwrap();
-        std::fs::write(scratch.outside().join("inner"), b"outside").unwrap();
-        std::os::unix::fs::symlink(scratch.outside(), scratch.root().join("e")).unwrap();
-        let d = scratch.directory();
-        let root = std::fs::File::open(scratch.root()).unwrap();
-        let swapper = std::thread::spawn(move || {
+        for scratch in Scratch::both("swap") {
+            std::fs::create_dir(scratch.root().join("d")).unwrap();
+            std::fs::write(scratch.root().join("d/inner"), b"inside").unwrap();
+            std::fs::write(scratch.outside().join("inner"), b"outside").unwrap();
+            std::os::unix::fs::symlink(scratch.outside(), scratch.root().join("e")).unwrap();
+            let d = scratch.directory();
+            let root = std::fs::File::open(scratch.root()).unwrap();
+            let swapper = std::thread::spawn(move || {
+                for _ in 0..10_000 {
+                    nix::fcntl::renameat2(
+                        &root,
+                        "d",
+                        &root,
+                        "e",
+                        nix::fcntl::RenameFlags::RENAME_EXCHANGE,
+                    )
+                    .unwrap();
+                }
+            });
+            let (mut inside, mut refused) = (0, 0);
             for _ in 0..10_000 {
-                nix::fcntl::renameat2(
-                    &root,
-                    "d",
-                    &root,
-                    "e",
-                    nix::fcntl::RenameFlags::RENAME_EXCHANGE,
-                )
-                .unwrap();
-            }
-        });
-        let (mut inside, mut refused) = (0, 0);
-        for _ in 0..10_000 {
-            match d.read_file("d/inner") {
-                Ok(bytes) => {
-                    assert_eq!(bytes, b"inside");
-                    inside += 1;
+                match d.read_file("d/inner") {
+                    Ok(bytes) => {
+                        assert_eq!(bytes, b"inside");
+                        inside += 1;
+                    }
+                    Err(e) if e.message.contains("symbolic link") => {
+                        assert_eq!(e.message, "path d/inner: symbolic link d");
+                        refused += 1;
+                    }
+                    Err(_) => {}
                 }
-                Err(e) if e.message.contains("symbolic link") => {
-                    assert_eq!(e.message, "path d/inner: symbolic link d");
-                    refused += 1;
-                }
-                Err(_) => {}
             }
+            swapper.join().unwrap();
+            assert!(inside + refused > 0);
+            assert_eq!(
+                std::fs::read(scratch.outside().join("inner")).unwrap(),
+                b"outside"
+            );
         }
-        swapper.join().unwrap();
-        assert!(inside + refused > 0);
-        assert_eq!(
-            std::fs::read(scratch.outside().join("inner")).unwrap(),
-            b"outside"
-        );
     }
 
     /// Row 5: readers racing replacing writers see one whole file or the
     /// other, and no temporary is left.
     #[test]
     fn write_replaces_atomically() {
-        let scratch = Scratch::new("atomic");
-        let d = scratch.directory();
-        let a = vec![b'A'; 64 * 1024];
-        let b = vec![b'B'; 64 * 1024];
-        d.write_file("file", &a).unwrap();
-        let writer = {
-            let d = d.clone();
-            let (a, b) = (a.clone(), b.clone());
-            std::thread::spawn(move || {
-                for i in 0..1_000 {
-                    d.write_file("file", if i % 2 == 0 { &b } else { &a })
-                        .unwrap();
-                }
-            })
-        };
-        for _ in 0..1_000 {
-            let read = d.read_file("file").unwrap();
-            assert!(
-                read == a || read == b,
-                "a torn read of {} bytes",
-                read.len()
-            );
+        for scratch in Scratch::both("atomic") {
+            let d = scratch.directory();
+            let a = vec![b'A'; 64 * 1024];
+            let b = vec![b'B'; 64 * 1024];
+            d.write_file("file", &a).unwrap();
+            let writer = {
+                let d = d.clone();
+                let (a, b) = (a.clone(), b.clone());
+                std::thread::spawn(move || {
+                    for i in 0..1_000 {
+                        d.write_file("file", if i % 2 == 0 { &b } else { &a })
+                            .unwrap();
+                    }
+                })
+            };
+            for _ in 0..1_000 {
+                let read = d.read_file("file").unwrap();
+                assert!(
+                    read == a || read == b,
+                    "a torn read of {} bytes",
+                    read.len()
+                );
+            }
+            writer.join().unwrap();
+            assert_eq!(d.read_directory("").unwrap(), ["file"]);
         }
-        writer.join().unwrap();
-        assert_eq!(d.read_directory("").unwrap(), ["file"]);
     }
 
     /// `write_file` replacing a file keeps the file's permission bits and
@@ -747,34 +916,35 @@ mod tests {
     #[test]
     fn a_replaced_file_keeps_its_permission_bits() {
         use std::os::unix::fs::PermissionsExt;
-        let scratch = Scratch::new("mode");
-        let d = scratch.directory();
-        let mode = |name: &str| {
-            std::fs::metadata(scratch.root().join(name))
-                .unwrap()
-                .permissions()
-                .mode()
-                & 0o7777
-        };
-        for (name, bits) in [("private", 0o600), ("script", 0o751), ("shared", 0o664)] {
-            d.write_file(name, b"first").unwrap();
-            std::fs::set_permissions(
-                scratch.root().join(name),
-                std::fs::Permissions::from_mode(bits),
-            )
-            .unwrap();
-            d.write_file(name, b"second").unwrap();
-            assert_eq!(mode(name), bits, "{name}");
-            assert_eq!(d.read_file(name).unwrap(), b"second");
+        for scratch in Scratch::both("mode") {
+            let d = scratch.directory();
+            let mode = |name: &str| {
+                std::fs::metadata(scratch.root().join(name))
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o7777
+            };
+            for (name, bits) in [("private", 0o600), ("script", 0o751), ("shared", 0o664)] {
+                d.write_file(name, b"first").unwrap();
+                std::fs::set_permissions(
+                    scratch.root().join(name),
+                    std::fs::Permissions::from_mode(bits),
+                )
+                .unwrap();
+                d.write_file(name, b"second").unwrap();
+                assert_eq!(mode(name), bits, "{name}");
+                assert_eq!(d.read_file(name).unwrap(), b"second");
+            }
+            let long = "n".repeat(255);
+            d.write_file(&long, b"x").unwrap();
+            d.write_file(&long, b"y").unwrap();
+            assert_eq!(d.read_file(&long).unwrap(), b"y");
+            assert_eq!(
+                names(&scratch.root()),
+                [long.as_str(), "private", "script", "shared"]
+            );
         }
-        let long = "n".repeat(255);
-        d.write_file(&long, b"x").unwrap();
-        d.write_file(&long, b"y").unwrap();
-        assert_eq!(d.read_file(&long).unwrap(), b"y");
-        assert_eq!(
-            names(&scratch.root()),
-            [long.as_str(), "private", "script", "shared"]
-        );
     }
 
     /// Row 7: the listing and depth bounds; a refused `remove_tree` removes
@@ -817,54 +987,195 @@ mod tests {
     /// a tree holding a link out.
     #[test]
     fn paths_round_trip_and_leave_nothing_outside() {
-        let scratch = Scratch::new("paths");
-        let d = scratch.directory();
-        let every: Vec<u8> = (0..=255).collect();
-        d.write_file("a.bin", &every).unwrap();
-        assert_eq!(d.read_file("a.bin").unwrap(), every);
-        assert_eq!(d.read_directory("").unwrap(), ["a.bin"]);
-        d.create_directory("sub/deeper").unwrap();
-        d.create_directory("sub/deeper").unwrap();
-        assert_eq!(d.read_directory(".").unwrap(), ["a.bin", "sub/"]);
-        d.remove("a.bin").unwrap();
-        d.remove_tree("sub").unwrap();
-        assert_eq!(d.read_directory("").unwrap(), Vec::<String>::new());
-        for (path, reason) in [
-            ("../x", "leaves its root"),
-            ("a/../../x", "leaves its root"),
-            ("/etc/passwd", "absolute"),
-            ("a\0b", "contains NUL"),
-        ] {
-            let want = format!("path {path}: {reason}");
-            assert_eq!(message(d.read_file(path)), want);
-            assert_eq!(message(d.write_file(path, b"x")), want);
-            assert_eq!(message(d.read_directory(path)), want);
-            assert_eq!(message(d.create_directory(path)), want);
-            assert_eq!(message(d.remove(path)), want);
-            assert_eq!(message(d.remove_tree(path)), want);
+        for scratch in Scratch::both("paths") {
+            let d = scratch.directory();
+            let every: Vec<u8> = (0..=255).collect();
+            d.write_file("a.bin", &every).unwrap();
+            assert_eq!(d.read_file("a.bin").unwrap(), every);
+            assert_eq!(d.read_directory("").unwrap(), ["a.bin"]);
+            d.create_directory("sub/deeper").unwrap();
+            d.create_directory("sub/deeper").unwrap();
+            assert_eq!(d.read_directory(".").unwrap(), ["a.bin", "sub/"]);
+            d.remove("a.bin").unwrap();
+            d.remove_tree("sub").unwrap();
+            assert_eq!(d.read_directory("").unwrap(), Vec::<String>::new());
+            for (path, reason) in [
+                ("../x", "leaves its root"),
+                ("a/../../x", "leaves its root"),
+                ("/etc/passwd", "absolute"),
+                ("a\0b", "contains NUL"),
+            ] {
+                let want = format!("path {path}: {reason}");
+                assert_eq!(message(d.read_file(path)), want);
+                assert_eq!(message(d.write_file(path, b"x")), want);
+                assert_eq!(message(d.read_directory(path)), want);
+                assert_eq!(message(d.create_directory(path)), want);
+                assert_eq!(message(d.remove(path)), want);
+                assert_eq!(message(d.remove_tree(path)), want);
+            }
+            assert!(!scratch.path.join("x").exists());
+            assert!(message(d.read_file("")).starts_with("path : "));
+            assert_eq!(message(d.remove_tree("")), "path : the root itself");
+            assert_eq!(message(d.remove_tree(".")), "path .: the root itself");
+            assert_eq!(message(d.remove("")), "path : the root itself");
+            assert!(message(d.remove("missing")).starts_with("path missing: "));
+            assert!(message(d.remove_tree("missing")).starts_with("path missing: "));
+            std::fs::write(scratch.outside().join("kept"), b"k").unwrap();
+            d.create_directory("tree/a/b").unwrap();
+            d.write_file("tree/a/b/f", b"f").unwrap();
+            d.write_file("tree/g", b"g").unwrap();
+            std::os::unix::fs::symlink(scratch.outside(), scratch.root().join("tree/out")).unwrap();
+            assert_eq!(
+                message(d.read_directory("tree/out")),
+                "path tree/out: symbolic link tree/out"
+            );
+            assert_eq!(d.read_directory("tree").unwrap(), ["a/", "g", "out"]);
+            d.remove_tree("tree").unwrap();
+            assert_eq!(names(&scratch.root()), Vec::<String>::new());
+            assert_eq!(names(&scratch.outside()), ["kept"]);
+            let canonical = std::fs::canonicalize(scratch.root()).unwrap();
+            assert_eq!(d.absolute_path().unwrap(), canonical.to_str().unwrap());
         }
-        assert!(!scratch.path.join("x").exists());
-        assert!(message(d.read_file("")).starts_with("path : "));
-        assert_eq!(message(d.remove_tree("")), "path : the root itself");
-        assert_eq!(message(d.remove_tree(".")), "path .: the root itself");
-        assert_eq!(message(d.remove("")), "path : the root itself");
-        assert!(message(d.remove("missing")).starts_with("path missing: "));
-        assert!(message(d.remove_tree("missing")).starts_with("path missing: "));
-        std::fs::write(scratch.outside().join("kept"), b"k").unwrap();
-        d.create_directory("tree/a/b").unwrap();
-        d.write_file("tree/a/b/f", b"f").unwrap();
-        d.write_file("tree/g", b"g").unwrap();
-        std::os::unix::fs::symlink(scratch.outside(), scratch.root().join("tree/out")).unwrap();
-        assert_eq!(
-            message(d.read_directory("tree/out")),
-            "path tree/out: symbolic link tree/out"
-        );
-        assert_eq!(d.read_directory("tree").unwrap(), ["a/", "g", "out"]);
-        d.remove_tree("tree").unwrap();
-        assert_eq!(names(&scratch.root()), Vec::<String>::new());
-        assert_eq!(names(&scratch.outside()), ["kept"]);
-        let canonical = std::fs::canonicalize(scratch.root()).unwrap();
-        assert_eq!(d.absolute_path().unwrap(), canonical.to_str().unwrap());
+    }
+
+    /// A link that stays inside the root is refused too, at the component
+    /// that is the link, whichever way the path is resolved (21.4).
+    #[test]
+    fn inside_links_are_refused() {
+        for scratch in Scratch::both("inside") {
+            std::fs::create_dir_all(scratch.root().join("sub/deeper")).unwrap();
+            std::fs::write(scratch.root().join("sub/file"), b"inside").unwrap();
+            std::os::unix::fs::symlink("sub", scratch.root().join("in")).unwrap();
+            std::os::unix::fs::symlink("file", scratch.root().join("sub/alias")).unwrap();
+            let d = scratch.directory();
+            assert_eq!(
+                message(d.read_file("in/file")),
+                "path in/file: symbolic link in"
+            );
+            assert_eq!(
+                message(d.read_file("./sub//alias")),
+                "path ./sub//alias: symbolic link sub/alias"
+            );
+            assert_eq!(message(d.read_directory("in")), "path in: symbolic link in");
+            assert_eq!(
+                message(d.read_directory("in/deeper")),
+                "path in/deeper: symbolic link in"
+            );
+            assert_eq!(
+                message(d.create_directory("in/deeper")),
+                "path in/deeper: symbolic link in"
+            );
+            assert_eq!(
+                message(d.write_file("in/new", b"x")),
+                "path in/new: symbolic link in"
+            );
+            assert_eq!(
+                message(d.remove("in/file")),
+                "path in/file: symbolic link in"
+            );
+            assert_eq!(d.read_file("sub/./file").unwrap(), b"inside");
+            assert_eq!(
+                d.read_directory("sub/").unwrap(),
+                ["alias", "deeper/", "file"]
+            );
+            d.remove("in").unwrap();
+            assert_eq!(names(&scratch.root()), ["sub"]);
+        }
+    }
+
+    /// Every operation answers the same, value or error message, whether
+    /// its path is resolved by `openat2` or by the walk.
+    #[test]
+    fn both_resolutions_answer_alike() {
+        let scratch = Scratch::new("alike");
+        let root = scratch.root();
+        std::fs::create_dir_all(root.join("d/e")).unwrap();
+        std::fs::write(root.join("d/f"), b"f").unwrap();
+        std::fs::write(root.join("plain"), b"p").unwrap();
+        std::os::unix::fs::symlink(scratch.outside(), root.join("out")).unwrap();
+        std::os::unix::fs::symlink("d", root.join("in")).unwrap();
+        std::os::unix::fs::symlink("missing", root.join("dangling")).unwrap();
+        let long = "x/".repeat(3000);
+        let beneath = scratch.directory();
+        let walk = scratch.directory().walking();
+        let paths = [
+            "",
+            ".",
+            "d",
+            "d/",
+            "d/e",
+            "d/f",
+            "d/f/x",
+            "d/missing",
+            "d/missing/x",
+            "plain",
+            "plain/x",
+            "out",
+            "out/x",
+            "in",
+            "in/f",
+            "d/../d",
+            "dangling",
+            "dangling/x",
+            long.as_str(),
+        ];
+        for path in paths {
+            let answers = |d: &Directory| {
+                let text = |r: Result<String, crate::IoError>| r.map_err(|e| e.message);
+                [
+                    text(d.read_file(path).map(|b| format!("{b:?}"))),
+                    text(d.read_directory(path).map(|n| n.join(","))),
+                ]
+            };
+            assert_eq!(answers(&beneath), answers(&walk), "{path}");
+        }
+        for path in [
+            "d/e", "d", "", "plain", "plain/x", "out/x", "in/e", "dangling",
+        ] {
+            assert_eq!(
+                beneath.create_directory(path).map_err(|e| e.message),
+                walk.create_directory(path).map_err(|e| e.message),
+                "{path}"
+            );
+        }
+        for path in ["d/missing", "out/x", "in/f", "plain/x", "d/f/x"] {
+            assert_eq!(
+                beneath.remove(path).map_err(|e| e.message),
+                walk.remove(path).map_err(|e| e.message),
+                "{path}"
+            );
+            assert_eq!(
+                beneath.write_file(path, b"w").map_err(|e| e.message),
+                walk.write_file(path, b"w").map_err(|e| e.message),
+                "{path}"
+            );
+            assert_eq!(
+                beneath.read_file(path).map_err(|e| e.message),
+                walk.read_file(path).map_err(|e| e.message),
+                "{path}"
+            );
+            let _ = walk.remove(path);
+        }
+        assert_eq!(names(&scratch.outside()), Vec::<String>::new());
+    }
+
+    /// Where the kernel has `openat2`, a path is resolved in one call that
+    /// refuses a link at any component and a step out of the root.
+    #[test]
+    fn one_call_resolves_a_path_beneath_the_root() {
+        let scratch = Scratch::new("beneath");
+        std::fs::create_dir_all(scratch.root().join("a/b")).unwrap();
+        std::os::unix::fs::symlink("a", scratch.root().join("l")).unwrap();
+        let d = scratch.directory();
+        if super::BENEATH_REFUSED.load(Ordering::Relaxed) {
+            eprintln!("openat2 refused by this kernel: the walk is the only resolution");
+            return;
+        }
+        assert!(d.beneath("a/b", super::DIRECTORY_FLAGS).is_some());
+        assert!(d.beneath(".", super::DIRECTORY_FLAGS).is_some());
+        assert!(d.beneath("l/b", super::DIRECTORY_FLAGS).is_none());
+        assert!(d.beneath("a/../..", super::DIRECTORY_FLAGS).is_none());
+        assert!(d.walking().beneath("a/b", super::DIRECTORY_FLAGS).is_none());
     }
 
     /// `Directory.temporary()` makes a new empty directory inside the

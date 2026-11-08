@@ -25,7 +25,8 @@
 //! republishes the state afterwards ([`with_task`]).
 //!
 //! Every block is allocated zeroed, so arena memory is always initialized
-//! and a read can go straight into it.
+//! and a read can go straight into it; a reused chunk or large block keeps
+//! what it held before.
 //!
 //! Chunks come from the kernel (`mmap`), not from `malloc`, and a chunk
 //! that is not kept for reuse goes back with `munmap`. In a `malloc` heap a
@@ -35,6 +36,12 @@
 //! and the 10 MB of chunks it frees at `task_end` stayed in the process's
 //! RSS until the next trim (2026-11-04). Large blocks still come from
 //! `malloc`: a block per allocation from `mmap` would be a system call each.
+//! A released large block is kept for the next large request it holds
+//! (up to [`SPARE_LARGE`] blocks and [`SPARE_LARGE_BYTES`]): a loop that
+//! builds a value over 16 KiB per iteration and releases it otherwise
+//! paid a zeroed `malloc`, and above glibc's `mmap` threshold a mapping
+//! and its page faults, per iteration (a SHA-1 and base64 loop over 1 MiB:
+//! 30.6k page faults against 1.0k for plain Rust, 2026-11-08).
 
 use std::alloc::Layout;
 use std::cell::{RefCell, UnsafeCell};
@@ -51,17 +58,31 @@ const CHUNK_ALIGN: usize = 16;
 /// Requests above this size get their own block instead of a chunk.
 pub(crate) const LARGE: usize = CHUNK / 4;
 /// Released chunks an arena keeps for reuse; the rest go back to the
-/// system allocator. Large blocks always go back.
+/// system allocator.
 const SPARE: usize = 16;
-/// Chunks the task arena keeps for the next task on the same thread.
+/// Chunks the task arena keeps for the next task on the same thread. One:
+/// with none, each connection of a server that takes one connection per
+/// request mapped and unmapped a chunk, 36 % more CPU per reply (the terminal
+/// benchmark connect-8, 2026-11-08), and the peak RSS under load did not change.
 const SPARE_AFTER_TASK: usize = 1;
+/// Released large blocks an arena keeps for reuse.
+const SPARE_LARGE: usize = 8;
+/// Bytes of released large blocks an arena keeps for reuse; a larger
+/// block goes back at once.
+const SPARE_LARGE_BYTES: usize = 8 * 1024 * 1024;
 /// Bytes of large blocks (`malloc`) a task's arenas must hold at
 /// `task_end` for the worker to return the freed heap pages to the kernel
 /// (`ignite_io::released_memory`); chunks go back by `munmap` themselves.
 const RELEASED_AT_TASK_END: usize = 1024 * 1024;
 /// Bytes a loop allocates above its mark before a release is due, at
-/// least (`ignite_rt_arena_due`).
-const DUE: u64 = 64 * 1024;
+/// least (`ignite_rt_arena_due`); the LLVM target's inline
+/// `@ignite.arena_due` uses the same number. With 64 KiB a server
+/// session's loop swept its whole chunk between releases, so every
+/// connection kept a fully touched chunk: get-64 of the todo example at
+/// 9.9 MB peak RSS against 5.9 MB with 16 KiB, at the same instructions
+/// per reply (2026-11-08).
+pub const ARENA_DUE: u64 = 16 * 1024;
+const DUE: u64 = ARENA_DUE;
 
 /// The bump state of the arena allocations go to (`docs/llvm.md`
 /// section 5). With a chunk last: `base` is the chunk, `cursor` the next
@@ -96,7 +117,11 @@ struct Block {
 struct Arena {
     blocks: Vec<Block>,
     spare: Vec<NonNull<u8>>,
-    /// Bytes held from the kernel and from `malloc`, spare chunks included.
+    /// Released large blocks kept for reuse, with the layout each was
+    /// allocated with.
+    spare_large: Vec<(NonNull<u8>, Layout)>,
+    /// Bytes held from the kernel and from `malloc`, spare chunks and
+    /// large blocks included.
     reserved: usize,
     /// The part of `reserved` held in large blocks from `malloc`.
     heap: usize,
@@ -131,6 +156,7 @@ impl Arena {
         Arena {
             blocks: Vec::new(),
             spare: Vec::new(),
+            spare_large: Vec::new(),
             reserved: 0,
             heap: 0,
         }
@@ -178,8 +204,28 @@ impl Arena {
         }
     }
 
+    /// The smallest kept large block that holds `layout`, taken out of the
+    /// spares with the layout it was allocated with.
+    fn reuse_large(&mut self, layout: Layout) -> Option<(NonNull<u8>, Layout)> {
+        let at = self
+            .spare_large
+            .iter()
+            .enumerate()
+            .filter(|(_, (_, kept))| kept.size() >= layout.size() && kept.align() >= layout.align())
+            .min_by_key(|(_, (_, kept))| kept.size())
+            .map(|(at, _)| at)?;
+        Some(self.spare_large.swap_remove(at))
+    }
+
     fn push(&mut self, layout: Layout, chunk: bool, used: usize) -> Result<*mut u8, String> {
-        let reused = if chunk { self.spare.pop() } else { None };
+        let (reused, layout) = if chunk {
+            (self.spare.pop(), layout)
+        } else {
+            match self.reuse_large(layout) {
+                Some((pointer, kept)) => (Some(pointer), kept),
+                None => (None, layout),
+            }
+        };
         let pointer = match reused {
             Some(pointer) => pointer,
             None if chunk => {
@@ -210,7 +256,7 @@ impl Arena {
     fn bump(&mut self, size: usize, align: usize) -> Option<*mut u8> {
         let block = self.blocks.last_mut().filter(|block| block.chunk)?;
         let address = block.pointer.as_ptr() as usize + block.used;
-        let start = block.used + (address.next_multiple_of(align) - address);
+        let start = block.used + (align_up(address, align) - address);
         let end = start.checked_add(size)?;
         if end > CHUNK {
             return None;
@@ -249,12 +295,27 @@ impl Arena {
         } else if block.chunk {
             self.reserved -= CHUNK;
             chunk_drop(block.pointer);
+        } else if self.spare_large.len() < SPARE_LARGE
+            && self.spare_large_bytes() + block.layout.size() <= SPARE_LARGE_BYTES
+        {
+            self.spare_large.push((block.pointer, block.layout));
         } else {
-            self.reserved -= block.layout.size();
-            self.heap -= block.layout.size();
-            // SAFETY: allocated in `Arena::push` with this layout.
-            unsafe { std::alloc::dealloc(block.pointer.as_ptr(), block.layout) };
+            self.drop_large(block.pointer, block.layout);
         }
+    }
+
+    fn spare_large_bytes(&self) -> usize {
+        self.spare_large
+            .iter()
+            .map(|(_, layout)| layout.size())
+            .sum()
+    }
+
+    /// Give a large block back to `malloc`.
+    fn drop_large(&mut self, pointer: NonNull<u8>, layout: Layout) {
+        self.reserved -= layout.size();
+        self.heap -= layout.size();
+        large_dealloc(pointer, layout);
     }
 
     /// Free every allocation made after the position `mark`. A mark at or
@@ -280,13 +341,17 @@ impl Arena {
         }
     }
 
-    /// Free everything, keeping at most `keep` chunks for reuse.
+    /// Free everything, keeping at most `keep` chunks and no large block
+    /// for reuse.
     fn clear(&mut self, keep: usize) {
         self.release(0);
         while self.spare.len() > keep {
             let pointer = self.spare.pop().expect("a spare chunk");
             self.reserved -= CHUNK;
             chunk_drop(pointer);
+        }
+        while let Some((pointer, layout)) = self.spare_large.pop() {
+            self.drop_large(pointer, layout);
         }
     }
 }
@@ -307,14 +372,24 @@ impl Drop for Arena {
             if block.chunk {
                 chunk_drop(block.pointer);
             } else {
-                // SAFETY: allocated in `Arena::push` with this layout.
-                unsafe { std::alloc::dealloc(block.pointer.as_ptr(), block.layout) };
+                large_dealloc(block.pointer, block.layout);
             }
         }
         for pointer in self.spare.drain(..) {
             chunk_drop(pointer);
         }
+        for (pointer, layout) in self.spare_large.drain(..) {
+            large_dealloc(pointer, layout);
+        }
     }
+}
+
+/// Give a large block, allocated in `Arena::push` with `layout` and owned
+/// by the caller, back to `malloc`.
+fn large_dealloc(pointer: NonNull<u8>, layout: Layout) {
+    // SAFETY: the block came from `std::alloc` with this layout and the
+    // caller gives up its only owner.
+    unsafe { std::alloc::dealloc(pointer.as_ptr(), layout) };
 }
 
 /// A task's arena and its scratch arena.
@@ -352,6 +427,15 @@ fn state() -> *mut State {
     STATE.with(UnsafeCell::get)
 }
 
+/// Run `f` on this thread's bump state. `f` must not call back into the
+/// runtime or generated code.
+#[inline]
+fn with_state<R>(f: impl FnOnce(&mut State) -> R) -> R {
+    // SAFETY: the state is this thread's, and nothing else reads or writes
+    // it while `f` runs; see `with_task`.
+    f(unsafe { &mut *state() })
+}
+
 /// Run `f` on the current task with its arenas in sync with the bump
 /// state: the cursor is taken into the current arena before and the state
 /// republished after. `None` once the thread's task storage is gone.
@@ -369,20 +453,42 @@ fn with_task<R>(f: impl FnOnce(&mut Task) -> R) -> Option<R> {
     .ok()
 }
 
+/// `address` rounded up to `align`, a power of two: a mask, where
+/// `next_multiple_of` divides (the division was half of this module's time
+/// in a server, 2026-11-08).
+#[inline]
+fn align_up(address: usize, align: usize) -> usize {
+    debug_assert!(align.is_power_of_two());
+    (address + (align - 1)) & !(align - 1)
+}
+
 /// `size` bytes aligned to `align` from the current task's arena (its
 /// scratch arena while scratch is on). Failure (memory exhausted, a bad
-/// alignment) ends the process like `ignite_rt_panic`.
+/// alignment) ends the process like `ignite_rt_panic`. The bump inside the
+/// current chunk is inlined into the runtime's callers; the rest is
+/// [`alloc_slow`].
+#[inline]
 pub(crate) fn alloc(size: usize, align: usize) -> *mut u8 {
     if size > 0 && size <= LARGE && align.is_power_of_two() && align <= CHUNK_ALIGN {
-        // SAFETY: this thread's state; see `with_task`.
-        let state = unsafe { &mut *state() };
-        let cursor = state.cursor as usize;
-        let start = cursor.next_multiple_of(align);
-        if !state.cursor.is_null() && start + size <= state.limit as usize {
-            state.cursor = state.cursor.wrapping_add(start + size - cursor);
-            return state.cursor.wrapping_sub(size);
+        let bumped = with_state(|state| {
+            let cursor = state.cursor as usize;
+            let start = align_up(cursor, align);
+            if !state.cursor.is_null() && start + size <= state.limit as usize {
+                state.cursor = state.cursor.wrapping_add(start + size - cursor);
+                Some(state.cursor.wrapping_sub(size))
+            } else {
+                None
+            }
+        });
+        if let Some(pointer) = bumped {
+            return pointer;
         }
     }
+    alloc_slow(size, align)
+}
+
+#[inline(never)]
+fn alloc_slow(size: usize, align: usize) -> *mut u8 {
     let result = with_task(|task| task.current().alloc(size, align))
         .unwrap_or_else(|| Err(String::from("allocation after the task ended")));
     match result {
@@ -391,15 +497,20 @@ pub(crate) fn alloc(size: usize, align: usize) -> *mut u8 {
     }
 }
 
+/// Bytes left in the current arena's last chunk; 0 when no chunk is last.
+pub(crate) fn room() -> usize {
+    with_state(|state| (state.limit as usize).saturating_sub(state.cursor as usize))
+}
+
 /// Give back the tail of the block of `size` bytes at `pointer` past its
 /// first `used` bytes, when it is the last allocation of the current
 /// arena's last chunk; otherwise do nothing.
 pub(crate) fn trim(pointer: *mut u8, size: usize, used: usize) {
-    // SAFETY: this thread's state; see `with_task`.
-    let state = unsafe { &mut *state() };
-    if used < size && !state.cursor.is_null() && pointer.wrapping_add(size) == state.cursor {
-        state.cursor = pointer.wrapping_add(used);
-    }
+    with_state(|state| {
+        if used < size && !state.cursor.is_null() && pointer.wrapping_add(size) == state.cursor {
+            state.cursor = pointer.wrapping_add(used);
+        }
+    });
 }
 
 /// Bytes the current task's arenas hold from the system allocator,
@@ -410,10 +521,21 @@ pub fn arena_reserved() -> usize {
 
 /// `ptr arena_state()`: this thread's [`State`]. The address is fixed for
 /// the life of the thread; generated code may read it once per function.
+///
+/// Not guarded (`crate::contain`): it cannot panic. `STATE` is a `const`
+/// thread-local whose type needs no drop, so it registers no destructor,
+/// is never torn down and `with` never fails. Behind the guard this entry,
+/// which every allocating function calls, was 12 % of a server's user
+/// time (2026-11-08).
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_arena_state() -> *mut State {
-    crate::entry(state)
+    state()
 }
+
+const _: () = assert!(
+    !std::mem::needs_drop::<UnsafeCell<State>>(),
+    "ignite_rt_arena_state relies on a thread-local without destructor"
+);
 
 /// `ptr alloc(i64 size, i64 align)`: arena allocation of the current task.
 /// A negative size or a non-power-of-two alignment is fatal (exit 101).
@@ -592,6 +714,45 @@ mod tests {
         ignite_rt_task_end();
     }
 
+    /// A large block a release frees is kept and handed out again for a
+    /// request it holds, so a loop that reads or builds a large value per
+    /// iteration does not go to `malloc` (and the kernel) each time. The
+    /// kept blocks go back at `task_end`.
+    #[test]
+    fn a_released_large_block_is_reused() {
+        let heap = || with_task(|task| task.arena.heap + task.scratch.heap).unwrap();
+        let mark = ignite_rt_arena_mark();
+        let first = ignite_rt_alloc(100_000, 8);
+        ignite_rt_arena_release(mark);
+        assert!(heap() >= 100_000, "the freed block is kept");
+        let again = ignite_rt_alloc(100_000, 8);
+        assert_eq!(again, first);
+        ignite_rt_arena_release(mark);
+        let smaller = ignite_rt_alloc(60_000, 8);
+        assert_eq!(smaller, first, "a kept block holds a smaller request");
+        // SAFETY: 60,000 bytes inside the kept block of 100,000.
+        unsafe { std::ptr::write_bytes(smaller, 9, 60_000) };
+        assert_eq!(ignite_rt_arena_mark(), mark + 60_000);
+        ignite_rt_arena_release(mark);
+        ignite_rt_task_end();
+        assert_eq!(heap(), 0);
+        assert!(arena_reserved() <= CHUNK);
+    }
+
+    /// Kept large blocks are bounded in count and in bytes.
+    #[test]
+    fn kept_large_blocks_are_bounded() {
+        let heap = || with_task(|task| task.arena.heap + task.scratch.heap).unwrap();
+        let mark = ignite_rt_arena_mark();
+        for _ in 0..(SPARE_LARGE + 4) {
+            ignite_rt_alloc(LARGE as i64 + 1, 8);
+        }
+        ignite_rt_alloc(SPARE_LARGE_BYTES as i64 + 1, 8);
+        ignite_rt_arena_release(mark);
+        assert!(heap() <= SPARE_LARGE * (LARGE + 1), "{}", heap());
+        ignite_rt_task_end();
+    }
+
     #[test]
     fn arenas_are_per_thread() {
         ignite_rt_alloc(100, 8);
@@ -679,15 +840,15 @@ mod tests {
     }
 
     #[test]
-    fn release_is_due_above_the_larger_of_64_kib_and_four_times_kept() {
+    fn release_is_due_above_the_larger_of_16_kib_and_four_times_kept() {
         let mark = ignite_rt_arena_mark();
-        ignite_rt_alloc(60_000, 8);
+        ignite_rt_alloc(15_000, 8);
         assert_eq!(ignite_rt_arena_due(mark, 0), 0);
-        ignite_rt_alloc(10_000, 8);
+        ignite_rt_alloc(2_000, 8);
         assert_eq!(ignite_rt_arena_due(mark, 0), 1);
-        assert_eq!(ignite_rt_arena_due(mark, 40_000), 0);
-        assert_eq!(ignite_rt_arena_due(mark, 20_000), 0);
-        assert_eq!(ignite_rt_arena_due(mark, 17_000), 1);
+        assert_eq!(ignite_rt_arena_due(mark, 10_000), 0);
+        assert_eq!(ignite_rt_arena_due(mark, 5_000), 0);
+        assert_eq!(ignite_rt_arena_due(mark, 4_100), 1);
         ignite_rt_task_end();
     }
 

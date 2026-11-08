@@ -34,7 +34,7 @@ mod task;
 mod text;
 
 pub use arena::{
-    State, arena_reserved, ignite_rt_alloc, ignite_rt_arena_due, ignite_rt_arena_mark,
+    ARENA_DUE, State, arena_reserved, ignite_rt_alloc, ignite_rt_arena_due, ignite_rt_arena_mark,
     ignite_rt_arena_release, ignite_rt_arena_scratch, ignite_rt_arena_scratch_clear,
     ignite_rt_arena_state, ignite_rt_task_end,
 };
@@ -67,10 +67,10 @@ pub use store::{
 };
 pub use task::{TaskFn, ignite_rt_spawn, ignite_rt_spawn_ready};
 pub use text::{
-    ignite_rt_int_parse, ignite_rt_int_to_text, ignite_rt_quantity_debug, ignite_rt_text_cmp,
-    ignite_rt_text_concat, ignite_rt_text_debug, ignite_rt_text_eq,
-    ignite_rt_text_from_bytes_lossy, ignite_rt_text_join, ignite_rt_text_starts_with,
-    ignite_rt_text_trim,
+    ignite_rt_bytes_index_of, ignite_rt_int_parse, ignite_rt_int_to_text, ignite_rt_quantity_debug,
+    ignite_rt_text_cmp, ignite_rt_text_concat, ignite_rt_text_debug, ignite_rt_text_eq,
+    ignite_rt_text_from_bytes_lossy, ignite_rt_text_join, ignite_rt_text_pieces,
+    ignite_rt_text_starts_with, ignite_rt_text_trim,
 };
 
 use ignite_io::{Input, IoError};
@@ -283,6 +283,7 @@ pub use channel::{
 // Panic containment at the C ABI (`crate::contain`), after the tests for
 // the same reason.
 mod contain;
+pub use contain::UNGUARDED_ENTRIES;
 use contain::{entry, entry_never};
 
 /// The log line on which [`ignite_rt_log`] panics in an archive built with

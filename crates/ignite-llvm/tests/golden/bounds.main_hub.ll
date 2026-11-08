@@ -23,7 +23,7 @@ declare void @ignite_rt_arena_scratch_clear()
 declare ptr @ignite_rt_arena_state() nounwind willreturn speculatable memory(none)
 declare i32 @ignite_rt_args_port(ptr, ptr, ptr)
 declare void @ignite_rt_exit(i32) noreturn
-declare void @ignite_rt_fail(ptr) noreturn
+declare void @ignite_rt_fail(ptr) cold noreturn
 declare void @ignite_rt_log(ptr)
 declare i32 @ignite_rt_tcp_bind(ptr, i64, ptr, ptr)
 declare i32 @ignite_rt_tcp_accept(i64, ptr, ptr)
@@ -67,7 +67,7 @@ declare { i8, i1 } @llvm.usub.with.overflow.i8(i8, i8)
 declare { i8, i1 } @llvm.umul.with.overflow.i8(i8, i8)
 declare void @"tests.bounds.Hub.main"(ptr, ptr)
 
-define internal void @ignite.reserve(ptr %list, i64 %extra, i64 %size, i64 %align) {
+define internal void @ignite.reserve(ptr %list, i64 %extra, i64 %size, i64 %align) alwaysinline {
 entry:
   %lenp = getelementptr inbounds i8, ptr %list, i64 8
   %len = load i64, ptr %lenp, align 8
@@ -77,6 +77,18 @@ entry:
   %fits = icmp sle i64 %need, %cap
   br i1 %fits, label %done, label %grow
 grow:
+  call void @ignite.grow(ptr %list, i64 %need, i64 %size, i64 %align)
+  br label %done
+done:
+  ret void
+}
+
+define internal void @ignite.grow(ptr %list, i64 %need, i64 %size, i64 %align) noinline cold {
+entry:
+  %lenp = getelementptr inbounds i8, ptr %list, i64 8
+  %len = load i64, ptr %lenp, align 8
+  %capp = getelementptr inbounds i8, ptr %list, i64 16
+  %cap = load i64, ptr %capp, align 8
   %double = mul i64 %cap, 2
   %big = icmp sgt i64 %double, %need
   %c1 = select i1 %big, i64 %double, i64 %need
@@ -89,8 +101,6 @@ grow:
   call void @llvm.memcpy.p0.p0.i64(ptr %new, ptr %old, i64 %used, i1 false)
   store ptr %new, ptr %list, align 8
   store i64 %newcap, ptr %capp, align 8
-  br label %done
-done:
   ret void
 }
 
@@ -140,8 +150,8 @@ entry:
   %pos = call i64 @ignite.arena_mark()
   %above = sub i64 %pos, %mark
   %four = shl i64 %kept, 2
-  %big = icmp sgt i64 %four, 65536
-  %limit = select i1 %big, i64 %four, i64 65536
+  %big = icmp sgt i64 %four, 16384
+  %limit = select i1 %big, i64 %four, i64 16384
   %due = icmp sgt i64 %above, %limit
   ret i1 %due
 }
