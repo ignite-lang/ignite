@@ -85,6 +85,7 @@ pub struct TcpListener {
 /// (`crate::drain`), with the address and port it was bound to.
 #[derive(Debug)]
 pub(crate) struct Slot {
+    _counted: crate::census::Counted,
     listener: RwLock<Option<std::net::TcpListener>>,
     address: String,
     port: i64,
@@ -130,6 +131,7 @@ pub struct TcpStream {
 #[derive(Debug)]
 struct Stream {
     socket: std::net::TcpStream,
+    _counted: crate::census::Counted,
     reading: Mutex<()>,
     writing: Mutex<Out>,
     /// A send of the buffer failed; the error waits in `Out::failed`.
@@ -386,6 +388,7 @@ impl TcpListener {
             .map(|bound| i64::from(bound.port()))
             .unwrap_or(0);
         let slot = Arc::new(Slot {
+            _counted: crate::census::Counted::new(crate::census::Kind::Listeners),
             listener: RwLock::new(Some(listener)),
             address,
             port,
@@ -472,6 +475,7 @@ impl TcpStream {
             .unwrap_or_default();
         TcpStream {
             inner: Arc::new(Stream {
+                _counted: crate::census::Counted::new(crate::census::Kind::Streams),
                 socket,
                 reading: Mutex::new(()),
                 writing: Mutex::new(Out::default()),

@@ -1,0 +1,121 @@
+package seeded
+
+// One soak test per kind the census compares (`docs/leak-guard.md` 7,
+// `docs/slice.md` 32). Each passes as written; a debug build of the
+// substrate run with `IGNITE_DEBUG_LEAK=<kind>` skips one release per
+// object of that kind, and the soak of that kind fails naming it.
+// `crates/ignite/tests/leak.rs` runs them with and without the variable.
+
+import std.runtime.{soak}
+import std.process.{Invocation}
+
+test fn quick() -> Result<Unit, IoError> {
+  Clock.sleep(0 ms)
+  Ok(())
+}
+
+test fn task_run(run: Int) -> Unit {
+  spawn quick()
+}
+
+test fn channel_run(run: Int) -> Unit {
+  let (tx, rx) = Channel.bounded(1)
+  let sent = tx.try_send(run)
+  tx.close()
+  let got = rx.receive_within(0 ms)
+}
+
+test fn pipe_run(run: Int) -> Unit {
+  let (a, b) = Pipe.pair()
+}
+
+test fn listener_run(run: Int) -> Unit {
+  let bound = TcpListener.bind("127.0.0.1", 0)
+}
+
+test fn stream_run(run: Int) -> Unit {
+  stream_once()
+}
+
+test fn stream_once() -> Result<Unit, IoError> {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let client = TcpStream.connect("127.0.0.1", listener.local_port())?
+  let server = listener.accept()?
+  Ok(())
+}
+
+test fn child_run(run: Int) -> Unit {
+  child_once()
+}
+
+test fn child_once() -> Result<Unit, IoError> {
+  let launcher = Launcher.new()
+  let child = launcher.start(Invocation { program = "/bin/true" })?
+  let exit = child.wait()?
+  Ok(())
+}
+
+test fn directory_run(run: Int) -> Unit {
+  let made = Directory.temporary()
+}
+
+test fn capability_run(run: Int) -> Unit {
+  let entropy = Entropy.new()
+}
+
+test fn arena_task() -> Result<Unit, IoError> {
+  Clock.sleep(0 ms)
+  let text = "a".concat(" task's own text")
+  Ok(())
+}
+
+test fn arena_run(run: Int) -> Unit {
+  spawn arena_task()
+}
+
+test "soak: task" {
+  assert soak(30, task_run).growth == []
+}
+
+test "soak: channel" {
+  assert soak(30, channel_run).growth == []
+}
+
+test "soak: pipe" {
+  assert soak(30, pipe_run).growth == []
+}
+
+test "soak: listener" {
+  assert soak(30, listener_run).growth == []
+}
+
+test "soak: stream" {
+  assert soak(30, stream_run).growth == []
+}
+
+test "soak: child" {
+  assert soak(30, child_run).growth == []
+}
+
+test "soak: directory" {
+  assert soak(30, directory_run).growth == []
+}
+
+test "soak: capability" {
+  assert soak(30, capability_run).growth == []
+}
+
+test "soak: bytes" {
+  assert soak(400, channel_run).growth == []
+}
+
+test "soak: arena" {
+  assert soak(30, arena_run).growth == []
+}
+
+test "a channel made and dropped" {
+  let (tx, rx) = Channel.bounded(1)
+  let sent = tx.try_send(1)
+  let got = rx.receive()
+  assert got == Some(1)
+}

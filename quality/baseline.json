@@ -625,12 +625,12 @@
       "area": "Generated code and runtime behaviour",
       "bars": {
         "llvm": {
-          "decision": "native parity round 1 integration (2026-11-08): story text-fast-search adds two unsafe blocks (memchr/memmem in ignite_io::text, the pieces list in ignite-rt), accepted by the coordinator; story fs-resolve-beneath adds two in ignite-io fs.rs (the getdents64 syscall that lists a directory and the slice over the bytes it filled); story rt-hot-path removes one in ignite-rt",
-          "value": 82
+          "decision": "story leak-census (2026-11-08): the counting global allocator `ignite_io::census::Counting` adds seven sites (the `unsafe impl GlobalAlloc`, its `alloc`, `dealloc` and `realloc` and the three calls of `System` inside them), required by the trait; before it, native parity round 1 integration: story text-fast-search adds two unsafe blocks (memchr/memmem in ignite_io::text, the pieces list in ignite-rt), story fs-resolve-beneath adds two in ignite-io fs.rs (the getdents64 syscall that lists a directory and the slice over the bytes it filled); story rt-hot-path removes one in ignite-rt",
+          "value": 89
         },
         "rust": {
-          "decision": "native parity round 1 integration (2026-11-08): story text-fast-search adds one unsafe block (memchr/memmem in ignite_io::text), accepted by the coordinator; story fs-resolve-beneath adds two in ignite-io fs.rs (the getdents64 syscall that lists a directory and the slice over the bytes it filled)",
-          "value": 12
+          "decision": "story leak-census (2026-11-08): the counting global allocator `ignite_io::census::Counting` adds seven sites (the `unsafe impl GlobalAlloc`, its `alloc`, `dealloc` and `realloc` and the three calls of `System` inside them), required by the trait; before it, native parity round 1 integration: story text-fast-search adds one unsafe block (memchr/memmem in ignite_io::text), story fs-resolve-beneath adds two in ignite-io fs.rs (the getdents64 syscall that lists a directory and the slice over the bytes it filled)",
+          "value": 19
         }
       },
       "direction": "lower",

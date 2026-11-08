@@ -1,0 +1,229 @@
+package std.runtime
+
+// The census of the runtime and the soak (`docs/slice.md` 32,
+// `docs/leak-guard.md` 5.2): the live objects of this process per kind and
+// the heap bytes it holds, on both targets, and a soak that runs a body
+// many times and reports the kinds that grew.
+//
+// Statics of the substrate, pure, with no value in the evaluator:
+//
+//   Runtime.census() -> Census                       the counters now, no wait
+//   Runtime.settle(tasks: Int, within: Duration) -> Bool
+//                                                    waits until at most `tasks` tasks are
+//                                                    live; false at the deadline
+//
+// A kind the LLVM target alone has (`handles`, `handle_slots`,
+// `heap_copies`, `arena_bytes`) is 0 on the Rust target. `stores` is
+// resident on LLVM (a store lives until the process exits); `workers`,
+// `handle_slots` and `resident_bytes` are pools or the kernel's view, and
+// reported only.
+
+// Live objects of this process, per kind (`docs/leak-guard.md` 5.1).
+type Census {
+  tasks: Int
+  workers: Int
+  channels: Int
+  listeners: Int
+  streams: Int
+  pipes: Int
+  children: Int
+  directories: Int
+  capabilities: Int
+  handles: Int
+  handle_slots: Int
+  heap_copies: Int
+  stores: Int
+  heap_bytes: Int
+  arena_bytes: Int
+  resident_bytes: Int
+}
+
+// A kind that grew in a soak: its value after the warm-up and after the
+// last run.
+type Growth {
+  kind: Text
+  before: Int
+  after: Int
+}
+
+// What a soak ran and what grew; `growth` is empty when nothing leaked.
+type Soak {
+  runs: Int
+  warmup: Int
+  growth: List<Growth>
+}
+
+// The slack of the byte kinds in a soak: first-use caches and pools.
+const BYTES_SLACK: Int = 65536
+
+// The kind `kind` as a growth when `after` exceeds `before` by more than
+// `slack`.
+fn grew(kind: Text, before: Int, after: Int, slack: Int) -> List<Growth> =
+  if after - before > slack { [Growth { kind, before, after }] } else { [] }
+
+// The compared kinds of `after` that grew over `before`: every count
+// exactly, heap and arena bytes beyond 64 KiB.
+fn growth(before: Census, after: Census) -> List<Growth> {
+  var all: List<Growth> = []
+  all.append(grew("tasks", before.tasks, after.tasks, 0))
+  all.append(grew("channels", before.channels, after.channels, 0))
+  all.append(grew("listeners", before.listeners, after.listeners, 0))
+  all.append(grew("streams", before.streams, after.streams, 0))
+  all.append(grew("pipes", before.pipes, after.pipes, 0))
+  all.append(grew("children", before.children, after.children, 0))
+  all.append(grew("directories", before.directories, after.directories, 0))
+  all.append(grew("capabilities", before.capabilities, after.capabilities, 0))
+  all.append(grew("handles", before.handles, after.handles, 0))
+  all.append(grew("heap_copies", before.heap_copies, after.heap_copies, 0))
+  all.append(grew("heap_bytes", before.heap_bytes, after.heap_bytes, BYTES_SLACK))
+  all.append(grew("arena_bytes", before.arena_bytes, after.arena_bytes, BYTES_SLACK))
+  all
+}
+
+// The body of a soak: one run, given its index. It may make channels,
+// listeners, streams and capabilities and use the clock and the process.
+type Body = fn(run: Int) -> Unit requires [run.*, channel.*, net.*, clock.*, process.*, directory.*, launcher.*, entropy.*, setting.*, command_line.*, environment.*]
+
+// Run `body(i)` for `i` in `0..runs`, after each run waiting up to 5 s for
+// the tasks it spawned. The first `max(10, runs / 10)` runs are the
+// warm-up; the census after the warm-up is compared with the census after
+// the last run.
+fn soak(runs: Int, body: Body) -> Soak {
+  let warmup = if runs / 10 > 10 { runs / 10 } else { 10 }
+  let tasks = Runtime.census().tasks
+  var before = Runtime.census()
+  var i = 0
+  while i < runs {
+    if i == warmup {
+      before = Runtime.census()
+    }
+    body(i)
+    let settled = Runtime.settle(tasks, 5 seconds)
+    i = i + 1
+  }
+  let after = Runtime.census()
+  Soak { runs, warmup, growth = growth(before, after) }
+}
+
+test fn idle(run: Int) -> Unit {
+  let twice = run * 2
+}
+
+test fn channel_made(run: Int) -> Unit {
+  let (tx, rx) = Channel.bounded(1)
+  let sent = tx.try_send(run)
+  let got = rx.receive_within(0 ms)
+}
+
+test "a soak of a body that keeps nothing finds no growth" {
+  let idle_soak = soak(100, idle)
+  assert idle_soak.warmup == 10
+  assert idle_soak.growth == []
+  assert soak(2000, channel_made).growth == []
+}
+
+test "the census counts a channel while it lives" {
+  let before = Runtime.census()
+  let (tx, rx) = Channel.bounded(1)
+  let sent = tx.try_send(1)
+  assert Runtime.census().channels == before.channels + 1
+  tx.close()
+  rx.close()
+}
+
+test fn channel_counted(before: Census) -> Int {
+  let (tx, rx) = Channel.bounded(1)
+  let sent = tx.try_send(1)
+  let during = Runtime.census().channels - before.channels
+  tx.close()
+  rx.close()
+  during
+}
+
+test "a released channel leaves the census" {
+  let before = Runtime.census()
+  assert channel_counted(before) == 1
+  assert Runtime.census().channels == before.channels
+}
+
+test fn wait_on(values: Receiver<Int>) -> Result<Unit, IoError> {
+  let got = values.receive()
+  Ok(())
+}
+
+test "a task counts until it ends" {
+  let before = Runtime.census()
+  let (tx, rx) = Channel.bounded(1)
+  spawn wait_on(rx)
+  assert Runtime.census().tasks == before.tasks + 1
+  tx.close()
+  assert Runtime.settle(before.tasks, 5 seconds)
+  assert Runtime.census().tasks == before.tasks
+}
+
+test fn pipe_counted(before: Census) -> Int {
+  let (a, b) = Pipe.pair()
+  Runtime.census().pipes - before.pipes
+}
+
+test "a pipe pair counts while it lives" {
+  let before = Runtime.census()
+  assert pipe_counted(before) == 1
+  assert Runtime.census().pipes == before.pipes
+}
+
+// A capability counts on both targets. Its release is checked on the Rust
+// target only: on the LLVM target no capability handle is released yet
+// (`docs/leak-guard.md` 1.2, Q8), which `leak::` records.
+test fn capability_counted(before: Census) -> Int {
+  let entropy = Entropy.new()
+  let drawn = entropy.random_bytes(1)
+  Runtime.census().capabilities - before.capabilities
+}
+
+test "a capability counts while it lives" {
+  let before = Runtime.census()
+  assert capability_counted(before) == 1
+}
+
+test "a store counts, and stays" {
+  let before = Runtime.census()
+  let store: Store<Int> = Store.new()
+  assert Runtime.census().stores == before.stores + 1
+}
+
+test fn megabyte() -> Bytes {
+  var bytes = Bytes.with_capacity(1100000)
+  var i = 0
+  while i < 1100000 {
+    bytes.push(7)
+    i = i + 1
+  }
+  bytes
+}
+
+test fn hold_megabyte(held: Sender<Int>, release: Receiver<Int>) -> Result<Unit, IoError> {
+  let big = megabyte()
+  let sent = held.send(big.len())
+  let go = release.receive()
+  let kept = big.len()
+  Ok(())
+}
+
+test "a task's megabyte counts in heap and arena bytes until the task ends" {
+  let before = Runtime.census()
+  let (held_tx, held_rx) = Channel.bounded(1)
+  let (go_tx, go_rx) = Channel.bounded(1)
+  let unused = go_tx.try_send(0)
+  let drained = go_rx.receive()
+  spawn hold_megabyte(held_tx, go_rx)
+  assert held_rx.receive() == Some(1100000)
+  let during = Runtime.census()
+  go_tx.close()
+  assert Runtime.settle(before.tasks, 5 seconds)
+  let after = Runtime.census()
+  assert during.heap_bytes - before.heap_bytes >= 1048576
+  assert after.heap_bytes - before.heap_bytes < 65536
+  assert during.arena_bytes == 0 || during.arena_bytes - before.arena_bytes >= 1048576
+  assert after.arena_bytes - before.arena_bytes < 65536
+}

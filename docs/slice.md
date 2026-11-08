@@ -10132,3 +10132,88 @@ stat` task-clock, page faults and user instructions, medians; 1-minute load 33 t
 - `ignite-types` fixtures `valid_local_inference` (the element type from a later `push` and
   from an argument) and `e042_with_capacity` (E042, E040).
 - `bitwise::sha1_and_base64_vectors_on_both_targets` over the rewritten codecs fixture.
+
+## 32 The census and the soak (`std.runtime`)
+
+Story `leak-census` of `epic:leak-guard` (`docs/leak-guard.md` 5.1, 5.2, 7). A test counts the
+live runtime objects of its process per kind and the heap bytes it holds, on both targets, and
+soaks a body: `assert soak(2000, body).growth == []` fails, naming the kind that grew, when the
+body keeps a counted object or bytes.
+
+### 32.1 The census
+
+`crates/ignite-io/src/census.rs`: one counter per kind, raised where the object is made and
+lowered where it is dropped. A `Counted` token lives in the shared part of each object (the
+`Arc` its clones share), so a copy of a handle is not a second object.
+
+| field | counts | Rust | LLVM | soak |
+|---|---|---|---|---|
+| `tasks` | spawned and not returned (`ignite_io::spawn`) | yes | yes | exact |
+| `workers` | worker threads, idle or running | yes | yes | reported |
+| `channels` | a channel's shared state | yes | yes | exact |
+| `listeners`, `streams` | a `TcpListener`'s socket, a `TcpStream`'s | yes | yes | exact |
+| `pipes` | a `Pipe.pair()`: one per pair, shared by its ends | yes | yes | exact |
+| `children` | a started `ChildProcess` | yes | yes | exact |
+| `directories` | a `Directory` root | yes | yes | exact |
+| `capabilities` | `Launcher`, `Entropy`, `Setting`, `CommandLine`, `Environment` | yes | yes | exact |
+| `handles` | filled slots of the handle table | 0 | yes | exact |
+| `handle_slots` | slots ever issued, the table's high-water mark | 0 | yes | reported |
+| `heap_copies` | live `HeapValue`s (stores, channels) | 0 | yes | exact |
+| `stores` | a `Store`; resident on LLVM | yes | yes | reported |
+| `heap_bytes` | bytes allocated through the counting allocator and not freed; on LLVM less the large arena blocks kept for reuse | yes | yes | 64 KiB slack |
+| `arena_bytes` | arena blocks of every task but the caller | 0 | yes | 64 KiB slack |
+| `resident_bytes` | `VmRSS` | yes | yes | reported |
+
+Heap bytes: `ignite_io::census::Counting` is a global allocator over the system allocator
+with 64 cache-line counter blocks, a thread adding to its own. The generated Rust executables
+(each `src/bin/*.rs`, the test executable included) and `ignite-rt` declare it. The LLVM
+target's generated `malloc` and `free` (heap copies, `glue.rs`) stay uncounted: they are
+counted as `heap_copies`. `CODEGEN_REVISION` moves once.
+
+### 32.2 `std.runtime`
+
+A base-layer module (`docs/layering.md`): the records `Census` (the fields of 32.1 in that
+order, all `Int`), `Growth { kind, before, after }`, `Soak { runs, warmup, growth }`, the fn type
+`Body`, and `soak(runs, body)`.
+
+| static | type | lowering |
+|---|---|---|
+| `Runtime.census()` | `Census` | Rust: `ignite_io::census::read()` into the record; LLVM: `ignite_rt_runtime_census(ptr out)`, sixteen `i64` |
+| `Runtime.settle(tasks: Int, within: Duration)` | `Bool` | waits until at most `tasks` tasks are live (`ignite_io::live_tasks`), false at the deadline; LLVM `i8 ignite_rt_runtime_settle(i64, i64)` |
+
+Both are pure (as `Process.flush`) and have no value in the evaluator. `soak` runs `body(i)`
+for `i` in `0..runs`, after each run `Runtime.settle` to the task count before the first run
+within 5 s; the census after the first `max(10, runs / 10)` runs is compared with the census
+after the last: every exact kind must not grow, `heap_bytes` and `arena_bytes` not by more than
+64 KiB. `Body` is `fn(run: Int) -> Unit requires [run.*, channel.*, net.*, clock.*, process.*,
+directory.*, launcher.*, entropy.*, setting.*, command_line.*, environment.*]`, so an effectful
+body is a value (E017 otherwise); `docs/leak-guard.md` 5.2 wrote `fn(Int) -> Unit`.
+
+### 32.3 Seeded leaks
+
+A debug build of `ignite-io` and `ignite-rt` reads `IGNITE_DEBUG_LEAK=<kind>` once and skips
+one release per object of that kind: `task`, `channel`, `listener`, `stream`, `pipe`, `child`,
+`directory`, `capability` (both targets), `handle`, `heap_copy` and `arena` (a task's last
+arena block kept at its end; LLVM); `bytes` keeps 370 bytes per dropped channel, which no
+counted object holds (both targets). Release builds ignore the variable.
+
+### 32.4 Tests
+
+- `std/runtime.ignite`: the soak of an idle body and of a channel per run finds no growth; a
+  channel, a task, a pipe pair and a capability count while they live and leave the census
+  once released; a store counts; a held 1.1 MB value raises `heap_bytes` by at least 1 MiB and
+  its drop returns it within 64 KiB.
+- `leak::every_soak_passes_without_a_seeded_leak` and
+  `leak::each_seeded_leak_fails_its_soak_naming_the_kind` over
+  `crates/ignite/tests/fixtures/leak/seeded.ignite`, both targets. On the LLVM target five
+  soaks are known failures without a seed, each asserted red with the kind it names: the
+  lowering releases only the channel ends, pipe ends and streams a block owns (`own.rs`), so a
+  listener (`soak: listener`, `soak: stream`), a directory and a capability (`soak: child` by
+  its launcher, `soak: capability`) stay in the handle table until the process exits
+  (`docs/leak-guard.md` 1.2, Q8); their seeds are checked on the Rust target only. For the
+  same reason the census test of a capability checks its release on neither target.
+- G30 (`docs/leak-guard.md` 6.1): `fixtures/leak/g30.ignite` holds "a channel end bound a
+  second time is released (G30)" and "a channel end kept in a record field is released (G30)";
+  `leak::g30_soaks_pass_on_rust_and_are_known_failures_on_llvm` asserts both pass on Rust and
+  both fail on LLVM naming `handles` and `channels`. `story:channel-release-on-close` turns the
+  LLVM half green and moves the two tests into `std/sync.ignite`.

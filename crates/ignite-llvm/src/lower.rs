@@ -4701,6 +4701,24 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                     .ins(format!("call void @ignite_rt_clock_sleep(i64 {duration})"));
                 Val::Unit
             }
+            RuntimeCensus => {
+                self.m
+                    .declare("ignite_rt_runtime_census", "void", &["ptr".to_string()]);
+                self.rt_out("runtime_census", &ignite_types::census(), &[])
+            }
+            RuntimeSettle => {
+                self.m.declare(
+                    "ignite_rt_runtime_settle",
+                    "i8",
+                    &["i64".to_string(), "i64".to_string()],
+                );
+                let tasks = self.scalar_arg(&args[0]);
+                let within = self.scalar_arg(&args[1]);
+                let settled = self.f.val(format!(
+                    "call i8 @ignite_rt_runtime_settle(i64 {tasks}, i64 {within})"
+                ));
+                Val::Scalar(self.f.val(format!("icmp ne i8 {settled}, 0")))
+            }
             ClockNow => {
                 self.m.declare("ignite_rt_clock_now", "i64", &[]);
                 Val::Scalar(self.f.val("call i64 @ignite_rt_clock_now()"))

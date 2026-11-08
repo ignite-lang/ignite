@@ -92,6 +92,7 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 #[derive(Clone, Debug)]
 pub struct Launcher {
     slots: Arc<Slots>,
+    _counted: Arc<crate::census::Counted>,
 }
 
 /// The children of one launcher that were started and not yet waited.
@@ -133,6 +134,9 @@ impl Launcher {
                 maximum: maximum_children,
                 taken: Mutex::new(0),
             }),
+            _counted: Arc::new(crate::census::Counted::new(
+                crate::census::Kind::Capabilities,
+            )),
         }
     }
 
@@ -158,6 +162,7 @@ impl Launcher {
                     id,
                     watched,
                     slots: Arc::clone(&self.slots),
+                    _counted: crate::census::Counted::new(crate::census::Kind::Children),
                 }),
             }),
             Err(error) => {
@@ -185,6 +190,7 @@ struct Started {
     id: i64,
     watched: Arc<Watched>,
     slots: Arc<Slots>,
+    _counted: crate::census::Counted,
 }
 
 impl ChildProcess {

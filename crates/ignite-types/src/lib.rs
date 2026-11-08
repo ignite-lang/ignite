@@ -88,7 +88,7 @@ use ignite_syntax::ast::{
 };
 use ignite_syntax::diagnostic::Diagnostic;
 
-pub use builtins::{child_exit, child_exit_name, endpoint, endpoint_name};
+pub use builtins::{census, census_name, child_exit, child_exit_name, endpoint, endpoint_name};
 pub use ignite_check::RFC_MODULE;
 
 /// The module of the reducers (`docs/slice.md` 16.6): a kind's hook
@@ -843,6 +843,13 @@ pub enum Builtin {
     /// `Process.flush() -> Unit`: send what the calling task wrote (21.20);
     /// pure, as `log`.
     ProcessFlush,
+    /// `Runtime.census() -> std.runtime.Census`: the live objects of the
+    /// process per kind and its heap bytes (`docs/slice.md` 32); pure, as
+    /// `Process.flush`, and no value in the evaluator.
+    RuntimeCensus,
+    /// `Runtime.settle(tasks: Int, within: Duration) -> Bool`: wait until at
+    /// most `tasks` tasks are live, false at the deadline (32); pure.
+    RuntimeSettle,
     /// `Process.open_files_limit() -> Int`: the current open-files soft
     /// limit (`docs/slice.md` 28); effect `process.limit`.
     ProcessOpenFilesLimit,

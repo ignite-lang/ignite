@@ -46,6 +46,7 @@ pub struct Directory {
 #[derive(Debug)]
 struct Root {
     descriptor: OwnedFd,
+    _counted: crate::census::Counted,
     path: String,
     /// Resolve by the walk alone, as on a kernel without `openat2`; set
     /// by tests only.
@@ -302,6 +303,7 @@ impl Directory {
                 .map_err(|_| refuse(&"not UTF-8"))?;
             Ok(Directory {
                 root: Arc::new(Root {
+                    _counted: crate::census::Counted::new(crate::census::Kind::Directories),
                     descriptor,
                     path,
                     walk_only: false,
@@ -354,6 +356,7 @@ impl Directory {
         let descriptor = self.root.descriptor.try_clone().unwrap();
         Directory {
             root: Arc::new(Root {
+                _counted: crate::census::Counted::new(crate::census::Kind::Directories),
                 descriptor,
                 path: self.root.path.clone(),
                 walk_only: true,

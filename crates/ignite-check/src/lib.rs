@@ -171,6 +171,8 @@ pub const BUILTIN_STATICS: &[(&str, &str)] = &[
     ("Process", "open_files_limit"),
     ("TcpStream", "connect_within"),
     ("Channel", "bounded"),
+    ("Runtime", "census"),
+    ("Runtime", "settle"),
 ];
 
 /// Owners of [`BUILTIN_STATICS`] that are records of the standard library,
@@ -324,6 +326,8 @@ const BUILTIN_STATIC_ARITIES: &[(&str, &str, usize)] = &[
     ("Process", "open_files_limit", 0),
     ("TcpStream", "connect_within", 3),
     ("Channel", "bounded", 1),
+    ("Runtime", "census", 0),
+    ("Runtime", "settle", 2),
 ];
 
 /// Builtin statics that are effectful substrate operations.

@@ -2335,6 +2335,8 @@ fn is_static(builtin: Builtin) -> bool {
             | Builtin::ClockSleep
             | Builtin::ClockNow
             | Builtin::ProcessFlush
+            | Builtin::RuntimeCensus
+            | Builtin::RuntimeSettle
             | Builtin::ProcessOpenFilesLimit
             | Builtin::TcpStreamConnectWithin
             | Builtin::ChannelBounded

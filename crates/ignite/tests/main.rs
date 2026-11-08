@@ -33,6 +33,7 @@ mod generics;
 mod http_chunked_adversary;
 mod ignite_test;
 mod image;
+mod leak;
 mod llvm;
 mod llvm_build;
 mod llvm_memory;

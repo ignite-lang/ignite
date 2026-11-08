@@ -270,7 +270,10 @@ fn decode(handle: i64) -> Option<(usize, u32)> {
 
 pub(crate) fn register(handle: Handle) -> i64 {
     let reused = lock(&FREE).pop();
-    let index = reused.unwrap_or_else(|| ISSUED.fetch_add(1, Ordering::AcqRel));
+    let index = reused.unwrap_or_else(|| {
+        ignite_io::census::add(ignite_io::census::Kind::HandleSlots, 1);
+        ISSUED.fetch_add(1, Ordering::AcqRel)
+    });
     if index >= u32::MAX as usize {
         crate::process::die("handle table full");
     }
@@ -280,6 +283,7 @@ pub(crate) fn register(handle: Handle) -> i64 {
     entry.owners = 1;
     let value = encode(index, entry.generation);
     slot.live.store(value, Ordering::Release);
+    ignite_io::census::add(ignite_io::census::Kind::Handles, 1);
     value
 }
 
@@ -770,6 +774,7 @@ fn release_owner(handle: i64, waited_child: Option<i64>) {
     slot.live.store(0, Ordering::Release);
     let released = entry.handle.take();
     entry.generation += 1;
+    ignite_io::census::release(ignite_io::census::Kind::Handles);
     let reusable = entry.generation < GENERATIONS;
     drop(entry);
     drop(released);

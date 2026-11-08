@@ -66,6 +66,7 @@ pub struct Store<T> {
 
 struct Shared<T> {
     shards: [Shard<T>; SHARDS],
+    _counted: crate::census::Counted,
     last_id: AtomicI64,
 }
 
@@ -321,6 +322,7 @@ impl<T> Store<T> {
     pub fn new() -> Store<T> {
         Store {
             inner: Arc::new(Shared {
+                _counted: crate::census::Counted::new(crate::census::Kind::Stores),
                 shards: std::array::from_fn(|_| Shard::new()),
                 last_id: AtomicI64::new(0),
             }),

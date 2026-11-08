@@ -514,6 +514,7 @@ pub mod args {
     pub struct Setting {
         flag: std::sync::Arc<str>,
         value: std::sync::Arc<str>,
+        _counted: std::sync::Arc<crate::census::Counted>,
     }
 
     impl Setting {
@@ -522,6 +523,9 @@ pub mod args {
             Setting {
                 flag: flag.as_ref().into(),
                 value: value.as_ref().into(),
+                _counted: std::sync::Arc::new(crate::census::Counted::new(
+                    crate::census::Kind::Capabilities,
+                )),
             }
         }
 
@@ -555,6 +559,7 @@ pub mod args {
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct CommandLine {
         arguments: std::sync::Arc<[String]>,
+        _counted: std::sync::Arc<crate::census::Counted>,
     }
 
     impl CommandLine {
@@ -562,6 +567,9 @@ pub mod args {
         pub fn of(arguments: Vec<String>) -> CommandLine {
             CommandLine {
                 arguments: arguments.into(),
+                _counted: std::sync::Arc::new(crate::census::Counted::new(
+                    crate::census::Kind::Capabilities,
+                )),
             }
         }
 
@@ -1091,6 +1099,8 @@ mod limits;
 pub use limits::{OPEN_FILES_REPORT_BELOW, open_files_limit, raise_open_files_limit};
 // `docs/slice.md` 30: bounded channels between tasks.
 pub mod channel;
+// `docs/slice.md` 32: the census of live objects and heap bytes.
+pub mod census;
 pub use channel::{Channel, Receiver, Sender};
 // Story `text-fast-search`: the byte search of `Bytes.index_of` and
 // `Text.pieces`.
