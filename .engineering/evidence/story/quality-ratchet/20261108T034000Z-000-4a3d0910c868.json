@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-08T03:40:00Z",
+  "actor": "human:timo",
+  "artifact": "story:quality-ratchet",
+  "kind": "story",
+  "revision": 8,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on wave/5 415ca28a: 1470 cargo passed, 0 failed; test-ignite 322 per target; ux 302/304 in the gate, 304 + ratchet rerun alone",
+    "reference": "https://github.com/ignite-lang/ignite/pull/116"
+  }
+}

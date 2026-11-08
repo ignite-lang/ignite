@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:quality-ratchet
 kind: story
-status: active
+status: implemented
 title: Quality metrics with a ratchet; one result across Rust, LLVM and the evaluator
 scope:
 - confidence: inferred
@@ -31,10 +31,11 @@ scope:
   path: site/book/src/quality.md
 - confidence: inferred
   path: tools/ignite-perf/src
-revision: 8
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-07T19:49:39Z", actor: "human:timo", revision: 3}
 - {from: "proposed", to: "active", at: "2026-11-07T19:49:39Z", actor: "human:timo", revision: 4}
+- {from: "active", to: "implemented", at: "2026-11-08T03:39:36Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: quality-ratchet
 
