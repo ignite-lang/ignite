@@ -7,7 +7,8 @@ import std.option.{unwrap_or, map}
 // are byte offsets into the UTF-8 encoding and needles match byte for
 // byte. Case and whitespace rules are ASCII only. The builtins `len`,
 // `is_empty`, `trim`, `starts_with`, `strip_prefix` and `concat` are not
-// repeated here.
+// repeated here; the search and the split below call the builtins
+// `index_of` of `Bytes` and `pieces` of `Text`.
 
 // ASCII whitespace: space, tab, LF, VT, FF, CR.
 fn is_whitespace(b: Byte) -> Bool = match b {
@@ -435,17 +436,9 @@ fn bytes_match_at(bytes: Bytes, needle: Bytes, at: Int) -> Bool {
   true
 }
 
-// The offset of the first `needle` in `bytes` at or after `start`.
-fn bytes_find_from(bytes: Bytes, needle: Bytes, start: Int) -> Option<Int> {
-  var at = start
-  while at + needle.len() <= bytes.len() {
-    if bytes_match_at(bytes, needle, at) {
-      return Some(at)
-    }
-    at = at + 1
-  }
-  None
-}
+// The offset of the first `needle` in `bytes` at or after `start`; a
+// negative `start` searches from 0.
+fn bytes_find_from(bytes: Bytes, needle: Bytes, start: Int) -> Option<Int> = bytes.index_of(needle, start)
 
 // The byte offset of the first `needle` in `text` at or after `start`.
 fn find_from(text: Text, needle: Text, start: Int) -> Option<Int> =
@@ -501,27 +494,7 @@ test "contains, ends_with and strip_suffix" {
 // The pieces between the separators: "a,b,,c".split(",") is
 // ["a", "b", "", "c"]; "".split(",") is [""]. An empty separator gives
 // `[text]`.
-fn split(text: Text, separator: Text) -> List<Text> {
-  let bytes = text.to_bytes()
-  let needle = separator.to_bytes()
-  if needle.is_empty() {
-    return [text]
-  }
-  var pieces = []
-  var start = 0
-  loop {
-    match bytes_find_from(bytes, needle, start) {
-      Some(at) => {
-        pieces.push(bytes.slice(start, at).to_text())
-        start = at + needle.len()
-      }
-      None => {
-        pieces.push(bytes.slice(start, bytes.len()).to_text())
-        return pieces
-      }
-    }
-  }
-}
+fn split(text: Text, separator: Text) -> List<Text> = text.pieces(separator)
 
 // The text before and after the first `separator`:
 // "Host: x".split_once(": ") is Some(("Host", "x")).
@@ -540,6 +513,98 @@ test "split keeps empty pieces" {
   assert split("abc", "abcd") == ["abc"]
   assert split("ä|ö|ü", "|") == ["ä", "ö", "ü"]
   assert split("x€y€", "€") == ["x", "y", ""]
+}
+
+// The search and the split before the builtins `index_of` and `pieces`,
+// the reference the test below compares them with.
+test fn naive_find_from(bytes: Bytes, needle: Bytes, start: Int) -> Option<Int> {
+  var at = start
+  while at + needle.len() <= bytes.len() {
+    if bytes_match_at(bytes, needle, at) {
+      return Some(at)
+    }
+    at = at + 1
+  }
+  None
+}
+
+test fn naive_split(text: Text, separator: Text) -> List<Text> {
+  let bytes = text.to_bytes()
+  let needle = separator.to_bytes()
+  if needle.is_empty() {
+    return [text]
+  }
+  var pieces = []
+  var start = 0
+  loop {
+    match naive_find_from(bytes, needle, start) {
+      Some(at) => {
+        pieces.push(bytes.slice(start, at).to_text())
+        start = at + needle.len()
+      }
+      None => {
+        pieces.push(bytes.slice(start, bytes.len()).to_text())
+        return pieces
+      }
+    }
+  }
+}
+
+test fn next_seed(seed: Int) -> Int = (seed * 1103515245 + 12345) % 2147483648
+
+test fn pick(seed: Int, count: Int) -> Int = (seed / 65536) % count
+
+// `count` pieces of an alphabet of one- to four-byte characters, and the
+// seed after them.
+test fn random_text(seed: Int, count: Int) -> (Text, Int) {
+  let alphabet = ["a", "b", ",", "é", "€", "\r\n", "ab", "𝄞", "ä€"]
+  var s = seed
+  var out = ""
+  var i = 0
+  while i < count {
+    s = next_seed(s)
+    out = out + alphabet.at(pick(s, alphabet.len()))
+    i = i + 1
+  }
+  (out, s)
+}
+
+test "index_of, pieces and contains agree with the naive search over random texts" {
+  var seed = 7
+  var n = 0
+  while n < 300 {
+    seed = next_seed(seed)
+    let (text, after_text) = random_text(seed, pick(seed, 12))
+    let (needle, after_needle) = random_text(after_text, pick(after_text, 3))
+    seed = next_seed(after_needle)
+    let start = pick(seed, text.len() + 5) - 2
+    let bytes = text.to_bytes()
+    assert bytes.index_of(needle.to_bytes(), start) == naive_find_from(bytes, needle.to_bytes(), start)
+    assert text.find_from(needle, start) == naive_find_from(bytes, needle.to_bytes(), start)
+    assert text.split(needle) == naive_split(text, needle)
+    assert text.pieces(needle) == naive_split(text, needle)
+    assert text.contains(needle) == (naive_find_from(bytes, needle.to_bytes(), 0) != None)
+    seed = next_seed(seed)
+    let from = pick(seed, bytes.len() + 1)
+    seed = next_seed(seed)
+    let part = bytes.slice(from, from + pick(seed, bytes.len() - from + 1))
+    assert bytes.index_of(part, 0) == naive_find_from(bytes, part, 0)
+    assert bytes.index_of(part, start) == naive_find_from(bytes, part, start)
+    n = n + 1
+  }
+}
+
+test "index_of searches bytes that are not UTF-8 and bounds the start" {
+  assert b"\xff\xfe\xff\xfe".index_of(b"\xfe\xff", 0) == Some(1)
+  assert b"\xff\xfe\xff\xfe".index_of(b"\xfe", 2) == Some(3)
+  assert b"abc".index_of(b"", 3) == Some(3)
+  assert b"abc".index_of(b"", 4) == None
+  assert b"abc".index_of(b"a", -5) == Some(0)
+  assert b"abc".index_of(b"", -5) == Some(0)
+  assert b"abc".index_of(b"c", 9223372036854775807) == None
+  assert b"".index_of(b"", 0) == Some(0)
+  assert "é".pieces("") == ["é"]
+  assert "a\r\nb\r\n".pieces("\r\n") == ["a", "b", ""]
 }
 
 test "split_once splits at the first separator" {

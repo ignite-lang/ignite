@@ -1254,6 +1254,41 @@ impl<'p> Evaluator<'p> {
                 let nodes = text.len() as u64 / 64;
                 Ok((Value::Text(text), nodes))
             }
+            (Builtin::BytesIndexOf, Value::List(items)) => {
+                let haystack = bytes_of(items)?;
+                let Value::List(needle) = next()? else {
+                    return Err(internal("index_of of a non-Bytes needle"));
+                };
+                let needle = bytes_of(&needle)?;
+                let Value::Int(start) = next()? else {
+                    return Err(internal("index_of from a non-Int start"));
+                };
+                let start = usize::try_from(start.max(0)).unwrap_or(usize::MAX);
+                let found = (start <= haystack.len())
+                    .then(|| {
+                        if needle.is_empty() {
+                            return Some(start);
+                        }
+                        haystack[start..]
+                            .windows(needle.len())
+                            .position(|window| window == needle.as_slice())
+                            .map(|at| start + at)
+                    })
+                    .flatten();
+                plain(Value::option(found.map(|at| Value::Int(at as i64))))
+            }
+            (Builtin::TextPieces, Value::Text(t)) => {
+                let separator = text(&next()?)?;
+                let pieces: Vec<Value> = if separator.is_empty() {
+                    vec![Value::Text(t.clone())]
+                } else {
+                    t.split(separator.as_str())
+                        .map(|piece| Value::Text(piece.to_string()))
+                        .collect()
+                };
+                let nodes = pieces.len() as u64 + t.len() as u64 / 64;
+                Ok((Value::List(pieces), nodes))
+            }
             (Builtin::ByteToInt, Value::Byte(b)) => plain(Value::Int(i64::from(*b))),
             (Builtin::IntToByte, Value::Int(n)) => {
                 plain(Value::option(u8::try_from(*n).ok().map(Value::Byte)))

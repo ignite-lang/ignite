@@ -186,6 +186,8 @@ pub const EFFECTFUL_METHODS: &[&str] = &[
     "write_urgent",
     "urgent_pending",
     "timed_out",
+    "index_of",
+    "pieces",
 ];
 
 /// Every builtin method name (`docs/slice.md` sections 6, 7, 10 and 13).
@@ -4219,6 +4221,7 @@ pub fn builtin_applies(ty: &Type, method: &str) -> bool {
                 | "concat"
                 | "to_bytes"
                 | "to_text"
+                | "pieces"
         ),
         "Int" => matches!(
             method,
@@ -4245,13 +4248,14 @@ pub fn builtin_applies(ty: &Type, method: &str) -> bool {
                 | "clear"
                 | "map"
                 | "to_text"
+                | "index_of"
         ),
         "List" => {
             matches!(
                 method,
                 "len" | "is_empty" | "at" | "slice" | "push" | "set" | "append" | "clear" | "map"
             ) || (method == "join" && text)
-                || (method == "to_text" && byte)
+                || (matches!(method, "to_text" | "index_of") && byte)
         }
         "Ref" | "Signal" => method == "to_text",
         "Store" => matches!(

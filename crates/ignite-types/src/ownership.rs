@@ -78,6 +78,7 @@ pub fn change(builtin: Builtin) -> Option<Change> {
         | BytesEmpty
         | ByteSizeToInt
         | BytesOf
+        | BytesIndexOf
         | BytesToText
         | ByteToInt
         | ByteToText
@@ -173,6 +174,7 @@ pub fn change(builtin: Builtin) -> Option<Change> {
         | TextConcat
         | TextIsEmpty
         | TextLen
+        | TextPieces
         | TextStartsWith
         | TextStripPrefix
         | TextToBytes

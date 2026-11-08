@@ -614,6 +614,8 @@ meaning. The generator emits exactly the Rust on the right.
 | `t.to_bytes()` | `t.clone().into_bytes()`; `t.into_bytes()` when `t` is a fresh text nothing else owns (a literal, a `+` chain or interpolation, `to_text` of Int, Byte or Bool, `concat`, `trim`) | |
 | `b.to_text()` | `String::from_utf8_lossy(&b).into_owned()` | |
 | `b.slice(i, j).to_text()` | `String::from_utf8_lossy(::ignite_io::checked::slice_ref(&b, i, j, <site>)).into_owned()`: the slice is borrowed, not copied, with the failure of `checked::slice` | Bytes |
+| `b.index_of(n, i) -> Option<Int>` | `::ignite_io::text::index_of(&b, &n, i)`: the offset of the first `n` at or after `i` (a negative `i` reads as 0; `None` when `i` is past the end, also for an empty `n`), by `memchr` or `memmem`; `t.to_bytes()` and a checked `slice` are borrowed, not copied. The LLVM runtime's `bytes_index_of` calls the same function (-1 for `None`). Story `text-fast-search` | Bytes |
+| `t.pieces(s) -> List<Text>` | `::ignite_io::text::pieces(&t, &s)`: the texts between the separators, empty pieces kept, `[t]` for an empty `s`; no piece is checked for UTF-8 again, since valid text cut at a valid separator stays valid. `std.text.split` is this builtin. The LLVM runtime's `text_pieces` uses the same search. Story `text-fast-search` | Text |
 | `b.at(i)` | `b[(i) as usize]`, then `.clone()` when the element is not `Int`, `Byte` or `Bool` (also `l[i]`) | Bytes, List |
 | `l.map(f)` | `l.iter().cloned().map(f).collect::<Vec<_>>()` | List |
 | `b.to_int()` | `(b as i64)` | Byte |
