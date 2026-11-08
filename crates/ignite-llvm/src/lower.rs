@@ -1135,13 +1135,18 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             {
                 self.moved_streams = crate::region::moved_to_task(&block.stmts, i, call);
             }
-            if let StmtKind::Expr(e) = &stmt.kind
+            if let Some(e) = crate::own::owned_match(stmt, &self.own_cx())
                 && let ExprKind::Match { scrutinee, .. } = &e.kind
                 && self.env.holds_handles(&self.ty(scrutinee))
-                && crate::own::owned_scrutinee(e, &self.own_cx())
             {
                 self.own_mark();
                 self.owned_matches.push(expr_key(e));
+            }
+            if let Some(iter) = crate::own::owned_iter(stmt, &self.own_cx())
+                && self.env.holds_handles(&self.ty(iter))
+            {
+                self.own_mark();
+                self.owned_matches.push(expr_key(iter));
             }
             match &stmt.kind {
                 StmtKind::Expr(e) if last && want => value = self.expr(e, true),
@@ -1331,6 +1336,14 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             other => panic!("for over {other:?}"),
         };
         let v = self.expr(iter, true);
+        // An owned iterated value (`own::owned_iter`): the block is the
+        // owner of its handles, the loop binds its elements in place.
+        if v != Val::Never
+            && let Some(at) = self.owned_matches.iter().position(|k| *k == expr_key(iter))
+        {
+            self.owned_matches.remove(at);
+            self.own_value(&list_ty, &v);
+        }
         let names = ownership::changed_in_block(body, Some(self.cx.types));
         let keep = Self::root(iter).is_some_and(|root| !names.contains(root));
         let v = if keep { v } else { self.owned(&list_ty, v) };

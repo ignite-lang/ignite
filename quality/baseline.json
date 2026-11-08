@@ -24,6 +24,12 @@
     "crates/ignite/tests/fixtures/conformance/adversary_std_telnet.ignite::adversary: replies and the prompt after a reply are NVT data": "builtin `PipePair` has no value at compile time",
     "crates/ignite/tests/fixtures/conformance/adversary_two_specs/main.ignite::padding exits with seven": "builtin `ProcessExit` has no value at compile time",
     "crates/ignite/tests/fixtures/conformance/signal.ignite::never ends": "exceeds the evaluator's fuel of 10000000 units",
+    "crates/ignite/tests/fixtures/leak/attack.ignite::a broadcast over stored senders is released (G30)": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/attack.ignite::a record field stays usable after its end was handed to a task": "builtin `RuntimeCensus` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/attack.ignite::a stored end read back and dropped stays the store's": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/attack.ignite::a stored end read through a temporary is released (G30)": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/attack.ignite::an alias stays usable after its original was handed to a task": "builtin `RuntimeCensus` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/attack.ignite::an end sent through a channel is the receiver's": "builtin `ChannelBounded` has no value at compile time",
     "crates/ignite/tests/fixtures/leak/repro.ignite::main repro": "a main does IO; the evaluator has none",
     "crates/ignite/tests/fixtures/leak/seeded.ignite::a channel made and dropped": "builtin `ChannelBounded` has no value at compile time",
     "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: arena": "builtin `RuntimeCensus` has no value at compile time",
@@ -334,10 +340,10 @@
           "value": 467
         },
         "llvm": {
-          "value": 727
+          "value": 733
         },
         "rust": {
-          "value": 727
+          "value": 733
         }
       },
       "direction": "higher",
@@ -408,8 +414,8 @@
       "area": "Semantics: one meaning across the three consumers",
       "bars": {
         "eval": {
-          "decision": "story channel-release-on-close (2026-11-08), wave 8 unit leaks: the four G30 soaks now in std/sync.ignite read Runtime.census() or make a store, and the main of the case study's reproducer (crates/ignite/tests/fixtures/leak/repro.ignite) does IO, none with a value at compile time (docs/slice.md 33.4); the two soaks of the removed fixtures/leak/g30.ignite left the list; listed in eval_cannot_run",
-          "value": 260
+          "decision": "story channel-release-on-close (2026-11-08), wave 8 unit leaks: the four G30 soaks now in std/sync.ignite read Runtime.census() or make a store, and the main of the case study's reproducer (crates/ignite/tests/fixtures/leak/repro.ignite) does IO, none with a value at compile time (docs/slice.md 33.4); the two soaks of the removed fixtures/leak/g30.ignite left the list; the six adversary cases of crates/ignite/tests/fixtures/leak/attack.ignite (25d418ae) start tasks, read Runtime.census() or make stores and channels, so 266; listed in eval_cannot_run",
+          "value": 266
         }
       },
       "direction": "lower",

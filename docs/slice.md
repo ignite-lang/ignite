@@ -10074,9 +10074,11 @@ and `<Receiver>`.
     `upsert`, `receive`, `receive_within`); or a call of a fn of the same module whose result
     holds only handles it created (its final expression such a value, a binding of one that
     escapes only there, or a tuple or record literal of those; no `return` of a value with a
-    handle). A `match` statement owns such a scrutinee when every arm keeps what it binds.
-    The block registers every handle in the value (`own_handles.<T>`) and releases them when
-    it is left.
+    handle). A `match` statement, or a `match` that is the value of a `let`
+    (`let present = match senders.get(id) {..}`), owns such a scrutinee when every arm keeps
+    what it binds; a `for` statement owns such an iterated value (`for s in senders.values()`)
+    when its body keeps every name the loop binds. The block registers every handle in the
+    value (`own_handles.<T>`) and releases them when it is left.
   - The handles stay owned while every later mention keeps them in the block: a receiver of a
     builtin method that does not hand it on, a value `put` in a store or sent on a channel, a
     `spawn` argument, a plain argument of a call whose result holds no handle or only fresh
@@ -10084,8 +10086,15 @@ and `<Receiver>`.
     `w.wake.receive()`), one of a type without handles keeps it anywhere (`w.id`). A `let` of
     the binding, of a field of it, or of a tuple or record literal around it makes an alias,
     which keeps it while the alias is kept in turn (`let r: Receiver<Int> = rx`,
-    `let w = Waiter { id, wake = rx }`). Any other mention leaves the binding unowned, as
-    before: never released, never closed early.
+    `let w = Waiter { id, wake = rx }`). A binding with an alias is not handed over to a
+    `spawn` that is its last mention: the alias still reads the handle, so the block keeps
+    its owner until it is left. Any other mention leaves the binding unowned, as before:
+    never released, never closed early.
+  - `crates/ignite/tests/fixtures/leak/attack.ignite` (six inline tests,
+    `leak::reachable_handles_stay_usable_and_stored_reads_are_released`, both targets): an
+    alias or a record field of an end handed to a task stays usable, a stored end read back
+    or sent through a channel stays the store's or the receiver's, and a broadcast over
+    stored senders and a look at one through a `let` of a `match` keep the census flat.
   - A heap copy in a store or a channel is an owner of its own: `copy_to_heap` adds an owner to
     every handle in it and `free_heap` drops it (`ignite_rt_handle_release`); `copy_from_heap`
     adds one for the copy it makes, so `remove` and `receive` hand the stored owner to their

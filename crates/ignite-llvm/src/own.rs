@@ -11,7 +11,9 @@
 //! a channel, or a call of a fn of the module that returns only handles it
 //! created, [`returns_fresh`]) and no later statement of the block lets it
 //! escape. A `match` whose scrutinee is such a value and whose arms keep
-//! what they bind is owned the same way ([`owned_scrutinee`]).
+//! what they bind is owned the same way ([`owned_scrutinee`], [`owned_match`]),
+//! and so is the value a `for` iterates when its body keeps what the loop
+//! binds ([`owned_iter`]).
 //!
 //! A mention keeps the handles inside the block when it is the receiver of
 //! a builtin method that does not hand the receiver on, a value `put` in a
@@ -94,6 +96,37 @@ pub fn owned_scrutinee(e: &Expr, cx: &Cx<'_>) -> bool {
                 .iter()
                 .all(|name| keeps(&arm.body, name, cx))
         })
+}
+
+/// The `match` that the statement `stmt` evaluates as a temporary and its
+/// block owns the scrutinee of ([`owned_scrutinee`]): the statement itself
+/// or the value of its `let` (`let present = match senders.get(id) {..}`).
+/// The scrutinee's handles are released when the block is left.
+pub fn owned_match<'s>(stmt: &'s Stmt, cx: &Cx<'_>) -> Option<&'s Expr> {
+    let e = match &stmt.kind {
+        StmtKind::Expr(e) => e,
+        StmtKind::Let { value, .. } | StmtKind::LetPattern { value, .. } => value,
+        _ => return None,
+    };
+    (matches!(e.kind, ExprKind::Match { .. }) && owned_scrutinee(e, cx)).then_some(e)
+}
+
+/// The iterated value of the `for` statement `stmt` when its block owns
+/// it: the value is one no one else owns ([`produces`]: `senders.values()`)
+/// and the body keeps every name the loop binds. The loop binds its
+/// elements in place, so the handles are released when the block is left.
+pub fn owned_iter<'s>(stmt: &'s Stmt, cx: &Cx<'_>) -> Option<&'s Expr> {
+    let (names, iter, body) = match &stmt.kind {
+        StmtKind::For { name, iter, body } => (vec![name.name.clone()], iter, body),
+        StmtKind::ForPattern {
+            pattern,
+            iter,
+            body,
+        } => (pattern_names(pattern), iter, body),
+        _ => return None,
+    };
+    (produces(iter, cx) && names.iter().all(|name| block_keeps(&body.stmts, name, cx)))
+        .then_some(iter)
 }
 
 /// Whether `value` makes a value whose handles have no other owner.
@@ -350,6 +383,8 @@ fn collect_names(pattern: &Pattern, out: &mut Vec<String>) {
 /// the scope: mentions after it are of the new binding. A spawn inside a
 /// loop runs again, so a loop body is not searched; a shadowing `let`
 /// inside a branch or a match arm that binds the name ends the search too.
+/// A binding with an alias before that spawn ([`makes_alias`]) is not
+/// handed over.
 pub fn handovers<'s>(stmts: &'s [Stmt], name: &str) -> Vec<&'s Expr> {
     let mut out = Vec::new();
     block_handovers(stmts, name, &mut out);
@@ -371,6 +406,12 @@ fn block_handovers<'s>(stmts: &'s [Stmt], name: &str, out: &mut Vec<&'s Expr>) {
     let Some(last) = scope.iter().rposition(|stmt| stmt_refers(stmt, name)) else {
         return;
     };
+    // An alias (`let r = rx`, `Waiter { wake = rx }`) still reads the
+    // handle after the spawn that is the binding's last mention: the block
+    // keeps its owner until it is left.
+    if scope[..last].iter().any(|stmt| makes_alias(stmt, name)) {
+        return;
+    }
     if let StmtKind::Expr(e) = &scope[last].kind {
         tail_handovers(e, name, out);
     }
@@ -520,6 +561,32 @@ fn tail_handovers<'s>(e: &'s Expr, name: &str, out: &mut Vec<&'s Expr>) {
             }
         }
         _ => {}
+    }
+}
+
+/// Whether `stmt` is a `let` whose value may alias the binding `name`: the
+/// binding, a field or element of it, or a tuple, record, list or enum
+/// literal holding one of those. Wider than [`alias_let`] on purpose: a
+/// handover it skips leaves the release at the block's end.
+fn makes_alias(stmt: &Stmt, name: &str) -> bool {
+    match &stmt.kind {
+        StmtKind::Let { value, .. } | StmtKind::LetPattern { value, .. } => holds_path(value, name),
+        _ => false,
+    }
+}
+
+fn holds_path(e: &Expr, name: &str) -> bool {
+    match &e.kind {
+        _ if is_path(e, name) => true,
+        ExprKind::Record { fields, .. } | ExprKind::RecordUpdate { fields, .. } => {
+            fields.iter().any(|init| holds_path(&init.value, name))
+        }
+        ExprKind::Tuple(items) | ExprKind::List(items) => {
+            items.iter().any(|item| holds_path(item, name))
+        }
+        ExprKind::Call { args, .. } => args.iter().any(|arg| holds_path(arg, name)),
+        ExprKind::NamedArg { value, .. } => holds_path(value, name),
+        _ => false,
     }
 }
 

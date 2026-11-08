@@ -34,8 +34,8 @@ Current values: run `v0.15.0` on 2026-11-08, commit `6e144f76`.
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | eval | 4 | 4 | = |
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | llvm | 0 | 0 | = |
 | 1.2 | differential corpus size | ratchet | eval | 467 | 452 | +29 better |
-| 1.2 | differential corpus size | ratchet | llvm | 727 | 688 | +45 better |
-| 1.2 | differential corpus size | ratchet | rust | 727 | 688 | +45 better |
+| 1.2 | differential corpus size | ratchet | llvm | 733 | 688 | +45 better |
+| 1.2 | differential corpus size | ratchet | rust | 733 | 688 | +45 better |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/builtins | 112 | 133 | +13 worse |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/patterns | 13 | 13 | = |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | llvm/builtins | 12 | 14 | +1 worse |
@@ -44,7 +44,7 @@ Current values: run `v0.15.0` on 2026-11-08, commit `6e144f76`.
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | rust/patterns | 71 | 83 | +12 worse |
 | 1.4 | generated-code goldens changed without a `CODEGEN_REVISION` bump | gate | all | 0 | 0 | = |
 | 1.5 | random programs on which the consumers disagree | gate | | unmeasured: no program generator yet (out of scope of story:quality-ratchet) | | |
-| 1.6 | corpus units the evaluator cannot run | ratchet | eval | 260 | 236 | +16 worse |
+| 1.6 | corpus units the evaluator cannot run | ratchet | eval | 266 | 236 | +16 worse |
 | 1.7 | known differences marked intermittent | gate | all | 1 | 1 | = |
 
 ## 2 Front end: the checker refuses exactly the wrong programs

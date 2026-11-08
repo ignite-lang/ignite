@@ -516,7 +516,10 @@ position, even with no buffer.
     call whose result type cannot hold a handle (no record, enum, fn value or type parameter
     in it) or holds only fresh ones. A field or element of the binding counts as the
     binding, and a `let` of the binding or of a literal around it is an alias that keeps it
-    while the alias is kept. The block registers every handle of the value with `tcp_own`
+    while the alias is kept; such a binding is not handed over to a `spawn` that is its
+    last mention. A `match` that is a `let`'s value and a `for` over such a value
+    (`for s in senders.values()`) own it the same way, the loop's elements bound in place.
+    The block registers every handle of the value with `tcp_own`
     (`own_handles.<T>` for an aggregate) after
     an owner mark (`own_mark`, the length of the task's registration list) taken at its
     first owned binding, and `own_release(mark)` releases every registration since the mark
