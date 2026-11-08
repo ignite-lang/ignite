@@ -438,22 +438,31 @@ fn checked(response: Response) -> Response satisfies [
   RFC9112.R6_1_8, RFC9112.R6_1_11, RFC9112.R6_2_1, RFC9110.R5_3_3, RFC9110.R5_6_1_1_1,
   RFC9110.R5_6_3_4, RFC9110.R5_6_7_2, RFC9110.R5_6_7_3
 ] {
-  var names = []
-  for header in response.headers {
+  // Taken over on every path, so the response is not copied to be
+  // returned; a repeated name is found among the earlier headers in
+  // place, without a list of lower-case names.
+  let out = response
+  var index = 0
+  for header in out.headers {
     let name = header.0.to_lower()
     if !is_token(header.0) || has_line_break(header.1) || !is_allowed_field(name, header.1) {
       return status_response(500)
     }
     if !is_list_field(name) && name != "set-cookie" {
-      for seen in names {
-        if seen == name {
+      var earlier = 0
+      for seen in out.headers {
+        if earlier == index {
+          break
+        }
+        if seen.0.equals_ignore_case(name) {
           return status_response(500)
         }
+        earlier = earlier + 1
       }
     }
-    names.push(name)
+    index = index + 1
   }
-  response
+  out
 }
 
 // How the body of a response is delimited on the wire: by a
@@ -477,8 +486,11 @@ fn render_head(response: Response, framing: Framing, keep_alive: Bool) -> Bytes 
     }
     _ => {}
   }
-  let connection = if keep_alive { "keep-alive" } else { "close" }
-  head = head + "Connection: {connection}\r\n\r\n"
+  if keep_alive {
+    head = head + "Connection: keep-alive\r\n\r\n"
+  } else {
+    head = head + "Connection: close\r\n\r\n"
+  }
   head.to_bytes()
 }
 
@@ -492,23 +504,27 @@ fn render(response: Response, keep_alive: Bool) -> Bytes satisfies [RFC9112.R2_2
 // to HEAD: the `Content-Length` is the one the body would have had (RFC
 // 9110 sections 8.6 and 9.3.2).
 fn render_message(response: Response, keep_alive: Bool, with_body: Bool) -> Bytes {
-  let framing = if has_no_content(response.status) { NoBody } else { Length(inline_body(response).len()) }
+  let framing = if has_no_content(response.status) { NoBody } else { Length(inline_length(response)) }
   render_framed(response, framing, keep_alive, with_body)
 }
 
-// The bytes an `Inline` or `Binary` response carries: `body` or the bytes
-// of `Binary`.
-fn inline_body(response: Response) -> Bytes = match response.content {
-  Binary(bytes) => bytes
-  _ => response.body.to_bytes()
+// The length of the bytes an `Inline` or `Binary` response carries:
+// `body` or the bytes of `Binary`.
+fn inline_length(response: Response) -> Int = match response.content {
+  Binary(bytes) => bytes.len()
+  _ => response.body.len()
 }
 
 // The head of `response` framed by `framing`, then its body unless
-// `with_body` is false or `framing` is `NoBody`.
+// `with_body` is false or `framing` is `NoBody`; the body is appended
+// from the response, not copied first.
 fn render_framed(response: Response, framing: Framing, keep_alive: Bool, with_body: Bool) -> Bytes {
   var out = render_head(response, framing, keep_alive)
   if with_body && framing != NoBody {
-    out.append(inline_body(response))
+    match response.content {
+      Binary(bytes) => out.append(bytes)
+      _ => out.append(response.body.to_bytes())
+    }
   }
   out
 }
@@ -524,7 +540,7 @@ fn inline_framing(request: Request, response: Response) -> Framing {
   if is_connect_success(request, response.status) {
     return UntilClose
   }
-  Length(inline_body(response).len())
+  Length(inline_length(response))
 }
 
 // Whether a response with `status` is a 2xx answer to a CONNECT `request`.
@@ -751,12 +767,20 @@ fn header(request: Request, name: Text) -> Option<Text> {
 }
 
 // The non-empty segments of the path: "/todos/3" is ["todos", "3"].
+// Each segment is copied once, from the path read in place.
 fn segments(request: Request) -> List<Text> {
+  let end = request.path.len()
   var out = []
-  for segment in request.path.split("/") {
-    if !segment.is_empty() {
-      out.push(segment)
+  var start = 0
+  while start < end {
+    let stop = match request.path.to_bytes().index_of(b"/", start) {
+      Some(at) => at
+      None => end
     }
+    if stop > start {
+      out.push(request.path.to_bytes().slice(start, stop).to_text())
+    }
+    start = stop + 1
   }
   out
 }
@@ -766,7 +790,7 @@ fn segments(request: Request) -> List<Text> {
 // header may be repeated (RFC 9110 section 7.6.1).
 fn lists_connection_option(headers: List<(Text, Text)>, option: Text) -> Bool satisfies [RFC9110.R5_6_1_2_1, RFC9110.R5_6_1_2_2] {
   for header in headers {
-    if header.0.to_lower() == "connection" {
+    if header.0.equals_ignore_case("connection") {
       for item in header.1.split(",") {
         if trim_ows(item).to_lower() == option {
           return true
@@ -851,30 +875,51 @@ fn is_token_byte(b: Byte) -> Bool = match b {
   _ => false
 }
 
-fn is_token(text: Text) -> Bool {
-  for b in text.to_bytes() {
-    if !is_token_byte(b) {
+fn is_token(text: Text) -> Bool = is_token_in(text.to_bytes(), 0, text.len())
+
+// Whether bytes `start` to `end` of `bytes` are a token. The parser reads
+// the head in place with this and the other `_in` checks, so a field is
+// copied once, when it is kept.
+fn is_token_in(bytes: Bytes, start: Int, end: Int) -> Bool {
+  var at = start
+  while at < end {
+    if !is_token_byte(bytes.at(at)) {
       return false
     }
+    at = at + 1
   }
-  !text.is_empty()
+  end > start
 }
 
 fn is_ows(b: Byte) -> Bool = b == b' ' || b == b'\t'
 
 // `text` without the SP and HTAB at either end (OWS, RFC 9110 section
 // 5.6.3); every other byte stays, a Unicode space too.
-fn trim_ows(text: Text) -> Text {
-  let bytes = text.to_bytes()
-  var start = 0
-  var end = bytes.len()
-  while start < end && is_ows(bytes.at(start)) {
-    start = start + 1
+fn trim_ows(text: Text) -> Text = trimmed_in(text.to_bytes(), 0, text.len())
+
+// Bytes `start` to `end` of `bytes` without the OWS at either end, as text.
+fn trimmed_in(bytes: Bytes, start: Int, end: Int) -> Text {
+  var from = start
+  var to = end
+  while from < to && is_ows(bytes.at(from)) {
+    from = from + 1
   }
-  while end > start && is_ows(bytes.at(end - 1)) {
-    end = end - 1
+  while to > from && is_ows(bytes.at(to - 1)) {
+    to = to - 1
   }
-  bytes.slice(start, end).to_text()
+  bytes.slice(from, to).to_text()
+}
+
+// Bytes `start` to `end` of `bytes` as text with ASCII letters in lower
+// case: a header name, copied once.
+fn lowered_in(bytes: Bytes, start: Int, end: Int) -> Text {
+  var out = bytes.slice(start, end)
+  var at = 0
+  while at < out.len() {
+    out[at] = lower_byte(out[at])
+    at = at + 1
+  }
+  out.to_text()
 }
 
 test "OWS is SP and HTAB only" verifies [RFC9112.R6_3_4, RFC9112.R6_3_5] {
@@ -893,23 +938,35 @@ test "OWS is SP and HTAB only" verifies [RFC9112.R6_3_4, RFC9112.R6_3_5] {
 }
 
 // A field value: no control byte except tab, so no bare CR or LF.
-fn is_field_value(text: Text) -> Bool satisfies [RFC9110.R5_5_4] {
-  for b in text.to_bytes() {
+fn is_field_value(text: Text) -> Bool satisfies [RFC9110.R5_5_4] = is_field_value_in(text.to_bytes(), 0, text.len())
+
+// Whether bytes `start` to `end` of `bytes` are a field value.
+fn is_field_value_in(bytes: Bytes, start: Int, end: Int) -> Bool {
+  var at = start
+  while at < end {
+    let b = bytes.at(at)
     if b < b' ' && b != b'\t' || b == 127 {
       return false
     }
+    at = at + 1
   }
   true
 }
 
 // A request target: visible bytes only.
-fn is_target(text: Text) -> Bool {
-  for b in text.to_bytes() {
+fn is_target(text: Text) -> Bool = is_target_in(text.to_bytes(), 0, text.len())
+
+// Whether bytes `start` to `end` of `bytes` are a request target.
+fn is_target_in(bytes: Bytes, start: Int, end: Int) -> Bool {
+  var at = start
+  while at < end {
+    let b = bytes.at(at)
     if b <= b' ' || b == 127 {
       return false
     }
+    at = at + 1
   }
-  !text.is_empty()
+  end > start
 }
 
 // An absolute-form request-target (RFC 9112 section 3.2.2) of the `http`
@@ -917,14 +974,11 @@ fn is_target(text: Text) -> Bool {
 // origin-form target, `/` when the path is empty. `None` for any other
 // form.
 fn absolute_form(target: Text) -> Option<(Text, Text)> {
-  let lower = target.to_lower()
-  var scheme = 8
-  if lower.starts_with("http://") {
-    scheme = 7
-  } else if !lower.starts_with("https://") {
+  let bytes = target.to_bytes()
+  let scheme = scheme_length(bytes, 0, bytes.len())
+  if scheme == 0 {
     return None
   }
-  let bytes = target.to_bytes()
   var end = scheme
   while end < bytes.len() && bytes.at(end) != b'/' && bytes.at(end) != b'?' {
     end = end + 1
@@ -932,6 +986,34 @@ fn absolute_form(target: Text) -> Option<(Text, Text)> {
   let rest = bytes.slice(end, bytes.len()).to_text()
   let origin = if rest.starts_with("/") { rest } else { "/" + rest }
   Some((bytes.slice(scheme, end).to_text(), origin))
+}
+
+// The length of the scheme `http://` or `https://`, in any case, that
+// bytes `start` to `end` of `bytes` start with; 0 for any other target.
+fn scheme_length(bytes: Bytes, start: Int, end: Int) -> Int {
+  if starts_lowered(bytes, start, end, b"http://") {
+    7
+  } else if starts_lowered(bytes, start, end, b"https://") {
+    8
+  } else {
+    0
+  }
+}
+
+// Whether bytes `start` to `end` of `bytes`, in lower case, start with
+// `prefix`.
+fn starts_lowered(bytes: Bytes, start: Int, end: Int, prefix: Bytes) -> Bool {
+  if end - start < prefix.len() {
+    return false
+  }
+  var at = 0
+  while at < prefix.len() {
+    if lower_byte(bytes.at(start + at)) != prefix.at(at) {
+      return false
+    }
+    at = at + 1
+  }
+  true
 }
 
 // RFC 3986 `unreserved`, `sub-delims` and `%`: the bytes of a `reg-name`.
@@ -982,31 +1064,32 @@ fn is_host(value: Text) -> Bool {
 // `request` once its `Host` is checked: `None` (400) when an HTTP/1.1
 // request has none, when it is repeated or its value is not a host. For an
 // absolute-form target, the received `Host` is replaced by the target's
-// `authority`, which must be a host and not empty.
+// `authority`, which must be a host and not empty. The request is taken
+// over, not copied: the headers are rebuilt only for an absolute form.
 fn resolve_host(request: Request, authority: Option<Text>) -> Option<Request> satisfies [RFC9112.R3_2_6, RFC9112.R3_2_2_5] {
-  var hosts = []
-  var others = []
-  for header in request.headers {
+  var resolved = request
+  var hosts = 0
+  var valid = true
+  for header in resolved.headers {
     if header.0 == "host" {
-      hosts.push(header.1)
-    } else {
-      others.push(header)
+      hosts = hosts + 1
+      valid = valid && is_host(header.1)
     }
   }
-  if hosts.len() > 1 || hosts.len() == 0 && request.version == "HTTP/1.1" {
+  if hosts > 1 || hosts == 0 && resolved.version == "HTTP/1.1" || !valid {
     return None
   }
-  for value in hosts {
-    if !is_host(value) {
-      return None
-    }
-  }
   match authority {
-    None => Some(request)
+    None => Some(resolved)
     Some(host) => if host.is_empty() || !is_host(host) {
       None
     } else {
-      var resolved = request
+      var others = []
+      for header in resolved.headers {
+        if header.0 != "host" {
+          others.push(header)
+        }
+      }
       others.push(("host", host))
       resolved.headers = others
       Some(resolved)
@@ -1032,35 +1115,131 @@ fn target_too_long(data: Bytes, maximum: Int) -> Bool satisfies [RFC9112.R3_3] {
 }
 
 // The request line and header lines of a head, without the blank line.
+// Read in place by offsets: each field kept is copied once, and nothing
+// else is (no list of lines or of parts).
 fn parse_head(head: Text) -> Option<Request> satisfies [RFC9112.R2_2_4, RFC9112.R2_2_9, RFC9112.R5_1_1, RFC9112.R5_2_2, RFC9110.R5_5_1, RFC9110.R5_5_4] {
-  let lines = head.split("\r\n")
-  let parts = lines.at(0).split(" ")
-  if parts.len() != 3 || !is_token(parts.at(0)) || !is_target(parts.at(1)) {
+  let bytes = head.to_bytes()
+  let end = bytes.len()
+  let line = request_line(bytes)
+  let (method_end, target_end) = match line.spaces {
+    Some(spaces) => spaces
+    None => return None
+  }
+  if !is_token_in(bytes, 0, method_end) || !is_target_in(bytes, method_end + 1, target_end) {
     return None
   }
-  if parts.at(2) != "HTTP/1.1" && parts.at(2) != "HTTP/1.0" {
+  let version_length = line.end - target_end - 1
+  if version_length != 8 || !bytes_match_at(bytes, b"HTTP/1.1", target_end + 1) && !bytes_match_at(bytes, b"HTTP/1.0", target_end + 1) {
     return None
   }
-  let target = match absolute_form(parts.at(1)) {
-    Some((_, rest)) => rest
-    None => parts.at(1)
-  }
-  let (path, query) = target.split_once("?").unwrap_or((target, ""))
-  if !path.starts_with("/") {
-    return None
+  let (path, query) = match target_parts(bytes, method_end + 1, target_end) {
+    Some(parts) => parts
+    None => return None
   }
   var headers = []
-  for line in lines.slice(1, lines.len()) {
-    match line.split_once(":") {
-      Some((name, value)) => if is_token(name) && is_field_value(value) {
-        headers.push((name.to_lower(), trim_ows(value)))
-      } else {
+  if line.end < end {
+    var at = line.end + 2
+    loop {
+      let stop = match bytes.index_of(b"\r\n", at) {
+        Some(found) => found
+        None => end
+      }
+      let colon = match bytes.index_of(b":", at) {
+        Some(found) => if found < stop { found } else { return None }
+        None => return None
+      }
+      if !is_token_in(bytes, at, colon) || !is_field_value_in(bytes, colon + 1, stop) {
         return None
       }
-      None => return None
+      headers.push((lowered_in(bytes, at, colon), trimmed_in(bytes, colon + 1, stop)))
+      if stop == end {
+        break
+      }
+      at = stop + 2
     }
   }
-  Some(Request { method = parts.at(0), path, query, version = parts.at(2), headers, body = "" })
+  Some(Request {
+    method = bytes.slice(0, method_end).to_text()
+    path
+    query
+    version = bytes.slice(target_end + 1, line.end).to_text()
+    headers
+    body = ""
+  })
+}
+
+// Where the request line of a head ends (its CR LF, or the end of the
+// head) and the offsets of its two spaces; `None` unless it has exactly
+// two.
+type RequestLine {
+  end: Int
+  spaces: Option<(Int, Int)>
+}
+
+fn request_line(bytes: Bytes) -> RequestLine {
+  let end = match bytes.index_of(b"\r\n", 0) {
+    Some(at) => at
+    None => bytes.len()
+  }
+  let first = match bytes.index_of(b" ", 0) {
+    Some(at) => at
+    None => end
+  }
+  let second = match bytes.index_of(b" ", first + 1) {
+    Some(at) => at
+    None => end
+  }
+  let third = match bytes.index_of(b" ", second + 1) {
+    Some(at) => at
+    None => end
+  }
+  RequestLine { end, spaces = if second < end && third >= end { Some((first, second)) } else { None } }
+}
+
+// The path and query of the request target at bytes `start` to `end` of
+// `bytes`, an absolute-form target read as its origin form.
+fn target_parts(bytes: Bytes, start: Int, end: Int) -> Option<(Text, Text)> {
+  if scheme_length(bytes, start, end) == 0 {
+    return origin_parts(bytes, start, end)
+  }
+  match absolute_form(bytes.slice(start, end).to_text()) {
+    Some((_, rest)) => origin_parts(rest.to_bytes(), 0, rest.len())
+    None => None
+  }
+}
+
+// The path and query of the origin-form target at bytes `start` to `end`
+// of `bytes`: the path up to the first `?`, which must start with `/`, and
+// the text after it.
+fn origin_parts(bytes: Bytes, start: Int, end: Int) -> Option<(Text, Text)> {
+  if end <= start || bytes.at(start) != b'/' {
+    return None
+  }
+  match bytes.index_of(b"?", start) {
+    Some(at) => if at < end {
+      Some((bytes.slice(start, at).to_text(), bytes.slice(at + 1, end).to_text()))
+    } else {
+      Some((bytes.slice(start, end).to_text(), ""))
+    }
+    None => Some((bytes.slice(start, end).to_text(), ""))
+  }
+}
+
+// The authority of an absolute-form request target in `head`, `None` for
+// an origin-form one, read without copying the request line.
+fn head_authority(head: Text) -> Option<Text> {
+  let bytes = head.to_bytes()
+  match request_line(bytes).spaces {
+    Some((method_end, target_end)) => if scheme_length(bytes, method_end + 1, target_end) == 0 {
+      None
+    } else {
+      match absolute_form(bytes.slice(method_end + 1, target_end).to_text()) {
+        Some((host, _)) => Some(host)
+        None => None
+      }
+    }
+    None => None
+  }
 }
 
 test "tokens, field values and targets" verifies [RFC9110.R5_5_4] {
@@ -1182,13 +1361,10 @@ fn next_request<T: ByteStream>(stream: T, limits: HttpLimits, buffer: Bytes) -> 
     Some(parsed) => parsed
     None => return Ok(Reject(400))
   }
-  let authority = match absolute_form(head.split("\r\n").at(0).split(" ").at(1)) {
-    Some((host, _)) => Some(host)
-    None => None
-  }
-  let request = match resolve_host(parsed, authority) {
+  let head_method = parsed.method == "HEAD"
+  let request = match resolve_host(parsed, head_authority(head)) {
     Some(resolved) => resolved
-    None => return Ok(rejected(parsed, 400))
+    None => return Ok(if head_method { RejectHead(400) } else { Reject(400) })
   }
   if header(request, "transfer-encoding") != None {
     match coding_status(request) {
@@ -1205,19 +1381,19 @@ fn next_request<T: ByteStream>(stream: T, limits: HttpLimits, buffer: Bytes) -> 
       }
     }
   }
-  var lengths = []
+  var length = 0
+  var lengths = 0
   for header in request.headers {
     if header.0 == "content-length" {
-      lengths.push(header.1)
+      lengths = lengths + 1
+      length = match parse_length(header.1) {
+        Some(n) => n
+        None => -1
+      }
     }
   }
-  let length = match lengths {
-    [] => 0
-    [text] => match parse_length(text) {
-      Some(n) => n
-      None => return Ok(rejected(request, 400))
-    }
-    _ => return Ok(rejected(request, 400))
+  if lengths > 1 || length < 0 {
+    return Ok(rejected(request, 400))
   }
   if length > limits.body.to_int() {
     return Ok(rejected(request, 413))
