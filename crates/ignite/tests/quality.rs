@@ -2745,7 +2745,11 @@ fn a_dedicated_host_run_has_its_own_timing_trend() {
         value: 309,
         load: None,
     };
-    assert!(release_refusals(&baseline, None, &history, &[value]).refused.is_empty());
+    assert!(
+        release_refusals(&baseline, None, &history, &[value])
+            .refused
+            .is_empty()
+    );
     let line = r#"{"base":"b","base_value":400,"commit":"e","date":"2026-11-08","host":"ec2:c7i.metal-24xl","load":"0.10","machine":{"cpu":"x","smt":"off"},"metric":"6.2","run":"run","target":"llvm","value":380}"#;
     let parsed = Record::parse(line).unwrap();
     assert_eq!(
