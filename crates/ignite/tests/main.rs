@@ -61,3 +61,4 @@ mod syntax;
 mod terminal;
 mod todo;
 mod typed_json;
+mod version_adversary;
