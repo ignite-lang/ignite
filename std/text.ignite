@@ -441,8 +441,9 @@ fn bytes_match_at(bytes: Bytes, needle: Bytes, at: Int) -> Bool {
 fn bytes_find_from(bytes: Bytes, needle: Bytes, start: Int) -> Option<Int> = bytes.index_of(needle, start)
 
 // The byte offset of the first `needle` in `text` at or after `start`.
+// Calls the builtin directly, so neither text is copied to be searched.
 fn find_from(text: Text, needle: Text, start: Int) -> Option<Int> =
-  bytes_find_from(text.to_bytes(), needle.to_bytes(), start)
+  text.to_bytes().index_of(needle.to_bytes(), start)
 
 // The byte offset of the first `needle` in `text`. "a=b".find("=") is Some(1).
 fn find(text: Text, needle: Text) -> Option<Int> = find_from(text, needle, 0)
@@ -692,8 +693,25 @@ fn to_upper(text: Text) -> Text {
 }
 
 // Equal after ASCII case folding: header names, `Content-Length` and
-// `content-length`.
-fn equals_ignore_case(a: Text, b: Text) -> Bool = to_lower(a) == to_lower(b)
+// `content-length`. Compared byte by byte, without a lower-case copy.
+fn equals_ignore_case(a: Text, b: Text) -> Bool {
+  let x = a.to_bytes()
+  let y = b.to_bytes()
+  if x.len() != y.len() {
+    return false
+  }
+  var i = 0
+  while i < x.len() {
+    if lower_byte(x.at(i)) != lower_byte(y.at(i)) {
+      return false
+    }
+    i = i + 1
+  }
+  true
+}
+
+// `b` in lower case when it is an ASCII capital letter, else `b`.
+fn lower_byte(b: Byte) -> Byte = if b >= b'A' && b <= b'Z' { b + 32 } else { b }
 
 test "case mapping is ASCII only" {
   assert "MiXeD 42 Ä".to_lower() == "mixed 42 Ä"
