@@ -885,14 +885,70 @@ impl Stdin {
 }
 ```
 
-**Tasks.** A task runs on one OS thread for as long as it runs. A thread that finishes a
-task waits up to `LINGER` for the next one; `spawn` hands a task to the thread that went
-idle most recently and starts a new thread only when none is idle. A task that panics
-ends its thread. Thread-local state survives from one task to the next on the same thread.
-The substrate's pending writes are always empty between tasks, because each task ends
-with a flush. When the operating system cannot start a thread, the task is dropped without
-running (a task that owns a stream closes it), the first such failure after a successful
-start is logged as `cannot start a task: <reason>`, and the process continues.
+**IO modes** (`docs/readiness-io.md`, phase R1). The substrate runs spawned tasks in one of
+two modes, chosen once per process by the environment variable `IGNITE_IO`: `readiness`
+(the default; also any value other than `threads`) or `threads`. Both modes run the same
+operations with the same results; only cost differs. `main` runs on the process's main
+thread in both.
+
+```rust
+pub enum IoMode { Threads, Readiness }
+pub fn io_mode() -> IoMode;                                  // IGNITE_IO, read once
+pub fn worker_limit() -> usize;                              // IGNITE_WORKERS, else available_parallelism
+pub const TASK_STACK: usize;                                 // 2 MiB: the stack of a task in `readiness`
+pub trait TaskLocals { fn swap(&mut self); }                 // a runtime's per-task thread-locals
+pub fn set_task_locals(make: fn() -> Box<dyn TaskLocals>);   // each new task gets make()
+```
+
+- `readiness`: a task is a stackful coroutine with its own `TASK_STACK` stack (`mmap`, one
+  guard page below it) on a **worker**, an OS thread named `worker` that runs its tasks until
+  each waits and then waits in `epoll_wait` for a descriptor, a timer or a wake. A worker
+  starts when a task needs one, up to `worker_limit()`. `spawn` from a task places the new
+  task on the caller's worker while that worker has at most one task more than the least
+  loaded worker (a worker not yet started counts as one with none). Otherwise, and from a
+  thread that is no worker, it places the task on an idle worker, else on a new worker, else
+  on the one with the fewest tasks. A worker whose only task is blocked in a read (below)
+  counts as busy: placement passes it, and only when every worker is busy and none can start
+  does a task go to it, to run when the read returns. A task stays on its worker (no
+  stealing, no migration). A worker without a task waits up to
+  `LINGER` for one, then ends, so an idle server runs no worker. A wait of a task (a read, a
+  write that finds the socket buffer full, `accept`, a channel, a pipe, a timer, a child,
+  standard input) parks the task and lets its worker run another. Sockets block, as in
+  `threads` mode (an accepted one from a single `accept4` with `SOCK_CLOEXEC`); a task's
+  `recv` and `send` pass `MSG_DONTWAIT`, and a socket is registered edge-triggered with the
+  worker's epoll on its first wait. A read that left the socket empty (it read
+  less than it asked for, or nothing) makes the next read of the stream wait for readiness
+  before its first `recv`. A read that filled its buffer lets the next one try at once. A worker creates
+  its epoll and eventfd when a task first waits for a descriptor, so tasks that wait only for
+  each other cost no descriptor; a worker that cannot create them (the process is out of
+  descriptors) looks at the descriptor every 10 ms instead, until it can. A worker runs at
+  most 128 tasks in a row before it polls for descriptors without waiting. The only task of a
+  worker with nothing else to run waits for its descriptor with one `poll` on the worker's
+  thread, as a blocked thread would, and a hand-over to the worker ends that wait. A read
+  without a deadline of its own by such a task, on a worker with no hand-over pending, is one
+  blocking `recv` instead, while fewer tasks live than `worker_limit()` (never with one
+  worker), so a spawn meanwhile finds an idle worker or starts one; the worker counts as busy
+  for that read. Each wait reads the clock once.
+  `connect`, name resolution, `Directory`, `Launcher` and stdout run inline on the worker. The
+  idle timeout (26.2) is `SO_RCVTIMEO` for a blocking `recv` and the deadline of the read's
+  wait otherwise. A panic in a task ends the task, not
+  its worker, as `task ended with error: <report>`; a stack overflow writes `thread 'worker'
+  has overflowed its stack` and aborts the process, as Rust does on a thread. Thread-locals
+  are the worker's: a runtime that keeps per-task state in thread-locals registers
+  `set_task_locals`, whose `swap` exchanges them whenever a different task resumes, and
+  borrows none across a wait.
+- `threads`: every task is an OS thread, as below. Sockets block: a read or send waits in the
+  kernel and the idle timeout is `SO_RCVTIMEO`.
+
+**Tasks.** In `threads` mode a task runs on one OS thread for as long as it runs. A thread
+that finishes a task waits up to `LINGER` for the next one; `spawn` hands a task to the
+thread that went idle most recently and starts a new thread only when none is idle. A task
+that panics ends its thread. Thread-local state survives from one task to the next on the
+same thread. In both modes the substrate's pending writes are always empty between tasks,
+because each task ends with a flush and flushes before it waits. When the operating system
+cannot start a thread (or map a task's stack), the task is dropped without running (a task
+that owns a stream closes it), the first such failure after a successful start is logged as
+`cannot start a task: <reason>`, and the process continues.
 
 **Freed memory.** A `Store` that replaces or removes a value, and an LLVM task whose arenas
 held more than 1 MiB at its end, call `released_memory`. On Linux with glibc the substrate
@@ -976,7 +1032,7 @@ targets: E003 bare variant of an enum out of scope that the expected type does n
 or a payload variant used bare (section 4), E005 ambiguous variant, E040 type mismatch,
 E041 unknown method or field for the receiver type (also an ambiguous or inapplicable method call, section 4.8; a tuple index past the tuple), E042 type cannot
 be inferred (also a type parameter neither the expected type nor later uses in the body decide, a closure parameter without type, and an effectful operation
-whose effects `ignite-check` could not check, section 11.7), E043 wrong number of arguments (also a range pattern whose start is above its end), E044 integer literal out of range for `Byte`,
+whose effects `ignite-check` could not check, section 11.7), E043 wrong number of arguments (also a range pattern whose start is above its end), E044 integer literal out of range for `Byte` or `U32` (32.2),
 E045 operator not defined for the operand type (also `==` on a type that is not comparable, section 13.5, a constant pattern of a type without
 `==`, and a range bound that is no literal or constant with a literal value), E046 `match` not exhaustive (ranges split `Int` and `Byte` into intervals, section 13.7), E047 record literal with a missing (and not defaulted),
 unknown or duplicate field, E048 unknown type name, wrong number of type arguments or an
@@ -9852,9 +9908,9 @@ and an `ignite` block that runs these rules.
 
 ### 29.2 Types and the shift rule
 
-Both operands and the result are `Int`; any other operand type, `Byte` included, is E040
-(`expected Int`), from `Typer::binary` and `Typer::binary_rest` checking each operand against
-`Int`, and `~` checks its operand the same way. None of them fails: no failure site is recorded
+Both operands and the result are `Int` (or `U32`, 32.2); any other operand type, `Byte`
+included, is E040 (`expected Int`), from `Typer::binary` and `Typer::binary_rest` through
+`Typer::word`, and `~` checks its operand the same way. None of them fails: no failure site is recorded
 and no backend emits a check. `&`, `|`, `^` and `~` act on the 64-bit two's complement.
 
 A shift amount outside `0..64` is defined, compared as unsigned so a negative amount counts as
@@ -9894,7 +9950,7 @@ an LLVM-target build must each print the values Rust's `i64` gives under 29.2, f
 ### 29.5 SHA-1 and base64, timed against hand-written Rust
 
 `crates/ignite/tests/fixtures/bitwise/codecs.ignite` holds SHA-1 (RFC 3174) and base64 with
-padding (RFC 4648 section 4) written with the operators, `wrapping_add` (25.2) for the
+padding (RFC 4648 section 4) written with the operators, `wrapping_add` (25.2; `U32` since 32.5) for the
 32-bit sums and `Bytes` read by index and built by `push`. Its four inline tests are RFC 3174's
 tests 1 to 4 (test 3 is a million `a`; plus the empty message) and the seven vectors of RFC 4648
 section 10; `bitwise::sha1_and_base64_vectors_on_both_targets` runs them with `ignite test` on
@@ -10132,3 +10188,215 @@ stat` task-clock, page faults and user instructions, medians; 1-minute load 33 t
 - `ignite-types` fixtures `valid_local_inference` (the element type from a later `push` and
   from an argument) and `e042_with_capacity` (E042, E040).
 - `bitwise::sha1_and_base64_vectors_on_both_targets` over the rewritten codecs fixture.
+
+## 32 `U32`: modular 32-bit words
+
+**Status: implemented in `story:u32-words`.**
+
+Source: `docs/fixed-width-ints.md` sections 3 and 6 (F2), acceptance rows 4 and 5. SHA-1 and
+its kin compute on 32-bit words modulo 2^32; with `Int` a program masks after every sum
+(`.wrapping_add(x) & MASK`) and writes a rotate as two shifts, an `or` and a mask. `U32` is
+the word itself.
+
+### 32.1 Values and operators
+
+`U32` holds 0 to 2^32 - 1. It is a word, not an integer: `+`, `-` and `*` are modulo 2^32 and
+never fail; `Int` keeps failing on overflow (25.2, vision T6).
+
+| operation | on `U32` | note |
+|---|---|---|
+| `a + b`, `a - b`, `a * b` | modulo 2^32 | never fails, no failure site |
+| `-a` | `0 - a` modulo 2^32 | never fails |
+| `a / b`, `a % b` | unsigned | `b == 0` fails with the `Int` report (`1 / 0`, 14.8) |
+| `==`, `!=`, `<`, `<=`, `>`, `>=` | unsigned | |
+| `a & b`, `a \| b`, `a ^ b`, `~a` | on 32 bits | 29's operators |
+| `a << n`, `a >> n` | `n: Int`; `>>` is logical | `n` outside `0..32` (negative included) gives 0 |
+| `a.rotate_left(n)`, `a.rotate_right(n)` | `n: Int`, taken modulo 32 (`n & 31`) | never fails |
+| `a.to_text()`, `a.debug()`, interpolation | decimal | |
+
+`U32` is a builtin type name (`ignite_check::BUILTIN_TYPES`, E004 for a declaration named
+`U32`), a scalar with `==` (13.5) and a `Copy` value: last-use moves (20.3) do not track it.
+It is no `Map` key (E106) and no `std.data` shape; neither is needed yet.
+
+### 32.2 Literals and typing
+
+- An integer literal is typed by its expected type, as for `Byte`: `let k: U32 = 0x5A827999`.
+  Outside 0 to 2^32 - 1 it is E044 (`integer literal 4294967296 is out of range for `U32` (0 to
+  4294967295)`), also for `-n` with `n` not 0, list items, patterns and comparisons. A literal
+  with no expected type is `Int`.
+- An arithmetic or comparison operator's operands have one type; a literal takes the other
+  side's (`x + 1`, `1 + x`, `x < 7`). Mixing widths is E040 with the existing text (`expected
+  `U32`, found `Int``); there is no implicit widening, in an argument, a `let` with a type or
+  an operand.
+- `& | ^`: both operands `Int` or both `U32`, the literal side taking the other's, the result
+  their type. `<<` and `>>`: the left operand `Int` or `U32`, the amount always `Int` (E040 for
+  a `U32` amount), the result the left's type. `~`: an `Int` or `U32` operand, the result its
+  type. Any other operand type is E040 `expected `Int``, as in 29.2; `Byte` stays E040.
+- Patterns: an integer literal or range pattern on a `U32` scrutinee is typed `U32` (E044
+  outside the range); a `U32` constant can be a pattern and a range bound; E046 splits a `U32`
+  column into intervals of 0 to 2^32 - 1, as it does `Int` and `Byte`.
+- The E040 text of a range pattern on another type now reads `ranges match `Int`, `Byte` and
+  `U32``.
+
+### 32.3 Conversions
+
+Explicit only. Widening is total; narrowing is checked or wrapping, by name. Each is a builtin
+whose name is in `ignite_check::BUILTIN_METHODS`, so on its receiver type the builtin wins over
+a user fn of the same name (13, row 5).
+
+| from \ to | `Int` | `U32` | `Byte` |
+|---|---|---|---|
+| `Int` | | `n.to_u32() -> Option<U32>` (`IntToU32`), `n.wrap_u32() -> U32`, the low 32 bits (`IntWrapU32`) | `n.to_byte()` (exists), `n.wrap_byte() -> Byte`, the low 8 bits (`IntWrapByte`) |
+| `U32` | `x.to_int()` (`U32ToInt`) | | `x.to_byte() -> Option<Byte>` (`U32ToByte`), `x.wrap_byte()` (`U32WrapByte`) |
+| `Byte` | `b.to_int()` (exists) | `b.to_u32()` (`ByteToU32`) | |
+
+`U32ToText`, `U32RotateLeft` and `U32RotateRight` are the other builtins. None changes its
+receiver (`ownership::change` none).
+
+### 32.4 Lowering
+
+| layer | `U32` |
+|---|---|
+| `ignite-types` | `Ty::U32`; `Typer::int_literal` and E044; `Typer::word` types a bitwise operand; `Typer::operator` records a failure site for `/` and `%` only |
+| evaluator | `Value::U32(u32)`: `u32::wrapping_*`, `checked_div` and `checked_rem` (the failure on `None`), `rotate_*` by `n & 31`, `eval::bitwise_u32` for the bitwise operators; a JSON number in the system model (15.5) and in decoded values |
+| Rust target | `u32`; a literal `123u32`; `u32::wrapping_add` (and `_sub`, `_mul`, `_neg`); `/` and `%` as `ignite_io::checked::div` and `rem` of the operands widened to `i64`, cast back (same report, no new substrate fn); `u32::checked_shl` and `checked_shr` by `min(n as u64, 32)` with `unwrap_or(0)`, a literal amount in `0..32` as Rust's shift; `u32::rotate_left(x, (n & 31) as u32)`; conversions by `as`, `u32::try_from`, `u8::try_from` |
+| LLVM target | `i32` (size 4, align 4 in records, lists and enum payloads); `add`, `sub`, `mul` without overflow intrinsics; `udiv`, `urem` behind the zero check of `Byte`; `icmp` unsigned; `and`, `or`, `xor`, `xor -1`; `shl` and `lshr` behind `select(icmp ult n, 32; …; 0)`, a literal amount in `0..32` without the select; `llvm.fshl.i32(x, x, trunc n)` and `fshr` for the rotates (the intrinsic takes the amount modulo 32); `zext`, `trunc` and an `icmp ult` for the checked narrowing |
+| typed document (24) | type `kind` `U32`, `text` `U32`, no further keys; the format stays `ignite-typed/0.1` (24.3) |
+| system model (15.5) | a JSON number |
+| apply identity | `apply::plan::CODEGEN_REVISION` bumped once for this story |
+
+### 32.5 Agreement and the codecs fixture
+
+`bitwise::u32_operators_agree_across_the_evaluator_and_both_targets`
+(`crates/ignite/tests/bitwise.rs`, 29.4's method and seed) writes a program over operand lists
+read at run time: every binary operator on the 25 pairs of the edges 0, 1, 2^31, 2^32 - 1 and
+`0x55555555` and 48 random pairs (`/` and `%` without a zero divisor), the six comparisons, the
+shifts and rotates of 13 words by -1, 0, 31, 32, 33, 1, 7, 64, `i64::MIN` and `i64::MAX`,
+literal shift amounts, `-` and `~`, every conversion of 32.3 (from `Int` at -1, 0, 255, 256,
+2^32 - 1, 2^32, `i64::MIN`, `i64::MAX` and two random values), a `match` with literal and range
+patterns, and one SHA-1-shaped fn mixing the levels without parentheses. The evaluator, a
+Rust-target build and an LLVM-target build must each print what Rust's `u32` gives.
+`ignite_test::overflow_fails_the_same_everywhere` adds `U32` division and remainder by zero
+(one report on both targets, dev and release) and wrapping sums that pass.
+
+`fixtures/bitwise/codecs.ignite` (29.5) computes SHA-1 on `U32`: the state, the schedule `w`
+(a `List<U32>` written by `w[t] = ..`, 25.4), `rotate_left`, `+` without masks, the big-endian
+word as `data[at].to_u32() << 24 | ..`; `byte` is `n.wrap_byte()`. base64 stays on `Int`.
+
+Measured 2026-11-08 with `perf stat` (`task-clock`, `page-faults`, `instructions:u`), 9
+interleaved runs per binary pinned to one core, medians, release builds, start load 53.8 and end
+load 50.8 (the host shared with other builds; instructions are the load-independent measure).
+"Before" is the 29.5 fixture (SHA-1 on `Int` with masks) built by the compiler without `U32`,
+"after" this fixture built by this compiler; all five binaries print the same two lines.
+
+| binary | task-clock | page faults | instructions | against plain Rust |
+|---|---|---|---|---|
+| plain Rust (`codecs.rs`) | 90.8 ms | 997 | 1,023,223,402 | 1 |
+| LLVM target, before | 131.0 ms | 2,215 | 1,631,412,158 | time 1.44, faults 2.22, instructions 1.59 |
+| LLVM target, after | 113.1 ms | 2,216 | 1,433,219,124 | time 1.25, faults 2.22, instructions 1.40 |
+| Rust target, before | 113.1 ms | 1,003 | 1,445,580,996 | time 1.25, faults 1.01, instructions 1.41 |
+| Rust target, after | 97.6 ms | 1,003 | 1,181,061,076 | time 1.07, faults 1.01, instructions 1.15 |
+
+Instructions fall 12 % on LLVM and 18 % on the Rust target. The optimised LLVM `sha1` holds
+`llvm.fshl.i32` for both rotates and no mask; what remains of its gap is the bounds check of
+every `w[t]` and `data[at]` (`ignite_rt_fail_index`, F3 of `docs/fixed-width-ints.md`). Page
+faults do not change, so the LLVM target's 2.2 times (row 2 of `docs/fixed-width-ints.md` 8) is
+not the arithmetic; this story does not attribute it.
+
+### 32.6 Tests
+
+- `ignite-types` fixtures `valid_u32` (every operator, rotate, conversion, literal, constant
+  and range pattern, `List<U32>` element assignment), `e044_u32_range` (a constant, `-1`, a
+  list item, a pattern, a comparison), `e040_u32_mixed` (`U32` with `Int` in `+`, `&`, `<`,
+  either order; a `U32` shift amount and rotate amount; `U32` where `Int`, `Byte` is expected and
+  back; `~` of an `Int` where `U32` is expected; `Bool ^ U32`); `e043_range` with the new text;
+  `builtin_tables::the_checker_table_matches_the_type_checker` with a `U32` receiver.
+- `typed_json::a_u32_is_named_in_the_document`: a parameter, a method call and a literal of
+  type `U32` carry `{"kind": "U32", "text": "U32"}`.
+- `crates/ignite/tests/bitwise.rs` and `ignite_test.rs`: 32.5 above;
+  `bitwise::sha1_and_base64_vectors_on_both_targets` over the rewritten codecs fixture.
+
+## 33 The census and the soak (`std.runtime`)
+
+Story `leak-census` of `epic:leak-guard` (`docs/leak-guard.md` 5.1, 5.2, 7). A test counts the
+live runtime objects of its process per kind and the heap bytes it holds, on both targets, and
+soaks a body: `assert soak(2000, body).growth == []` fails, naming the kind that grew, when the
+body keeps a counted object or bytes.
+
+### 33.1 The census
+
+`crates/ignite-io/src/census.rs`: one counter per kind, raised where the object is made and
+lowered where it is dropped. A `Counted` token lives in the shared part of each object (the
+`Arc` its clones share), so a copy of a handle is not a second object.
+
+| field | counts | Rust | LLVM | soak |
+|---|---|---|---|---|
+| `tasks` | spawned and not returned (`ignite_io::spawn`) | yes | yes | exact |
+| `workers` | worker threads, idle or running | yes | yes | reported |
+| `channels` | a channel's shared state | yes | yes | exact |
+| `listeners`, `streams` | a `TcpListener`'s socket, a `TcpStream`'s | yes | yes | exact |
+| `pipes` | a `Pipe.pair()`: one per pair, shared by its ends | yes | yes | exact |
+| `children` | a started `ChildProcess` | yes | yes | exact |
+| `directories` | a `Directory` root | yes | yes | exact |
+| `capabilities` | `Launcher`, `Entropy`, `Setting`, `CommandLine`, `Environment` | yes | yes | exact |
+| `handles` | filled slots of the handle table | 0 | yes | exact |
+| `handle_slots` | slots ever issued, the table's high-water mark | 0 | yes | reported |
+| `heap_copies` | live `HeapValue`s (stores, channels) | 0 | yes | exact |
+| `stores` | a `Store`; resident on LLVM | yes | yes | reported |
+| `heap_bytes` | bytes allocated through the counting allocator and not freed; on LLVM less the large arena blocks kept for reuse | yes | yes | 64 KiB slack |
+| `arena_bytes` | arena blocks of every task but the caller | 0 | yes | 64 KiB slack |
+| `resident_bytes` | `VmRSS` | yes | yes | reported |
+
+Heap bytes: `ignite_io::census::Counting` is a global allocator over the system allocator
+with 64 cache-line counter blocks, a thread adding to its own. The generated Rust executables
+(each `src/bin/*.rs`, the test executable included) and `ignite-rt` declare it. The LLVM
+target's generated `malloc` and `free` (heap copies, `glue.rs`) stay uncounted: they are
+counted as `heap_copies`. `CODEGEN_REVISION` moves once.
+
+### 33.2 `std.runtime`
+
+A base-layer module (`docs/layering.md`): the records `Census` (the fields of 33.1 in that
+order, all `Int`), `Growth { kind, before, after }`, `Soak { runs, warmup, growth }`, the fn type
+`Body`, and `soak(runs, body)`.
+
+| static | type | lowering |
+|---|---|---|
+| `Runtime.census()` | `Census` | Rust: `ignite_io::census::read()` into the record; LLVM: `ignite_rt_runtime_census(ptr out)`, sixteen `i64` |
+| `Runtime.settle(tasks: Int, within: Duration)` | `Bool` | waits until at most `tasks` tasks are live (`ignite_io::live_tasks`), false at the deadline; LLVM `i8 ignite_rt_runtime_settle(i64, i64)` |
+
+Both are pure (as `Process.flush`) and have no value in the evaluator. `soak` runs `body(i)`
+for `i` in `0..runs`, after each run `Runtime.settle` to the task count before the first run
+within 5 s; the census after the first `max(10, runs / 10)` runs is compared with the census
+after the last: every exact kind must not grow, `heap_bytes` and `arena_bytes` not by more than
+64 KiB. `Body` is `fn(run: Int) -> Unit requires [run.*, channel.*, net.*, clock.*, process.*,
+directory.*, launcher.*, entropy.*, setting.*, command_line.*, environment.*]`, so an effectful
+body is a value (E017 otherwise); `docs/leak-guard.md` 5.2 wrote `fn(Int) -> Unit`.
+
+### 33.3 Seeded leaks
+
+A debug build of `ignite-io` and `ignite-rt` reads `IGNITE_DEBUG_LEAK=<kind>` once and skips
+one release per object of that kind: `task`, `channel`, `listener`, `stream`, `pipe`, `child`,
+`directory`, `capability` (both targets), `handle`, `heap_copy` and `arena` (a task's last
+arena block kept at its end; LLVM); `bytes` keeps 370 bytes per dropped channel, which no
+counted object holds (both targets). Release builds ignore the variable.
+
+### 33.4 Tests
+
+- `std/runtime.ignite`: the soak of an idle body and of a channel per run finds no growth; a
+  channel, a task, a pipe pair and a capability count while they live and leave the census
+  once released; a store counts; a held 1.1 MB value raises `heap_bytes` by at least 1 MiB and
+  its drop returns it within 64 KiB.
+- `leak::every_soak_passes_without_a_seeded_leak` and
+  `leak::each_seeded_leak_fails_its_soak_naming_the_kind` over
+  `crates/ignite/tests/fixtures/leak/seeded.ignite`, both targets. On the LLVM target five
+  soaks are known failures without a seed, each asserted red with the kind it names: the
+  lowering releases only the channel ends, pipe ends and streams a block owns (`own.rs`), so a
+  listener (`soak: listener`, `soak: stream`), a directory and a capability (`soak: child` by
+  its launcher, `soak: capability`) stay in the handle table until the process exits
+  (`docs/leak-guard.md` 1.2, Q8); their seeds are checked on the Rust target only. For the
+  same reason the census test of a capability checks its release on neither target.
+- G30 (`docs/leak-guard.md` 6.1): `fixtures/leak/g30.ignite` holds "a channel end bound a
+  second time is released (G30)" and "a channel end kept in a record field is released (G30)";
+  `leak::g30_soaks_pass_on_rust_and_are_known_failures_on_llvm` asserts both pass on Rust and
+  both fail on LLVM naming `handles` and `channels`. `story:channel-release-on-close` turns the
+  LLVM half green and moves the two tests into `std/sync.ignite`.

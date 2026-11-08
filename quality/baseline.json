@@ -24,6 +24,19 @@
     "crates/ignite/tests/fixtures/conformance/adversary_std_telnet.ignite::adversary: replies and the prompt after a reply are NVT data": "builtin `PipePair` has no value at compile time",
     "crates/ignite/tests/fixtures/conformance/adversary_two_specs/main.ignite::padding exits with seven": "builtin `ProcessExit` has no value at compile time",
     "crates/ignite/tests/fixtures/conformance/signal.ignite::never ends": "exceeds the evaluator's fuel of 10000000 units",
+    "crates/ignite/tests/fixtures/leak/g30.ignite::a channel end bound a second time is released (G30)": "builtin `RuntimeCensus` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/g30.ignite::a channel end kept in a record field is released (G30)": "builtin `RuntimeCensus` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/seeded.ignite::a channel made and dropped": "builtin `ChannelBounded` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: arena": "builtin `RuntimeCensus` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: bytes": "builtin `RuntimeCensus` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: capability": "builtin `RuntimeCensus` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: channel": "builtin `RuntimeCensus` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: child": "builtin `RuntimeCensus` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: directory": "builtin `RuntimeCensus` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: listener": "builtin `RuntimeCensus` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: pipe": "builtin `RuntimeCensus` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: stream": "builtin `RuntimeCensus` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: task": "builtin `RuntimeCensus` has no value at compile time",
     "crates/ignite/tests/fixtures/net_builtins/adversary.ignite::adv: a huge timeout still connects": "builtin `TcpListenerBind` has no value at compile time",
     "crates/ignite/tests/fixtures/net_builtins/adversary.ignite::adv: a name with several addresses tries the next one": "builtin `TcpListenerBind` has no value at compile time",
     "crates/ignite/tests/fixtures/net_builtins/adversary.ignite::adv: a negative timeout is refused before any attempt": "builtin `TcpListenerBind` has no value at compile time",
@@ -235,6 +248,14 @@
     "std/protocol/telnet.ignite::the server answers options and AYT between lines": "builtin `PipePair` has no value at compile time",
     "std/protocol/telnet.ignite::the server closes on an overlong line, IAC IP and an overlong subnegotiation": "builtin `PipePair` has no value at compile time",
     "std/protocol/telnet.ignite::the server sends IAC GA after each prompt and the AYT answer": "builtin `PipePair` has no value at compile time",
+    "std/runtime.ignite::a capability counts while it lives": "builtin `RuntimeCensus` has no value at compile time",
+    "std/runtime.ignite::a pipe pair counts while it lives": "builtin `RuntimeCensus` has no value at compile time",
+    "std/runtime.ignite::a released channel leaves the census": "builtin `RuntimeCensus` has no value at compile time",
+    "std/runtime.ignite::a soak of a body that keeps nothing finds no growth": "builtin `RuntimeCensus` has no value at compile time",
+    "std/runtime.ignite::a store counts, and stays": "builtin `RuntimeCensus` has no value at compile time",
+    "std/runtime.ignite::a task counts until it ends": "builtin `RuntimeCensus` has no value at compile time",
+    "std/runtime.ignite::a task's megabyte counts in heap and arena bytes until the task ends": "builtin `RuntimeCensus` has no value at compile time",
+    "std/runtime.ignite::the census counts a channel while it lives": "builtin `RuntimeCensus` has no value at compile time",
     "std/sync.ignite::a closed channel still gives what was sent before": "builtin `ChannelBounded` has no value at compile time",
     "std/sync.ignite::a send from another task wakes a waiting receiver": "builtin `ChannelBounded` has no value at compile time",
     "std/sync.ignite::a value sent is the receiver's own": "builtin `ChannelBounded` has no value at compile time",
@@ -256,6 +277,41 @@
     "crates/ignite/tests/fixtures/tests/store_load.ignite::values under updates of one shard: every id, values grow, no long wait, no lost write": "story:llvm-store-update-off-lock, 2026-11-07: the 500 ms wait assertion fails on LLVM at load 35 to 39, also when run alone, and passes at lower load"
   },
   "known_differences": {
+    "crates/ignite/tests/fixtures/leak/g30.ignite::a channel end bound a second time is released (G30)": {
+      "consumer": "llvm",
+      "story": "story:channel-release-on-close",
+      "what": "Rust passes; on LLVM the soak fails naming `handles` and `channels`: the lowering releases only the channel ends a block owns (docs/leak-guard.md 6.1, docs/slice.md 33.4; asserted red by leak::g30_soaks_pass_on_rust_and_are_known_failures_on_llvm)"
+    },
+    "crates/ignite/tests/fixtures/leak/g30.ignite::a channel end kept in a record field is released (G30)": {
+      "consumer": "llvm",
+      "story": "story:channel-release-on-close",
+      "what": "Rust passes; on LLVM the soak fails naming `handles` and `channels`: the lowering releases only the channel ends a block owns (docs/leak-guard.md 6.1, docs/slice.md 33.4; asserted red by leak::g30_soaks_pass_on_rust_and_are_known_failures_on_llvm)"
+    },
+    "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: capability": {
+      "consumer": "llvm",
+      "story": "story:llvm-release-all-handles",
+      "what": "Rust passes; on LLVM a capability stays in the handle table until the process exits, so the soak fails naming its kind: the lowering releases only the channel ends, pipe ends and streams a block owns (docs/leak-guard.md 1.2 and Q8, docs/slice.md 33.4; asserted red by leak::every_soak_passes_without_a_seeded_leak)"
+    },
+    "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: child": {
+      "consumer": "llvm",
+      "story": "story:llvm-release-all-handles",
+      "what": "Rust passes; on LLVM the child's launcher stays in the handle table until the process exits, so the soak fails naming its kind: the lowering releases only the channel ends, pipe ends and streams a block owns (docs/leak-guard.md 1.2 and Q8, docs/slice.md 33.4; asserted red by leak::every_soak_passes_without_a_seeded_leak)"
+    },
+    "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: directory": {
+      "consumer": "llvm",
+      "story": "story:llvm-release-all-handles",
+      "what": "Rust passes; on LLVM a directory stays in the handle table until the process exits, so the soak fails naming its kind: the lowering releases only the channel ends, pipe ends and streams a block owns (docs/leak-guard.md 1.2 and Q8, docs/slice.md 33.4; asserted red by leak::every_soak_passes_without_a_seeded_leak)"
+    },
+    "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: listener": {
+      "consumer": "llvm",
+      "story": "story:llvm-release-all-handles",
+      "what": "Rust passes; on LLVM a listener stays in the handle table until the process exits, so the soak fails naming its kind: the lowering releases only the channel ends, pipe ends and streams a block owns (docs/leak-guard.md 1.2 and Q8, docs/slice.md 33.4; asserted red by leak::every_soak_passes_without_a_seeded_leak)"
+    },
+    "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: stream": {
+      "consumer": "llvm",
+      "story": "story:llvm-release-all-handles",
+      "what": "Rust passes; on LLVM the listener of the stream stays in the handle table until the process exits, so the soak fails naming its kind: the lowering releases only the channel ends, pipe ends and streams a block owns (docs/leak-guard.md 1.2 and Q8, docs/slice.md 33.4; asserted red by leak::every_soak_passes_without_a_seeded_leak)"
+    },
     "crates/ignite/tests/fixtures/tests/basics.ignite::try on err fails": {
       "consumer": "eval",
       "story": "story:eval-try-report",
@@ -291,7 +347,8 @@
           "value": 4
         },
         "llvm": {
-          "value": 0
+          "decision": "story leak-census (2026-11-08), accepted by the coordinator: the seven LLVM soaks of crates/ignite/tests/fixtures/leak/ fail on LLVM by design: G30's two until story:channel-release-on-close, listener, stream, child, directory and capability until story:llvm-release-all-handles (docs/leak-guard.md 1.2, Q8); listed in known_differences and asserted red in leak::",
+          "value": 7
         }
       },
       "direction": "lower",
@@ -306,13 +363,13 @@
       "area": "Semantics: one meaning across the three consumers",
       "bars": {
         "eval": {
-          "value": 465
+          "value": 454
         },
         "llvm": {
-          "value": 701
+          "value": 711
         },
         "rust": {
-          "value": 701
+          "value": 711
         }
       },
       "direction": "higher",
@@ -383,8 +440,8 @@
       "area": "Semantics: one meaning across the three consumers",
       "bars": {
         "eval": {
-          "decision": "native parity round 1 integration (2026-11-08): story todo-save-without-races adds the inline test of saves that finish out of order, which needs Directory.temporary (DirectoryTemporary has no compile-time value); listed in eval_cannot_run",
-          "value": 236
+          "decision": "story leak-census (2026-11-08), accepted by the coordinator: the 21 census tests of std/runtime.ignite and crates/ignite/tests/fixtures/leak/ read Runtime.census() or make channels, which have no value at compile time (docs/slice.md 33.2); listed in eval_cannot_run",
+          "value": 257
         }
       },
       "direction": "lower",
@@ -467,7 +524,7 @@
       "area": "Front end: the checker refuses exactly the wrong programs",
       "bars": {
         "all": {
-          "value": 329
+          "value": 332
         }
       },
       "direction": "higher",
@@ -625,12 +682,12 @@
       "area": "Generated code and runtime behaviour",
       "bars": {
         "llvm": {
-          "decision": "native parity round 1 integration (2026-11-08): story text-fast-search adds two unsafe blocks (memchr/memmem in ignite_io::text, the pieces list in ignite-rt), accepted by the coordinator; story fs-resolve-beneath adds two in ignite-io fs.rs (the getdents64 syscall that lists a directory and the slice over the bytes it filled); story rt-hot-path removes one in ignite-rt",
-          "value": 82
+          "decision": "readiness IO (2026-11-08): story readiness-waiters adds three unsafe sites in ignite-io reactor.rs (BorrowedFd::borrow_raw of a registered descriptor in epoll and poll), story readiness-scheduler five in ignite-io sched.rs (the coroutine yielder of the running task, installing and restoring the SIGSEGV and SIGBUS handlers that report a task stack overflow, the alternate signal stack, si_addr in that handler); story leak-census (2026-11-08): the counting global allocator `ignite_io::census::Counting` adds seven sites (the `unsafe impl GlobalAlloc`, its `alloc`, `dealloc` and `realloc` and the three calls of `System` inside them), required by the trait; integration of readiness IO, U32 and the leak census (2026-11-08): bar set once from the measured value of the merged tree",
+          "value": 95
         },
         "rust": {
-          "decision": "native parity round 1 integration (2026-11-08): story text-fast-search adds one unsafe block (memchr/memmem in ignite_io::text), accepted by the coordinator; story fs-resolve-beneath adds two in ignite-io fs.rs (the getdents64 syscall that lists a directory and the slice over the bytes it filled)",
-          "value": 12
+          "decision": "readiness IO (2026-11-08): story readiness-waiters adds three unsafe sites in ignite-io reactor.rs (BorrowedFd::borrow_raw of a registered descriptor in epoll and poll), story readiness-scheduler five in ignite-io sched.rs (the coroutine yielder of the running task, installing and restoring the SIGSEGV and SIGBUS handlers that report a task stack overflow, the alternate signal stack, si_addr in that handler); story leak-census (2026-11-08): the counting global allocator `ignite_io::census::Counting` adds seven sites (the `unsafe impl GlobalAlloc`, its `alloc`, `dealloc` and `realloc` and the three calls of `System` inside them), required by the trait; integration of readiness IO, U32 and the leak census (2026-11-08): bar set once from the measured value of the merged tree",
+          "value": 25
         }
       },
       "direction": "lower",
@@ -831,10 +888,10 @@
           "value": 209
         },
         "llvm": {
-          "value": 350
+          "value": 358
         },
         "rust": {
-          "value": 350
+          "value": 358
         }
       },
       "direction": "higher",

@@ -9,7 +9,7 @@ This page lists the types of v0.3.0 and what each one supports. The intent behin
 
 | family | types |
 |---|---|
-| scalars | `Int`, `Byte`, `Bool`, `Text`, `Unit` |
+| scalars | `Int`, `Byte`, `U32`, `Bool`, `Text`, `Unit` |
 | collections | `List<T>`, `Bytes` (= `List<Byte>`), `Map<K, V>` |
 | failure | `Option<T>`, `Result<T, E>`, `IoError` |
 | user types | records (`type`), enums (`enum`), tuples, aliases |
@@ -27,6 +27,7 @@ item with a builtin name is E004.
 |---|---|---|
 | `Int` | signed 64-bit integers | `42`, `-7`, `0xFF`, `1_000` |
 | `Byte` | unsigned 8-bit integers, 0 to 255 | `b'a'`, or an integer literal where a `Byte` is expected |
+| `U32` | 32-bit words, 0 to 2^32 - 1, arithmetic modulo 2^32 | an integer literal where a `U32` is expected |
 | `Bool` | `true`, `false` | `true`, `false` |
 | `Text` | UTF-8 text | `"hello"`, `"n = {n}"`, `r"raw"` |
 | `Unit` | the one value `()` | `()`, also written `Unit` |
@@ -88,6 +89,33 @@ test "checked arithmetic" {
   assert (-MAX - 1).checked_sub(1) == None
   assert (-MAX - 1).checked_mul(-1) == None
   assert (3).checked_mul(4) == Some(12)
+}
+```
+
+### 32-bit words
+
+`U32` is a word for hashes, checksums and bit fields, not a counting integer: `+`, `-`, `*`
+and unary `-` are modulo 2^32 and never fail. `/` and `%` are unsigned and fail on a zero
+divisor, as on `Int`. `& | ^ ~` act on the 32 bits; `x << n` and `x >> n` take an `Int` amount,
+`>>` shifts in zeros, and an amount outside 0 to 31 gives 0. `x.rotate_left(n)` and
+`x.rotate_right(n)` take `n` modulo 32. Comparisons are unsigned.
+
+An integer literal is a `U32` where one is expected (`let k: U32 = 0x5A827999`, `x + 1`);
+outside 0 to 4294967295 it is E044. `U32` and `Int` never mix: `x + n` with `n: Int` is E040.
+Conversions are explicit: `x.to_int()`, `n.to_u32()` (`Option<U32>`), `n.wrap_u32()` (the
+low 32 bits), `b.to_u32()` on a `Byte`, `x.to_byte()` (`Option<Byte>`) and `x.wrap_byte()`
+(the low 8 bits, also on `Int`).
+
+```ignite
+fn rotl5(x: U32) -> U32 = x.rotate_left(5)
+
+test "words wrap" {
+  let top: U32 = 4294967295
+  assert top + 1 == 0
+  assert (0x80000000).wrap_u32() >> 31 == 1
+  assert rotl5(0x80000000) == 16
+  assert (4294967296).to_u32() == None
+  assert top.to_int() == 4294967295
 }
 ```
 

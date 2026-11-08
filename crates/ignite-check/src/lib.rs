@@ -100,6 +100,7 @@ pub const BUILTIN_TYPES: &[&str] = &[
     "Text",
     "Bytes",
     "Byte",
+    "U32",
     "Int",
     "Bool",
     "Unit",
@@ -171,6 +172,8 @@ pub const BUILTIN_STATICS: &[(&str, &str)] = &[
     ("Process", "open_files_limit"),
     ("TcpStream", "connect_within"),
     ("Channel", "bounded"),
+    ("Runtime", "census"),
+    ("Runtime", "settle"),
 ];
 
 /// Owners of [`BUILTIN_STATICS`] that are records of the standard library,
@@ -228,6 +231,11 @@ pub const BUILTIN_METHODS: &[&str] = &[
     "map",
     "to_int",
     "to_byte",
+    "to_u32",
+    "wrap_u32",
+    "wrap_byte",
+    "rotate_left",
+    "rotate_right",
     "wrapping_add",
     "wrapping_sub",
     "wrapping_mul",
@@ -324,6 +332,8 @@ const BUILTIN_STATIC_ARITIES: &[(&str, &str, usize)] = &[
     ("Process", "open_files_limit", 0),
     ("TcpStream", "connect_within", 3),
     ("Channel", "bounded", 1),
+    ("Runtime", "census", 0),
+    ("Runtime", "settle", 2),
 ];
 
 /// Builtin statics that are effectful substrate operations.
@@ -2329,7 +2339,7 @@ impl Checker {
         let ty = self.expand_ref(ty);
         let name = ty.name.name.as_str();
         match name {
-            "Int" | "Text" | "Bool" | "Byte" | "Bytes" | "Unit" | "IoError" | "Input" => {
+            "Int" | "Text" | "Bool" | "Byte" | "U32" | "Bytes" | "Unit" | "IoError" | "Input" => {
                 return false;
             }
             "TcpStream" | "PipeStream" | "TcpListener" | "Store" | "Stdin" | "Stdout"
@@ -4325,6 +4335,9 @@ pub fn builtin_applies(ty: &Type, method: &str) -> bool {
             method,
             "to_text"
                 | "to_byte"
+                | "to_u32"
+                | "wrap_u32"
+                | "wrap_byte"
                 | "wrapping_add"
                 | "wrapping_sub"
                 | "wrapping_mul"
@@ -4332,7 +4345,11 @@ pub fn builtin_applies(ty: &Type, method: &str) -> bool {
                 | "checked_sub"
                 | "checked_mul"
         ),
-        "Byte" => matches!(method, "to_text" | "to_int"),
+        "Byte" => matches!(method, "to_text" | "to_int" | "to_u32"),
+        "U32" => matches!(
+            method,
+            "to_text" | "to_int" | "to_byte" | "wrap_byte" | "rotate_left" | "rotate_right"
+        ),
         "Bool" => method == "to_text",
         "Bytes" => matches!(
             method,

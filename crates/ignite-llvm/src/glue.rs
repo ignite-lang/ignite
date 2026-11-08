@@ -1108,12 +1108,17 @@ fn debug_function(module: &mut Module<'_>, ty: &Ty) -> String {
             ));
             append_text(module, &mut f, buf, &t);
         }
-        Ty::Int | Ty::Byte => {
-            let i = if *ty == Ty::Int {
-                f.val("load i64, ptr %v, align 8")
-            } else {
-                let b = f.val("load i8, ptr %v, align 1");
-                f.val(format!("zext i8 {b} to i64"))
+        Ty::Int | Ty::Byte | Ty::U32 => {
+            let i = match ty {
+                Ty::Int => f.val("load i64, ptr %v, align 8"),
+                Ty::U32 => {
+                    let w = f.val("load i32, ptr %v, align 4");
+                    f.val(format!("zext i32 {w} to i64"))
+                }
+                _ => {
+                    let b = f.val("load i8, ptr %v, align 1");
+                    f.val(format!("zext i8 {b} to i64"))
+                }
             };
             let t = f.alloca(env.layout(&Ty::Text));
             f.ins(format!(

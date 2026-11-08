@@ -1,0 +1,13 @@
+e040_u32_mixed.ignite:4:17: error[E040]: type mismatch: expected `U32`, found `Int`
+e040_u32_mixed.ignite:5:19: error[E040]: type mismatch: expected `Int`, found `U32`
+e040_u32_mixed.ignite:6:20: error[E040]: type mismatch: expected `U32`, found `Int`
+e040_u32_mixed.ignite:7:22: error[E040]: type mismatch: expected `Int`, found `U32`
+e040_u32_mixed.ignite:8:31: error[E040]: type mismatch: expected `Int`, found `U32`
+e040_u32_mixed.ignite:9:22: error[E040]: type mismatch: expected `Int`, found `U32`
+e040_u32_mixed.ignite:10:23: error[E040]: type mismatch: expected `U32`, found `Int`
+e040_u32_mixed.ignite:11:20: error[E040]: type mismatch: expected `Byte`, found `U32`
+e040_u32_mixed.ignite:12:21: error[E040]: type mismatch: expected `Int`, found `U32`
+e040_u32_mixed.ignite:13:22: error[E040]: type mismatch: expected `U32`, found `Int`
+e040_u32_mixed.ignite:14:22: error[E040]: type mismatch: expected `U32`, found `Int`
+e040_u32_mixed.ignite:15:13: error[E040]: type mismatch: expected `Int`, found `Bool`
+e040_u32_mixed.ignite:15:20: error[E040]: type mismatch: expected `Int`, found `U32`

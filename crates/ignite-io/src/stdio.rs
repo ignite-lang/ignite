@@ -4,7 +4,7 @@
 //! on every call.
 
 use std::io::Write;
-use std::os::fd::AsFd;
+use std::os::fd::{AsFd, AsRawFd};
 
 use nix::errno::Errno;
 
@@ -25,6 +25,17 @@ impl Stdin {
     pub fn read(maximum: i64) -> Result<Input, IoError> {
         crate::flush();
         let stdin = std::io::stdin();
+        // A task on a worker waits for input parked (`crate::sched`), so a
+        // read that has none yet does not stop its worker's other tasks;
+        // the read itself then finds input. A standard input the reactor
+        // cannot watch (a regular file, always ready) is read at once.
+        if crate::wait::Waiter::current().is_task() {
+            let _ = crate::wait::wait_descriptor(
+                stdin.as_fd().as_raw_fd(),
+                crate::reactor::Interest::READ,
+                None,
+            );
+        }
         read_input(maximum, |buffer| {
             loop {
                 match nix::unistd::read(stdin.as_fd(), &mut *buffer) {

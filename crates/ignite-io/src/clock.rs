@@ -25,7 +25,7 @@ pub fn sleep(nanoseconds: i64) {
     if let Ok(nanoseconds) = u64::try_from(nanoseconds)
         && nanoseconds > 0
     {
-        std::thread::sleep(Duration::from_nanos(nanoseconds));
+        crate::wait::sleep(Duration::from_nanos(nanoseconds));
     }
 }
 

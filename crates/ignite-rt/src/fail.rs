@@ -56,6 +56,22 @@ thread_local! {
     static PENDING: RefCell<Option<String>> = const { RefCell::new(None) };
 }
 
+/// A task's jump buffers and kept report while another task runs on its
+/// worker (`ignite_io::TaskLocals`, IO mode `readiness`).
+#[derive(Default)]
+pub(crate) struct TaskHandlers {
+    handlers: Vec<Handler>,
+    pending: Option<String>,
+}
+
+impl TaskHandlers {
+    /// Exchange the saved handlers with this thread's.
+    pub(crate) fn swap(&mut self) {
+        HANDLERS.with(|handlers| std::mem::swap(&mut *handlers.borrow_mut(), &mut self.handlers));
+        PENDING.with(|pending| std::mem::swap(&mut *pending.borrow_mut(), &mut self.pending));
+    }
+}
+
 fn push(handler: Handler) {
     let _ = HANDLERS.try_with(|handlers| handlers.borrow_mut().push(handler));
 }

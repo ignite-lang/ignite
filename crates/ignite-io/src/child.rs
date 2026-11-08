@@ -19,8 +19,7 @@ use std::os::fd::AsFd;
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStderr, ChildStdout, Command, ExitStatus, Stdio};
-use std::sync::mpsc;
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, Once, PoisonError, Weak};
+use std::sync::{Arc, Mutex, MutexGuard, Once, PoisonError, Weak};
 use std::time::{Duration, Instant};
 
 use nix::errno::Errno;
@@ -31,6 +30,7 @@ use nix::sys::wait::{Id, WaitPidFlag, WaitStatus, waitid};
 use nix::unistd::Pid;
 
 use crate::IoError;
+use crate::wait::{WaitList, park_in};
 
 /// The default and test-only bound of children started and not yet
 /// waited (`Launcher.new()`, the resource's default `maximum_children`).
@@ -92,6 +92,7 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 #[derive(Clone, Debug)]
 pub struct Launcher {
     slots: Arc<Slots>,
+    _counted: Arc<crate::census::Counted>,
 }
 
 /// The children of one launcher that were started and not yet waited.
@@ -133,6 +134,9 @@ impl Launcher {
                 maximum: maximum_children,
                 taken: Mutex::new(0),
             }),
+            _counted: Arc::new(crate::census::Counted::new(
+                crate::census::Kind::Capabilities,
+            )),
         }
     }
 
@@ -158,6 +162,7 @@ impl Launcher {
                     id,
                     watched,
                     slots: Arc::clone(&self.slots),
+                    _counted: crate::census::Counted::new(crate::census::Kind::Children),
                 }),
             }),
             Err(error) => {
@@ -185,6 +190,7 @@ struct Started {
     id: i64,
     watched: Arc<Watched>,
     slots: Arc<Slots>,
+    _counted: crate::census::Counted,
 }
 
 impl ChildProcess {
@@ -203,10 +209,7 @@ impl ChildProcess {
         }
         state.waited = true;
         while state.exit.is_none() {
-            state = watched
-                .done
-                .wait(state)
-                .unwrap_or_else(PoisonError::into_inner);
+            state = park_in(&watched.state, state, |s| &mut s.done, None).0;
         }
         let exit = state.exit.take();
         drop(state);
@@ -228,7 +231,6 @@ impl ChildProcess {
 #[derive(Debug)]
 pub(crate) struct Watched {
     state: Mutex<State>,
-    done: Condvar,
 }
 
 #[derive(Debug, Default)]
@@ -242,6 +244,8 @@ struct State {
     timed_out: bool,
     waited: bool,
     exit: Option<ChildExit>,
+    /// The handle waiting in [`ChildProcess::wait`] for `exit`.
+    done: WaitList,
 }
 
 impl Watched {
@@ -251,7 +255,6 @@ impl Watched {
                 own_group,
                 ..State::default()
             }),
-            done: Condvar::new(),
         }
     }
 
@@ -466,6 +469,60 @@ fn executable(path: &Path) -> bool {
     std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
 }
 
+/// What a watcher reports to the task that launched its child: the pid or
+/// the spawn's failure, once. `None` once the watcher dropped its
+/// [`Reporter`] without a report.
+#[derive(Default)]
+struct Report {
+    state: Mutex<Reported>,
+}
+
+#[derive(Default)]
+struct Reported {
+    started: Option<Result<u32, std::io::Error>>,
+    gone: bool,
+    waiting: WaitList,
+}
+
+impl Report {
+    /// The report, waiting for it; does not flush the task's writes, as
+    /// the start of a child never did.
+    fn receive(&self) -> Option<Result<u32, std::io::Error>> {
+        let mut state = lock(&self.state);
+        loop {
+            if let Some(started) = state.started.take() {
+                return Some(started);
+            }
+            if state.gone {
+                return None;
+            }
+            state = park_in(&self.state, state, |s| &mut s.waiting, None).0;
+        }
+    }
+}
+
+/// The watcher's end of a [`Report`]; its drop without a report gives
+/// `None`.
+struct Reporter(Arc<Report>);
+
+impl Reporter {
+    fn send(&self, started: Result<u32, std::io::Error>) {
+        let mut state = lock(&self.0.state);
+        if state.started.is_none() && !state.gone {
+            state.started = Some(started);
+        }
+        state.waiting.wake_all();
+    }
+}
+
+impl Drop for Reporter {
+    fn drop(&mut self) {
+        let mut state = lock(&self.0.state);
+        state.gone = true;
+        state.waiting.wake_all();
+    }
+}
+
 /// Start `prepared` on a new watcher thread named `child`; the child's pid
 /// once it runs.
 fn launch(prepared: Prepared) -> Result<(i64, Arc<Watched>), IoError> {
@@ -480,7 +537,8 @@ fn launch(prepared: Prepared) -> Result<(i64, Arc<Watched>), IoError> {
         .command
         .get_current_dir()
         .map(|d| d.to_string_lossy().into_owned());
-    let (sender, receiver) = mpsc::channel::<Result<u32, std::io::Error>>();
+    let report = Arc::new(Report::default());
+    let sender = Reporter(Arc::clone(&report));
     let shared = Arc::clone(&watched);
     std::thread::Builder::new()
         .name("child".to_string())
@@ -492,24 +550,24 @@ fn launch(prepared: Prepared) -> Result<(i64, Arc<Watched>), IoError> {
                 input,
             } = prepared;
             let finished = watch(command, &shared, timeout, limit, input, |started| {
-                let _ = sender.send(started);
+                sender.send(started);
             });
             if let Ok(finished) = finished {
                 let exit = finished.exit();
                 let mut state = lock(&shared.state);
                 state.exit = Some(exit);
-                shared.done.notify_all();
+                state.done.wake_all();
             }
         })
         .map_err(|error| IoError::new(format!("program {program}: {error}")))?;
-    match receiver.recv() {
-        Ok(Ok(pid)) => Ok((i64::from(pid), watched)),
-        Ok(Err(error)) => Err(IoError::new(refusal(
+    match report.receive() {
+        Some(Ok(pid)) => Ok((i64::from(pid), watched)),
+        Some(Err(error)) => Err(IoError::new(refusal(
             &program,
             directory.as_deref(),
             &error,
         ))),
-        Err(_) => Err(IoError::new(format!("program {program}: not started"))),
+        None => Err(IoError::new(format!("program {program}: not started"))),
     }
 }
 

@@ -413,6 +413,51 @@ fn a_fn_carries_its_parameters_and_a_ufcs_call_its_callee() {
     assert_eq!(member(ty, "text"), Some(&Json::Str("List<Text>".into())));
 }
 
+/// `docs/slice.md` 32.6: a `U32` parameter and a `U32` expression carry
+/// the type `kind` `U32`, with no further keys.
+#[test]
+fn a_u32_is_named_in_the_document() {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("typed-json-u32");
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("words.ignite");
+    std::fs::write(
+        &file,
+        "fn mix(x: U32, n: Int) -> U32 = x.rotate_left(n) + 0x5A827999\n",
+    )
+    .unwrap();
+    let output = emit(file.to_str().unwrap());
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let document = Json::parse(String::from_utf8(output.stdout).unwrap().trim_end()).unwrap();
+    let mix = array(&document, "decls", "words")
+        .iter()
+        .find(|d| member(d, "name") == Some(&Json::Str("mix".into())))
+        .expect("the fn mix");
+    let x = &array(mix, "params", "words")[0];
+    let word = Json::Object(
+        [
+            ("kind".to_string(), Json::Str("U32".into())),
+            ("text".to_string(), Json::Str("U32".into())),
+        ]
+        .into_iter()
+        .collect(),
+    );
+    assert_eq!(member(x, "type"), Some(&word));
+    let rotate = array(&document, "exprs", "words")
+        .iter()
+        .find(|e| member(e, "kind") == Some(&Json::Str("method".into())))
+        .expect("the rotate");
+    assert_eq!(member(rotate, "type"), Some(&word));
+    let literal = array(&document, "exprs", "words")
+        .iter()
+        .find(|e| member(e, "kind") == Some(&Json::Str("int".into())))
+        .expect("the literal");
+    assert_eq!(member(literal, "type"), Some(&word));
+}
+
 const READER: &str = "examples/typed/reader.ignite";
 const OPEN: &str = "test const SAMPLE: Text = r##\"";
 

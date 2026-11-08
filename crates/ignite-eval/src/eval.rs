@@ -120,6 +120,24 @@ fn bitwise(op: BinaryOp, a: i64, b: i64) -> i64 {
     }
 }
 
+/// `a op b` for a bitwise `op` on `U32` (`docs/slice.md` 32.1): `&`, `|`
+/// and `^` take a `U32` `b`, the shifts an `Int` amount; `>>` is logical
+/// and an amount outside `0..32` gives 0 for either shift.
+fn bitwise_u32(op: BinaryOp, a: u32, b: &Value) -> Option<u32> {
+    match (op, b) {
+        (BinaryOp::BitAnd, Value::U32(b)) => Some(a & b),
+        (BinaryOp::BitOr, Value::U32(b)) => Some(a | b),
+        (BinaryOp::BitXor, Value::U32(b)) => Some(a ^ b),
+        (BinaryOp::Shl | BinaryOp::Shr, Value::Int(n)) => {
+            let Some(n) = u32::try_from(*n).ok().filter(|n| *n < 32) else {
+                return Some(0);
+            };
+            Some(if op == BinaryOp::Shl { a << n } else { a >> n })
+        }
+        _ => None,
+    }
+}
+
 /// A failure of the evaluator itself: an expression the type checker
 /// accepted but the interpreter has no rule for. Reported as E117 so the
 /// compiler never panics on it.
@@ -635,6 +653,7 @@ impl<'p> Evaluator<'p> {
         match &e.kind {
             ExprKind::Int(value) => Ok(match cx.types().try_type_of(e) {
                 Some(Ty::Byte) => Value::Byte(*value as u8),
+                Some(Ty::U32) => Value::U32(*value as u32),
                 _ => Value::Int(*value),
             }),
             ExprKind::Str(text) => Ok(Value::Text(text.clone())),
@@ -1311,6 +1330,29 @@ impl<'p> Evaluator<'p> {
             (Builtin::IntToByte, Value::Int(n)) => {
                 plain(Value::option(u8::try_from(*n).ok().map(Value::Byte)))
             }
+            (Builtin::IntToU32, Value::Int(n)) => {
+                plain(Value::option(u32::try_from(*n).ok().map(Value::U32)))
+            }
+            (Builtin::IntWrapU32, Value::Int(n)) => plain(Value::U32(*n as u32)),
+            (Builtin::IntWrapByte, Value::Int(n)) => plain(Value::Byte(*n as u8)),
+            (Builtin::ByteToU32, Value::Byte(b)) => plain(Value::U32(u32::from(*b))),
+            (Builtin::U32ToText, Value::U32(x)) => plain(Value::Text(x.to_string())),
+            (Builtin::U32ToInt, Value::U32(x)) => plain(Value::Int(i64::from(*x))),
+            (Builtin::U32ToByte, Value::U32(x)) => {
+                plain(Value::option(u8::try_from(*x).ok().map(Value::Byte)))
+            }
+            (Builtin::U32WrapByte, Value::U32(x)) => plain(Value::Byte(*x as u8)),
+            (Builtin::U32RotateLeft | Builtin::U32RotateRight, Value::U32(x)) => {
+                let Value::Int(n) = next()? else {
+                    return Err(internal("rotate by a non-Int"));
+                };
+                let n = (n & 31) as u32;
+                plain(Value::U32(if builtin == Builtin::U32RotateLeft {
+                    x.rotate_left(n)
+                } else {
+                    x.rotate_right(n)
+                }))
+            }
             (
                 Builtin::IntWrappingAdd | Builtin::IntWrappingSub | Builtin::IntWrappingMul,
                 Value::Int(a),
@@ -1692,7 +1734,9 @@ impl<'p> Evaluator<'p> {
                 None => Err(self.fail(cx, e, FailureOp::Sub, &format!("-({n})"))),
             },
             (UnaryOp::Neg, Value::Byte(0)) => Ok(Value::Byte(0)),
+            (UnaryOp::Neg, Value::U32(x)) => Ok(Value::U32(x.wrapping_neg())),
             (UnaryOp::BitNot, Value::Int(n)) => Ok(Value::Int(!n)),
+            (UnaryOp::BitNot, Value::U32(x)) => Ok(Value::U32(!x)),
             (op, value) => Err(internal(format!(
                 "unary `{op:?}` on `{}`",
                 value.debug_text()
@@ -1753,6 +1797,7 @@ impl<'p> Evaluator<'p> {
                 let ordering = match (&l, &r) {
                     (Value::Int(a), Value::Int(b)) => a.cmp(b),
                     (Value::Byte(a), Value::Byte(b)) => a.cmp(b),
+                    (Value::U32(a), Value::U32(b)) => a.cmp(b),
                     (Value::Quantity(_, a), Value::Quantity(_, b)) => a.cmp(b),
                     (Value::Text(a), Value::Text(b)) => a.as_bytes().cmp(b.as_bytes()),
                     _ => {
@@ -1772,6 +1817,11 @@ impl<'p> Evaluator<'p> {
                 }));
             }
             BitAnd | BitOr | BitXor | Shl | Shr => {
+                if let Value::U32(a) = l
+                    && let Some(value) = bitwise_u32(op, a, &r)
+                {
+                    return Ok(Value::U32(value));
+                }
                 let (Value::Int(a), Value::Int(b)) = (&l, &r) else {
                     return Err(internal(format!(
                         "`{}` on `{}` and `{}`",
@@ -1815,6 +1865,15 @@ impl<'p> Evaluator<'p> {
             (Value::Byte(a), Value::Byte(b)) => byte(*a, *b)
                 .map(Value::Byte)
                 .ok_or_else(|| overflow(self, i64::from(*a), i64::from(*b))),
+            (Value::U32(a), Value::U32(b)) => match op {
+                Add => Some(a.wrapping_add(*b)),
+                Sub => Some(a.wrapping_sub(*b)),
+                Mul => Some(a.wrapping_mul(*b)),
+                Div => a.checked_div(*b),
+                _ => a.checked_rem(*b),
+            }
+            .map(Value::U32)
+            .ok_or_else(|| overflow(self, i64::from(*a), i64::from(*b))),
             (Value::List(a), Value::List(b)) if op == Add => {
                 let joined: Vec<Value> = a.iter().chain(b).cloned().collect();
                 self.alloc(joined.len() as u64)?;
@@ -1881,6 +1940,7 @@ impl<'p> Evaluator<'p> {
             PatternKind::Int(n) => match value {
                 Value::Int(v) => v == n,
                 Value::Byte(v) => i64::from(*v) == *n,
+                Value::U32(v) => i64::from(*v) == *n,
                 _ => false,
             },
             PatternKind::Str(s) => matches!(value, Value::Text(t) if t == s),
@@ -1958,6 +2018,7 @@ impl<'p> Evaluator<'p> {
                 match value {
                     Value::Int(v) => lo <= *v && *v <= hi,
                     Value::Byte(v) => lo <= i64::from(*v) && i64::from(*v) <= hi,
+                    Value::U32(v) => lo <= i64::from(*v) && i64::from(*v) <= hi,
                     _ => false,
                 }
             }
@@ -2231,6 +2292,7 @@ impl<'p> Evaluator<'p> {
         Ok(match (&compare.show, value) {
             (Some(Show::Builtin(Builtin::IntToTextMethod)), Value::Int(n)) => n.to_string(),
             (Some(Show::Builtin(Builtin::ByteToText)), Value::Byte(b)) => b.to_string(),
+            (Some(Show::Builtin(Builtin::U32ToText)), Value::U32(x)) => x.to_string(),
             (Some(Show::Builtin(Builtin::BoolToText)), Value::Bool(b)) => b.to_string(),
             (Some(Show::Builtin(Builtin::TextToText)), Value::Text(t)) => t.clone(),
             (Some(Show::Builtin(Builtin::TextToText)), Value::Reference(reference)) => {
@@ -2335,6 +2397,8 @@ fn is_static(builtin: Builtin) -> bool {
             | Builtin::ClockSleep
             | Builtin::ClockNow
             | Builtin::ProcessFlush
+            | Builtin::RuntimeCensus
+            | Builtin::RuntimeSettle
             | Builtin::ProcessOpenFilesLimit
             | Builtin::TcpStreamConnectWithin
             | Builtin::ChannelBounded

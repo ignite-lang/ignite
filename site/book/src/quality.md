@@ -32,10 +32,10 @@ Current values: run `v0.15.0` on 2026-11-08, commit `6e144f76`.
 | # | metric | kind | target | bar | current | trend |
 |---|---|---|---|---|---|---|
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | eval | 4 | 4 | = |
-| 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | llvm | 0 | 0 | = |
-| 1.2 | differential corpus size | ratchet | eval | 465 | 452 | +29 better |
-| 1.2 | differential corpus size | ratchet | llvm | 701 | 688 | +45 better |
-| 1.2 | differential corpus size | ratchet | rust | 701 | 688 | +45 better |
+| 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | llvm | 7 | 0 | = |
+| 1.2 | differential corpus size | ratchet | eval | 454 | 452 | +29 better |
+| 1.2 | differential corpus size | ratchet | llvm | 711 | 688 | +45 better |
+| 1.2 | differential corpus size | ratchet | rust | 711 | 688 | +45 better |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/builtins | 112 | 133 | +13 worse |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/patterns | 13 | 13 | = |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | llvm/builtins | 12 | 14 | +1 worse |
@@ -44,7 +44,7 @@ Current values: run `v0.15.0` on 2026-11-08, commit `6e144f76`.
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | rust/patterns | 71 | 83 | +12 worse |
 | 1.4 | generated-code goldens changed without a `CODEGEN_REVISION` bump | gate | all | 0 | 0 | = |
 | 1.5 | random programs on which the consumers disagree | gate | | unmeasured: no program generator yet (out of scope of story:quality-ratchet) | | |
-| 1.6 | corpus units the evaluator cannot run | ratchet | eval | 236 | 236 | +16 worse |
+| 1.6 | corpus units the evaluator cannot run | ratchet | eval | 257 | 236 | +16 worse |
 | 1.7 | known differences marked intermittent | gate | all | 1 | 1 | = |
 
 ## 2 Front end: the checker refuses exactly the wrong programs
@@ -56,7 +56,7 @@ Current values: run `v0.15.0` on 2026-11-08, commit `6e144f76`.
 | 2.2 | accepted programs that fail in a backend | gate | rust | 0 | 0 | = |
 | 2.3 | soundness holes open (effects, ownership, exhaustiveness) | ratchet | | unmeasured: the planning store tags no story as a soundness hole; known open: story:map-put-handle-roots, story:immutable-binding-e006 | | |
 | 2.4 | compiler panics on any input | gate | | unmeasured: no fuzzer yet (out of scope of story:quality-ratchet) | | |
-| 2.5 | diagnostic fixtures (one diagnostic per error site, its span) | ratchet | all | 329 | 329 | +6 better |
+| 2.5 | diagnostic fixtures (one diagnostic per error site, its span) | ratchet | all | 332 | 329 | +6 better |
 | 2.6 | checking time stays linear (limit tests) | gate | all | 5 | 5 | = |
 
 ## 3 Generated code and runtime behaviour
@@ -93,8 +93,8 @@ Current values: run `v0.15.0` on 2026-11-08, commit `6e144f76`.
 | 3.3 | throughput against plain Rust | ratchet | go/todo/patch-16 | reference, no bar | 0.908× | ec2:c7i.metal-24xl |
 | 3.4 | peak RSS, leaked handles and threads after a load run | gate | | unmeasured: no number: the named tests gate it in task gate | | |
 | 3.5 | runtime entries that can unwind a panic across `extern "C"` | gate | llvm | 0 | 0 | = |
-| 3.6 | `unsafe` sites in the substrate a target links | ratchet | llvm | 82 | 82 | +6 worse |
-| 3.6 | `unsafe` sites in the substrate a target links | ratchet | rust | 12 | 12 | +3 worse |
+| 3.6 | `unsafe` sites in the substrate a target links | ratchet | llvm | 95 | 82 | +6 worse |
+| 3.6 | `unsafe` sites in the substrate a target links | ratchet | rust | 25 | 12 | +3 worse |
 | 3.7 | p99 latency against plain Rust | ratchet | llvm/terminal/connect-8 | 1.105× | 1.105× | ec2:c7i.metal-24xl, −27 better |
 | 3.7 | p99 latency against plain Rust | ratchet | llvm/terminal/rr-1 | 1.000× | 1.000× | ec2:c7i.metal-24xl, −17 better |
 | 3.7 | p99 latency against plain Rust | ratchet | llvm/terminal/rr-64 | 1.032× | 1.032× | ec2:c7i.metal-24xl, −208 better |
@@ -155,8 +155,8 @@ Current values: run `v0.15.0` on 2026-11-08, commit `6e144f76`.
 | 4.2 | gaps per claimed spec | ratchet | rust/rfc9110 | 2 | 2 | = |
 | 4.2 | gaps per claimed spec | ratchet | rust/rfc9112 | 1 | 1 | = |
 | 4.3 | inline tests per target | ratchet | eval | 209 | 209 | +18 better |
-| 4.3 | inline tests per target | ratchet | llvm | 350 | 350 | +28 better |
-| 4.3 | inline tests per target | ratchet | rust | 350 | 350 | +28 better |
+| 4.3 | inline tests per target | ratchet | llvm | 358 | 350 | +28 better |
+| 4.3 | inline tests per target | ratchet | rust | 358 | 350 | +28 better |
 | 4.4 | std functions with no inline test | ratchet | | unmeasured: no instrument yet: needs the call graph of the test bodies | | |
 
 ## 5 Operations: run, apply, host

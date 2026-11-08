@@ -88,7 +88,7 @@ use ignite_syntax::ast::{
 };
 use ignite_syntax::diagnostic::Diagnostic;
 
-pub use builtins::{child_exit, child_exit_name, endpoint, endpoint_name};
+pub use builtins::{census, census_name, child_exit, child_exit_name, endpoint, endpoint_name};
 pub use ignite_check::RFC_MODULE;
 
 /// The module of the reducers (`docs/slice.md` 16.6): a kind's hook
@@ -154,6 +154,8 @@ pub enum Ty {
     Int,
     Bool,
     Byte,
+    /// A 32-bit modular word (`docs/slice.md` 32): `+ - *` wrap.
+    U32,
     Unit,
     Text,
     /// `Bytes` is `List(Byte)`.
@@ -540,6 +542,7 @@ impl fmt::Display for Ty {
             Ty::Int => write!(f, "Int"),
             Ty::Bool => write!(f, "Bool"),
             Ty::Byte => write!(f, "Byte"),
+            Ty::U32 => write!(f, "U32"),
             Ty::Unit => write!(f, "Unit"),
             Ty::Text => write!(f, "Text"),
             Ty::List(element) if **element == Ty::Byte => write!(f, "Bytes"),
@@ -678,6 +681,26 @@ pub enum Builtin {
     ByteToInt,
     /// `i.to_byte() -> Option<Byte>`, `None` outside 0 to 255.
     IntToByte,
+    /// `x.to_text()` on a `U32`: decimal (`docs/slice.md` 32).
+    U32ToText,
+    /// `x.to_int() -> Int` on a `U32`.
+    U32ToInt,
+    /// `x.to_byte() -> Option<Byte>` on a `U32`, `None` above 255.
+    U32ToByte,
+    /// `x.wrap_byte() -> Byte` on a `U32`: the low 8 bits.
+    U32WrapByte,
+    /// `x.rotate_left(n) -> U32`, `n` taken modulo 32.
+    U32RotateLeft,
+    /// `x.rotate_right(n) -> U32`, `n` taken modulo 32.
+    U32RotateRight,
+    /// `n.to_u32() -> Option<U32>` on an `Int`, `None` outside 0 to 2^32 - 1.
+    IntToU32,
+    /// `n.wrap_u32() -> U32` on an `Int`: the low 32 bits.
+    IntWrapU32,
+    /// `n.wrap_byte() -> Byte` on an `Int`: the low 8 bits.
+    IntWrapByte,
+    /// `b.to_u32() -> U32` on a `Byte`.
+    ByteToU32,
     /// `a.wrapping_add(b) -> Int`: the sum modulo 2^64 in two's complement,
     /// never a failure (`docs/slice.md` 25.2).
     IntWrappingAdd,
@@ -843,6 +866,13 @@ pub enum Builtin {
     /// `Process.flush() -> Unit`: send what the calling task wrote (21.20);
     /// pure, as `log`.
     ProcessFlush,
+    /// `Runtime.census() -> std.runtime.Census`: the live objects of the
+    /// process per kind and its heap bytes (`docs/slice.md` 33); pure, as
+    /// `Process.flush`, and no value in the evaluator.
+    RuntimeCensus,
+    /// `Runtime.settle(tasks: Int, within: Duration) -> Bool`: wait until at
+    /// most `tasks` tasks are live, false at the deadline (32); pure.
+    RuntimeSettle,
     /// `Process.open_files_limit() -> Int`: the current open-files soft
     /// limit (`docs/slice.md` 28); effect `process.limit`.
     ProcessOpenFilesLimit,
@@ -1896,6 +1926,7 @@ pub fn equality(ty: &Ty, modules: &TypedModules) -> Option<Equality> {
         match ty {
             Ty::Int
             | Ty::Byte
+            | Ty::U32
             | Ty::Bool
             | Ty::Unit
             | Ty::Text
@@ -1941,7 +1972,9 @@ pub fn equality(ty: &Ty, modules: &TypedModules) -> Option<Equality> {
         }
     }
     match ty {
-        Ty::Int | Ty::Byte | Ty::Bool | Ty::Unit | Ty::Quantity(_) => Some(Equality::Scalar),
+        Ty::Int | Ty::Byte | Ty::U32 | Ty::Bool | Ty::Unit | Ty::Quantity(_) => {
+            Some(Equality::Scalar)
+        }
         Ty::Text | Ty::Ref(_) | Ty::Signal(_) | Ty::SystemRef | Ty::Protocol => {
             Some(Equality::Text)
         }

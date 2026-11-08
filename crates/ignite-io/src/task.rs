@@ -2,13 +2,14 @@
 //! OS thread of its own for as long as the task runs, and reuses threads
 //! that finished a task within [`LINGER`] instead of starting new ones.
 //!
-//! A worker that finished a task puts itself on the idle stack and parks.
-//! `spawn` pops the most recently idle worker (its stack and caches are
-//! warm), puts the task in the worker's slot and unparks it; only when the
-//! stack is empty does it start a thread. A worker that waited [`LINGER`]
-//! without a task takes itself off the stack under the stack's lock and
-//! ends; if a `spawn` popped it first, that `spawn` fills (or has filled)
-//! its slot, so the worker waits for the task and runs it. A task that
+//! A worker that finished a task puts itself on the idle stack and parks
+//! its waiter ([`crate::wait`]). `spawn` pops the most recently idle worker
+//! (its stack and caches are warm), puts the task in the worker's slot and
+//! wakes it; only when the stack is empty does it start a thread. A worker
+//! that waited [`LINGER`] without a task takes itself off the stack under
+//! the stack's lock and ends; if a `spawn` popped it first, that `spawn`
+//! fills (or has filled) its slot, so the worker waits for the task and
+//! runs it. A task that
 //! fails or panics (`docs/slice.md` section 14.8) is caught at the worker:
 //! `task ended with error: <report>` is logged, and the worker takes its
 //! next task as after any other task.
@@ -34,11 +35,11 @@
 
 use std::cell::Cell;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError, TryLockError};
-use std::thread::Thread;
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, TryLockError};
 use std::time::{Duration, Instant};
 
 use crate::IoError;
+use crate::wait::{WaitList, Waiter, park, park_in, wake};
 
 /// How long a worker without a task waits for one before it ends.
 pub const LINGER: Duration = Duration::from_secs(1);
@@ -52,11 +53,16 @@ struct Count {
     live: usize,
     /// Of those, the tasks waiting in [`idle_on_kept`] now.
     kept: usize,
+    /// [`wait_for_tasks`], woken when a task ends or begins to wait on a
+    /// kept listener.
+    ended: WaitList,
 }
 
-static LIVE: Mutex<Count> = Mutex::new(Count { live: 0, kept: 0 });
-/// Notified when a task ends or begins to wait on a kept listener.
-static ENDED: Condvar = Condvar::new();
+static LIVE: Mutex<Count> = Mutex::new(Count {
+    live: 0,
+    kept: 0,
+    ended: WaitList::new(),
+});
 
 thread_local! {
     /// The thread is a task worker ([`work`]), not `main` or a thread a
@@ -65,20 +71,22 @@ thread_local! {
 }
 
 fn task_started() {
+    crate::census::add(crate::census::Kind::Tasks, 1);
     lock(&LIVE).live += 1;
 }
 
 /// Count a task's end, and wake [`wait_for_tasks`] when no task is left
 /// that is not idle on a kept listener: that is all the drain waits for.
-/// A `notify_all` is a `futex` call even without a waiter, made under
-/// `LIVE`'s lock: on every task's end it was 1.4 of the 5.2 futex calls
-/// per connection of the LLVM terminal example server under connect-8
-/// (2026-11-08).
+/// Waking on every task's end was 1.4 of the 5.2 futex calls per
+/// connection of the LLVM terminal example server under connect-8, when
+/// the wait was a condition variable (2026-11-08); the wait list is woken
+/// only then.
 fn task_ended() {
+    crate::census::release(crate::census::Kind::Tasks);
     let mut count = lock(&LIVE);
     count.live = count.live.saturating_sub(1);
     if count.live <= count.kept {
-        ENDED.notify_all();
+        count.ended.wake_all();
     }
 }
 
@@ -96,7 +104,7 @@ pub fn live_tasks() -> usize {
 pub fn wait_for_tasks() {
     let mut count = lock(&LIVE);
     while count.live > count.kept {
-        count = ENDED.wait(count).unwrap_or_else(PoisonError::into_inner);
+        count = park_in(&LIVE, count, |c| &mut c.ended, None).0;
     }
 }
 
@@ -115,15 +123,17 @@ pub(crate) fn idle_on_kept<T>(wait: impl FnOnce() -> T) -> T {
             count.kept = count.kept.saturating_sub(1);
         }
     }
-    lock(&LIVE).kept += 1;
-    ENDED.notify_all();
+    let mut count = lock(&LIVE);
+    count.kept += 1;
+    count.ended.wake_all();
+    drop(count);
     let _back = Back;
     wait()
 }
 
-/// An idle worker: its thread and the slot `spawn` puts its next task in.
+/// An idle worker: its waiter and the slot `spawn` puts its next task in.
 struct Worker {
-    thread: Thread,
+    waiter: Waiter,
     next: Mutex<Option<Job>>,
 }
 
@@ -155,10 +165,32 @@ where
 {
     let job: Job = Box::new(task);
     task_started();
+    if crate::sched::readiness() {
+        return match crate::sched::spawn(job) {
+            Ok(()) => {
+                FAILING.store(false, Ordering::Relaxed);
+                Ok(())
+            }
+            Err(error) => {
+                task_ended();
+                let error = IoError::new(format!("cannot start a task: {error}"));
+                if !FAILING.swap(true, Ordering::Relaxed) {
+                    crate::log(&error.to_string());
+                }
+                Err(error)
+            }
+        };
+    }
+    spawn_thread(job)
+}
+
+/// [`try_spawn`] in the IO mode `threads`: `job` on an idle worker thread
+/// or a new one.
+fn spawn_thread(job: Job) -> Result<(), IoError> {
     let worker = lock(&IDLE).pop();
     if let Some(worker) = worker {
         *lock(&worker.next) = Some(job);
-        worker.thread.unpark();
+        wake(&worker.waiter);
         return Ok(());
     }
     match std::thread::Builder::new().spawn(move || work(job)) {
@@ -246,11 +278,30 @@ fn trim_heap() {}
 /// A thread failed to start since the last one that started.
 static FAILING: AtomicBool = AtomicBool::new(false);
 
+/// Mark the calling thread as one that runs tasks (`crate::sched`'s
+/// workers), so a wait on a kept listener does not hold up the drain.
+pub(crate) fn mark_task_thread() {
+    IN_TASK.with(|in_task| in_task.set(true));
+}
+
+/// A task on a worker ended (`crate::sched`): count it and trim the heap
+/// when due, as a task thread does after its task.
+pub(crate) fn task_finished() {
+    task_ended();
+    trim_if_released(&RELEASED, &LAST_TRIM, TRIM_INTERVAL);
+}
+
+/// A worker ends after lingering: trim what is still marked.
+pub(crate) fn trim_after_linger() {
+    trim_if_released(&RELEASED, &LAST_TRIM, Duration::ZERO);
+}
+
 /// Run `job`, then the tasks `spawn` hands this thread, until it lingered.
 fn work(mut job: Job) {
     IN_TASK.with(|in_task| in_task.set(true));
+    let _worker = crate::census::Counted::new(crate::census::Kind::Workers);
     let me = Arc::new(Worker {
-        thread: std::thread::current(),
+        waiter: Waiter::current(),
         next: Mutex::new(None),
     });
     loop {
@@ -266,9 +317,8 @@ fn work(mut job: Job) {
             if let Some(next) = lock(&me.next).take() {
                 break next;
             }
-            let now = Instant::now();
-            if now < deadline {
-                std::thread::park_timeout(deadline - now);
+            if Instant::now() < deadline {
+                park(&me.waiter, Some(deadline));
                 continue;
             }
             let mut idle = lock(&IDLE);
@@ -283,7 +333,7 @@ fn work(mut job: Job) {
                 if let Some(next) = lock(&me.next).take() {
                     break next;
                 }
-                std::thread::park();
+                park(&me.waiter, None);
             };
             break next;
         };
@@ -294,6 +344,17 @@ fn work(mut job: Job) {
 mod tests {
     use super::*;
     use std::sync::mpsc::channel;
+
+    /// These tests are of the IO mode `threads`, whatever mode the test
+    /// process runs in: [`spawn`] here starts a task on a thread. The
+    /// readiness mode's tests are `crates/ignite-io/tests/scheduler.rs`.
+    fn spawn<F>(task: F)
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        task_started();
+        let _ = spawn_thread(Box::new(task));
+    }
 
     /// One test: the idle stack is global, so a parallel test would hand
     /// its own workers to these tasks.
@@ -444,7 +505,7 @@ mod tests {
         loop {
             {
                 let idle = lock(&IDLE);
-                if let Some(at) = idle.iter().position(|w| w.thread.id() == id) {
+                if let Some(at) = idle.iter().position(|w| w.waiter.thread() == Some(id)) {
                     return Some(idle.len() - at);
                 }
             }

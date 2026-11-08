@@ -897,11 +897,17 @@ fn idle_terminald_runs_one_thread() {
     }
 }
 
-/// Under `ulimit -n 8`, `accept` runs out of descriptors (`EMFILE`):
+/// Under `ulimit -n 10`, `accept` runs out of descriptors (`EMFILE`):
 /// `terminald` logs it, keeps serving the sessions it has, and accepts
-/// again once descriptors are free (`docs/slice.md` section 7).
+/// again once descriptors are free (`docs/slice.md` section 7). With the
+/// first session open the process holds 8: standard input, output and
+/// error, the listener, `main`'s eventfd, the session's socket and its
+/// worker's epoll and eventfd (IO mode `readiness`), so two descriptors
+/// are left for the crowd, as there were under `ulimit -n 8` before the
+/// workers.
 fn accept_survives_running_out_of_descriptors(target: Target) {
-    let mut server = Server::start_under(target, &["sh", "-c", "ulimit -n 8 && exec \"$@\"", "sh"]);
+    let mut server =
+        Server::start_under(target, &["sh", "-c", "ulimit -n 10 && exec \"$@\"", "sh"]);
     let mut first = server.raw();
     let crowd: Vec<TcpStream> = (0..8)
         .map(|_| TcpStream::connect(("127.0.0.1", server.port)).expect("connect"))

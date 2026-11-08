@@ -19,6 +19,7 @@ const MAXIMUM_COUNT: i64 = 65536;
 #[derive(Clone, Debug)]
 pub struct Entropy {
     source: Arc<Result<File, String>>,
+    _counted: Arc<crate::census::Counted>,
 }
 
 impl Default for Entropy {
@@ -33,6 +34,9 @@ impl Entropy {
     pub fn new() -> Entropy {
         Entropy {
             source: Arc::new(File::open(SOURCE).map_err(|e| format!("{SOURCE}: {e}"))),
+            _counted: Arc::new(crate::census::Counted::new(
+                crate::census::Kind::Capabilities,
+            )),
         }
     }
 

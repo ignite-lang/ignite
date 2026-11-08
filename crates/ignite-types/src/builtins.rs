@@ -57,6 +57,16 @@ pub(crate) fn method(receiver: &Ty, name: &str) -> Option<Sig> {
         (Ty::Bool, "to_text") => sig(BoolToText, vec![], Ty::Text),
         (Ty::Byte, "to_int") => sig(ByteToInt, vec![], Ty::Int),
         (Ty::Int, "to_byte") => sig(IntToByte, vec![], Ty::Option(Box::new(Ty::Byte))),
+        (Ty::Int, "to_u32") => sig(IntToU32, vec![], Ty::Option(Box::new(Ty::U32))),
+        (Ty::Int, "wrap_u32") => sig(IntWrapU32, vec![], Ty::U32),
+        (Ty::Int, "wrap_byte") => sig(IntWrapByte, vec![], Ty::Byte),
+        (Ty::Byte, "to_u32") => sig(ByteToU32, vec![], Ty::U32),
+        (Ty::U32, "to_text") => sig(U32ToText, vec![], Ty::Text),
+        (Ty::U32, "to_int") => sig(U32ToInt, vec![], Ty::Int),
+        (Ty::U32, "to_byte") => sig(U32ToByte, vec![], Ty::Option(Box::new(Ty::Byte))),
+        (Ty::U32, "wrap_byte") => sig(U32WrapByte, vec![], Ty::Byte),
+        (Ty::U32, "rotate_left") => sig(U32RotateLeft, vec![Ty::Int], Ty::U32),
+        (Ty::U32, "rotate_right") => sig(U32RotateRight, vec![Ty::Int], Ty::U32),
         (Ty::Int, "wrapping_add") => sig(IntWrappingAdd, vec![Ty::Int], Ty::Int),
         (Ty::Int, "wrapping_sub") => sig(IntWrappingSub, vec![Ty::Int], Ty::Int),
         (Ty::Int, "wrapping_mul") => sig(IntWrappingMul, vec![Ty::Int], Ty::Int),
@@ -421,6 +431,12 @@ pub(crate) fn static_fn(owner: &str, name: &str) -> Option<Sig> {
         ),
         ("Clock", "now") => sig(ClockNow, vec![], Ty::Quantity(QuantityKind::Duration)),
         ("Process", "flush") => sig(ProcessFlush, vec![], Ty::Unit),
+        ("Runtime", "census") => sig(RuntimeCensus, vec![], census()),
+        ("Runtime", "settle") => sig(
+            RuntimeSettle,
+            vec![Ty::Int, Ty::Quantity(QuantityKind::Duration)],
+            Ty::Bool,
+        ),
         ("Process", "open_files_limit") => sig(ProcessOpenFilesLimit, vec![], Ty::Int),
         ("TcpStream", "connect_within") => sig(
             TcpStreamConnectWithin,
@@ -440,6 +456,16 @@ pub fn endpoint_name() -> crate::QualName {
 /// The record `std.net.Endpoint`: the result of `Endpoint.of`.
 pub fn endpoint() -> Ty {
     Ty::Record(endpoint_name())
+}
+
+/// The name of the record `std.runtime.Census` (`docs/slice.md` 33).
+pub fn census_name() -> crate::QualName {
+    crate::QualName::new("std.runtime", "Census")
+}
+
+/// The record `std.runtime.Census`: the result of `Runtime.census()`.
+pub fn census() -> Ty {
+    Ty::Record(census_name())
 }
 
 /// The builtin free function `log(line: Text)`.
@@ -481,6 +507,7 @@ mod tests {
                 ("ChildProcess", process.clone()),
                 ("Endpoint", vec!["std.net".to_string()]),
                 ("Launcher", process),
+                ("Runtime", vec!["std.runtime".to_string()]),
             ]
         );
     }

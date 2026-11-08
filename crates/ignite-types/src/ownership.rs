@@ -114,6 +114,16 @@ pub fn change(builtin: Builtin) -> Option<Change> {
         | IntWrappingAdd
         | IntWrappingMul
         | IntWrappingSub
+        | IntToU32
+        | IntWrapU32
+        | IntWrapByte
+        | ByteToU32
+        | U32ToText
+        | U32ToInt
+        | U32ToByte
+        | U32WrapByte
+        | U32RotateLeft
+        | U32RotateRight
         | IoErrorNew
         | IoErrorWithExitCode
         | LauncherExecute
@@ -187,6 +197,8 @@ pub fn change(builtin: Builtin) -> Option<Change> {
         | ClockSleep
         | ClockNow
         | ProcessFlush
+        | RuntimeCensus
+        | RuntimeSettle
         | ProcessOpenFilesLimit
         | ChannelBounded
         | SenderSend
