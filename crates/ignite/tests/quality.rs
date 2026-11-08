@@ -179,6 +179,9 @@ pub struct Baseline {
     /// limit, which a merge run does not evaluate, each with the decision
     /// that listed it.
     pub eval_slow: BTreeMap<String, String>,
+    /// The decision that listed a unit of `known_differences` as
+    /// intermittent; a unit `main` does not list so needs one of its own.
+    pub intermittent_decisions: BTreeMap<String, String>,
 }
 
 fn object<'a>(value: &'a Json, what: &str) -> Result<&'a BTreeMap<String, Json>, String> {
@@ -326,6 +329,18 @@ pub fn read_baseline(json: &Json) -> Result<Baseline, String> {
                 .ok_or_else(|| format!("{unit}: the reason is no text"))
         })
         .collect::<Result<_, _>>()?;
+    let intermittent_decisions = match root.get("intermittent_decisions") {
+        None => BTreeMap::new(),
+        Some(map) => object(map, "`intermittent_decisions`")?
+            .iter()
+            .map(|(unit, decision)| {
+                decision
+                    .as_str()
+                    .map(|d| (unit.clone(), d.to_string()))
+                    .ok_or_else(|| format!("{unit}: the decision is no text"))
+            })
+            .collect::<Result<_, _>>()?,
+    };
     let eval_slow = match root.get("eval_slow") {
         None => BTreeMap::new(),
         Some(slow) => object(slow, "`eval_slow`")?
@@ -345,6 +360,7 @@ pub fn read_baseline(json: &Json) -> Result<Baseline, String> {
         known_differences,
         eval_cannot_run,
         eval_slow,
+        intermittent_decisions,
     })
 }
 
@@ -421,6 +437,16 @@ pub fn write_baseline(baseline: &Baseline) -> String {
         ("metrics".to_string(), Json::Object(metrics)),
         ("known_differences".to_string(), Json::Object(known)),
         ("eval_cannot_run".to_string(), Json::Object(cannot)),
+        (
+            "intermittent_decisions".to_string(),
+            Json::Object(
+                baseline
+                    .intermittent_decisions
+                    .iter()
+                    .map(|(unit, decision)| (unit.clone(), s(decision)))
+                    .collect(),
+            ),
+        ),
         (
             "eval_slow".to_string(),
             Json::Object(
@@ -529,14 +555,64 @@ pub fn check(
     }
     if let Some(main) = main {
         errors.extend(against_main(baseline, source, main));
+        if source == "differential" {
+            errors.extend(intermittent_against_main(baseline, main));
+        }
     }
     errors
 }
 
+/// An intermittent difference is neither counted in 1.1 nor refused when it
+/// shows, so listing a unit as intermittent that `main` does not list so is
+/// a decision: it needs an `intermittent_decisions` entry of its own (1.7
+/// counts the entries, not which units they are).
+fn intermittent_against_main(baseline: &Baseline, main: &Baseline) -> Vec<String> {
+    let mut errors = Vec::new();
+    for (unit, known) in &baseline.known_differences {
+        let on_main = main
+            .known_differences
+            .get(unit)
+            .is_some_and(|k| k.intermittent && k.consumer == known.consumer);
+        if known.intermittent
+            && !on_main
+            && !new_decision(
+                baseline
+                    .intermittent_decisions
+                    .get(unit)
+                    .map(String::as_str),
+                main,
+            )
+        {
+            errors.push(format!(
+                "{unit}: listed as an intermittent {} difference, which main does not list, without an `intermittent_decisions` entry of its own",
+                known.consumer
+            ));
+        }
+    }
+    errors
+}
+
+/// Every decision `main`'s baseline holds, trimmed: on a bar, on a
+/// tolerance, for a slow unit, for an intermittent difference.
+fn decisions_of(main: &Baseline) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    for metric in main.metrics.values() {
+        out.extend(metric.bars.values().filter_map(|b| b.decision.clone()));
+        out.extend(metric.tolerance_decision.clone());
+    }
+    out.extend(main.eval_slow.values().cloned());
+    out.extend(main.intermittent_decisions.values().cloned());
+    out.into_iter().map(|d| d.trim().to_string()).collect()
+}
+
 /// Whether `decision` is a decision taken in this change: present, not
-/// blank, and not the one `main` already holds in its place.
-fn new_decision(decision: Option<&str>, on_main: Option<&str>) -> bool {
-    decision.is_some_and(|d| !d.trim().is_empty() && Some(d) != on_main)
+/// blank, and, trimmed, none of the decisions `main` already holds (for
+/// this place or any other), so an old decision cannot be reused.
+fn new_decision(decision: Option<&str>, main: &Baseline) -> bool {
+    decision.is_some_and(|d| {
+        let d = d.trim();
+        !d.is_empty() && !decisions_of(main).contains(d)
+    })
 }
 
 /// The refusals of `baseline` against `main`'s for the metrics `source`
@@ -578,7 +654,7 @@ fn against_main(baseline: &Baseline, source: &str, main: &Baseline) -> Vec<Strin
             if old
                 .direction
                 .worse(old_bar.value, bar.value, Tolerance::Count(0))
-                && !new_decision(bar.decision.as_deref(), old_bar.decision.as_deref())
+                && !new_decision(bar.decision.as_deref(), main)
             {
                 errors.push(format!(
                     "{id} {target}: the bar moved from {} on main to {} without a `decision` of its own",
@@ -587,10 +663,7 @@ fn against_main(baseline: &Baseline, source: &str, main: &Baseline) -> Vec<Strin
             }
         }
         if metric.tolerance.looser_than(old.tolerance)
-            && !new_decision(
-                metric.tolerance_decision.as_deref(),
-                old.tolerance_decision.as_deref(),
-            )
+            && !new_decision(metric.tolerance_decision.as_deref(), main)
         {
             errors.push(format!(
                 "{id}: the tolerance loosened from {:?} on main to {:?} without a `tolerance_decision` of its own",
@@ -744,10 +817,7 @@ fn slow_against_main(baseline: &Baseline, main: &Baseline) -> Vec<String> {
         if was_slow {
             continue;
         }
-        if !new_decision(
-            baseline.eval_slow.get(unit).map(String::as_str),
-            main.eval_slow.get(unit).map(String::as_str),
-        ) {
+        if !new_decision(baseline.eval_slow.get(unit).map(String::as_str), main) {
             errors.push(format!(
                 "{unit}: listed as {reason:?}, which a merge run does not evaluate, without an `eval_slow` decision of its own"
             ));
@@ -761,14 +831,31 @@ pub fn is_slow(reason: &str) -> bool {
     reason.starts_with("over the time limit")
 }
 
-/// Whether the planning store holds `story` (`story:<id>`).
-fn story_exists(story: &str) -> bool {
-    story.strip_prefix("story:").is_some_and(|id| {
-        workspace()
-            .join(".engineering/planning/story")
-            .join(format!("{id}.md"))
-            .is_file()
-    })
+/// The statuses of a story that still tracks work (`aep plan artifact
+/// lifecycle story`: draft, proposed, active); `implemented`, `rejected`
+/// and `archived` end it.
+const OPEN_STORY: [&str; 3] = ["draft", "proposed", "active"];
+
+/// Whether the planning store holds `story` (`story:<id>`) with an open
+/// status in its frontmatter.
+fn story_open(story: &str) -> bool {
+    let Some(id) = story.strip_prefix("story:") else {
+        return false;
+    };
+    let path = workspace()
+        .join(".engineering/planning/story")
+        .join(format!("{id}.md"));
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    let frontmatter = text
+        .strip_prefix("---\n")
+        .and_then(|rest| rest.split_once("\n---"))
+        .map_or("", |(front, _)| front);
+    frontmatter
+        .lines()
+        .find_map(|line| line.strip_prefix("status:"))
+        .is_some_and(|status| OPEN_STORY.contains(&status.trim()))
 }
 
 /// The runner's metrics with 1.1 counting only the steady differences: a
@@ -841,9 +928,9 @@ fn differential_lists(baseline: &Baseline, outcome: &differential::Outcome) -> V
         }
     }
     for (unit, known) in &baseline.known_differences {
-        if known.intermittent && !story_exists(&known.story) {
+        if known.intermittent && !story_open(&known.story) {
             errors.push(format!(
-                "{unit}: an intermittent difference names {}, which is no story of .engineering/planning/story/",
+                "{unit}: an intermittent difference names {}, which is no open story (draft, proposed or active) of .engineering/planning/story/",
                 known.story
             ));
         }
@@ -1858,6 +1945,7 @@ fn baseline_of(metrics: &[(&str, Metric)]) -> Baseline {
         known_differences: BTreeMap::new(),
         eval_cannot_run: BTreeMap::new(),
         eval_slow: BTreeMap::new(),
+        intermittent_decisions: BTreeMap::new(),
     }
 }
 
@@ -2239,10 +2327,14 @@ fn the_differential_refuses_a_missing_run_a_slow_listing_without_a_decision_and_
         "s.ignite::other".to_string(),
         "story:x, measured 185 s".to_string(),
     );
+    // Main holds the text "story:x, measured 185 s" (for `other`), so it is
+    // no new decision for either unit: a decision of main is never reused.
     let errors = slow_against_main(&stale, &main_with);
     assert!(
-        errors.len() == 1 && errors[0].contains("s.ignite::other"),
-        "main's decision for a unit main does not list as slow: {errors:?}"
+        errors.len() == 2
+            && errors.iter().any(|e| e.contains("s.ignite::other"))
+            && errors.iter().any(|e| e.contains("s.ignite::slow")),
+        "a decision main holds was reused: {errors:?}"
     );
 
     let mut unknown = baseline.clone();
@@ -2257,7 +2349,7 @@ fn the_differential_refuses_a_missing_run_a_slow_listing_without_a_decision_and_
     );
     let errors = differential_lists(&unknown, &empty);
     assert!(
-        errors.len() == 1 && errors[0].contains("no story"),
+        errors.len() == 1 && errors[0].contains("no open story"),
         "{errors:?}"
     );
     assert_eq!(
@@ -2383,5 +2475,122 @@ fn adversary_eval_cannot_run_reasons_are_held_exactly() {
     assert!(
         !errors.is_empty(),
         "a changed reason for a unit the evaluator cannot run passed"
+    );
+}
+
+// ---- adversary, story quality-ratchet pass 2 ----------------------------
+
+/// The differential baseline of pass 2's cases: 1.1 llvm at 0, 1.7 at 1,
+/// and the known differences `known` (each intermittent, on LLVM, naming
+/// `story`).
+fn adversary2_differential(known: &[&str], story: &str) -> Baseline {
+    let gate = |value: i64, target: &str| {
+        let mut m = metric(Direction::Lower, Tolerance::Count(0), &[(target, value)]);
+        m.source = Some("differential".to_string());
+        m
+    };
+    let mut b = baseline_of(&[("1.1", gate(0, "llvm")), ("1.7", gate(1, "all"))]);
+    for unit in known {
+        b.known_differences.insert(
+            unit.to_string(),
+            Known {
+                consumer: "llvm".to_string(),
+                story: story.to_string(),
+                what: "a timing assertion".to_string(),
+                intermittent: true,
+            },
+        );
+    }
+    b
+}
+
+fn adversary2_outcome(llvm_differs: &[&str]) -> differential::Outcome {
+    differential::Outcome {
+        units: BTreeMap::new(),
+        llvm_differs: llvm_differs
+            .iter()
+            .map(|u| (u.to_string(), "exit 101 on Rust, 0 on LLVM".to_string()))
+            .collect(),
+        eval_differs: BTreeMap::new(),
+        eval_cannot: BTreeMap::new(),
+        build_failed: BTreeMap::new(),
+        unchecked: BTreeMap::new(),
+        no_run: BTreeMap::new(),
+        metrics: vec![(
+            "1.1".to_string(),
+            "llvm".to_string(),
+            llvm_differs.len() as i64,
+        )],
+    }
+}
+
+/// A6 again: 1.7 counts the intermittent entries, not which ones. Main
+/// lists `old` as intermittent; the branch drops `old` and lists a new,
+/// steady LLVM regression `new` as intermittent instead. 1.7 stays 1, 1.1
+/// leaves `new` out, and nothing compares `known_differences` with main's,
+/// so the regression merges with no decision.
+#[test]
+fn adversary2_a_new_regression_swapped_in_for_an_intermittent_entry_is_refused() {
+    let story = "story:llvm-store-update-off-lock";
+    let main = adversary2_differential(&["t.ignite::old"], story);
+    let branch = adversary2_differential(&["t.ignite::new"], story);
+    let outcome = adversary2_outcome(&["t.ignite::new"]);
+    let mut errors = differential_lists(&branch, &outcome);
+    errors.extend(check(
+        &branch,
+        "differential",
+        &steady(&branch, &outcome),
+        Some(&main),
+    ));
+    assert!(
+        !errors.is_empty(),
+        "a steady LLVM difference listed as intermittent in place of main's entry passed"
+    );
+}
+
+/// A2 again: "a decision of its own" is any text unequal to main's, so
+/// main's own decision with a trailing space lets the bar worsen again.
+#[test]
+fn adversary2_main_decision_with_a_trailing_space_is_not_a_new_decision() {
+    let decided = |value: i64, decision: &str| {
+        let mut b = baseline_of(&[(
+            "7.2",
+            metric(Direction::Lower, Tolerance::Count(0), &[("all", value)]),
+        )]);
+        b.metrics
+            .get_mut("7.2")
+            .unwrap()
+            .bars
+            .get_mut("all")
+            .unwrap()
+            .decision = Some(decision.to_string());
+        b
+    };
+    let main = decided(18, "story:x, 2026-11-07");
+    let worse_again = decided(30, "story:x, 2026-11-07 ");
+    let errors = check(&worse_again, "static", &one("7.2", "all", 30), Some(&main));
+    assert!(
+        errors.iter().any(|e| e.contains("without a `decision`")),
+        "the bar moved 18 -> 30 on main's decision plus a space and passed: {errors:?}"
+    );
+}
+
+/// A6/1.7: an intermittent entry must name a story that tracks its fix; a
+/// story the store holds as `implemented` tracks nothing.
+#[test]
+fn adversary2_an_intermittent_entry_naming_an_implemented_story_is_refused() {
+    let branch = adversary2_differential(&["t.ignite::old"], "story:apply-recovery-way-out");
+    let story = std::fs::read_to_string(
+        workspace().join(".engineering/planning/story/apply-recovery-way-out.md"),
+    )
+    .unwrap();
+    assert!(
+        story.contains("\nstatus: implemented\n"),
+        "fixture story moved"
+    );
+    let errors = differential_lists(&branch, &adversary2_outcome(&[]));
+    assert!(
+        !errors.is_empty(),
+        "an intermittent difference parked on an implemented story passed"
     );
 }

@@ -366,6 +366,12 @@ fn run_all(jobs: &BTreeMap<String, Job>) -> BTreeMap<String, Run> {
                         break;
                     };
                     let run = job.run();
+                    // The executable does not hold the test (exit 2, `no test
+                    // named …`): the test never ran, so the unit has no run
+                    // and `run_corpus` reports it in `no_run`.
+                    if job.test && run.status == "2" && run.stderr.contains("no test named") {
+                        continue;
+                    }
                     results.lock().unwrap().insert(key.clone(), run);
                 }
             });
@@ -391,18 +397,22 @@ fn build_options(target: Target, out: PathBuf) -> ignite::BuildOptions {
         out: Some(out),
         target_dir: (target == Target::Rust).then(|| scratch_root().join("cargo")),
         runtime: (target == Target::Llvm).then(common::runner_archive),
+        // `cargo --offline`: the gate never touches the network; the
+        // project resolves from the lock `seed_lock` gave it.
+        offline: target == Target::Rust,
         ..Default::default()
     }
 }
 
 /// Give the generated Rust project at `project` the workspace's
-/// `Cargo.lock` before its first build. The project's dependencies are
-/// `ignite-io` and its crates, which the workspace lock pins, so cargo
-/// resolves from the lock and the local registry cache and never updates the
-/// crates.io index: the gate stays off the network. A lock the project
-/// already has (from an earlier run) is kept.
+/// `Cargo.lock` before every build, over any lock an earlier run left. The
+/// project's dependencies are `ignite-io` and its crates, which the
+/// workspace lock pins, so cargo (`--offline`, [`build_options`]) resolves
+/// from the lock and the local registry cache and never updates the
+/// crates.io index: the gate stays off the network, and after a dependency
+/// bump the project follows the workspace instead of a stale lock.
 fn seed_lock(target: Target, project: &Path) {
-    if target != Target::Rust || project.join("Cargo.lock").exists() {
+    if target != Target::Rust {
         return;
     }
     std::fs::create_dir_all(project).unwrap();
@@ -1251,5 +1261,94 @@ fn adversary_every_test_of_two_files_with_one_module_path_runs_on_a_target() {
     assert!(
         missing.is_empty(),
         "units with no run on LLVM: {missing:#?}"
+    );
+}
+
+/// Adversary (story quality-ratchet, pass 2): pass 1's case and
+/// `run_corpus`'s `no_run` check count a unit as run when a `Run` exists.
+/// Mutant: the executables paired with the wrong files (the group order
+/// reversed, as a `test_groups` that disagrees with `build_tests` would
+/// pair them). Every job then exits 2 with `no test named …` on both
+/// targets alike, so the targets agree, 1.2 counts it, and the presence
+/// check still finds a run for every unit. A unit counts as run only when
+/// its test ran.
+#[test]
+fn adversary2_a_test_the_executable_does_not_hold_is_not_a_run() {
+    let entry = |name: &str| {
+        let path = fixture(name);
+        let loaded = ignite::load(&path, None).unwrap_or_else(|e| panic!("{e}"));
+        Entry {
+            rel: relative(&path),
+            module: loaded.types().module.clone(),
+            tests: test_names(loaded.program()),
+            mains: Vec::new(),
+            mains_not_run: None,
+            std: false,
+            path,
+        }
+    };
+    let entries = [entry("slice16/holds.ignite"), entry("slice16/moves.ignite")];
+    let with_tests: Vec<&Entry> = entries.iter().collect();
+    let (built, failed) = test_executables(&with_tests, Target::Llvm);
+    assert!(failed.is_empty(), "{failed:?}");
+    let exes: Vec<PathBuf> = built.iter().map(|(exe, _)| exe.clone()).rev().collect();
+    let mut jobs = BTreeMap::new();
+    for (exe, (_, held)) in exes.into_iter().zip(&built) {
+        for e in held {
+            for name in &e.tests {
+                jobs.insert(
+                    format!("{}::{name}", e.rel),
+                    Job {
+                        program: exe.clone(),
+                        args: vec!["--run-one".to_string(), format!("{}/{name}", e.module)],
+                        scratch: scratch_root()
+                            .join("adversary2-mispaired")
+                            .join(jobs.len().to_string()),
+                        test: true,
+                    },
+                );
+            }
+        }
+    }
+    let runs = run_all(&jobs);
+    let counted: Vec<&String> = runs
+        .iter()
+        .filter(|(_, run)| run.stderr.contains("no test named"))
+        .map(|(key, _)| key)
+        .collect();
+    let missing: Vec<&String> = jobs.keys().filter(|key| !runs.contains_key(*key)).collect();
+    assert!(
+        counted.is_empty() || !missing.is_empty(),
+        "{} units whose test never ran have a run, and the presence check finds none missing: {:#?}",
+        counted.len(),
+        &counted[..counted.len().min(3)]
+    );
+}
+
+/// Adversary (story quality-ratchet, pass 2): the gate stays off the
+/// network only while the generated project's lock pins what the workspace
+/// pins. `seed_lock` keeps a lock an earlier run left in
+/// `CARGO_TARGET_TMPDIR`, so after a dependency bump of `ignite-io` the
+/// project resolves against the stale lock and cargo updates the crates.io
+/// index.
+#[test]
+fn adversary2_a_seeded_lock_follows_the_workspace_lock() {
+    let project = scratch_root().join("adversary2-lock/rust");
+    let _ = std::fs::remove_dir_all(&project);
+    std::fs::create_dir_all(&project).unwrap();
+    std::fs::write(
+        project.join("Cargo.lock"),
+        "version = 4\n\n[[package]]\nname = \"nix\"\nversion = \"0.1.0\"\n",
+    )
+    .unwrap();
+    seed_lock(Target::Rust, &project);
+    let seeded = std::fs::read_to_string(project.join("Cargo.lock")).unwrap();
+    let workspace_lock = std::fs::read_to_string(workspace().join("Cargo.lock")).unwrap();
+    let _ = std::fs::remove_dir_all(project.parent().unwrap());
+    assert!(
+        seeded == workspace_lock,
+        "a stale lock from an earlier run was kept: {} bytes against the workspace's {}",
+        seeded.len(),
+        workspace_lock.len()
     );
 }
