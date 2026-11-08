@@ -47,10 +47,11 @@ the IO substrate (Rust) that compiled programs link.
 | `examples/todo/health.ignite` | `examples.todo.health`, the HTTP probe kind `HttpHealth` declared outside `std/` (22.6): its outcome type `HealthCheck { answered, status, latency }`, the predicate `healthy` a contract names in `good`, `encode_check` (one line per attempt in the model encoding); the request is written by hand (D13) |
 | `github.com/ignite-lang/ignite-lsp` | the language server `ignite-lsp` (written in Ignite), its generated LSP types, their generator `ignite-lsp-types`, the vendored LSP `metaModel.json` and its end-to-end test live there since story:lsp-repository; it builds against a released `ignite` |
 | `examples/typed/` | `sample.ignite`, a small program, and `reader.ignite`, which reads the typed document of `sample.ignite` (`ignite emit --typed-json`, `docs/slice.md` 24) with `std.json` in an inline test; the document is checked in as the raw string `SAMPLE`, kept equal to the compiler's output by `typed_json::the_reader_fixture_is_the_sample_document` (`IGNITE_BLESS=1` rewrites it) |
+| `dist/toolchain/` | `Dockerfile` of the toolchain image `ghcr.io/ignite-lang/ignite-toolchain:<version>`, one per release (AGENTS.md § Releases) |
 | `docs/rfc/` | the RFCXML sources of RFC 9110 and RFC 9112, vendored unmodified for `ignite rfc check` in the gate; `README.md` states their licence (`docs/slice.md` 19.9, D5) |
 | `docs/vision.md` | direction: target architecture, sequencing of waves and slices, contradictions between documents, open and taken decisions |
 | `PLAN.md` | the roadmap in outline: slices, waves, state; reasoning stays in `docs/vision.md` |
-| `docs/` | design document, slice contract, `llvm.md` (LLVM target); `friction.md` (language friction backlog); research: `research/lean.md`, `research/ess.md` (comparisons), `research/review-2026-11-04.md` and `research/review-2026-11-04-ecosystem.md` (external reviews and what the plan does with them); future designs, not implemented: `serde.md` (data formats: one value model, compiler-derived codecs, JSON, YAML, TOML), `wasm.md` (WebAssembly target, runtime in Ignite, hot reload), `actors.md` (typed actors, pub/sub, supervision), `protocols.md` (RFC-bound protocols, pluggable transports) |
+| `docs/` | design document, slice contract, `llvm.md` (LLVM target); `friction.md` (language friction backlog); research: `research/lean.md`, `research/ess.md` (comparisons), `research/review-2026-11-04.md` and `research/review-2026-11-04-ecosystem.md` (external reviews and what the plan does with them); future designs, not implemented: `serde.md` (data formats: one value model, compiler-derived codecs, JSON, YAML, TOML), `web.md` (the web framework `x.web`: the web app as a system declaration with derived routes, JSON, OpenAPI, live pages, caching and contracts; markup literals and the other language extensions it needs; a second root `x` beside `std`), `wasm.md` (WebAssembly target, runtime in Ignite, hot reload), `actors.md` (typed actors, pub/sub, supervision), `protocols.md` (RFC-bound protocols, pluggable transports) |
 | `.engineering/` | AEP planning store (`aep plan artifact list`): epics and stories of live work, from slice 13 on; slices 1 to 12c stay in `PLAN.md` |
 | `site/` | the website: `index.html` and `assets/` (the landing page, static HTML, CSS and vanilla JS) and `book/` (mdBook 0.5.4: guide, language design, reference; theme in `book/theme/`, Ignite highlighting in `book/theme/highlight.js`); every `ignite` block checks or is marked `fragment`, `fails=Ennn` or `dir=PATH`, and no page names `target/debug/ignite` (`site::` in `crates/ignite/tests/site.rs`); deployed to GitHub Pages by `.github/workflows/pages.yml` on push to `main` |
 | `ux/` | the website's UI loop (story `docs-site-ui-loop`, `ux/README.md`): `adapter.ts` (viewports, themes, always-visible controls), `scenarios/` (the page list and the tasks a reader does from the landing page), Playwright TypeScript specs `tests/` (L2 layout contract with axe-core, L3 screen-only user, break-tests), `baseline.json` (the ratchet, checked by `site::ux::ratchet` in `crates/ignite/tests/site/ux.rs`), `findings/UXF-nnn.md`; rounds: `scenarios/cards/` (two anchor cards and one rotating card per round), the trial `round/sessions.spec.ts` with `round.config.ts`, `rounds/R-nn/` (`report.md`, `round.json`, `shots/`, written by `site::round::write` in `crates/ignite/tests/site/round.rs`; the reviews and `triage.md` beside them) and `rounds/trend.md`; `node_modules/` is ignored, a link to one shared offline install per lockfile (`task ux-install` is the one networked step) |
@@ -84,6 +85,7 @@ Rules of the layout:
 | format and lint | `task check` |
 | merge gate | `task gate` |
 | pack the release binary | `task dist` (release `ignite` for Linux x86_64, glibc linked statically, with `std/` as `target/dist/ignite-VERSION-x86_64-linux.tar.gz`: `bin/ignite`, `share/ignite/std`; a driver at `<prefix>/bin/ignite` reads `<prefix>/share/ignite/std` first when it exists) |
+| build and check the toolchain image | `task image VERSION=X.Y.Z` (`dist/toolchain/Dockerfile`, tags `ghcr.io/ignite-lang/ignite-toolchain:X.Y.Z` from release vX.Y.Z's archive and the tag's source), `task image-check VERSION=X.Y.Z [IMAGE=REF]` (`image::` in `crates/ignite/tests/image.rs`, ignored elsewhere: needs docker) |
 | compile the example | `task compile` (`ignite build --target rust`; writes `target/ignite/terminal/`, prints `built …/terminald` and `built …/tn`) |
 | run the compiled server | `task server` |
 | run the compiled client | `task client` |
@@ -420,6 +422,7 @@ cold comparison against each baseline meets the start-load rule and has no faile
 
 - No comments in `Cargo.toml`, `Taskfile.yml` or any other config file.
 - Tooling, checks and scripts are Rust (Timo, 2026-11-02): a `#[test]` in the crate that owns the rule, or a Rust binary. No new Python; Bash only for one-line invocations in `Taskfile.yml`. The former `scripts/*.py` are `tools/ignite-perf` and the serial `cargo fmt --all -- --check` of `task check` (`story:rust-tooling`); scripts under `docs/performance/` are recorded evidence and stay as they are.
+- The repository, its releases and its packages are public (Timo, 2026-11-08): no company, customer, service or internal project names, hosts, paths, account ids or credentials in any file, commit message, PR, release note or image label. A case study is named by what it is ("a WebSocket push service").
 - Commit titles follow Conventional Commits: `type(scope): summary` with `type` one of `feat`,
   `fix`, `perf`, `docs`, `test`, `refactor`, `chore`, `build`, `ci`; the scope is optional. Every
   commit has a body: a blank line after the title, then bullets on what changed and why.
@@ -481,6 +484,15 @@ without waiting for a person.
   with `share/ignite/std`, the standard library a driver at `<prefix>/bin/ignite` reads first;
   the Rust target still needs a clone (`--substrate`). The VS Code extension of `ignite-lsp`
   downloads it.
+- Image (story `toolchain-image`), after the archive is uploaded: `task image VERSION=X.Y.Z`
+  (`dist/toolchain/Dockerfile`: `rust:1.98-trixie`, clang, lld, the release archive checked
+  against its `.sha256`, the tag's source in `/usr/local/src/ignite` with its crates fetched,
+  `CARGO_NET_OFFLINE=true`), `task image-check VERSION=X.Y.Z` (the todo example built on both
+  targets with no network, each `todod` answers), `docker push
+  ghcr.io/ignite-lang/ignite-toolchain:X.Y.Z` (login: `gh auth token | docker login ghcr.io -u
+  <gh user> --password-stdin`; the package is public), then add the reference with its
+  `@sha256:` digest (`docker inspect --format '{{index .RepoDigests 0}}'`) to the release notes
+  with `gh release edit`.
 - Announce: send the release's tag, URL and notes to the `brain` session (Claude session named
   `brain`, `SendMessage`), asking it to forward the announcement to AI autodev. Send the path of
   a ready file, not the text: Slack mrkdwn (`<url|label>` links), every line at most 200

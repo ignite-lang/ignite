@@ -5,7 +5,7 @@ type App {
 }
 
 fn App.main(self: App) -> Result<Unit, IoError> {
-  log(Env.get("PUSHER_SESSION_STORE").debug())
+  log(Env.get("SESSION_STORE").debug())
   Ok(())
 }
 

@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-08T00:27:00Z",
+  "actor": "human:timo",
+  "artifact": "story:drain-exit",
+  "kind": "story",
+  "revision": 7,
+  "change": {
+    "change": "redaction",
+    "literal_sha256": "c1ca19857709b36ccdcc93f218f86e4dc8235a65a46ca06f9b53886f9b66ad2f",
+    "literal_chars": 6,
+    "replacement": "case-study",
+    "count": 4,
+    "reason": "operator rule 2026-11-08: no internal names in the public repository"
+  }
+}

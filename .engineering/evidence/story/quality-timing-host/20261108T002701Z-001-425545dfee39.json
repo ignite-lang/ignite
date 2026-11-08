@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-08T00:27:01Z",
+  "actor": "human:timo",
+  "artifact": "story:quality-timing-host",
+  "kind": "story",
+  "revision": 7,
+  "change": {
+    "change": "redaction",
+    "literal_sha256": "961581d4ef56017c4e7c118a4110cdc38a816eda43ada149798e22a8b51f242e",
+    "literal_chars": 12,
+    "replacement": "an AWS account",
+    "count": 1,
+    "reason": "operator rule 2026-11-08: no internal names in the public repository"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-08T00:27:01Z",
+  "actor": "human:timo",
+  "artifact": "story:quality-timing-host",
+  "kind": "story",
+  "revision": 9,
+  "change": {
+    "change": "redaction",
+    "literal_sha256": "47988e7918b46648428c225e2e44a799914c58e2bf39d8e9192e9e65ac9be0ac",
+    "literal_chars": 16,
+    "replacement": "the case study's benchmark",
+    "count": 1,
+    "reason": "operator rule 2026-11-08: no internal names in the public repository"
+  }
+}

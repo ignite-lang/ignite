@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-08T00:27:00Z",
+  "actor": "human:timo",
+  "artifact": "story:drain-exit",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "redaction",
+    "literal_sha256": "59d31f6b89eb84033a07bcdb4bb4028cf3e469780136dbe04990f718b2b4f0fb",
+    "literal_chars": 20,
+    "replacement": "the case study's Ignite candidate",
+    "count": 1,
+    "reason": "operator rule 2026-11-08: no internal names in the public repository"
+  }
+}

@@ -13,7 +13,7 @@ scope:
   path: crates/ignite-rt/src/process.rs
 - confidence: inferred
   path: docs/slice.md
-revision: 4
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-07T22:06:09Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-07T22:06:09Z", actor: "human:timo", revision: 3}
@@ -26,11 +26,11 @@ transitions:
 
 ## Context
 
-- Found by the pusher case study (session `pusher-2b`, GitLab `pusher/pusher-ignite`, G16 and the G13 update in `docs/research/pusher-gaps.md`), ignite v0.13.0 (`33b59123`), LLVM target; the Rust target not checked.
+- Found by the case-study case study (session `a case-study session`, GitLab `the case study's Ignite candidate`, G16 and the G13 update in `docs/research/case-study-gaps.md`), ignite v0.13.0 (`33b59123`), LLVM target; the Rust target not checked.
 - Site: `Process.exit` lowers to `ignite_rt_exit` (`crates/ignite-llvm/src/lower.rs:4607`); while draining it calls `drained()`, which runs `wait_for_tasks()` unbounded and then `exit(0)` (`crates/ignite-rt/src/process.rs:307-348`). `ignite_io::exit` (`crates/ignite-io/src/lib.rs:171-182`) says other tasks are not waited for.
-- Reproducer: `docs/research/pusher-gaps/G16.ignite` with its log `g16.log`: after SIGTERM the log shows `drain began`, two `released`, `calling Process.exit(3)`, and the process stays up until SIGKILL.
+- Reproducer: `docs/research/case-study-gaps/G16.ignite` with its log `g16.log`: after SIGTERM the log shows `drain began`, two `released`, `calling Process.exit(3)`, and the process stays up until SIGKILL.
 - G13 update: `close()` sends only its own stream (`crates/ignite-io/src/net.rs:438`); a write just before `main` returns while draining is never sent because `ignite_rt_exit` waits without flushing.
-- What reaches it: any server that calls `Process.exit` after SIGTERM while a task waits in `accept`, a read or a sleep; the pusher's `task candidate:run` hung.
+- What reaches it: any server that calls `Process.exit` after SIGTERM while a task waits in `accept`, a read or a sleep; the case-study's `task candidate:run` hung.
 
 ## Acceptance
 

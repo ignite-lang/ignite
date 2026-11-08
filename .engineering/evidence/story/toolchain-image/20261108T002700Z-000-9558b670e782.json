@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-08T00:27:00Z",
+  "actor": "human:timo",
+  "artifact": "story:toolchain-image",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "redaction",
+    "literal_sha256": "00651705517ab2b7aee72eaf097caf78a20c02ea1778c10d00634241a32d516a",
+    "literal_chars": 22,
+    "replacement": "the operator's rules",
+    "count": 1,
+    "reason": "operator rule 2026-11-08: no internal names in the public repository"
+  }
+}

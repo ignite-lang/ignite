@@ -4,7 +4,7 @@ id: epic:data-formats
 kind: epic
 status: draft
 title: 'Data formats: one value model, derived codecs, JSON, YAML, TOML'
-revision: 2
+revision: 3
 ---
 # Epic: data-formats
 
@@ -17,7 +17,7 @@ An Ignite program turns a data value into JSON, YAML or TOML text and back with 
 - Timo, 2026-11-08: "create design for serde (yaml, json, toml, etc)", then "… in std".
 - Design: `docs/serde.md` (PRs 98, 99, 100; `main` at `2563ea25`).
 - Hand-written codecs today: `examples/todo/todo.ignite:59-70`, `std/protocol/jsonrpc.ignite:250-371`, ignite-lsp `src/lsp_types.ignite` (9,882 lines, 533 codec functions, generated).
-- Pusher case study G9 needs YAML (`docs/friction.md` row 68).
+- case-study case study G9 needs YAML (`docs/friction.md` row 68).
 
 ## Stories
 

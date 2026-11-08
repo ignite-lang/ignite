@@ -19,21 +19,21 @@ scope:
   path: docs/slice.md
 - confidence: inferred
   path: std/net.ignite
-revision: 4
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-07T22:11:32Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-07T22:11:32Z", actor: "human:timo", revision: 3}
 ---
-# Story: pusher-net-builtins
+# Story: case-study-net-builtins
 
 ## Outcome
 
-A server written in Ignite can read a connection's peer address, tell a read that timed out from a peer that closed, and bound a connect by a timeout, on both targets, so the pusher drops its `/proc/self/net/tcp` diff and its timed-read guess.
+A server written in Ignite can read a connection's peer address, tell a read that timed out from a peer that closed, and bound a connect by a timeout, on both targets, so the case-study drops its `/proc/self/net/tcp` diff and its timed-read guess.
 
 ## Context
 
-- Pusher case study (session `pusher`, GitLab `pusher/pusher-ignite`), `docs/research/pusher-gaps.md` G1, G4, G5; `docs/friction.md` rows 60, 63, 64. Timo, 2026-11-07: high priority, "we have to build the pusher".
-- G1 (blocking): `crates/ignite-io/src/net.rs` `TcpListener::accept` drops `_peer`; reproducer `docs/research/pusher-gaps/G1.ignite` (E041 `peer_address`).
+- case-study case study (session `case-study`, GitLab `the case study's Ignite candidate`), `docs/research/case-study-gaps.md` G1, G4, G5; `docs/friction.md` rows 60, 63, 64. Timo, 2026-11-07: high priority, "we have to build the case-study".
+- G1 (blocking): `crates/ignite-io/src/net.rs` `TcpListener::accept` drops `_peer`; reproducer `docs/research/case-study-gaps/G1.ignite` (E041 `peer_address`).
 - G4: `net.rs:388` maps WouldBlock and TimedOut to `Ok(0)`, read as `Eof`; reproducer `G4.ignite` prints `after 205 ms: Eof` and `peer closed: Eof`.
 - G5: `TcpStream::connect` (`net.rs` ~359) calls `std::net::TcpStream::connect` with no timeout; reproducer `G5.ignite`.
 - `std.net.Endpoint { address, port }` exists for the client side.

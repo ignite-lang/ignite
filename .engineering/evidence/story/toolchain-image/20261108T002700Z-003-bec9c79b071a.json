@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-08T00:27:00Z",
+  "actor": "human:timo",
+  "artifact": "story:toolchain-image",
+  "kind": "story",
+  "revision": 8,
+  "change": {
+    "change": "redaction",
+    "literal_sha256": "93c0d423bc044939ac95893911c52f74654da02aeab6dceb0c51c18a95a8f371",
+    "literal_chars": 13,
+    "replacement": "the case study's Ignite candidate",
+    "count": 1,
+    "reason": "operator rule 2026-11-08: no internal names in the public repository"
+  }
+}

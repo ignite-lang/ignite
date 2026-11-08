@@ -49,6 +49,8 @@ names the row in its contract.
 | 69 | No `setrlimit` (`RLIMIT_NOFILE`) | case study G10, 2026-11-07 | none: the container default caps connections |
 | 70 | No FFI | case study G11, 2026-11-07 | none of rows 60 to 69 can be closed by a thin binding |
 | 71 | `ess generate` has no Ignite target (ESS tooling, not the language) | case study G12, 2026-11-07 | hand-written code |
+| 73 | No `ignite fmt` and no format check | case study G17, 2026-11-08 | none; the format gate is a no-op |
+| 74 | `IoError` has no `==`, not even in an `assert` (E045) | case study G18, 2026-11-08 | compare `error.message`, or return errors as `Text` |
 
 ## Solved in the process builtins story (`docs/slice.md` 21.20)
 

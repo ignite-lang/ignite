@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-08T00:27:00Z",
+  "actor": "human:timo",
+  "artifact": "story:builtin-named-user-fn",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "redaction",
+    "literal_sha256": "e473a6aca62501578c99decab555379146f71af22722bfa23d0a3158cbf34ec6",
+    "literal_chars": 9,
+    "replacement": "a case-study session",
+    "count": 1,
+    "reason": "operator rule 2026-11-08: no internal names in the public repository"
+  }
+}

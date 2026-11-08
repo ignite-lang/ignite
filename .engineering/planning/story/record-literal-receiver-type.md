@@ -11,7 +11,7 @@ scope:
   path: crates/ignite-check/src/lib.rs
 - confidence: inferred
   path: crates/ignite-types/src
-revision: 4
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-07T22:06:09Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-07T22:06:09Z", actor: "human:timo", revision: 3}
@@ -24,7 +24,7 @@ The effect check of a method call reads the receiver's inferred type, so `let w 
 
 ## Context
 
-- Found by the pusher case study (session `pusher-2b`, G15 in `docs/research/pusher-gaps.md`), ignite v0.13.0, LLVM; reproducer `docs/research/pusher-gaps/G15.ignite`: `error[E042]: cannot check the effects of `put`: the type of its receiver is not declared; annotate the binding` (and the same for `get`).
+- Found by the case-study case study (session `a case-study session`, G15 in `docs/research/case-study-gaps.md`), ignite v0.13.0, LLVM; reproducer `docs/research/case-study-gaps/G15.ignite`: `error[E042]: cannot check the effects of `put`: the type of its receiver is not declared; annotate the binding` (and the same for `get`).
 - Same cause as `story:immutable-binding-e006`: `crates/ignite-check` decides from the declared (`static_type`) type only, before the type checker infers it. Both stories move the decision to where the type is known.
 
 ## Acceptance

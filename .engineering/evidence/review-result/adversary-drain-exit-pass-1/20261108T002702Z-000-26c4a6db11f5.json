@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-08T00:27:02Z",
+  "actor": "human:timo",
+  "artifact": "review-result:adversary-drain-exit-pass-1",
+  "kind": "review-result",
+  "revision": 2,
+  "change": {
+    "change": "redaction",
+    "literal_sha256": "c1ca19857709b36ccdcc93f218f86e4dc8235a65a46ca06f9b53886f9b66ad2f",
+    "literal_chars": 6,
+    "replacement": "case-study",
+    "count": 2,
+    "reason": "operator rule 2026-11-08: no internal names in the public repository"
+  }
+}
