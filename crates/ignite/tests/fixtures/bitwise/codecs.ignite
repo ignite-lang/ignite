@@ -1,29 +1,21 @@
 package fixtures.bitwise.codecs
 
 // SHA-1 (RFC 3174) and base64 (RFC 4648) written with the bitwise
-// operators of docs/slice.md 29. crates/ignite/tests/bitwise.rs runs the
-// tests below on both targets and times the executable `codecs` against
-// the hand-written Rust of codecs.rs beside this file (29.5); the two
-// print the same lines.
-
-const MASK: Int = 0xFFFFFFFF
-
-/// `x` rotated left by `n` within 32 bits; `x` lies in 0 to 2^32 - 1.
-fn rotl(x: Int, n: Int) -> Int = (x << n | x >> 32 - n) & MASK
+// operators of docs/slice.md 29, SHA-1 on the 32-bit words of 32.
+// crates/ignite/tests/bitwise.rs runs the tests below on both targets and
+// times the executable `codecs` against the hand-written Rust of codecs.rs
+// beside this file (29.5); the two print the same lines.
 
 /// The low 8 bits of `n`.
-fn byte(n: Int) -> Byte = match (n & 255).to_byte() {
-  Some(b) => b
-  None => 0
-}
+fn byte(n: Int) -> Byte = n.wrap_byte()
 
 /// The five 32-bit words of the SHA-1 digest of `message`.
-fn sha1(message: Bytes) -> List<Int> {
-  var h0 = 0x67452301
-  var h1 = 0xEFCDAB89
-  var h2 = 0x98BADCFE
-  var h3 = 0x10325476
-  var h4 = 0xC3D2E1F0
+fn sha1(message: Bytes) -> List<U32> {
+  var h0: U32 = 0x67452301
+  var h1: U32 = 0xEFCDAB89
+  var h2: U32 = 0x98BADCFE
+  var h3: U32 = 0x10325476
+  var h4: U32 = 0xC3D2E1F0
   let length = message.len()
   var data = message
   data.push(0x80)
@@ -35,7 +27,7 @@ fn sha1(message: Bytes) -> List<Int> {
     data.push(byte(length * 8 >> shift))
     shift = shift - 8
   }
-  var w: List<Int> = List.with_capacity(80)
+  var w: List<U32> = List.with_capacity(80)
   while w.len() < 80 {
     w.push(0)
   }
@@ -44,11 +36,11 @@ fn sha1(message: Bytes) -> List<Int> {
     var t = 0
     while t < 16 {
       let at = block + t * 4
-      w.set(t, data[at].to_int() << 24 | data[at + 1].to_int() << 16 | data[at + 2].to_int() << 8 | data[at + 3].to_int())
+      w[t] = data[at].to_u32() << 24 | data[at + 1].to_u32() << 16 | data[at + 2].to_u32() << 8 | data[at + 3].to_u32()
       t = t + 1
     }
     while t < 80 {
-      w.set(t, rotl(w[t - 3] ^ w[t - 8] ^ w[t - 14] ^ w[t - 16], 1))
+      w[t] = (w[t - 3] ^ w[t - 8] ^ w[t - 14] ^ w[t - 16]).rotate_left(1)
       t = t + 1
     }
     var a = h0
@@ -59,7 +51,7 @@ fn sha1(message: Bytes) -> List<Int> {
     t = 0
     while t < 80 {
       var f = b ^ c ^ d
-      var k = 0xCA62C1D6
+      var k: U32 = 0xCA62C1D6
       if t < 20 {
         f = b & c | ~b & d
         k = 0x5A827999
@@ -69,32 +61,32 @@ fn sha1(message: Bytes) -> List<Int> {
         f = b & c | b & d | c & d
         k = 0x8F1BBCDC
       }
-      let temp = rotl(a, 5).wrapping_add(f).wrapping_add(e).wrapping_add(k).wrapping_add(w[t]) & MASK
+      let temp = a.rotate_left(5) + f + e + k + w[t]
       e = d
       d = c
-      c = rotl(b, 30)
+      c = b.rotate_left(30)
       b = a
       a = temp
       t = t + 1
     }
-    h0 = h0.wrapping_add(a) & MASK
-    h1 = h1.wrapping_add(b) & MASK
-    h2 = h2.wrapping_add(c) & MASK
-    h3 = h3.wrapping_add(d) & MASK
-    h4 = h4.wrapping_add(e) & MASK
+    h0 = h0 + a
+    h1 = h1 + b
+    h2 = h2 + c
+    h3 = h3 + d
+    h4 = h4 + e
     block = block + 64
   }
   [h0, h1, h2, h3, h4]
 }
 
 /// The words as 40 lowercase hex digits.
-fn hex(words: List<Int>) -> Text {
+fn hex(words: List<U32>) -> Text {
   let digits = b"0123456789abcdef"
   var out = Bytes.with_capacity(words.len() * 8)
   for word in words {
     var shift = 28
     while shift >= 0 {
-      out.push(digits[word >> shift & 15])
+      out.push(digits[(word >> shift & 15).to_int()])
       shift = shift - 4
     }
   }

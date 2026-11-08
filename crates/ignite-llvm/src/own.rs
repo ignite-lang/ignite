@@ -280,6 +280,7 @@ fn may_hold_stream(ty: &Ty) -> bool {
         Ty::Int
         | Ty::Bool
         | Ty::Byte
+        | Ty::U32
         | Ty::Unit
         | Ty::Text
         | Ty::IoError

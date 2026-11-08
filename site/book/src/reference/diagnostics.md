@@ -557,7 +557,8 @@ example.ignite:1:24: error[E043]: wrong number of arguments to `len`: expected 0
 
 ### E044 Byte out of range {#e044}
 
-An integer literal used as a `Byte` that is outside 0 to 255.
+An integer literal used as a `Byte` or a `U32` that is outside its range: 0 to 255 for `Byte`,
+0 to 4294967295 for `U32`.
 
 ```ignite,fails=E044
 const BIG: Byte = 256

@@ -1204,6 +1204,7 @@ impl<'a> Typer<'a> {
             "Int" => Ty::Int,
             "Bool" => Ty::Bool,
             "Byte" => Ty::Byte,
+            "U32" => Ty::U32,
             "Unit" => Ty::Unit,
             "Text" => Ty::Text,
             "Bytes" => bytes(),
@@ -1491,7 +1492,10 @@ impl<'a> Typer<'a> {
         for _ in 0..2 {
             for decl in &program.decls {
                 if let Decl::Const(c) = decl
-                    && matches!(self.own.consts.get(&c.name.name), Some(Ty::Int | Ty::Byte))
+                    && matches!(
+                        self.own.consts.get(&c.name.name),
+                        Some(Ty::Int | Ty::Byte | Ty::U32)
+                    )
                 {
                     self.const_eval(&c.name.name, &c.value);
                 }
@@ -1680,7 +1684,14 @@ impl<'a> Typer<'a> {
     /// against records and enums that hold themselves through `List`.
     fn equatable(&self, ty: &Ty, seen: &mut Vec<Ty>, in_assert: bool) -> bool {
         match ty {
-            Ty::Int | Ty::Bool | Ty::Byte | Ty::Unit | Ty::Text | Ty::Input | Ty::Never => true,
+            Ty::Int
+            | Ty::Bool
+            | Ty::Byte
+            | Ty::U32
+            | Ty::Unit
+            | Ty::Text
+            | Ty::Input
+            | Ty::Never => true,
             Ty::List(t) | Ty::Option(t) => self.equatable(t, seen, in_assert),
             Ty::Result(ok, err) => {
                 self.equatable(ok, seen, in_assert) && self.equatable(err, seen, in_assert)
@@ -1737,6 +1748,7 @@ impl<'a> Typer<'a> {
         let builtin = match ty {
             Ty::Int => Some(Builtin::IntToTextMethod),
             Ty::Byte => Some(Builtin::ByteToText),
+            Ty::U32 => Some(Builtin::U32ToText),
             Ty::Bool => Some(Builtin::BoolToText),
             Ty::Text | Ty::Ref(_) | Ty::Signal(_) => Some(Builtin::TextToText),
             Ty::List(element) if **element == Ty::Byte => Some(Builtin::BytesToText),
@@ -2418,6 +2430,15 @@ impl<'a> Typer<'a> {
                 );
             }
             Ty::Byte
+        } else if expected == Some(&Ty::U32) {
+            if !(0..=i64::from(u32::MAX)).contains(&value) {
+                self.error(
+                    "E044",
+                    span,
+                    format!("integer literal {value} is out of range for `U32` (0 to 4294967295)"),
+                );
+            }
+            Ty::U32
         } else {
             Ty::Int
         }
@@ -3872,29 +3893,45 @@ impl<'a> Typer<'a> {
                 Some(Ty::Bool)
             }
             UnaryOp::BitNot => {
-                self.check(operand, &Ty::Int);
-                Some(Ty::Int)
+                // `docs/slice.md` 32.2: `~` on a `U32` is a `U32`; any
+                // other operand is checked against `Int` (29.2).
+                let hint = expected.filter(|t| matches!(t, Ty::Int | Ty::U32));
+                match self.expr(operand, Mode::Value(hint)) {
+                    Some(Ty::U32) => Some(Ty::U32),
+                    Some(found) if !compatible(&found, &Ty::Int) => {
+                        self.mismatch(operand.span, &Ty::Int, &found);
+                        Some(Ty::Int)
+                    }
+                    _ => Some(Ty::Int),
+                }
             }
             UnaryOp::Neg => {
                 if let ExprKind::Int(value) = operand.kind
-                    && expected == Some(&Ty::Byte)
+                    && let Some(narrow @ (Ty::Byte | Ty::U32)) = expected
                 {
                     if value != 0 {
+                        let range = if *narrow == Ty::Byte {
+                            "0 to 255"
+                        } else {
+                            "0 to 4294967295"
+                        };
                         self.error(
                             "E044",
                             expr.span,
                             format!(
-                                "integer literal -{value} is out of range for `Byte` (0 to 255)"
+                                "integer literal -{value} is out of range for `{narrow}` ({range})"
                             ),
                         );
                     }
-                    return self.record(operand, Some(Ty::Byte));
+                    return self.record(operand, Some(narrow.clone()));
                 }
                 match self.synth(operand)? {
                     ty @ (Ty::Int | Ty::Never) => {
                         self.fail_site(expr, FailureOp::Sub, expr.span.start);
                         Some(ty)
                     }
+                    // Modulo 2^32, never a failure (32.1).
+                    Ty::U32 => Some(Ty::U32),
                     other => {
                         self.error(
                             "E045",
@@ -3923,9 +3960,11 @@ impl<'a> Typer<'a> {
         let hint_for = |op: BinaryOp, expected: Option<Ty>| -> Option<Ty> {
             match op {
                 BinaryOp::And | BinaryOp::Or => Some(Ty::Bool),
-                op if op.is_bitwise() => Some(Ty::Int),
+                op if op.is_bitwise() => {
+                    Some(expected.filter(|t| *t == Ty::U32).unwrap_or(Ty::Int))
+                }
                 BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem => {
-                    expected.filter(|t| matches!(t, Ty::Int | Ty::Byte))
+                    expected.filter(|t| matches!(t, Ty::Int | Ty::Byte | Ty::U32))
                 }
                 _ => None,
             }
@@ -3978,20 +4017,21 @@ impl<'a> Typer<'a> {
             return Some(Ty::Bool);
         }
         if op.is_bitwise() {
-            if let Some(found) = &left_ty
-                && !compatible(found, &Ty::Int)
-            {
-                self.mismatch(left.span, &Ty::Int, found);
-            }
-            self.check(right, &Ty::Int);
-            return Some(Ty::Int);
+            let word = self.word(left, left_ty);
+            let amount = if matches!(op, BinaryOp::Shl | BinaryOp::Shr) {
+                Ty::Int
+            } else {
+                word.clone()
+            };
+            self.check(right, &amount);
+            return Some(word);
         }
         let arithmetic = matches!(
             op,
             BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem
         );
         let hint = if arithmetic {
-            expected.filter(|t| matches!(t, Ty::Int | Ty::Byte))
+            expected.filter(|t| matches!(t, Ty::Int | Ty::Byte | Ty::U32))
         } else {
             None
         };
@@ -4045,16 +4085,33 @@ impl<'a> Typer<'a> {
             return Some(Ty::Bool);
         }
         if op.is_bitwise() {
-            self.check(left, &Ty::Int);
-            self.check(right, &Ty::Int);
-            return Some(Ty::Int);
+            // `docs/slice.md` 32.2: both sides one word type (`Int` or
+            // `U32`) for `& | ^`, the literal side taking the other's; a
+            // shift's amount is an `Int` whatever its left side.
+            let hint = Some(expected.filter(|t| **t == Ty::U32).unwrap_or(&Ty::Int));
+            if matches!(op, BinaryOp::Shl | BinaryOp::Shr) {
+                let left_ty = self.expr(left, Mode::Value(hint));
+                let word = self.word(left, left_ty);
+                self.check(right, &Ty::Int);
+                return Some(word);
+            }
+            if is_literal(left) && !is_literal(right) {
+                let right_ty = self.expr(right, Mode::Value(hint));
+                let word = self.word(right, right_ty);
+                self.check(left, &word);
+                return Some(word);
+            }
+            let left_ty = self.expr(left, Mode::Value(hint));
+            let word = self.word(left, left_ty);
+            self.check(right, &word);
+            return Some(word);
         }
         let arithmetic = matches!(
             op,
             BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem
         );
         let hint = if arithmetic {
-            expected.filter(|t| matches!(t, Ty::Int | Ty::Byte))
+            expected.filter(|t| matches!(t, Ty::Int | Ty::Byte | Ty::U32))
         } else {
             None
         };
@@ -4075,6 +4132,19 @@ impl<'a> Typer<'a> {
             (left_ty?, right_ty?)
         };
         self.operator(expr, op, left_ty, right_ty)
+    }
+
+    /// The word type of a bitwise operand `e` of type `found`: `U32` for a
+    /// `U32`, else `Int`, with E040 when `found` is neither (29.2, 32.2).
+    fn word(&mut self, e: &Expr, found: Option<Ty>) -> Ty {
+        match found {
+            Some(Ty::U32) => Ty::U32,
+            Some(found) if !compatible(&found, &Ty::Int) => {
+                self.mismatch(e.span, &Ty::Int, &found);
+                Ty::Int
+            }
+            _ => Ty::Int,
+        }
     }
 
     /// The type of `left op right` from the operand types: `==` and `!=`
@@ -4102,14 +4172,21 @@ impl<'a> Typer<'a> {
             BinaryOp::Eq | BinaryOp::Ne => self.equatable(&operand, &mut Vec::new(), false),
             BinaryOp::Add => matches!(
                 operand,
-                Ty::Int | Ty::Byte | Ty::Text | Ty::List(_) | Ty::Never
+                Ty::Int | Ty::Byte | Ty::U32 | Ty::Text | Ty::List(_) | Ty::Never
             ),
             BinaryOp::Lt | BinaryOp::Gt | BinaryOp::Le | BinaryOp::Ge => {
-                matches!(operand, Ty::Int | Ty::Byte | Ty::Text | Ty::Never)
+                matches!(operand, Ty::Int | Ty::Byte | Ty::U32 | Ty::Text | Ty::Never)
             }
-            _ => matches!(operand, Ty::Int | Ty::Byte | Ty::Never),
+            _ => matches!(operand, Ty::Int | Ty::Byte | Ty::U32 | Ty::Never),
         };
-        if defined && arithmetic && matches!(operand, Ty::Int | Ty::Byte) {
+        // `U32`'s `+ - *` wrap (`docs/slice.md` 32.1); only its `/` and `%`
+        // can fail, on a zero divisor.
+        let fails = match operand {
+            Ty::Int | Ty::Byte => true,
+            Ty::U32 => matches!(op, BinaryOp::Div | BinaryOp::Rem),
+            _ => false,
+        };
+        if defined && arithmetic && fails {
             self.fail_site(expr, system::failure_op(op), expr.span.start);
         }
         if !defined {
@@ -4309,8 +4386,9 @@ impl<'a> Typer<'a> {
             PatternKind::Wildcard => {}
             PatternKind::Range { start, end } => self.range_pattern(pattern, start, end, ty),
             PatternKind::Int(value) => match ty {
-                Some(Ty::Byte) => {
-                    self.int_literal(pattern.span, *value, Some(&Ty::Byte));
+                Some(narrow @ (Ty::Byte | Ty::U32)) => {
+                    let narrow = narrow.clone();
+                    self.int_literal(pattern.span, *value, Some(&narrow));
                 }
                 None | Some(Ty::Int | Ty::Never) => {}
                 Some(other) => self.error(
@@ -4347,12 +4425,12 @@ impl<'a> Typer<'a> {
     ) {
         let scalar = match ty {
             None | Some(Ty::Never) => None,
-            Some(t @ (Ty::Int | Ty::Byte)) => Some(t.clone()),
+            Some(t @ (Ty::Int | Ty::Byte | Ty::U32)) => Some(t.clone()),
             Some(other) => {
                 self.error(
                     "E040",
                     pattern.span,
-                    format!("type mismatch: expected `{other}`, found a range pattern; ranges match `Int` and `Byte`"),
+                    format!("type mismatch: expected `{other}`, found a range pattern; ranges match `Int`, `Byte` and `U32`"),
                 );
                 return;
             }
@@ -4449,7 +4527,7 @@ impl<'a> Typer<'a> {
             return;
         };
         self.pattern_consts.insert(pattern.id, q);
-        if !matches!(const_ty, Ty::Int | Ty::Byte | Ty::Bool | Ty::Text) {
+        if !matches!(const_ty, Ty::Int | Ty::Byte | Ty::U32 | Ty::Bool | Ty::Text) {
             self.error(
                 "E045",
                 pattern.span,

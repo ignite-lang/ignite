@@ -1577,6 +1577,7 @@ fn rust_type_in(ty: &Type, params: &BTreeSet<String>) -> String {
         "Text" => "String".to_string(),
         "Bytes" => "Vec<u8>".to_string(),
         "Byte" => "u8".to_string(),
+        "U32" => "u32".to_string(),
         "Int" => "i64".to_string(),
         "Bool" => "bool".to_string(),
         "Unit" => "()".to_string(),
@@ -2036,6 +2037,59 @@ impl<'a> Generator<'a> {
         ))
     }
 
+    /// `l op r` at `node` when its result is a `U32` (`docs/slice.md` 32.3):
+    /// `+ - *` wrap; `/` and `%` fail on a zero divisor through the `Int`
+    /// forms of `ignite_io::checked` on the widened operands, which give the
+    /// same report; a shift by an amount outside `0..32` gives 0, and one
+    /// by a literal amount in range (`right`) is Rust's shift. `None` for
+    /// any other node and for `& | ^`, which are Rust's operators.
+    fn word_binary(
+        &self,
+        node: &Expr,
+        op: BinaryOp,
+        right: &Expr,
+        l: &str,
+        r: &str,
+    ) -> Option<String> {
+        if self.type_of(node) != Some(&Ty::U32) {
+            return None;
+        }
+        let constant = match right.kind {
+            ExprKind::Int(n) if (0..32).contains(&n) => Some(n),
+            _ => None,
+        };
+        Some(match op {
+            BinaryOp::Add => format!("u32::wrapping_add({l}, {r})"),
+            BinaryOp::Sub => format!("u32::wrapping_sub({l}, {r})"),
+            BinaryOp::Mul => format!("u32::wrapping_mul({l}, {r})"),
+            BinaryOp::Div | BinaryOp::Rem => {
+                let name = if op == BinaryOp::Div { "div" } else { "rem" };
+                match self.types.and_then(|t| t.failure_site(node)) {
+                    Some(site) => format!(
+                        "(::ignite_io::checked::{name}(({l}) as i64, ({r}) as i64, {}) as u32)",
+                        self.site_args(site)
+                    ),
+                    None => format!("({l} {} {r})", binary_symbol(op)),
+                }
+            }
+            BinaryOp::Shl | BinaryOp::Shr => {
+                let symbol = if op == BinaryOp::Shl { "<<" } else { ">>" };
+                let checked = if op == BinaryOp::Shl {
+                    "checked_shl"
+                } else {
+                    "checked_shr"
+                };
+                match constant {
+                    Some(n) => format!("({l} {symbol} {n})"),
+                    None => format!(
+                        "u32::{checked}({l}, u64::min(({r}) as u64, 32) as u32).unwrap_or(0)"
+                    ),
+                }
+            }
+            _ => return None,
+        })
+    }
+
     /// `ignite_io::fail(..)` for the failure site of `expr` with `detail`,
     /// when the typer recorded one.
     fn fail_call(&self, expr: &Expr, detail: &str) -> Option<String> {
@@ -2055,10 +2109,14 @@ impl<'a> Generator<'a> {
         if let Some(resolved) = self.types.and_then(|t| t.resolved_type(ty)) {
             return matches!(
                 resolved,
-                Ty::Int | Ty::Byte | Ty::Bool | Ty::Unit | Ty::Fn(..) | Ty::EffectFn(..)
+                Ty::Int | Ty::Byte | Ty::U32 | Ty::Bool | Ty::Unit | Ty::Fn(..) | Ty::EffectFn(..)
             );
         }
-        ty.is_fn() || matches!(ty.name.name.as_str(), "Int" | "Byte" | "Bool" | "Unit")
+        ty.is_fn()
+            || matches!(
+                ty.name.name.as_str(),
+                "Int" | "Byte" | "U32" | "Bool" | "Unit"
+            )
     }
 
     /// Whether `expr`, a place in a move position, takes its value without
@@ -2356,7 +2414,7 @@ impl<'a> Generator<'a> {
     fn result(&mut self, expr: &Expr) -> String {
         let copies = matches!(
             self.type_of(expr),
-            None | Some(Ty::Int | Ty::Byte | Ty::Bool | Ty::Unit | Ty::Quantity(_))
+            None | Some(Ty::Int | Ty::Byte | Ty::U32 | Ty::Bool | Ty::Unit | Ty::Quantity(_))
         );
         let reached =
             place_root(expr).is_some_and(|root| self.is_borrowed(root) || self.is_captured(root));
@@ -2488,6 +2546,7 @@ impl<'a> Generator<'a> {
             Ty::Int => "i64".to_string(),
             Ty::Bool => "bool".to_string(),
             Ty::Byte => "u8".to_string(),
+            Ty::U32 => "u32".to_string(),
             Ty::Unit | Ty::Never => "()".to_string(),
             Ty::Text => "String".to_string(),
             Ty::List(item) => format!("Vec<{}>", self.rust_ty(item)),
@@ -2855,6 +2914,7 @@ impl<'a> Generator<'a> {
             let equal = match compare.operand {
                 Ty::Int
                 | Ty::Byte
+                | Ty::U32
                 | Ty::Bool
                 | Ty::Text
                 | Ty::Unit
@@ -3145,6 +3205,7 @@ impl<'a> Generator<'a> {
                     Builtin::IntToText
                         | Builtin::IntToTextMethod
                         | Builtin::ByteToText
+                        | Builtin::U32ToText
                         | Builtin::BoolToText
                         | Builtin::TextConcat
                         | Builtin::TextTrim
@@ -3509,6 +3570,7 @@ impl<'a> Generator<'a> {
             ExprKind::Return(Some(value)) => format!("return {}", self.value(value)),
             ExprKind::Return(None) => "return".to_string(),
             ExprKind::Int(value) if *value < 0 => format!("({value})"),
+            ExprKind::Int(value) if self.type_of(expr) == Some(&Ty::U32) => format!("{value}u32"),
             ExprKind::Int(value) => value.to_string(),
             ExprKind::Str(text) => format!("String::from(\"{}\")", escape_str(text)),
             ExprKind::Bool(value) => value.to_string(),
@@ -3625,6 +3687,13 @@ impl<'a> Generator<'a> {
                     self.site_args(site)
                 )
             }
+            ExprKind::Unary {
+                op: UnaryOp::Neg,
+                operand,
+            } if self.type_of(expr) == Some(&Ty::U32) => {
+                let text = self.value(operand);
+                format!("u32::wrapping_neg({text})")
+            }
             ExprKind::Unary { op, operand } => {
                 let symbol = match op {
                     UnaryOp::Not | UnaryOp::BitNot => "!",
@@ -3679,7 +3748,9 @@ impl<'a> Generator<'a> {
                 // `docs/slice.md` 29.2: an amount outside `0..64` gives 0
                 // for `<<` and the sign fill for `>>` (63 places).
                 let (l, r) = (self.operand(left), self.operand(right));
-                if *op == BinaryOp::Shl {
+                if let Some(word) = self.word_binary(expr, *op, right, &l, &r) {
+                    word
+                } else if *op == BinaryOp::Shl {
                     format!("i64::checked_shl({l}, u64::min(({r}) as u64, 64) as u32).unwrap_or(0)")
                 } else {
                     format!("i64::wrapping_shr({l}, u64::min(({r}) as u64, 63) as u32)")
@@ -3701,6 +3772,9 @@ impl<'a> Generator<'a> {
                 } else {
                     (self.operand(left), self.operand(right))
                 };
+                if let Some(word) = self.word_binary(expr, *op, right, &left_text, &right_text) {
+                    return word;
+                }
                 match self.checked_op(expr, *op) {
                     Some((checked, site)) => {
                         format!("{checked}({left_text}, {right_text}, {site})")
@@ -3719,7 +3793,7 @@ impl<'a> Generator<'a> {
     /// `Int`, `Byte`, `Bool`, `Unit` and when types are not known.
     fn element_clone(&self, expr: &Expr) -> &'static str {
         match self.type_of(expr) {
-            None | Some(Ty::Int | Ty::Byte | Ty::Bool | Ty::Unit) => "",
+            None | Some(Ty::Int | Ty::Byte | Ty::U32 | Ty::Bool | Ty::Unit) => "",
             Some(_) => ".clone()",
         }
     }
@@ -3825,6 +3899,7 @@ impl<'a> Generator<'a> {
                         Builtin::TextToText
                             | Builtin::IntToTextMethod
                             | Builtin::ByteToText
+                            | Builtin::U32ToText
                             | Builtin::BoolToText
                     ))
                 )
@@ -4815,7 +4890,10 @@ impl<'a> Generator<'a> {
                 return format!("({r}.{})({})", ident(field), a.join(", "));
             }
             Some(Callee::Builtin(
-                Builtin::IntToTextMethod | Builtin::ByteToText | Builtin::BoolToText,
+                Builtin::IntToTextMethod
+                | Builtin::ByteToText
+                | Builtin::U32ToText
+                | Builtin::BoolToText,
             )) => {
                 let r = self.receiver(receiver);
                 return format!("{r}.to_string()");
@@ -4909,6 +4987,15 @@ impl<'a> Generator<'a> {
             ),
             ("to_int", 0) => format!("({r} as i64)"),
             ("to_byte", 0) => format!("u8::try_from({r}).ok()"),
+            ("to_u32", 0) if self.type_of(receiver) == Some(&Ty::Byte) => {
+                format!("({r} as u32)")
+            }
+            ("to_u32", 0) => format!("u32::try_from({r}).ok()"),
+            ("wrap_u32", 0) => format!("({r} as u32)"),
+            ("wrap_byte", 0) => format!("({r} as u8)"),
+            ("rotate_left" | "rotate_right", 1) => {
+                format!("u32::{}({r}, (({}) & 31) as u32)", name.name, a[0])
+            }
             (
                 "wrapping_add" | "wrapping_sub" | "wrapping_mul" | "checked_add" | "checked_sub"
                 | "checked_mul",
@@ -5608,7 +5695,7 @@ impl<'a> Generator<'a> {
     /// `IoError` (only inside an `assert`, 12.3) by its message.
     fn eq_test(&mut self, ty: &Ty, a: &str, b: &str) -> String {
         match ty {
-            Ty::Int | Ty::Byte | Ty::Bool | Ty::Quantity(_) => format!("(*{a} == *{b})"),
+            Ty::Int | Ty::Byte | Ty::U32 | Ty::Bool | Ty::Quantity(_) => format!("(*{a} == *{b})"),
             Ty::Unit | Ty::Never => "true".to_string(),
             Ty::Text | Ty::Ref(_) | Ty::Signal(_) | Ty::SystemRef | Ty::Protocol => {
                 format!("({a} == {b})")
@@ -5624,7 +5711,7 @@ impl<'a> Generator<'a> {
     fn debug_write(&mut self, ty: &Ty, v: &str, out: &str) -> String {
         let fixed = |text: &str| format!("{out}.push_str(\"{}\");", escape_str(text));
         match ty {
-            Ty::Int | Ty::Byte | Ty::Bool => format!("{out}.push_str(&{v}.to_string());"),
+            Ty::Int | Ty::Byte | Ty::U32 | Ty::Bool => format!("{out}.push_str(&{v}.to_string());"),
             Ty::Quantity(kind) => {
                 let kind = match kind {
                     QuantityKind::Duration => "Duration",
@@ -6302,14 +6389,19 @@ impl<'a> Generator<'a> {
                     .filter_map(|(op, _, _)| *op)
                     .all(|op| Some(op) == chunk.iter().find_map(|(op, _, _)| *op));
                 let mut value = previous.clone().unwrap_or_default();
-                for (op, term, node) in chunk {
-                    let term = self.operand(term);
+                for (op, right, node) in chunk {
+                    let term = self.operand(right);
                     value = match op {
                         None => term,
-                        Some(op) => match self.checked_op(node, *op) {
-                            Some((checked, site)) => format!("{checked}({value}, {term}, {site})"),
-                            None if uniform => format!("{value} {} {term}", binary_symbol(*op)),
-                            None => format!("({value} {} {term})", binary_symbol(*op)),
+                        Some(op) => match self.word_binary(node, *op, right, &value, &term) {
+                            Some(word) => word,
+                            None => match self.checked_op(node, *op) {
+                                Some((checked, site)) => {
+                                    format!("{checked}({value}, {term}, {site})")
+                                }
+                                None if uniform => format!("{value} {} {term}", binary_symbol(*op)),
+                                None => format!("({value} {} {term})", binary_symbol(*op)),
+                            },
                         },
                     };
                 }
@@ -6400,7 +6492,7 @@ fn lendable(ty: &Ty) -> bool {
 /// options, results and tuples of those.
 fn rust_copy(ty: &Ty) -> bool {
     match ty {
-        Ty::Int | Ty::Bool | Ty::Byte | Ty::Unit | Ty::Never | Ty::Quantity(_) => true,
+        Ty::Int | Ty::Bool | Ty::Byte | Ty::U32 | Ty::Unit | Ty::Never | Ty::Quantity(_) => true,
         Ty::Option(inner) => rust_copy(inner),
         Ty::Result(ok, err) => rust_copy(ok) && rust_copy(err),
         Ty::Tuple(items) => items.iter().all(rust_copy),

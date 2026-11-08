@@ -606,8 +606,9 @@ fn endpoint_of_reads_the_ref_binding_on_both_targets() {
 }
 
 /// `docs/vision.md` T6: `+`, `-`, `*`, unary `-`, `/` and `%` on `Int` and
-/// `Byte` fail the test with one report, the same on both targets in dev
-/// and in release.
+/// `Byte`, and `/` and `%` by zero on `U32` (`docs/slice.md` 32.1), fail the
+/// test with one report, the same on both targets in dev and in release;
+/// `U32`'s `+ - *` wrap.
 #[test]
 fn overflow_fails_the_same_everywhere() {
     let file = fixture("overflow.ignite");
@@ -633,6 +634,8 @@ fn overflow_fails_the_same_everywhere() {
                 ("byte mul", "*", 66, "16 * 16"),
                 ("byte div by zero", "/", 71, "1 / 0"),
                 ("byte rem by zero", "%", 76, "1 % 0"),
+                ("u32 div by zero", "/", 83, "1 / 0"),
+                ("u32 rem by zero", "%", 88, "1 % 0"),
             ]
             .map(|(test, op, line, detail)| {
                 format!(
@@ -640,7 +643,7 @@ fn overflow_fails_the_same_everywhere() {
                 )
             });
             for line in expected.iter().map(String::as_str).chain([
-                "test result: FAILED. 1 passed; 13 failed; 0 filtered out",
+                "test result: FAILED. 1 passed; 15 failed; 0 filtered out",
                 "test fixtures.overflow/in range passes ... ok",
             ]) {
                 assert!(

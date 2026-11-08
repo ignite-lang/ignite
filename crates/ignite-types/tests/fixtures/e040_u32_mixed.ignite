@@ -1,0 +1,17 @@
+fn wide(n: Int) -> Int = n
+
+fn f(x: U32, n: Int, b: Byte, flag: Bool) -> U32 {
+  let sum = x + n
+  let other = n + x
+  let masked = x & n
+  let shifted = x << x
+  let rotated = x.rotate_left(x)
+  let widened: Int = x
+  let narrowed: U32 = n
+  let byte: Byte = x
+  let called = wide(x)
+  let compared = x < n
+  let flipped: U32 = ~n
+  let bad = flag ^ x
+  return x
+}
