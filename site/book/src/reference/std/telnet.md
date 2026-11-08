@@ -222,7 +222,7 @@ enum Event {
   Nothing,
   Literal(Byte),
   EndOfLine,
-  Answer(Bytes),
+  Answer(Byte, Byte),
   AreYouThere,
   Interrupt,
   SubnegotiationTooLong,
@@ -248,7 +248,7 @@ test "the decoder answers negotiation and finds line ends" {
   assert decode(Ground, IAC) == (Interpret, Nothing)
   assert decode(Interpret, IAC) == (Ground, Literal(IAC))
   assert decode(Interpret, DO) == (Negotiation(DO), Nothing)
-  assert decode(Negotiation(DO), 1) == (Ground, Answer([IAC, WONT, 1]))
+  assert decode(Negotiation(DO), 1) == (Ground, Answer(WONT, 1))
 }
 
 test "replies and input in NVT form" {
