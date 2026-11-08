@@ -88,7 +88,8 @@ pub(crate) fn die(message: &str) -> ! {
 /// (`ignite_io::raise_open_files_limit`, `docs/slice.md` 28), ignores
 /// `SIGPIPE` (a write to a closed socket or pipe is an error, as in a Rust
 /// program), and installs, once per process, a panic hook (exit status
-/// 101, terminal restored) and an `atexit` terminal restore.
+/// 101, terminal restored), wrapped by `ignite-io`'s (`crate::contain`),
+/// and an `atexit` terminal restore.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_init(argc: i32, argv: *const *const c_char) {
     store_args(decode_args(argc, argv));
@@ -116,6 +117,9 @@ pub extern "C" fn ignite_rt_init(argc: i32, argv: *const *const c_char) {
             ignite_io::log(&report);
             ignite_io::exit(PANIC_EXIT_CODE)
         }));
+        // `ignite-io`'s hook wraps the one above; installed here, at
+        // start, rather than by the first guarded entry.
+        ignite_io::install_hook();
         // SAFETY: `restore_at_exit` is a plain function that never unwinds.
         unsafe { atexit(restore_at_exit) };
     });

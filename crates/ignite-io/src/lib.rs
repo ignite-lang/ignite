@@ -1029,7 +1029,7 @@ mod report;
 mod test;
 pub use report::{
     FAILURE_EXIT_CODE, Failure, assert_failed, assert_report, catch, fail, fail_with,
-    failure_report, report_of, task_failed, try_failed, try_report,
+    failure_report, install_hook, report_of, task_failed, try_failed, try_report,
 };
 
 // Slice 10 (`docs/slice.md` sections 14.1 and 14.8): the checked operations

@@ -34,7 +34,7 @@ mod task;
 mod text;
 
 pub use arena::{
-    State, arena_reserved, ignite_rt_alloc, ignite_rt_arena_due, ignite_rt_arena_mark,
+    ARENA_DUE, State, arena_reserved, ignite_rt_alloc, ignite_rt_arena_due, ignite_rt_arena_mark,
     ignite_rt_arena_release, ignite_rt_arena_scratch, ignite_rt_arena_scratch_clear,
     ignite_rt_arena_state, ignite_rt_task_end,
 };
@@ -283,6 +283,7 @@ pub use channel::{
 // Panic containment at the C ABI (`crate::contain`), after the tests for
 // the same reason.
 mod contain;
+pub use contain::UNGUARDED_ENTRIES;
 use contain::{entry, entry_never};
 
 /// The log line on which [`ignite_rt_log`] panics in an archive built with

@@ -51,6 +51,7 @@ pub extern "C" fn ignite_rt_spawn(function: Option<TaskFn>, env: *mut c_void) ->
             function(env.into_inner());
             spawn_ready();
             task_end();
+            crate::net::task_ended();
         });
         ignite_io::flush();
         if result.is_err() {
