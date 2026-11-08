@@ -222,14 +222,14 @@ fn needs_expected(expr: &Expr, ambiguous: &dyn Fn(&str) -> bool) -> bool {
             is(callee, "Ok")
                 || is(callee, "Err")
                 || matches!(&callee.kind, ExprKind::Name(id) if ambiguous(&id.name))
-                || matches!(&callee.kind, ExprKind::Field { receiver, name } if is(receiver, "List") && name.name == "empty")
+                || matches!(&callee.kind, ExprKind::Field { receiver, name } if is(receiver, "List") && matches!(name.name.as_str(), "empty" | "with_capacity"))
                 || matches!(&callee.kind, ExprKind::Field { receiver, name } if is(receiver, "Map") && name.name == "empty")
                 || matches!(&callee.kind, ExprKind::Field { receiver, name } if is(receiver, "Store") && name.name == "new")
                 || matches!(&callee.kind, ExprKind::Field { receiver, name } if is(receiver, "Channel") && name.name == "bounded")
                 || matches!(&callee.kind, ExprKind::Name(id) if id.name == "module")
         }
         ExprKind::Method { receiver, name, .. } => {
-            is(receiver, "List") && name.name == "empty"
+            is(receiver, "List") && matches!(name.name.as_str(), "empty" | "with_capacity")
                 || is(receiver, "Map") && name.name == "empty"
                 || is(receiver, "Store") && name.name == "new"
                 || is(receiver, "Channel") && name.name == "bounded"
@@ -2879,14 +2879,18 @@ impl<'a> Typer<'a> {
             self.arguments(expr.span, &what, &sig.params, args);
             return Some(sig.ret);
         }
-        if owner == "List" && name.name == "empty" {
-            self.callees
-                .insert(key(expr), Callee::Builtin(crate::Builtin::ListEmpty));
-            self.arguments(expr.span, &what, &[], args);
+        if owner == "List" && matches!(name.name.as_str(), "empty" | "with_capacity") {
+            let (builtin, params) = if name.name == "empty" {
+                (crate::Builtin::ListEmpty, Vec::new())
+            } else {
+                (crate::Builtin::ListWithCapacity, vec![Ty::Int])
+            };
+            self.callees.insert(key(expr), Callee::Builtin(builtin));
+            self.arguments(expr.span, &what, &params, args);
             return match expected {
                 Some(ty @ Ty::List(_)) => {
                     if let Some(callee) = callee {
-                        self.record(callee, Some(fn_ty(vec![], ty.clone())));
+                        self.record(callee, Some(fn_ty(params, ty.clone())));
                     }
                     Some(ty.clone())
                 }
@@ -2905,8 +2909,14 @@ impl<'a> Typer<'a> {
                     self.error(
                         "E042",
                         expr.span,
-                        "cannot infer the element type of `List.empty()`; add a type annotation"
-                            .to_string(),
+                        format!(
+                            "cannot infer the element type of `List.{}`; add a type annotation",
+                            if name.name == "empty" {
+                                "empty()"
+                            } else {
+                                "with_capacity(..)"
+                            }
+                        ),
                     );
                     None
                 }

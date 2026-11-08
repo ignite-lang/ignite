@@ -749,6 +749,33 @@ fn checked_arithmetic_on_both_targets() {
     });
 }
 
+/// The capacity hint `List.with_capacity(n)` and `Bytes.with_capacity(n)`
+/// (`docs/slice.md` 31): an empty list, `push` beyond `n` grows, `n < 0`
+/// is 0, the same on both targets in dev and in release
+/// (`fixtures/tests/capacity.ignite`).
+#[test]
+fn capacity_hint_on_both_targets() {
+    let file = fixture("capacity.ignite");
+    on_both_targets(|target| {
+        for profile in [&[][..], &["--release"][..]] {
+            let mut args = vec![file.as_str()];
+            args.extend(profile.iter().copied());
+            let run = ignite_test(Chain::Fixtures, target, &args);
+            assert_eq!(
+                run.status, 0,
+                "{target} {profile:?}: {}\n{}",
+                run.stdout, run.stderr
+            );
+            assert!(
+                run.stdout
+                    .contains("test result: ok. 4 passed; 0 failed; 0 filtered out"),
+                "{target} {profile:?}: {}",
+                run.stdout
+            );
+        }
+    });
+}
+
 /// An in-place builtin changes the variable only through a place rooted at
 /// it, and a copy through `at` or `?`, the same on both targets
 /// (`fixtures/tests/in_place.ignite`, `ignite_types::ownership`). Before

@@ -448,3 +448,52 @@ test "a spawned task gets the borrowed arguments as they were at the spawn" {
   }
   assert got3.to_text() == "n:4"
 }
+
+test type Greeting {
+  words: List<Text>
+  count: Int
+}
+
+test fn greets(s: PipeStream, greeting: Greeting, tail: Text) -> Result<Unit, IoError> requires [s.write] {
+  var line = ""
+  for word in greeting.words {
+    line = "{line}{word}"
+  }
+  s.write_all("{line}{greeting.count}{tail};".to_bytes())?
+  s.close()
+}
+
+// Story spawn-without-handshake: `spawn` copies its arguments into the
+// task's transfer memory and does not wait for the task, and the loop
+// frees and reuses the memory it built them in at each iteration (the
+// debug runtime overwrites it), so a shallow environment fails here.
+test "every task reads the arguments its spawn saw after the loop freed them" {
+  var clients: List<PipeStream> = []
+  var expected: List<Text> = []
+  var i = 0
+  while i < 40 {
+    let (client, server) = Pipe.pair()
+    client.set_idle_timeout(5000)?
+    var words: List<Text> = []
+    var j = 0
+    while j < 8 {
+      words.push("w{i}.{j}-")
+      j = j + 1
+    }
+    let greeting = Greeting { words = words, count = i }
+    let tail = "/{i * 7}"
+    spawn greets(server, greeting, tail)
+    clients.push(client)
+    var line = ""
+    for word in words {
+      line = "{line}{word}"
+    }
+    expected.push("{line}{i}/{i * 7};")
+    i = i + 1
+  }
+  var k = 0
+  while k < 40 {
+    assert all_of(clients[k])?.to_text() == expected[k], "task {k}"
+    k = k + 1
+  }
+}

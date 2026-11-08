@@ -306,13 +306,13 @@
       "area": "Semantics: one meaning across the three consumers",
       "bars": {
         "eval": {
-          "value": 448
+          "value": 452
         },
         "llvm": {
-          "value": 684
+          "value": 688
         },
         "rust": {
-          "value": 684
+          "value": 688
         }
       },
       "direction": "higher",
@@ -467,7 +467,7 @@
       "area": "Front end: the checker refuses exactly the wrong programs",
       "bars": {
         "all": {
-          "value": 328
+          "value": 329
         }
       },
       "direction": "higher",
@@ -549,13 +549,51 @@
     },
     "3.3": {
       "area": "Generated code and runtime behaviour",
+      "bars": {
+        "llvm/terminal/connect-8": {
+          "value": 766
+        },
+        "llvm/terminal/rr-1": {
+          "value": 906
+        },
+        "llvm/terminal/rr-64": {
+          "value": 858
+        },
+        "llvm/todo/get-1": {
+          "value": 899
+        },
+        "llvm/todo/get-64": {
+          "value": 869
+        },
+        "llvm/todo/patch-16": {
+          "value": 576
+        },
+        "rust/terminal/connect-8": {
+          "value": 946
+        },
+        "rust/terminal/rr-1": {
+          "value": 886
+        },
+        "rust/terminal/rr-64": {
+          "value": 824
+        },
+        "rust/todo/get-1": {
+          "value": 809
+        },
+        "rust/todo/get-64": {
+          "value": 703
+        },
+        "rust/todo/patch-16": {
+          "value": 567
+        }
+      },
       "direction": "higher",
-      "instrument": "`ignite-load matrix` (`task bench-throughput`)",
+      "instrument": "`ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): replies per second of todod and terminald over the plain-Rust implementation's, per cell",
       "kind": "ratchet",
-      "name": "throughput and p99 latency of terminald and todod",
+      "name": "throughput against plain Rust",
+      "source": "bench",
       "tolerance": "10%",
-      "unit": "count",
-      "unmeasured": "no load baseline yet (out of scope of story:quality-ratchet)"
+      "unit": "permille"
     },
     "3.4": {
       "area": "Generated code and runtime behaviour",
@@ -601,6 +639,126 @@
       "source": "static",
       "tolerance": 0,
       "unit": "count"
+    },
+    "3.7": {
+      "area": "Generated code and runtime behaviour",
+      "bars": {
+        "llvm/terminal/connect-8": {
+          "value": 1132
+        },
+        "llvm/terminal/rr-1": {
+          "value": 1017
+        },
+        "llvm/terminal/rr-64": {
+          "value": 1240
+        },
+        "llvm/todo/get-1": {
+          "value": 1099
+        },
+        "llvm/todo/get-64": {
+          "value": 1265
+        },
+        "llvm/todo/patch-16": {
+          "value": 2193
+        },
+        "rust/terminal/connect-8": {
+          "value": 1058
+        },
+        "rust/terminal/rr-1": {
+          "value": 1008
+        },
+        "rust/terminal/rr-64": {
+          "value": 1243
+        },
+        "rust/todo/get-1": {
+          "value": 1202
+        },
+        "rust/todo/get-64": {
+          "value": 1551
+        },
+        "rust/todo/patch-16": {
+          "value": 2275
+        }
+      },
+      "direction": "lower",
+      "instrument": "`ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): p99 reply latency over the plain-Rust implementation's, per cell",
+      "kind": "ratchet",
+      "name": "p99 latency against plain Rust",
+      "source": "bench",
+      "tolerance": "20%",
+      "unit": "permille"
+    },
+    "3.8": {
+      "area": "Generated code and runtime behaviour",
+      "bars": {
+        "llvm/terminal/connect-8": {
+          "value": 2645
+        },
+        "llvm/terminal/rr-1": {
+          "value": 1221
+        },
+        "llvm/terminal/rr-64": {
+          "value": 2288
+        },
+        "llvm/todo/get-1": {
+          "value": 839
+        },
+        "llvm/todo/get-64": {
+          "value": 2857
+        },
+        "llvm/todo/patch-16": {
+          "value": 1468
+        },
+        "rust/terminal/connect-8": {
+          "value": 983
+        },
+        "rust/terminal/rr-1": {
+          "value": 1065
+        },
+        "rust/terminal/rr-64": {
+          "value": 1036
+        },
+        "rust/todo/get-1": {
+          "value": 765
+        },
+        "rust/todo/get-64": {
+          "value": 2654
+        },
+        "rust/todo/patch-16": {
+          "value": 1158
+        }
+      },
+      "direction": "lower",
+      "instrument": "`ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): the server's peak RSS over the plain-Rust implementation's, per cell",
+      "kind": "ratchet",
+      "name": "peak RSS under load against plain Rust",
+      "source": "bench",
+      "tolerance": "10%",
+      "unit": "permille"
+    },
+    "3.9": {
+      "area": "Generated code and runtime behaviour",
+      "bars": {
+        "llvm/terminal": {
+          "value": 1378
+        },
+        "llvm/todo": {
+          "value": 700
+        },
+        "rust/terminal": {
+          "value": 1263
+        },
+        "rust/todo": {
+          "value": 692
+        }
+      },
+      "direction": "lower",
+      "instrument": "`ignite-perf quality-remote` (`bench/native/`): the stripped release binary over the plain-Rust implementation's, per program",
+      "kind": "ratchet",
+      "name": "stripped binary size against plain Rust",
+      "source": "bench",
+      "tolerance": "5%",
+      "unit": "permille"
     },
     "4.1": {
       "area": "Standard library and protocols",

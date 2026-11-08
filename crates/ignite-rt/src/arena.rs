@@ -48,6 +48,7 @@ use std::cell::{RefCell, UnsafeCell};
 use std::ffi::c_void;
 use std::num::NonZeroUsize;
 use std::ptr::NonNull;
+use std::sync::Mutex;
 
 use nix::sys::mman::{MapFlags, ProtFlags, mmap_anonymous, munmap};
 
@@ -392,11 +393,13 @@ fn large_dealloc(pointer: NonNull<u8>, layout: Layout) {
     unsafe { std::alloc::dealloc(pointer.as_ptr(), layout) };
 }
 
-/// A task's arena and its scratch arena.
+/// A task's arena and its scratch arena, and the transfer arena of a
+/// `spawn` it is building.
 struct Task {
     arena: Arena,
     scratch: Arena,
     in_scratch: bool,
+    transfer: Option<Arena>,
 }
 
 impl Task {
@@ -405,17 +408,132 @@ impl Task {
             arena: Arena::new(),
             scratch: Arena::new(),
             in_scratch: false,
+            transfer: None,
         }
     }
 
     /// The arena allocations go to.
     fn current(&mut self) -> &mut Arena {
-        if self.in_scratch {
+        if let Some(transfer) = &mut self.transfer {
+            transfer
+        } else if self.in_scratch {
             &mut self.scratch
         } else {
             &mut self.arena
         }
     }
+}
+
+/// Chunks kept for the next transfer, any thread's. Transfer memory flows
+/// from the spawning thread to the task's, so a spawned task that adopts
+/// its transfer gives the chunk its thread kept here in exchange
+/// ([`adopt`]): a server's accept loop takes one per connection and the
+/// starting sessions return as many, with no `mmap` or `munmap` in steady
+/// state. A chunk no arena holds is kept as its address, with its
+/// provenance exposed ([`keep_for_transfers`]).
+static TRANSFER_SPARE: Mutex<Vec<usize>> = Mutex::new(Vec::new());
+
+/// Chunks [`TRANSFER_SPARE`] keeps; a transfer touches a page or two of
+/// its chunk, and a burst of spawns beyond this many maps new ones.
+const TRANSFER_KEPT: usize = 16;
+
+/// The memory of a `spawn`'s environment (`docs/llvm.md` section 4): an
+/// arena the spawning task filled between [`transfer_begin`] and
+/// [`transfer_end`], then owned by the spawned task, which reads its
+/// arguments there until it ends. Dropping it returns its chunks to
+/// [`TRANSFER_SPARE`] and its large blocks to `malloc`. Not `Send`: it
+/// moves to the task's thread inside `task::Environment`, whose pointer
+/// points into it.
+pub(crate) struct Transfer(Arena);
+
+impl Drop for Transfer {
+    fn drop(&mut self) {
+        if self.0.blocks.is_empty() && self.0.spare.is_empty() {
+            return;
+        }
+        self.0.release(0);
+        keep_for_transfers(std::mem::take(&mut self.0.spare));
+        self.0.reserved = 0;
+    }
+}
+
+/// Put `chunks` on [`TRANSFER_SPARE`] while it has room and give the rest
+/// back to the kernel.
+fn keep_for_transfers(chunks: Vec<NonNull<u8>>) {
+    if chunks.is_empty() {
+        return;
+    }
+    let mut kept = TRANSFER_SPARE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    for pointer in chunks {
+        if kept.len() < TRANSFER_KEPT {
+            kept.push(pointer.as_ptr().expose_provenance());
+        } else {
+            chunk_drop(pointer);
+        }
+    }
+}
+
+/// Make `transfer` the bottom of the current task's empty arena, so the
+/// task reads its arguments where the spawning task copied them and
+/// allocates after them, and give the chunks the arena kept from this
+/// thread's last task to [`TRANSFER_SPARE`] in exchange: a chunk flows
+/// from the spawning task to the spawned one and back to the next spawn,
+/// and neither thread maps or unmaps one per task, nor holds one more per
+/// live task. `Some(transfer)` back when the arena is not empty (the
+/// caller keeps it until the task ends).
+pub(crate) fn adopt(mut transfer: Transfer) -> Option<Transfer> {
+    let adopted = with_task(|task| {
+        if !task.arena.blocks.is_empty() || task.in_scratch || task.transfer.is_some() {
+            return false;
+        }
+        let mut incoming = std::mem::replace(&mut transfer.0, Arena::new());
+        let arena = &mut task.arena;
+        let given = std::mem::replace(&mut arena.spare, std::mem::take(&mut incoming.spare));
+        arena.reserved -= given.len() * CHUNK;
+        keep_for_transfers(given);
+        arena.blocks = std::mem::take(&mut incoming.blocks);
+        arena.spare_large.append(&mut incoming.spare_large);
+        arena.reserved += incoming.reserved;
+        arena.heap += incoming.heap;
+        true
+    });
+    if adopted == Some(true) {
+        None
+    } else {
+        Some(transfer)
+    }
+}
+
+/// Send the current task's allocations to a new transfer arena, which
+/// starts with a kept chunk when [`TRANSFER_SPARE`] has one. A transfer
+/// already begun continues.
+pub(crate) fn transfer_begin() {
+    let _ = with_task(|task| {
+        if task.transfer.is_none() {
+            let mut transfer = Arena::new();
+            let kept = TRANSFER_SPARE
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .pop()
+                .and_then(|address| NonNull::new(std::ptr::with_exposed_provenance_mut(address)));
+            if let Some(pointer) = kept {
+                transfer.spare.push(pointer);
+                transfer.reserved += CHUNK;
+            }
+            task.transfer = Some(transfer);
+        }
+    });
+}
+
+/// End the current transfer: allocations go to the task's arenas again,
+/// and the caller owns what was allocated since [`transfer_begin`]. `None`
+/// without a transfer.
+pub(crate) fn transfer_end() -> Option<Transfer> {
+    with_task(|task| task.transfer.take())
+        .flatten()
+        .map(Transfer)
 }
 
 thread_local! {
@@ -689,6 +807,7 @@ pub extern "C" fn ignite_rt_task_end() {
 /// after the task's function returned: a panic there unwinds to
 /// `ignite_io::spawn`'s catch, outside any task wrapper.
 pub(crate) fn task_end() {
+    drop(transfer_end());
     let _ = with_task(|task| {
         if task.arena.heap + task.scratch.heap > RELEASED_AT_TASK_END {
             ignite_io::released_memory();
@@ -740,6 +859,46 @@ mod tests {
         let pointer = ignite_rt_alloc(0, 8);
         assert!(!pointer.is_null());
         assert_eq!(pointer as usize % 8, 0);
+    }
+
+    /// The only test of this binary that transfers: the kept chunks are
+    /// global.
+    #[test]
+    fn a_transfer_leaves_the_task_arena_and_its_chunk_is_reused() {
+        let before = alloc(8, 8);
+        transfer_begin();
+        let first = alloc(8, 8);
+        let transfer = transfer_end().expect("a transfer");
+        assert_eq!(alloc(8, 8), before.wrapping_add(8), "back in the arena");
+        drop(transfer);
+        transfer_begin();
+        let second = alloc(8, 8);
+        drop(transfer_end());
+        assert_eq!(second, first, "the kept chunk is reused");
+        assert!(transfer_end().is_none());
+        ignite_rt_task_end();
+        a_spawned_task_adopts_its_transfer_and_gives_its_spare_chunk();
+    }
+
+    /// Part of the test above: the kept chunks are global. `abi::` checks
+    /// the environment's bytes across threads.
+    fn a_spawned_task_adopts_its_transfer_and_gives_its_spare_chunk() {
+        let _ = alloc(8, 8);
+        ignite_rt_task_end();
+        assert_eq!(arena_reserved(), CHUNK, "the thread keeps one chunk");
+        transfer_begin();
+        let env = alloc(16, 8);
+        let transfer = transfer_end().expect("a transfer");
+        let kept = TRANSFER_SPARE.lock().unwrap().len();
+        assert!(adopt(transfer).is_none(), "an empty arena adopts");
+        assert_eq!(TRANSFER_SPARE.lock().unwrap().len(), kept + 1);
+        assert_eq!(arena_reserved(), CHUNK, "only the adopted chunk");
+        assert_eq!(alloc(8, 8), env.wrapping_add(16), "allocated after it");
+        let _ = alloc(8, 8);
+        transfer_begin();
+        let another = transfer_end().expect("a transfer");
+        assert!(adopt(another).is_some(), "a used arena does not adopt");
+        ignite_rt_task_end();
     }
 
     #[test]

@@ -640,6 +640,11 @@ pub enum Builtin {
     BytesEmpty,
     BytesOf,
     ListEmpty,
+    /// `List.with_capacity(n)`: an empty list with room for `n` elements;
+    /// only speed is observable (`docs/slice.md` 31).
+    ListWithCapacity,
+    /// `Bytes.with_capacity(n)`, as [`Builtin::ListWithCapacity`].
+    BytesWithCapacity,
     IntToText,
     Log,
     TcpListenerBind,

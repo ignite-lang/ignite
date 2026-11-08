@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-08T13:30:00Z",
+  "actor": "human:timo",
+  "artifact": "story:spawn-without-handshake",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 1c61977b (PR 125): 1554 cargo passed, 0 failed, 24 ignored; 350 inline per target; cost table in PR 125",
+    "reference": "https://github.com/ignite-lang/ignite/pull/125"
+  }
+}

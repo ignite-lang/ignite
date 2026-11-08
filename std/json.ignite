@@ -64,7 +64,7 @@ fn hex_digit(n: Byte) -> Byte = if n < 10 { b'0' + n } else { b'a' + n - 10 }
 // `text` as a JSON string literal: quote, backslash and the control
 // characters escaped, every other character as it is.
 fn quote(text: Text) -> Text {
-  let out = write_quoted(Bytes.empty(), text)
+  let out = write_quoted(Bytes.with_capacity(text.len() + 2), text)
   out.to_text()
 }
 
@@ -97,7 +97,7 @@ fn write_quoted(out: Bytes, text: Text) -> Bytes {
 
 // The compact JSON text of `value`: no whitespace, members in their order.
 fn encode(value: Json) -> Text {
-  let out = write_value(Bytes.empty(), value)
+  let out = write_value(Bytes.with_capacity(128), value)
   out.to_text()
 }
 

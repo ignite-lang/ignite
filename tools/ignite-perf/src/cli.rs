@@ -47,6 +47,10 @@ pub enum Mode {
     VerifyLlvmReadiness(ReadinessArgs),
     /// Measure the timing and size rows of docs/quality.md once on the working tree
     Quality(crate::quality::QualityArgs),
+    /// Measure the timing rows of docs/quality.md on a single-tenant EC2 host made for the run
+    QualityRemote(crate::remote::RemoteArgs),
+    /// The part of quality-remote that runs on the EC2 host
+    QualityHost(crate::remote::HostArgs),
 }
 
 /// The checkout that built this binary, as `Path(__file__).resolve().parents[1]` was.

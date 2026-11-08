@@ -221,6 +221,17 @@ fn list_set_concat() -> (List<List<Int>>, List<Text>) {
   (grid, names)
 }
 
+fn list_with_capacity() -> (List<Int>, Bytes, List<Text>) {
+  var xs: List<Int> = List.with_capacity(2)
+  xs.push(1)
+  xs.push(2)
+  xs.push(3)
+  var b = Bytes.with_capacity(-1)
+  b.push(7)
+  let none: List<Text> = List.with_capacity(0)
+  (xs, b, none)
+}
+
 // Map
 
 fn map_literal() -> Map<Text, Int> = { b = 2, a = 1, c = 3 }
@@ -654,6 +665,7 @@ fn Printer.main(self: Printer) -> Result<Unit, IoError> {
   show(list_mutate_place().debug())?
   show(list_index_push().debug())?
   show(list_set_concat().debug())?
+  show(list_with_capacity().debug())?
   show(map_literal().debug())?
   show(map_ops().debug())?
   show(map_queries().debug())?

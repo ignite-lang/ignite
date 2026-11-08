@@ -75,7 +75,7 @@ const LAYERS: &[(&str, Layer)] = &[
 /// Crates under `crates/` that may name a protocol, with the reason.
 const CRATES_EXEMPT: &[(&str, &str)] = &[(
     "ignite-load",
-    "a load client of the terminal example's server: it speaks the protocol to measure it and is linked into neither the compiler nor a compiled program",
+    "a load client of the example servers (terminal and todo): it speaks their protocols to measure and check them and is linked into neither the compiler nor a compiled program",
 )];
 
 const PROTOCOL_PREFIX: &str = "std.protocol.";

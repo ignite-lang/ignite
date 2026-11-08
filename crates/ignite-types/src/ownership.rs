@@ -76,6 +76,7 @@ pub fn change(builtin: Builtin) -> Option<Change> {
         StoreNextId | StorePut | StoreRemove | StoreUpdate | StoreUpsert => Some(Change::Handle),
         BoolToText
         | BytesEmpty
+        | BytesWithCapacity
         | ByteSizeToInt
         | BytesOf
         | BytesIndexOf
@@ -120,6 +121,7 @@ pub fn change(builtin: Builtin) -> Option<Change> {
         | LauncherStart
         | ListAt
         | ListEmpty
+        | ListWithCapacity
         | ListIsEmpty
         | ListJoin
         | ListLen
