@@ -206,12 +206,12 @@ metric, the target, the value before and after, and the run of `task quality` th
 
 | # | metric | kind | better | instrument | bar | target |
 |---|---|---|---|---|---|---|
-| 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | lower | `differential::corpus_agrees_across_rust_llvm_and_the_evaluator` (every merge): units of the corpus whose exit, stdout or failure text differs from the Rust target's | eval 4, llvm 0 |  |
-| 1.2 | differential corpus size | ratchet | higher | the differential runner: units (inline tests and executables) each consumer ran | eval 467, llvm 733, rust 733 |  |
+| 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | lower | `differential::corpus_agrees_across_rust_llvm_and_the_evaluator` (every merge): units of the corpus whose exit, stdout or failure text differs from the Rust target's | eval 4, llvm 4 |  |
+| 1.2 | differential corpus size | ratchet | higher | the differential runner: units (inline tests and executables) each consumer ran | eval 475, llvm 762, rust 762 |  |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | lower | `quality::static_metrics_hold_the_bar`: per consumer crate, `PatternKind::` mentions (patterns) and distinct `Builtin::` variants named (builtins) | eval/builtins 112, eval/patterns 13, llvm/builtins 12, llvm/patterns 30, rust/builtins 43, rust/patterns 71 | one implementation per rule: after story:mid-level-ir the backends name no `PatternKind` and no `Builtin` the IR lowers |
 | 1.4 | generated-code goldens changed without a `CODEGEN_REVISION` bump | gate | lower | `quality::static_metrics_hold_the_bar`: golden `.rs` and `.ll` outputs changed against the merge base with main while `CODEGEN_REVISION` is unchanged | all 0 |  |
 | 1.5 | random programs on which the consumers disagree | gate | lower | a typed program generator, N seeds per gate | unmeasured: no program generator yet (out of scope of story:quality-ratchet) |  |
-| 1.6 | corpus units the evaluator cannot run | ratchet | lower | the differential runner: units the evaluator has no rule for (IO, tasks, fuel), each listed with its reason in `quality/baseline.json` `eval_cannot_run` | eval 266 |  |
+| 1.6 | corpus units the evaluator cannot run | ratchet | lower | the differential runner: units the evaluator has no rule for (IO, tasks, fuel), each listed with its reason in `quality/baseline.json` `eval_cannot_run` | eval 287 |  |
 | 1.7 | known differences marked intermittent | gate | lower | `quality::check_differential` (every merge): entries of `known_differences` marked `intermittent`, each naming a story of the planning store; a difference so marked may show or not in a run | all 1 |  |
 
 ### 2 Front end: the checker refuses exactly the wrong programs
@@ -222,7 +222,7 @@ metric, the target, the value before and after, and the run of `task quality` th
 | 2.2 | accepted programs that fail in a backend | gate | lower | the differential runner: corpus programs that check and do not build on a target | llvm 0, rust 0 |  |
 | 2.3 | soundness holes open (effects, ownership, exhaustiveness) | ratchet | lower | count of open stories that are soundness holes | unmeasured: the planning store tags no story as a soundness hole; known open: story:map-put-handle-roots, story:immutable-binding-e006 |  |
 | 2.4 | compiler panics on any input | gate | lower | fuzz the parser and checker on a mutated corpus | unmeasured: no fuzzer yet (out of scope of story:quality-ratchet) |  |
-| 2.5 | diagnostic fixtures (one diagnostic per error site, its span) | ratchet | higher | `quality::static_metrics_hold_the_bar`: `.expected` diagnostic fixtures; each is compared by its crate's fixture test every merge | all 332 |  |
+| 2.5 | diagnostic fixtures (one diagnostic per error site, its span) | ratchet | higher | `quality::static_metrics_hold_the_bar`: `.expected` diagnostic fixtures; each is compared by its crate's fixture test every merge | all 336 |  |
 | 2.6 | checking time stays linear (limit tests) | gate | higher | `quality::static_metrics_hold_the_bar`: the `limits::` tests of `ignite-check` and `ignite-types`, each a linearity bound run every merge | all 5 |  |
 
 ### 3 Generated code and runtime behaviour
@@ -245,7 +245,7 @@ metric, the target, the value before and after, and the run of `task quality` th
 |---|---|---|---|---|---|---|
 | 4.1 | conformance claims that hold | ratchet | higher | `quality::conformance_claims_hold_the_bar` (every merge): claim lines `yes` of `ignite conformance` over std/protocol/telnet, http and jsonrpc | llvm 3, rust 3 |  |
 | 4.2 | gaps per claimed spec | ratchet | lower | same: the gap count of each claim line, per claimed spec | llvm/jsonrpc-2.0 0, llvm/rfc854 0, llvm/rfc855 0, llvm/rfc9110 2, llvm/rfc9112 1, rust/jsonrpc-2.0 0, rust/rfc854 0, rust/rfc855 0, rust/rfc9110 2, rust/rfc9112 1 |  |
-| 4.3 | inline tests per target | ratchet | higher | the differential runner: inline tests of std/ and examples/ each consumer ran | eval 209, llvm 362, rust 362 |  |
+| 4.3 | inline tests per target | ratchet | higher | the differential runner: inline tests of std/ and examples/ each consumer ran | eval 217, llvm 375, rust 375 |  |
 | 4.4 | std functions with no inline test | ratchet | lower | typed program against the test bodies | unmeasured: no instrument yet: needs the call graph of the test bodies |  |
 
 ### 5 Operations: run, apply, host

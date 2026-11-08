@@ -9788,7 +9788,7 @@ tree every data format reads into and writes from; the codecs, YAML, TOML and th
 | `type DecodeError` | `path`, `expected`, `found`, all `Text`; `describe(error)` (UFCS `error.describe()`) is `<path>: expected <expected>, found <found>` |
 | `type FormatError` | `message: Text`, `line`, `column`, `offset: Int`: the first bad byte of a read, `line` and `column` 1-based, `column` in characters, `offset` in bytes (the positions of 1.1); a write gives 0 for all three |
 | `format_error(text, message, offset)` | the `FormatError` at byte `offset` of `text`, line and column counted |
-| `base64(bytes)` | moved to `std.encoding` (section NN); `std.json` imports it from there for the text of `Value.Bytes` |
+| `base64(bytes)` | moved to `std.encoding` (section 34); `std.json` imports it from there for the text of `Value.Bytes` |
 
 `describe` is a fn, not a `DecodeError.describe` hook: a hook of 16.16 is not callable as a
 method. `Value`'s variants share names with `Json`'s (`Null`, `Bool`, `Decimal`), so a module
@@ -9825,7 +9825,7 @@ refused duplicate member follow `docs/serde.md` goal 5 and section 4.
 
 ### 27.5 Tests
 
-- `std/data.ignite`: the default `Shape`, `describe` (the `base64` vectors are in `std/encoding.ignite`, NN),
+- `std/data.ignite`: the default `Shape`, `describe` (the `base64` vectors are in `std/encoding.ignite`, 34),
   `format_error`'s line and column (`task test-ignite`, both targets).
 - `std/json.ignite`: `of_data(to_data(j)) == j` for every `Json` variant, nested; `Bytes` as
   base64 and `Moment` as text; `read` of every kind; line, column and offset of a format error;
@@ -9998,7 +9998,7 @@ tests 1 to 4 (test 3 is a million `a`; plus the empty message) and the seven vec
 section 10; `bitwise::sha1_and_base64_vectors_on_both_targets` runs them with `ignite test` on
 both targets. Reading a byte by index and `push` lower to an inline load or store behind a
 bounds check on both targets (no call), so the story's "byte get/set cheaply" needs no new
-builtin. Since section NN the code is `std.digest.sha1` and `std.encoding.base64`, which the
+builtin. Since section 34 the code is `std.digest.sha1` and `std.encoding.base64`, which the
 fixture imports.
 
 The file's executable `codecs` builds 1 MiB (`byte i = (31 i + 7) mod 256`) and runs 16 rounds
@@ -10490,7 +10490,7 @@ counted object holds (both targets). Release builds ignore the variable.
   (`fixtures/leak/repro.ignite`) on both targets and runs every mode at `N=20000`: each mode's
   peak resident size (`VmHWM`, the lowest of up to three runs) is within 2 MB of `none`'s.
 
-## NN. SHA-1, SHA-256 and base64 in std (`std.digest`, `std.encoding`)
+## 34. SHA-1, SHA-256 and base64 in std (`std.digest`, `std.encoding`)
 
 **Status: implemented in `story:std-digest`.**
 
@@ -10499,7 +10499,7 @@ or a content hash wrote its digest and its base64 by hand with bit arithmetic. B
 modules, written in Ignite on 29's operators and 32's `U32`; no builtin and no substrate code is
 added, so the compiler and both backends are unchanged.
 
-### NN.1 `std.encoding`
+### 34.1 `std.encoding`
 
 RFC 4648. Encoding is total; decoding returns `Result<Bytes, EncodingError>`.
 
@@ -10525,7 +10525,7 @@ white space are characters outside the alphabet.
 `std.data.base64` (27.1) is gone: the function moved here unchanged in output, and `std.json`
 imports it from `std.encoding` for the text of `Value.Bytes`.
 
-### NN.2 `std.digest`
+### 34.2 `std.digest`
 
 | item | meaning |
 |---|---|
@@ -10544,13 +10544,13 @@ the rest; the one-shot form therefore copies at most 63 bytes of its input. `upd
 (E041 on `d.update(..)`; `describe` in 27.1 is a fn for the same reason): a caller imports `std.digest.{Digest, update, finish}`. Input
 lengths are counted in `Int`; `length * 8` fails past 2^60 bytes as every `Int` overflow does.
 
-### NN.3 Layering
+### 34.3 Layering
 
 Both are in the base layer (`docs/layering.md`, `LAYERS` in
 `crates/ignite-check/tests/layering.rs`). `std.encoding` imports nothing; `std.digest` imports
 `std.encoding.hex` for its tests only.
 
-### NN.4 The codecs fixture
+### 34.4 The codecs fixture
 
 `crates/ignite/tests/fixtures/bitwise/codecs.ignite` (29.5, 32.5) no longer writes SHA-1 and
 base64 itself: it imports `std.digest.sha1` and `std.encoding.{base64, hex}`, keeps its four
@@ -10561,11 +10561,11 @@ acceptance's 1 MiB timing and now times std's code. Not recorded in this story: 
 happen on the dedicated measurement host, not on the shared workstation; the numbers of 32.5
 are the last record and were taken over the same SHA-1 rounds.
 
-### NN.5 Tests
+### 34.5 Tests
 
 - `std/encoding.ignite` (both targets): RFC 4648 section 10's vectors in base64; base64url
   padded and unpadded; every decoder reverses its encoder on those vectors; each refusal of
-  NN.1 with its offset; `hex`.
+  34.1 with its offset; `hex`.
 - `std/digest.ignite` (both targets): RFC 3174's tests 1 to 4 (test 3 is a million `a`) and the
   empty message; FIPS 180-4's SHA-256 examples (`abc`, the 448-bit and 896-bit messages), the
   empty message and a million `a`; `Digest` fed in pieces of 1, 3, 55, 56, 63, 64, 65, 128 and

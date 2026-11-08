@@ -271,7 +271,7 @@
 - Kind: missing-feature.
 - Since wave 7: bitwise operators (`story:bitwise-operators`); `std.data` has a `base64` helper (`story:data-value-model`).
 - Story: `story:std-digest` (wave 8): SHA-1 and SHA-256, base64 and base64url as std modules with the RFC test vectors.
-- Since wave 8: `std.digest` (`sha1`, `sha256`, the incremental `Digest`) and `std.encoding` (`base64`, `base64url`, their decoders, `hex`); `std.data.base64` moved to `std.encoding` (`docs/slice.md` NN).
+- Since wave 8: `std.digest` (`sha1`, `sha256`, the incremental `Digest`) and `std.encoding` (`base64`, `base64url`, their decoders, `hex`); `std.data.base64` moved to `std.encoding` (`docs/slice.md` 34).
 - Blocks: no.
 
 ## G23 No NATS client

@@ -30,6 +30,22 @@
     "crates/ignite/tests/fixtures/leak/attack.ignite::a stored end read through a temporary is released (G30)": "builtin `StoreNew` has no value at compile time",
     "crates/ignite/tests/fixtures/leak/attack.ignite::an alias stays usable after its original was handed to a task": "builtin `RuntimeCensus` has no value at compile time",
     "crates/ignite/tests/fixtures/leak/attack.ignite::an end sent through a channel is the receiver's": "builtin `ChannelBounded` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/attack2.ignite::a broadcast in a loop left by continue and break is released (G30)": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/attack2.ignite::a broadcast inside a closure is released (G30)": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/attack2.ignite::a broadcast left by break and continue in its body is released (G30)": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/attack2.ignite::a broadcast left by return is released (G30)": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/attack2.ignite::a broadcast over stored records is released (G30)": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/attack2.ignite::a look through a let's match left by return is released (G30)": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/attack2.ignite::a nested match over stored ends is released (G30)": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/attack2.ignite::a received end looked at through a let's match is released (G30)": "builtin `ChannelBounded` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/attack2.ignite::a record put as a literal and removed is released (G30)": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/attack2.ignite::a stored end looked at through is_some is released (G30)": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/attack2.ignite::a stored end removed by a bare statement is released (G30)": "builtin `StoreNew` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/attack2.ignite::an alias in a branch stays usable after its end was handed to a task there": "builtin `RuntimeCensus` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/attack2.ignite::an alias in a nested record stays usable after its end was handed to a task": "builtin `RuntimeCensus` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/attack2.ignite::an alias outside a branch stays usable after the branch handed its end to a task": "builtin `RuntimeCensus` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/attack2.ignite::an end a broadcast hands to a task stays the task's after the store drops it": "builtin `RuntimeCensus` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/attack2.ignite::nested broadcasts are released (G30)": "builtin `StoreNew` has no value at compile time",
     "crates/ignite/tests/fixtures/leak/repro.ignite::main repro": "a main does IO; the evaluator has none",
     "crates/ignite/tests/fixtures/leak/seeded.ignite::a channel made and dropped": "builtin `ChannelBounded` has no value at compile time",
     "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: arena": "builtin `RuntimeCensus` has no value at compile time",
@@ -130,11 +146,14 @@
     "examples/todo/todo.ignite::handle creates, lists, reads, updates and deletes": "builtin `DirectoryTemporary` has no value at compile time",
     "examples/todo/todo.ignite::ids past 65,536 go to the next shard and load from it": "builtin `DirectoryTemporary` has no value at compile time",
     "examples/todo/todo.ignite::saves that finish out of order leave only the newest file": "builtin `DirectoryTemporary` has no value at compile time",
+    "std/digest.ignite::sha1 of RFC 3174 test 3, a million a": "exceeds the evaluator's limit Nodes(1000000)",
+    "std/digest.ignite::sha256 of a million a": "exceeds the evaluator's limit Nodes(1000000)",
     "std/fs.ignite::a file over the read bound is refused": "builtin `DirectoryTemporary` has no value at compile time",
     "std/fs.ignite::a file written is read back, listed, nested and removed": "builtin `DirectoryTemporary` has no value at compile time",
     "std/fs.ignite::a legal 250-byte name is written": "builtin `DirectoryTemporary` has no value at compile time",
     "std/fs.ignite::paths that leave the root are refused": "builtin `DirectoryTemporary` has no value at compile time",
     "std/fs.ignite::remove_tree removes links, not their targets": "builtin `DirectoryTemporary` has no value at compile time",
+    "std/net.ignite::a listener bound kept accepts as one bound plainly": "builtin `TcpListenerBindKept` has no value at compile time",
     "std/net.ignite::a read the idle timeout ended is told from a close": "builtin `TcpListenerBind` has no value at compile time",
     "std/net.ignite::connect_within gives up within its timeout": "builtin `ClockMonotonic` has no value at compile time",
     "std/net.ignite::the peer of a stream is the other end, in both families": "builtin `TcpListenerBind` has no value at compile time",
@@ -268,9 +287,11 @@
     "std/sync.ignite::a send from another task wakes a waiting receiver": "builtin `ChannelBounded` has no value at compile time",
     "std/sync.ignite::a value sent is the receiver's own": "builtin `ChannelBounded` has no value at compile time",
     "std/sync.ignite::an annotated pair of channel ends is released (G30)": "builtin `RuntimeCensus` has no value at compile time",
+    "std/sync.ignite::an end found in a Store needs no annotation": "builtin `ChannelBounded` has no value at compile time",
     "std/sync.ignite::closing a channel ends every waiter": "builtin `ChannelBounded` has no value at compile time",
     "std/sync.ignite::receive_within returns None at its deadline": "builtin `ChannelBounded` has no value at compile time",
     "std/sync.ignite::send waits while the channel is full": "builtin `ChannelBounded` has no value at compile time",
+    "std/sync.ignite::the ends of a returned record need no annotation": "builtin `ChannelBounded` has no value at compile time",
     "std/sync.ignite::the last sender gone closes the channel": "builtin `ChannelBounded` has no value at compile time",
     "std/sync.ignite::values arrive in order and a full channel refuses try_send": "builtin `ChannelBounded` has no value at compile time",
     "std/text.ignite::Int.parse reads bytes from any receiver and leaves them as they were": "builtin `StoreNew` has no value at compile time",
@@ -286,6 +307,26 @@
     "crates/ignite/tests/fixtures/tests/store_load.ignite::values under updates of one shard: every id, values grow, no long wait, no lost write": "story:llvm-store-update-off-lock, 2026-11-07: the 500 ms wait assertion fails on LLVM at load 35 to 39, also when run alone, and passes at lower load"
   },
   "known_differences": {
+    "crates/ignite/tests/fixtures/leak/attack2.ignite::a nested match over stored ends is released (G30)": {
+      "consumer": "llvm",
+      "story": "story:llvm-release-handle-temporaries",
+      "what": "the soak grows channels and handles 200 to 2000 on LLVM and stays flat on Rust: a value copied out of a store that no owning let, statement match or for holds keeps its owner (docs/slice.md 30.3, known gap decided in wave 8; leak::stored_ends_read_in_every_form_are_released asserts it red)"
+    },
+    "crates/ignite/tests/fixtures/leak/attack2.ignite::a record put as a literal and removed is released (G30)": {
+      "consumer": "llvm",
+      "story": "story:llvm-release-handle-temporaries",
+      "what": "the soak grows channels and handles 200 to 2000 on LLVM and stays flat on Rust: a value copied out of a store that no owning let, statement match or for holds keeps its owner (docs/slice.md 30.3, known gap decided in wave 8; leak::stored_ends_read_in_every_form_are_released asserts it red)"
+    },
+    "crates/ignite/tests/fixtures/leak/attack2.ignite::a stored end looked at through is_some is released (G30)": {
+      "consumer": "llvm",
+      "story": "story:llvm-release-handle-temporaries",
+      "what": "the soak grows channels and handles 200 to 2000 on LLVM and stays flat on Rust: a value copied out of a store that no owning let, statement match or for holds keeps its owner (docs/slice.md 30.3, known gap decided in wave 8; leak::stored_ends_read_in_every_form_are_released asserts it red)"
+    },
+    "crates/ignite/tests/fixtures/leak/attack2.ignite::a stored end removed by a bare statement is released (G30)": {
+      "consumer": "llvm",
+      "story": "story:llvm-release-handle-temporaries",
+      "what": "the soak grows channels and handles 200 to 2000 on LLVM and stays flat on Rust: a value copied out of a store that no owning let, statement match or for holds keeps its owner (docs/slice.md 30.3, known gap decided in wave 8; leak::stored_ends_read_in_every_form_are_released asserts it red)"
+    },
     "crates/ignite/tests/fixtures/tests/basics.ignite::try on err fails": {
       "consumer": "eval",
       "story": "story:eval-try-report",
@@ -321,8 +362,8 @@
           "value": 4
         },
         "llvm": {
-          "decision": "story leak-census (2026-11-08), accepted by the coordinator: the seven LLVM soaks of crates/ignite/tests/fixtures/leak/ fail on LLVM by design: G30's two until story:channel-release-on-close, listener, stream, child, directory and capability until story:llvm-release-all-handles (docs/leak-guard.md 1.2, Q8); listed in known_differences and asserted red in leak::",
-          "value": 0
+          "decision": "wave 8 (2026-11-09), accepted by the coordinator: the adversary's pass 2 on story channel-release-on-close found four pre-existing LLVM leaks of stored ends read through temporaries (crates/ignite/tests/fixtures/leak/attack2.ignite, red on the wave base 91fa0a25 too); listed in known_differences, asserted red in leak::, fixed by story:llvm-release-handle-temporaries",
+          "value": 4
         }
       },
       "direction": "lower",
@@ -337,13 +378,13 @@
       "area": "Semantics: one meaning across the three consumers",
       "bars": {
         "eval": {
-          "value": 467
+          "value": 475
         },
         "llvm": {
-          "value": 733
+          "value": 762
         },
         "rust": {
-          "value": 733
+          "value": 762
         }
       },
       "direction": "higher",
@@ -414,8 +455,8 @@
       "area": "Semantics: one meaning across the three consumers",
       "bars": {
         "eval": {
-          "decision": "story channel-release-on-close (2026-11-08), wave 8 unit leaks: the four G30 soaks now in std/sync.ignite read Runtime.census() or make a store, and the main of the case study's reproducer (crates/ignite/tests/fixtures/leak/repro.ignite) does IO, none with a value at compile time (docs/slice.md 33.4); the two soaks of the removed fixtures/leak/g30.ignite left the list; the six adversary cases of crates/ignite/tests/fixtures/leak/attack.ignite (25d418ae) start tasks, read Runtime.census() or make stores and channels, so 266; listed in eval_cannot_run",
-          "value": 266
+          "decision": "story channel-release-on-close (2026-11-08), wave 8 unit leaks: the four G30 soaks now in std/sync.ignite read Runtime.census() or make a store, and the main of the case study's reproducer (crates/ignite/tests/fixtures/leak/repro.ignite) does IO, none with a value at compile time (docs/slice.md 33.4); the two soaks of the removed fixtures/leak/g30.ignite left the list; the six adversary cases of crates/ignite/tests/fixtures/leak/attack.ignite (25d418ae) start tasks, read Runtime.census() or make stores and channels, so 266; listed in eval_cannot_run; wave 8 integration (2026-11-09): the 16 adversary cases of crates/ignite/tests/fixtures/leak/attack2.ignite and the two store-end tests of std/sync.ignite (story infer-channel-ends) make stores, channels or read Runtime.census(), std/net.ignite's bind_kept test binds a listener (story drain-keeps-bound-listeners), and std/digest.ignite's two million-byte vectors exceed the evaluator's node limit (story std-digest), so 287; listed in eval_cannot_run",
+          "value": 287
         }
       },
       "direction": "lower",
@@ -498,7 +539,7 @@
       "area": "Front end: the checker refuses exactly the wrong programs",
       "bars": {
         "all": {
-          "value": 332
+          "value": 336
         }
       },
       "direction": "higher",
@@ -859,13 +900,13 @@
       "area": "Standard library and protocols",
       "bars": {
         "eval": {
-          "value": 209
+          "value": 217
         },
         "llvm": {
-          "value": 362
+          "value": 375
         },
         "rust": {
-          "value": 362
+          "value": 375
         }
       },
       "direction": "higher",
