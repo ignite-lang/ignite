@@ -710,18 +710,35 @@ test "malformed input is an error at its offset" {
 
 // ---- access -----------------------------------------------------------------
 
-// The first member `name` of an object; `None` when there is none or
-// `value` is not an object.
+// The last member `name` of an object, as ECMAScript's `JSON.parse` keeps
+// it (`docs/slice.md` 19.20); `None` when there is none or `value` is not
+// an object.
 fn get(value: Json, name: Text) -> Option<Json> = match value {
   Object(members) => {
+    var found: Option<Json> = None
     for member in members {
       if member.0 == name {
-        return Some(member.1)
+        found = Some(member.1)
       }
     }
-    None
+    found
   }
   _ => None
+}
+
+// Every member `name` of an object in document order; empty when there is
+// none or `value` is not an object.
+fn get_all(value: Json, name: Text) -> List<Json> = match value {
+  Object(members) => {
+    var found: List<Json> = []
+    for member in members {
+      if member.0 == name {
+        found.push(member.1)
+      }
+    }
+    found
+  }
+  _ => []
 }
 
 fn as_text(value: Json) -> Option<Text> = match value {
@@ -757,7 +774,7 @@ test "the accessors read members of the right kind" {
   let body = parse(r#"{"title":"milk","done":true,"id":7,"tags":["a"],"id":8}"#)?
   assert body.text("title") == Some("milk")
   assert body.bool("done") == Some(true)
-  assert body.int("id") == Some(7)
+  assert body.int("id") == Some(8)
   assert body.text("id") == None
   assert body.int("title") == None
   assert body.bool("missing") == None
@@ -772,6 +789,22 @@ test "the accessors read members of the right kind" {
   assert as_bool(Null) == None
   assert as_list(Array([Null])) == Some([Null])
   assert as_list(Object([])) == None
+}
+
+test "get returns the last duplicated member and get_all every one" {
+  let g29 = r#"{"channel":"/a","channel":"/meta/handshake"}"#
+  let message = parse(g29)?
+  assert message.get("channel") == Some(Str("/meta/handshake"))
+  assert message.text("channel") == Some("/meta/handshake")
+  assert message.get_all("channel") == [Str("/a"), Str("/meta/handshake")]
+  assert message.get_all("id") == []
+  assert Str("channel").get_all("channel") == []
+  assert encode(message) == g29
+  let three = parse(r#"{"a":1,"b":true,"a":2,"a":"x"}"#)?
+  assert three.get("a") == Some(Str("x"))
+  assert three.int("a") == None
+  assert three.get_all("a") == [Number(1), Number(2), Str("x")]
+  assert three.get_all("b") == [Bool(true)]
 }
 
 test "encode and parse round trip" {

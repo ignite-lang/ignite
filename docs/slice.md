@@ -6504,6 +6504,29 @@ number" and "minus zero round trips byte-identical"; in `std/protocol/jsonrpc.ig
 tests removed in 0b28ae4e and 831b72d4, restored, and "an id of 19 digits that fits Int is a
 NumberId and -0 comes back as sent"; `conformance::json_rpc_matrix_is_labelled_by_its_id_and_holds`.
 
+Repeated member names (story `json-duplicate-keys`, 2026-11-08). RFC 8259 section 4 says the
+names of an object should be unique and leaves open what a reader does when they are not.
+ECMAScript's `JSON.parse` keeps the last member, so a server that read the first one disagreed
+with its JavaScript clients: `{"channel":"/a","channel":"/meta/handshake"}` was `/a` in std and
+`/meta/handshake` in JavaScript (case study gap G29). The rule now:
+
+- `parse` keeps every member in document order and `encode` writes every one back, in that
+  order: for compact `t` (no whitespace between tokens, as `encode` writes) `encode(parse(t)?)
+  == t` holds for an object with a repeated name too; for any other `t` the members come back
+  in order, compacted (`{"a": 1, "a": 2}` encodes as `{"a":1,"a":2}`).
+- `get(value, name)` returns the last member `name`; `text`, `int` and `bool` read through it.
+  It returned the first before this story.
+- `get_all(value, name) -> List<Json>` returns every member `name` in document order, empty
+  when there is none or `value` is not an object.
+- `read` and `read_with` (27) still refuse a repeated name with "duplicate member"; the split
+  stays: `parse` is the lenient reader that agrees with JavaScript, `read` the strict one that
+  gives a `Map`.
+
+Tests: in `std/json.ignite`, "get returns the last duplicated member and get_all every one"
+and "the accessors read members of the right kind" (its repeated `id` now gives 8);
+`data_json::read_and_write_agree_across_the_evaluator_and_both_targets` evaluates the G29
+document's `get`, `get_all` and `encode` in the evaluator and prints them on both targets.
+
 ### 19.21 Telnet conforms to RFC 854 (story `telnet-rfc854-conformance`, 2026-11-06)
 
 `ignite conformance std/protocol/telnet.ignite` prints `claim conformance of Telnet to rfc854:

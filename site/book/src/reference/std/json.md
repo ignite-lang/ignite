@@ -70,6 +70,7 @@ string`, `control character in a string` and `nested deeper than 64`.
 
 ```ignite,fragment
 fn get(value: Json, name: Text) -> Option<Json>
+fn get_all(value: Json, name: Text) -> List<Json>
 fn text(value: Json, name: Text) -> Option<Text>
 fn int(value: Json, name: Text) -> Option<Int>
 fn bool(value: Json, name: Text) -> Option<Bool>
@@ -81,9 +82,16 @@ fn as_list(value: Json) -> Option<List<Json>>
 
 | function | what it does |
 |---|---|
-| `get` | the first member `name` of an object; `None` when there is none or `value` is not an object |
+| `get` | the last member `name` of an object, as ECMAScript's `JSON.parse` keeps it; `None` when there is none or `value` is not an object |
+| `get_all` | every member `name` of an object, in document order; empty when there is none or `value` is not an object |
 | `text`, `int`, `bool` | member `name` when it is a string, a number, or `true`/`false` |
 | `as_text`, `as_int`, `as_bool`, `as_list` | the value itself when it is of that kind |
+
+A name may repeat in an object, and RFC 8259 section 4 leaves open which member counts. `parse`
+keeps every member and `encode` writes every one back; `get`, and with it `text`, `int` and
+`bool`, reads the last one, so a server reads `{"channel":"/a","channel":"/b"}` as `/b`, the
+value a JavaScript client sees. `get_all` gives every member when the repetition matters.
+`read` (the bridge to `std.data`) refuses a repeated name instead.
 
 ## Example
 
@@ -94,7 +102,8 @@ test "parse, read and encode JSON" {
   let body = parse(r#"{"title":"milk","done":true,"id":7,"tags":["a"],"id":8}"#)?
   assert body.text("title") == Some("milk")
   assert body.bool("done") == Some(true)
-  assert body.int("id") == Some(7)
+  assert body.int("id") == Some(8)
+  assert body.get_all("id") == [Number(7), Number(8)]
   assert body.text("id") == None
   assert body.get("tags") == Some(Array([Str("a")]))
   let todo = Object([("id", Number(1)), ("title", Str(r#"say "hi""#)), ("done", Bool(false))])
