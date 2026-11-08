@@ -1,0 +1,21 @@
+// The channel ends of G32 have their effects checked, not skipped: a
+// `Some(tx)` binding from a `Store` lookup and the fields of `let d = f()`.
+
+type Ends {
+  tx: Sender<Int>
+  rx: Receiver<Int>
+}
+
+fn ring(senders: Store<Sender<Int>>, id: Int) -> Bool requires [senders.read] {
+  match senders.get(id) {
+    Some(tx) => tx.try_send(1)
+    None => false
+  }
+}
+
+fn pass(e: Ends) -> Ends = e
+
+fn send_through(e: Ends) -> Bool requires [] {
+  let d = pass(e)
+  d.tx.try_send(1)
+}

@@ -1518,9 +1518,21 @@ and `to_text`.
 - `ignite-check` finds Store receivers and the fn types of called values from declared types:
   parameter types, `let` annotations, record field types (generic arguments substituted,
   aliases expanded), `x.f`, `x.copy()`, `e?`, `l[i]`, Store results, `for` over a list, a
-  literal of a record without type parameters (`let w = World { .. }`, case-study gap G15). Where
-  it cannot, the type checker reports E042 at the call (``cannot check the effects of `get`:
-  the type of its receiver is not declared; annotate the binding``).
+  literal of a record without type parameters (`let w = World { .. }`, case-study gap G15), a
+  call by name of a fn without type parameters that the module itself declares and whose
+  declared return type is no fn type (that type: `let d = ends()`, then `d.tx.send(1)`; an
+  imported fn's return type names the exporting module's types and stays E042, as does a fn
+  value a call returns, 20.4.3), and the names a `match` arm binds from a scrutinee of such a
+  type (the value itself, tuple elements, the payload of `Some(x)` of an `Option<T>` and of
+  `Ok(x)` and `Err(e)` of a `Result<T, E>`: `match senders.get(id) { Some(tx) => tx.send(1),
+  .. }` with `senders: Store<Sender<Int>>`; case-study gap G32). An imported record's field
+  types and an imported alias's target are written in the exporting module's namespace: a field
+  of such a record has no static type, and such an alias is not expanded, unless every name in
+  the declared type is builtin, a type parameter of the declaration, or imported from that same
+  module (a name the importer declares, imports from elsewhere or does not know could mean
+  another type). Where it cannot, the type
+  checker reports E042 at the call (``cannot check the effects of `get`: the type of its
+  receiver is not declared; annotate the binding``).
 
 **Systems.** In component property expressions every resource name is a value: a
 `TcpListener` resource of type `TcpListener`, a `Store<T>` resource of type `Store<T>`
