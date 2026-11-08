@@ -625,11 +625,11 @@
       "bars": {
         "llvm": {
           "decision": "readiness IO (2026-11-08): story readiness-waiters adds three unsafe sites in ignite-io reactor.rs (BorrowedFd::borrow_raw of a registered descriptor in epoll and poll), story readiness-scheduler five in ignite-io sched.rs (the coroutine yielder of the running task, installing and restoring the SIGSEGV and SIGBUS handlers that report a task stack overflow, the alternate signal stack, si_addr in that handler)",
-          "value": 90
+          "value": 88
         },
         "rust": {
           "decision": "readiness IO (2026-11-08): story readiness-waiters adds three unsafe sites in ignite-io reactor.rs (BorrowedFd::borrow_raw of a registered descriptor in epoll and poll), story readiness-scheduler five in ignite-io sched.rs (the coroutine yielder of the running task, installing and restoring the SIGSEGV and SIGBUS handlers that report a task stack overflow, the alternate signal stack, si_addr in that handler)",
-          "value": 20
+          "value": 18
         }
       },
       "direction": "lower",
