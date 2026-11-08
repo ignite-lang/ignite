@@ -2,11 +2,14 @@
 format: aep.planning-md/3
 id: story:quality-native-benchmarks
 kind: story
-status: draft
+status: active
 title: Benchmark Ignite programs against plain Rust and Go on the EC2 host
 relations:
 - depends_on: story:quality-timing-host
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-08T01:03:20Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-11-08T01:03:20Z", actor: "human:timo", revision: 3}
 ---
 # Story: quality-native-benchmarks
 
