@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:readiness-waiters
 kind: story
-status: active
+status: implemented
 title: Every substrate wait goes through one waiter that parks a thread or a task
 relations:
 - decomposes: epic:native-parity
@@ -30,10 +30,11 @@ scope:
   path: crates/ignite-io/src/wait.rs
 - confidence: inferred
   path: crates/ignite-io/tests
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T08:45:33Z", actor: "human:timo", revision: 4}
 - {from: "proposed", to: "active", at: "2026-11-08T08:45:33Z", actor: "human:timo", revision: 5}
+- {from: "active", to: "implemented", at: "2026-11-08T18:10:59Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: readiness-waiters
 

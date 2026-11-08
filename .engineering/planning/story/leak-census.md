@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:leak-census
 kind: story
-status: active
+status: implemented
 title: 'Runtime census and soak: seeded leaks and G30 fail a test'
 summary: Per-kind live counters and heap bytes on both targets, std.runtime census, settle and soak
 relations:
@@ -72,10 +72,11 @@ scope:
   path: std/runtime.ignite
 - confidence: inferred
   path: std/sync.ignite
-revision: 11
+revision: 12
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T15:04:30Z", actor: "human:timo", revision: 3}
 - {from: "proposed", to: "active", at: "2026-11-08T15:04:30Z", actor: "human:timo", revision: 4}
+- {from: "active", to: "implemented", at: "2026-11-08T18:10:59Z", actor: "human:timo", revision: 12, decided_on: {"recorded":{"test_result":1,"review_outcome":4}}}
 ---
 # Story: leak-census
 

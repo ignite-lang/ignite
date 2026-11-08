@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-08T18:09:00Z",
+  "actor": "human:timo",
+  "artifact": "story:readiness-scheduler",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 740059878 (PR 131): 1604 cargo passed, 0 failed, 24 ignored; 358 inline per target; task ux 304",
+    "reference": "https://github.com/ignite-lang/ignite/pull/131"
+  }
+}

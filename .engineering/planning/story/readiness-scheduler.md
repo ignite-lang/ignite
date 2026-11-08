@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:readiness-scheduler
 kind: story
-status: active
+status: implemented
 title: Spawned tasks run as stackful tasks on epoll workers
 relations:
 - decomposes: epic:native-parity
@@ -33,10 +33,11 @@ scope:
   path: docs/slice.md
 - confidence: cited
   path: docs/vision.md
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T08:45:33Z", actor: "human:timo", revision: 3}
 - {from: "proposed", to: "active", at: "2026-11-08T09:43:55Z", actor: "human:timo", revision: 4}
+- {from: "active", to: "implemented", at: "2026-11-08T18:10:59Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: readiness-scheduler
 

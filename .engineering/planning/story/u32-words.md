@@ -2,15 +2,16 @@
 format: aep.planning-md/3
 id: story:u32-words
 kind: story
-status: active
+status: implemented
 title: 'U32: modular 32-bit words with rotate and explicit conversions'
 relations:
 - decomposes: epic:native-parity
 - depends_on: story:list-capacity
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T08:07:15Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-08T14:05:50Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-08T18:10:59Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: u32-words
 
