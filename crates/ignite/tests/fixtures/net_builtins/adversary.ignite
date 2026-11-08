@@ -2,9 +2,9 @@ package adversary
 
 import std.net.{Endpoint}
 
-// Adversary pass 1 of story `pusher-net-builtins` (`docs/slice.md` 26):
+// Adversary pass 1 of the network builtins story (`docs/slice.md` 26):
 // edges of `peer`, `timed_out` and `connect_within` on both targets.
-// Run with `ignite test crates/ignite/tests/fixtures/pusher_net/adversary.ignite --target=all`.
+// Run with `ignite test crates/ignite/tests/fixtures/net_builtins/adversary.ignite --target=all`.
 
 test "adv: an IPv4 peer of a dual-stack listener is written as IPv4" {
   let listener = TcpListener.bind("::", 0)?

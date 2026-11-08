@@ -1,6 +1,6 @@
-//! `docs/slice.md` 21.20 end to end: the pusher case study's reproducers
-//! G2, G3, G8 and G13 (`docs/research/pusher-gaps.md`), adapted to the
-//! names chosen there, in `fixtures/process_builtins/pusher_gaps.ignite`:
+//! `docs/slice.md` 21.20 end to end: the case study's reproducers
+//! G2, G3, G8 and G13, adapted to the
+//! names chosen there, in `fixtures/process_builtins/case_gaps.ignite`:
 //! built once per target and started as real processes, its inline test
 //! run on both targets.
 
@@ -13,7 +13,7 @@ use ignite::Target;
 
 use crate::common;
 
-const SOURCE: &str = "pusher_gaps.ignite";
+const SOURCE: &str = "case_gaps.ignite";
 
 fn fixture(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -61,16 +61,14 @@ fn executable(name: &str, target: Target) -> PathBuf {
         .clone()
 }
 
-/// `name` run to its end with `PUSHER_SESSION_STORE` set to `store`, or
+/// `name` run to its end with `SESSION_STORE` set to `store`, or
 /// unset: its output.
 fn run(name: &str, target: Target, store: Option<&str>) -> Output {
     let path = executable(name, target);
     let mut command = Command::new(&path);
-    command
-        .stdin(Stdio::null())
-        .env_remove("PUSHER_SESSION_STORE");
+    command.stdin(Stdio::null()).env_remove("SESSION_STORE");
     if let Some(store) = store {
-        command.env("PUSHER_SESSION_STORE", store);
+        command.env("SESSION_STORE", store);
     }
     command
         .output()
@@ -119,7 +117,7 @@ fn g2_launch_skips_a_variable_that_is_not_utf8(target: Target) {
     let path = executable("g2", target);
     let output = Command::new(&path)
         .stdin(Stdio::null())
-        .env("PUSHER_SESSION_STORE", "redis://sessions:6379")
+        .env("SESSION_STORE", "redis://sessions:6379")
         .env("ADVERSARY_ODD_VALUE", OsStr::from_bytes(b"a\xffb"))
         .env(OsStr::from_bytes(b"ADVERSARY_ODD\xffNAME"), "x")
         .output()

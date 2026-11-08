@@ -88,10 +88,7 @@ mod tests {
     #[test]
     fn launch_skips_variables_that_are_not_utf8() {
         let vars = [
-            (
-                OsString::from("PUSHER_SESSION_STORE"),
-                OsString::from("redis"),
-            ),
+            (OsString::from("SESSION_STORE"), OsString::from("redis")),
             (
                 OsString::from("ODD_VALUE"),
                 OsStr::from_bytes(b"a\xffb").to_os_string(),
@@ -103,10 +100,7 @@ mod tests {
             (OsString::from("EMPTY"), OsString::new()),
         ];
         let environment = Environment::from_os_vars(vars.into_iter());
-        assert_eq!(
-            environment.get("PUSHER_SESSION_STORE"),
-            Some("redis".to_string())
-        );
+        assert_eq!(environment.get("SESSION_STORE"), Some("redis".to_string()));
         assert_eq!(environment.get("ODD_VALUE"), None);
         assert_eq!(environment.get("EMPTY"), Some(String::new()));
     }

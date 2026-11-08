@@ -1,10 +1,10 @@
-package pusher_gaps
+package case_gaps
 
-// The pusher case study's reproducers G2, G3, G8 and G13
-// (`docs/research/pusher-gaps.md`) in the names of `docs/slice.md` 21.20
+// The case study's reproducers G2, G3, G8 and G13
+// in the names of `docs/slice.md` 21.20
 // (environment, sleep, wall clock, flush): each executable is one
 // reproducer, its output one line on stderr.
-//   g2  log(environment.get("PUSHER_SESSION_STORE").debug())
+//   g2  log(environment.get("SESSION_STORE").debug())
 //   g3  Clock.sleep(300 ms), then logs the monotonic time it took in ms
 //   g8  log(Clock.now().to_ms().to_text())
 // G13 was a test; it is the test at the end.
@@ -15,7 +15,7 @@ type EnvironmentApp {
 }
 
 fn EnvironmentApp.main(self: EnvironmentApp) -> Result<Unit, IoError> {
-  log(self.environment.get("PUSHER_SESSION_STORE").debug())
+  log(self.environment.get("SESSION_STORE").debug())
   Ok(())
 }
 
@@ -39,7 +39,7 @@ fn WallClockApp.main(self: WallClockApp) -> Result<Unit, IoError> {
   Ok(())
 }
 
-system PusherGaps {
+system CaseGaps {
   resource environment: Environment
 
   component g2: EnvironmentApp {

@@ -1,7 +1,7 @@
 package tests.drain_exit
 
 // Built for both targets and run by tests/drain.rs (`docs/slice.md`
-// 16.13, story `drain-exit`, the pusher's G16): `Process.exit` during the
+// 16.13, story `drain-exit`, the case study's G16): `Process.exit` during the
 // drain ends the process with its code at once, while one task waits in
 // `accept` on a listener bound after the drain began and another in an
 // idle read, and the write made before it reaches the peer.

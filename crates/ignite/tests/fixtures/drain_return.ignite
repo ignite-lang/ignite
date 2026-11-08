@@ -1,7 +1,7 @@
 package tests.drain_return
 
 // Built for both targets and run by tests/drain.rs (`docs/slice.md`
-// 16.13, story `drain-exit`, the pusher's G13 update): a line written
+// 16.13, story `drain-exit`, the case study's G13 update): a line written
 // just before `main` returns during the drain reaches the peer while the
 // process still waits for the task that holds the same stream in an idle
 // read: the stream outlives `main`, so no drop sends it.
