@@ -275,6 +275,10 @@ fn fnv1a(mut hash: u64, bytes: &[u8]) -> u64 {
 /// `.dirty`), when `HEAD` moves (see [`git_source`]) and when
 /// `IGNITE_RELEASE_COMMIT` changes, which `task dist` sets to the commit of
 /// the release tag so that a tag made after the last build is seen.
+/// Two setups are not watched (story `version-names-commit`, wave 8): a
+/// checkout without a reflog whose branch is packed keeps the version of
+/// its last build after a commit, and a tag made after the last build is
+/// seen by a plain rebuild only when `HEAD` or a source next changes.
 fn version(workspace: &Path) {
     let (source, inputs) = match git_source(workspace) {
         Some(found) => found,

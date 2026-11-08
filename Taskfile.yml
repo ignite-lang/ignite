@@ -133,6 +133,7 @@ tasks:
       - mkdir -p '{{.DIR}}/bin' '{{.DIR}}/share/ignite'
       - cp '{{.T}}/x86_64-unknown-linux-gnu/release/ignite' '{{.DIR}}/bin/ignite'
       - 'v="$(''{{.DIR}}/bin/ignite'' --version)" && echo "$v" && test "$v" = ''ignite {{.VERSION}}'''
+      - git diff --quiet 'v{{.VERSION}}' -- std README.md && test -z "$(git ls-files --others -- std)"
       - cp -R std '{{.DIR}}/share/ignite/std'
       - cp README.md '{{.DIR}}/'
       - tar -czf '{{.DIR}}.tar.gz' -C '{{.T}}/dist' '{{.NAME}}'
