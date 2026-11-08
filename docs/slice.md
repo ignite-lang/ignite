@@ -10100,6 +10100,12 @@ and `<Receiver>`.
     adds one for the copy it makes, so `remove` and `receive` hand the stored owner to their
     caller. A store's `update` and `upsert` call their fn on a copy that shares the stored
     handles.
+  - Known gap (wave 8, `story:llvm-release-handle-temporaries`): on LLVM a copied-out value
+    that no owning `let`, statement `match` or `for` holds keeps that owner forever: an arm's
+    value that is a `match` without braces, a record literal passed to `put`, a
+    `get(..).is_some()`, a bare `remove`, `get` or `receive` statement.
+    `leak::stored_ends_read_in_every_form_are_released` (`fixtures/leak/attack2.ignite`) holds
+    these four as the failing tests on LLVM; the Rust target passes all 16.
   - `spawn` adds an owner in the parent for every handle inside a tuple, record or enum
     argument (`retain_handles.<T>`); the task registers them and releases them when its fn
     returns, as it does a stream argument.
