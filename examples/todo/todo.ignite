@@ -43,7 +43,13 @@ type Todo {
   version: Int = 1
   deleted: Bool = false
   deleted_by: Int = 0
+  stored: Int = 0
+  superseded: Int = 0
 }
+
+// `stored` and `superseded` are memory only, like `deleted_by`: the newest
+// version whose file this process wrote or loaded, and the one that file
+// replaced; `save` reads them to remove each superseded file once.
 
 // The state of the handler: the todos in memory, whether this process has
 // loaded them (under id 0; the store's counter gives each DELETE its
@@ -69,7 +75,7 @@ fn to_record(todo: Todo) -> Json = Object([
 ])
 
 fn from_record(value: Json) -> Option<Todo> = match (value.int("id"), value.text("title"), value.bool("done"), value.int("version"), value.bool("deleted")) {
-  (Some(id), Some(title), Some(done), Some(version), Some(deleted)) => Some(Todo { id, title, done, version, deleted })
+  (Some(id), Some(title), Some(done), Some(version), Some(deleted)) => Some(Todo { id, title, done, version, deleted, stored = version })
   _ => None
 }
 
@@ -101,29 +107,30 @@ fn version_of(name: Text) -> Option<Int> = match name.strip_suffix(".json") {
   None => None
 }
 
-// `todo` written as the file of its version, then the files of its older
-// versions removed; a failed removal is ignored, since a load takes the
-// newest version.
+// `todo` written as the file of its version, then the one file it
+// superseded removed. Concurrent saves of one todo rename their files in
+// any order, so which file goes is decided in one atomic `update` after
+// the rename: a save newer than `stored` becomes `stored` and removes the
+// file it replaced; a save older than `stored` removes its own file, which
+// no newer save could remove because it was not yet written. Each file is
+// so removed once, by one save. A failed removal is ignored, since a load
+// takes the newest version.
 fn save(state: Todos, todo: Todo) -> Result<Unit, IoError> {
   let directory = todo_directory(todo.id)
   state.data.create_directory(directory)?
   write_text_file(state.data, join_path(directory, version_file(todo.version)), encode(to_record(todo)))?
-  let names = match state.data.read_directory(directory) {
-    Ok(names) => names
-    Err(_) => []
+  let version = todo.version
+  let held = state.todos.update(todo.id, |current| if current.stored < version {
+    Todo { stored = version, superseded = current.stored, ..current }
+  } else { current })
+  let gone = match held {
+    Some(current) => if current.stored == version { current.superseded } else { version }
+    None => 0
   }
-  for name in names {
-    if older(name, todo.version) {
-      _ = state.data.remove(join_path(directory, name))
-    }
+  if gone > 0 {
+    _ = state.data.remove(join_path(directory, version_file(gone)))
   }
   Ok(())
-}
-
-// Whether `name` is the file of a version before `version`.
-fn older(name: Text, version: Int) -> Bool = match version_of(name) {
-  Some(found) => found < version
-  None => false
 }
 
 // The newest version among the files of `directory` that parse.
@@ -425,4 +432,24 @@ test "ids past 65,536 go to the next shard and load from it" {
   assert answer(todos, "PATCH", "/todos/65537", r#"{"done":true}"#) == (200, r#"{"id":65537,"title":"far","done":true}"#)
   assert data.read_directory("todos-1/65537")? == ["2.json"]
   assert data.read_directory("todos")? == []
+}
+
+// Saves of one todo finish in any order under concurrent PATCHes: here the
+// save of version 3 renames its file before the save of version 2, and
+// version 4 is never written. Each file is removed by exactly one save, so
+// every superseded file goes and none is removed twice.
+test "saves that finish out of order leave only the newest file" {
+  let data = Directory.temporary()?
+  let todos = state_over(data)
+  assert status(todos, "POST", "/todos", r#"{"title":"milk"}"#) == 201
+  assert data.read_directory("todos/1")? == ["1.json"]
+  let memory: Store<Todo> = todos.todos
+  let first = memory.get(1).unwrap_or(Todo { id = 0, title = "" })
+  _ = memory.update(1,|todo| Todo { version = 4, ..todo })
+  save(todos, Todo { version = 3, ..first })?
+  assert data.read_directory("todos/1")? == ["3.json"]
+  save(todos, Todo { version = 2, ..first })?
+  assert data.read_directory("todos/1")? == ["3.json"]
+  save(todos, Todo { version = 5, ..first })?
+  assert data.read_directory("todos/1")? == ["5.json"]
 }

@@ -8606,6 +8606,8 @@ type Todo {
   version: Int = 1
   deleted: Bool = false
   deleted_by: Int = 0
+  stored: Int = 0
+  superseded: Int = 0
 }
 
 type Todos {
@@ -8683,8 +8685,14 @@ Behaviour:
   handler then creates `<shard>/<id>` (`create_directory`; `write_file` needs its parent, 21.4)
   and writes the returned value's file before it answers. A failed write answers 500 with the
   body `not stored\n`; 500 means "not durable", not "not applied": the memory value stays, and a
-  later successful write of that id persists it. After the write, files of that id with a lower version are
-  removed; a failed removal is ignored (the next load takes the highest version).
+  later successful write of that id persists it. After the write, the save removes one file, decided
+  in a second atomic `update` over the memory-only fields `stored` (the newest version whose file
+  this process wrote or loaded) and `superseded` (the one that file replaced): a save newer than
+  `stored` takes its place and removes the file of `superseded`; a save older than `stored` (its
+  rename came after a newer save's) removes its own file. Concurrent saves of one todo therefore
+  remove each superseded file once and list no directory (story `todo-save-without-races`); a
+  failed removal is ignored (the next load takes the highest version), and a file a crash leaves
+  between rename and removal stays on disk, where loads skip it as older.
 - Load: each request first checks `loaded.get(0)`; while it is not `Some(true)`, the request
   loads: `create_directory("todos")`, then for each shard directory at the root of `data`
   (`todos/` and every `todos-<digits>/`; other entries are skipped) and each `<id>/` in it the
