@@ -1,0 +1,44 @@
+const K: U32 = 0x5A827999
+const TOP: U32 = 4294967295
+
+fn round(a: U32, b: U32, c: U32, d: U32, w: U32) -> U32 {
+  let f = b & c | ~b & d
+  let k: U32 = 0xCA62C1D6
+  a.rotate_left(5) + f + k + w + K
+}
+
+fn arithmetic(x: U32, y: U32) -> List<U32> {
+  [x + y, x - y, x * y, x / y, x % y, -x, x + 1, 1 + x, x * 3, TOP - x]
+}
+
+fn bits(x: U32, n: Int) -> List<U32> {
+  [x & 0xFF, 0xFF & x, x | x, x ^ 1, ~x, x << 8, x >> n, x << n + 1, x.rotate_left(n), x.rotate_right(31)]
+}
+
+fn compare(x: U32, y: U32) -> List<Bool> {
+  [x == y, x != y, x < y, x <= y, x > y, x >= y, x < 7, 7 < x]
+}
+
+fn conversions(n: Int, x: U32, b: Byte) -> Bool {
+  let wide: Int = x.to_int()
+  let narrow: Option<U32> = n.to_u32()
+  let low: U32 = n.wrap_u32()
+  let byte: Option<Byte> = x.to_byte()
+  let low_byte: Byte = x.wrap_byte()
+  let from_int: Byte = n.wrap_byte()
+  let from_byte: U32 = b.to_u32()
+  x.to_text() == wide.to_text() && x.debug() == x.to_text()
+}
+
+fn classify(x: U32) -> Int = match x {
+  0 => 0
+  1..=255 => 1
+  256..=TOP => 2
+}
+
+fn words() -> List<U32> {
+  var w: List<U32> = List.with_capacity(80)
+  w.push(0)
+  w[0] = w[0] + 1
+  w
+}

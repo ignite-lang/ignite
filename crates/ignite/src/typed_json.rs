@@ -132,6 +132,7 @@ pub fn ty(t: &Ty) -> Json {
         Ty::Int => "Int",
         Ty::Bool => "Bool",
         Ty::Byte => "Byte",
+        Ty::U32 => "U32",
         Ty::Unit => "Unit",
         Ty::Text => "Text",
         Ty::TcpListener => "TcpListener",

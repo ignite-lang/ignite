@@ -64,7 +64,7 @@ hljs.registerLanguage("ignite", function (hljs) {
         "continue spawn requires test assert",
       literal: "true false",
       built_in:
-        "Int Bool Byte Text Bytes Unit List Map Option Result Some None Ok Err " +
+        "Int Bool Byte U32 Text Bytes Unit List Map Option Result Some None Ok Err " +
         "Duration ByteSize Ratio Ref IoError TcpListener TcpStream PipeStream Pipe " +
         "ByteStream Endpoint Exposure Store Data Eof module event rolling exponential"
     },

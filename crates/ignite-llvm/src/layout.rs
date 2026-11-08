@@ -347,6 +347,7 @@ impl TypeEnv {
             | Ty::Capability(_) => Layout::scalar(8),
             Ty::Fn(..) | Ty::EffectFn(..) => Layout { size: 16, align: 8 },
             Ty::Bool | Ty::Byte => Layout::scalar(1),
+            Ty::U32 => Layout::scalar(4),
             Ty::Unit | Ty::Never => Layout::ZERO,
             Ty::Text
             | Ty::List(_)
@@ -584,6 +585,7 @@ pub fn scalar_type(ty: &Ty) -> Option<&'static str> {
         | Ty::Capability(_) => Some("i64"),
         Ty::Bool => Some("i1"),
         Ty::Byte => Some("i8"),
+        Ty::U32 => Some("i32"),
         Ty::Store(_) => Some("ptr"),
         _ => None,
     }
@@ -606,6 +608,7 @@ pub fn mangle(ty: &Ty) -> String {
         Ty::Quantity(kind) => kind.name().into(),
         Ty::Bool => "Bool".into(),
         Ty::Byte => "Byte".into(),
+        Ty::U32 => "U32".into(),
         Ty::Unit => "Unit".into(),
         Ty::Text | Ty::Ref(_) | Ty::Signal(_) | Ty::SystemRef | Ty::Protocol => "Text".into(),
         Ty::Map(k, v) => format!("Map<{},{}>", mangle(k), mangle(v)),

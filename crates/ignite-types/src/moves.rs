@@ -438,6 +438,7 @@ fn aggregate(ty: &Ty) -> bool {
         ty,
         Ty::Int
             | Ty::Byte
+            | Ty::U32
             | Ty::Bool
             | Ty::Unit
             | Ty::Quantity(_)

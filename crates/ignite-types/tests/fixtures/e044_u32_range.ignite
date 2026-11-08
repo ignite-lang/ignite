@@ -1,0 +1,11 @@
+const BIG: U32 = 4294967296
+
+fn f(x: U32) -> Bool {
+  let negative: U32 = -1
+  let words: List<U32> = [1, 4294967295, 5000000000]
+  let small = match x {
+    4294967296 => true
+    _ => false
+  }
+  return x == 4294967296
+}

@@ -718,6 +718,7 @@ impl TypeText<'_, '_> {
             "Int" => plain(Ty::Int),
             "Bool" => plain(Ty::Bool),
             "Byte" => plain(Ty::Byte),
+            "U32" => plain(Ty::U32),
             "Unit" => plain(Ty::Unit),
             "Text" => plain(Ty::Text),
             "Bytes" => plain(Ty::List(Box::new(Ty::Byte))),
@@ -1605,6 +1606,7 @@ pub fn value_json(value: &Value) -> Json {
         Value::Bool(b) => Json::Bool(*b),
         Value::Int(n) => Json::Int(*n),
         Value::Byte(b) => tagged("Byte", vec![("value", Json::Int(i64::from(*b)))]),
+        Value::U32(x) => Json::Int(i64::from(*x)),
         Value::Text(text) => Json::Str(text.clone()),
         Value::List(items) => Json::Array(items.iter().map(value_json).collect()),
         Value::Tuple(items) => tagged(

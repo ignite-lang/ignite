@@ -976,7 +976,7 @@ targets: E003 bare variant of an enum out of scope that the expected type does n
 or a payload variant used bare (section 4), E005 ambiguous variant, E040 type mismatch,
 E041 unknown method or field for the receiver type (also an ambiguous or inapplicable method call, section 4.8; a tuple index past the tuple), E042 type cannot
 be inferred (also a type parameter neither the expected type nor later uses in the body decide, a closure parameter without type, and an effectful operation
-whose effects `ignite-check` could not check, section 11.7), E043 wrong number of arguments (also a range pattern whose start is above its end), E044 integer literal out of range for `Byte`,
+whose effects `ignite-check` could not check, section 11.7), E043 wrong number of arguments (also a range pattern whose start is above its end), E044 integer literal out of range for `Byte` or `U32` (32.2),
 E045 operator not defined for the operand type (also `==` on a type that is not comparable, section 13.5, a constant pattern of a type without
 `==`, and a range bound that is no literal or constant with a literal value), E046 `match` not exhaustive (ranges split `Int` and `Byte` into intervals, section 13.7), E047 record literal with a missing (and not defaulted),
 unknown or duplicate field, E048 unknown type name, wrong number of type arguments or an
@@ -9852,9 +9852,9 @@ and an `ignite` block that runs these rules.
 
 ### 29.2 Types and the shift rule
 
-Both operands and the result are `Int`; any other operand type, `Byte` included, is E040
-(`expected Int`), from `Typer::binary` and `Typer::binary_rest` checking each operand against
-`Int`, and `~` checks its operand the same way. None of them fails: no failure site is recorded
+Both operands and the result are `Int` (or `U32`, 32.2); any other operand type, `Byte`
+included, is E040 (`expected Int`), from `Typer::binary` and `Typer::binary_rest` through
+`Typer::word`, and `~` checks its operand the same way. None of them fails: no failure site is recorded
 and no backend emits a check. `&`, `|`, `^` and `~` act on the 64-bit two's complement.
 
 A shift amount outside `0..64` is defined, compared as unsigned so a negative amount counts as
@@ -9894,7 +9894,7 @@ an LLVM-target build must each print the values Rust's `i64` gives under 29.2, f
 ### 29.5 SHA-1 and base64, timed against hand-written Rust
 
 `crates/ignite/tests/fixtures/bitwise/codecs.ignite` holds SHA-1 (RFC 3174) and base64 with
-padding (RFC 4648 section 4) written with the operators, `wrapping_add` (25.2) for the
+padding (RFC 4648 section 4) written with the operators, `wrapping_add` (25.2; `U32` since 32.5) for the
 32-bit sums and `Bytes` read by index and built by `push`. Its four inline tests are RFC 3174's
 tests 1 to 4 (test 3 is a million `a`; plus the empty message) and the seven vectors of RFC 4648
 section 10; `bitwise::sha1_and_base64_vectors_on_both_targets` runs them with `ignite test` on
@@ -10132,3 +10132,130 @@ stat` task-clock, page faults and user instructions, medians; 1-minute load 33 t
 - `ignite-types` fixtures `valid_local_inference` (the element type from a later `push` and
   from an argument) and `e042_with_capacity` (E042, E040).
 - `bitwise::sha1_and_base64_vectors_on_both_targets` over the rewritten codecs fixture.
+
+## 32 `U32`: modular 32-bit words
+
+**Status: implemented in `story:u32-words`.**
+
+Source: `docs/fixed-width-ints.md` sections 3 and 6 (F2), acceptance rows 4 and 5. SHA-1 and
+its kin compute on 32-bit words modulo 2^32; with `Int` a program masks after every sum
+(`.wrapping_add(x) & MASK`) and writes a rotate as two shifts, an `or` and a mask. `U32` is
+the word itself.
+
+### 32.1 Values and operators
+
+`U32` holds 0 to 2^32 - 1. It is a word, not an integer: `+`, `-` and `*` are modulo 2^32 and
+never fail; `Int` keeps failing on overflow (25.2, vision T6).
+
+| operation | on `U32` | note |
+|---|---|---|
+| `a + b`, `a - b`, `a * b` | modulo 2^32 | never fails, no failure site |
+| `-a` | `0 - a` modulo 2^32 | never fails |
+| `a / b`, `a % b` | unsigned | `b == 0` fails with the `Int` report (`1 / 0`, 14.8) |
+| `==`, `!=`, `<`, `<=`, `>`, `>=` | unsigned | |
+| `a & b`, `a \| b`, `a ^ b`, `~a` | on 32 bits | 29's operators |
+| `a << n`, `a >> n` | `n: Int`; `>>` is logical | `n` outside `0..32` (negative included) gives 0 |
+| `a.rotate_left(n)`, `a.rotate_right(n)` | `n: Int`, taken modulo 32 (`n & 31`) | never fails |
+| `a.to_text()`, `a.debug()`, interpolation | decimal | |
+
+`U32` is a builtin type name (`ignite_check::BUILTIN_TYPES`, E004 for a declaration named
+`U32`), a scalar with `==` (13.5) and a `Copy` value: last-use moves (20.3) do not track it.
+It is no `Map` key (E106) and no `std.data` shape; neither is needed yet.
+
+### 32.2 Literals and typing
+
+- An integer literal is typed by its expected type, as for `Byte`: `let k: U32 = 0x5A827999`.
+  Outside 0 to 2^32 - 1 it is E044 (`integer literal 4294967296 is out of range for `U32` (0 to
+  4294967295)`), also for `-n` with `n` not 0, list items, patterns and comparisons. A literal
+  with no expected type is `Int`.
+- An arithmetic or comparison operator's operands have one type; a literal takes the other
+  side's (`x + 1`, `1 + x`, `x < 7`). Mixing widths is E040 with the existing text (`expected
+  `U32`, found `Int``); there is no implicit widening, in an argument, a `let` with a type or
+  an operand.
+- `& | ^`: both operands `Int` or both `U32`, the literal side taking the other's, the result
+  their type. `<<` and `>>`: the left operand `Int` or `U32`, the amount always `Int` (E040 for
+  a `U32` amount), the result the left's type. `~`: an `Int` or `U32` operand, the result its
+  type. Any other operand type is E040 `expected `Int``, as in 29.2; `Byte` stays E040.
+- Patterns: an integer literal or range pattern on a `U32` scrutinee is typed `U32` (E044
+  outside the range); a `U32` constant can be a pattern and a range bound; E046 splits a `U32`
+  column into intervals of 0 to 2^32 - 1, as it does `Int` and `Byte`.
+- The E040 text of a range pattern on another type now reads `ranges match `Int`, `Byte` and
+  `U32``.
+
+### 32.3 Conversions
+
+Explicit only. Widening is total; narrowing is checked or wrapping, by name. Each is a builtin
+whose name is in `ignite_check::BUILTIN_METHODS`, so on its receiver type the builtin wins over
+a user fn of the same name (13, row 5).
+
+| from \ to | `Int` | `U32` | `Byte` |
+|---|---|---|---|
+| `Int` | | `n.to_u32() -> Option<U32>` (`IntToU32`), `n.wrap_u32() -> U32`, the low 32 bits (`IntWrapU32`) | `n.to_byte()` (exists), `n.wrap_byte() -> Byte`, the low 8 bits (`IntWrapByte`) |
+| `U32` | `x.to_int()` (`U32ToInt`) | | `x.to_byte() -> Option<Byte>` (`U32ToByte`), `x.wrap_byte()` (`U32WrapByte`) |
+| `Byte` | `b.to_int()` (exists) | `b.to_u32()` (`ByteToU32`) | |
+
+`U32ToText`, `U32RotateLeft` and `U32RotateRight` are the other builtins. None changes its
+receiver (`ownership::change` none).
+
+### 32.4 Lowering
+
+| layer | `U32` |
+|---|---|
+| `ignite-types` | `Ty::U32`; `Typer::int_literal` and E044; `Typer::word` types a bitwise operand; `Typer::operator` records a failure site for `/` and `%` only |
+| evaluator | `Value::U32(u32)`: `u32::wrapping_*`, `checked_div` and `checked_rem` (the failure on `None`), `rotate_*` by `n & 31`, `eval::bitwise_u32` for the bitwise operators; a JSON number in the system model (15.5) and in decoded values |
+| Rust target | `u32`; a literal `123u32`; `u32::wrapping_add` (and `_sub`, `_mul`, `_neg`); `/` and `%` as `ignite_io::checked::div` and `rem` of the operands widened to `i64`, cast back (same report, no new substrate fn); `u32::checked_shl` and `checked_shr` by `min(n as u64, 32)` with `unwrap_or(0)`, a literal amount in `0..32` as Rust's shift; `u32::rotate_left(x, (n & 31) as u32)`; conversions by `as`, `u32::try_from`, `u8::try_from` |
+| LLVM target | `i32` (size 4, align 4 in records, lists and enum payloads); `add`, `sub`, `mul` without overflow intrinsics; `udiv`, `urem` behind the zero check of `Byte`; `icmp` unsigned; `and`, `or`, `xor`, `xor -1`; `shl` and `lshr` behind `select(icmp ult n, 32; …; 0)`, a literal amount in `0..32` without the select; `llvm.fshl.i32(x, x, trunc n)` and `fshr` for the rotates (the intrinsic takes the amount modulo 32); `zext`, `trunc` and an `icmp ult` for the checked narrowing |
+| typed document (24) | type `kind` `U32`, `text` `U32`, no further keys; the format stays `ignite-typed/0.1` (24.3) |
+| system model (15.5) | a JSON number |
+| apply identity | `apply::plan::CODEGEN_REVISION` bumped once for this story |
+
+### 32.5 Agreement and the codecs fixture
+
+`bitwise::u32_operators_agree_across_the_evaluator_and_both_targets`
+(`crates/ignite/tests/bitwise.rs`, 29.4's method and seed) writes a program over operand lists
+read at run time: every binary operator on the 25 pairs of the edges 0, 1, 2^31, 2^32 - 1 and
+`0x55555555` and 48 random pairs (`/` and `%` without a zero divisor), the six comparisons, the
+shifts and rotates of 13 words by -1, 0, 31, 32, 33, 1, 7, 64, `i64::MIN` and `i64::MAX`,
+literal shift amounts, `-` and `~`, every conversion of 32.3 (from `Int` at -1, 0, 255, 256,
+2^32 - 1, 2^32, `i64::MIN`, `i64::MAX` and two random values), a `match` with literal and range
+patterns, and one SHA-1-shaped fn mixing the levels without parentheses. The evaluator, a
+Rust-target build and an LLVM-target build must each print what Rust's `u32` gives.
+`ignite_test::overflow_fails_the_same_everywhere` adds `U32` division and remainder by zero
+(one report on both targets, dev and release) and wrapping sums that pass.
+
+`fixtures/bitwise/codecs.ignite` (29.5) computes SHA-1 on `U32`: the state, the schedule `w`
+(a `List<U32>` written by `w[t] = ..`, 25.4), `rotate_left`, `+` without masks, the big-endian
+word as `data[at].to_u32() << 24 | ..`; `byte` is `n.wrap_byte()`. base64 stays on `Int`.
+
+Measured 2026-11-08 with `perf stat` (`task-clock`, `page-faults`, `instructions:u`), 9
+interleaved runs per binary pinned to one core, medians, release builds, start load 53.8 and end
+load 50.8 (the host shared with other builds; instructions are the load-independent measure).
+"Before" is the 29.5 fixture (SHA-1 on `Int` with masks) built by the compiler without `U32`,
+"after" this fixture built by this compiler; all five binaries print the same two lines.
+
+| binary | task-clock | page faults | instructions | against plain Rust |
+|---|---|---|---|---|
+| plain Rust (`codecs.rs`) | 90.8 ms | 997 | 1,023,223,402 | 1 |
+| LLVM target, before | 131.0 ms | 2,215 | 1,631,412,158 | time 1.44, faults 2.22, instructions 1.59 |
+| LLVM target, after | 113.1 ms | 2,216 | 1,433,219,124 | time 1.25, faults 2.22, instructions 1.40 |
+| Rust target, before | 113.1 ms | 1,003 | 1,445,580,996 | time 1.25, faults 1.01, instructions 1.41 |
+| Rust target, after | 97.6 ms | 1,003 | 1,181,061,076 | time 1.07, faults 1.01, instructions 1.15 |
+
+Instructions fall 12 % on LLVM and 18 % on the Rust target. The optimised LLVM `sha1` holds
+`llvm.fshl.i32` for both rotates and no mask; what remains of its gap is the bounds check of
+every `w[t]` and `data[at]` (`ignite_rt_fail_index`, F3 of `docs/fixed-width-ints.md`). Page
+faults do not change, so the LLVM target's 2.2 times (row 2 of `docs/fixed-width-ints.md` 8) is
+not the arithmetic; this story does not attribute it.
+
+### 32.6 Tests
+
+- `ignite-types` fixtures `valid_u32` (every operator, rotate, conversion, literal, constant
+  and range pattern, `List<U32>` element assignment), `e044_u32_range` (a constant, `-1`, a
+  list item, a pattern, a comparison), `e040_u32_mixed` (`U32` with `Int` in `+`, `&`, `<`,
+  either order; a `U32` shift amount and rotate amount; `U32` where `Int`, `Byte` is expected and
+  back; `~` of an `Int` where `U32` is expected; `Bool ^ U32`); `e043_range` with the new text;
+  `builtin_tables::the_checker_table_matches_the_type_checker` with a `U32` receiver.
+- `typed_json::a_u32_is_named_in_the_document`: a parameter, a method call and a literal of
+  type `U32` carry `{"kind": "U32", "text": "U32"}`.
+- `crates/ignite/tests/bitwise.rs` and `ignite_test.rs`: 32.5 above;
+  `bitwise::sha1_and_base64_vectors_on_both_targets` over the rewritten codecs fixture.
