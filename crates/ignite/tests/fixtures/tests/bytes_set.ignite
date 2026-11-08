@@ -1,0 +1,185 @@
+package fixtures.bytes_set
+
+// Bytes element assignment and the in-place to_lower and to_upper of
+// std.text (story list-set-by-index), run by `ignite test` on both targets
+// in debug and release (crates/ignite/tests/ignite_test.rs
+// `bytes_set_on_both_targets`). The last five tests fail on purpose: set
+// out of range at the extremes of Int and on empty Bytes, and a Byte past
+// 255.
+
+import std.text.{to_lower, to_upper}
+
+const SHOUT: Text = "LOUD"
+
+type Named {
+  name: Text
+}
+
+fn old_lower(text: Text) -> Text {
+  var out = Bytes.empty()
+  for b in text.to_bytes() {
+    out.push(if b >= b'A' && b <= b'Z' { b + 32 } else { b })
+  }
+  out.to_text()
+}
+
+fn old_upper(text: Text) -> Text {
+  var out = Bytes.empty()
+  for b in text.to_bytes() {
+    out.push(if b >= b'a' && b <= b'z' { b - 32 } else { b })
+  }
+  out.to_text()
+}
+
+fn lower_twice(text: Text) -> (Text, Text) {
+  let first = text.to_lower()
+  (first, text)
+}
+
+fn first_to_z(text: Text) -> Text {
+  var bytes = text.to_bytes()
+  bytes[0] = b'z'
+  bytes.to_text()
+}
+
+test "to_lower and to_upper agree with the pushing version on every ASCII byte" {
+  var all = Bytes.empty()
+  var b: Byte = 0
+  while b < 127 {
+    all.push(b)
+    let one = Bytes.of([b]).to_text()
+    assert one.to_lower() == old_lower(one)
+    assert one.to_upper() == old_upper(one)
+    b = b + 1
+  }
+  all.push(127)
+  let text = all.to_text()
+  assert text.to_lower() == old_lower(text)
+  assert text.to_upper() == old_upper(text)
+}
+
+test "to_lower and to_upper leave non-ASCII bytes alone" {
+  assert "ÀÉÎÕÜß€ÿ".to_lower() == "ÀÉÎÕÜß€ÿ"
+  assert "àéîõüß€ÿ".to_upper() == "àéîõüß€ÿ"
+  assert "ÄbC€dE".to_lower() == "Äbc€de"
+  assert "ÄbC€dE".to_upper() == "ÄBC€DE"
+  assert "".to_lower() == ""
+  assert "".to_upper() == ""
+}
+
+test "to_lower leaves the text it lowers unchanged" {
+  let literal = "MiXeD"
+  assert literal.to_lower() == "mixed"
+  assert literal == "MiXeD"
+  let built = "Mi".concat("XeD")
+  assert built.to_lower() == "mixed"
+  assert built == "MiXeD"
+  assert built.to_upper() == "MIXED"
+  assert built == "MiXeD"
+  assert SHOUT.to_lower() == "loud"
+  assert SHOUT == "LOUD"
+  let pair = lower_twice("AbC".concat("D"))
+  assert pair.0 == "abcd"
+  assert pair.1 == "AbCD"
+  let named = Named { name = "Ab".concat("CD") }
+  assert named.name.to_lower() == "abcd"
+  assert named.name == "AbCD"
+  let names = ["X".concat("Y")]
+  assert names[0].to_lower() == "xy"
+  assert names[0] == "XY"
+}
+
+test "a var bound to to_bytes of a text is a copy" {
+  let text = "ab".concat("c")
+  assert first_to_z(text) == "zbc"
+  assert text == "abc"
+  var bytes = text.to_bytes()
+  bytes[1] = b'Q'
+  assert text == "abc"
+  assert bytes == b"aQc"
+  let named = Named { name = "xy".concat("z") }
+  assert first_to_z(named.name) == "zyz"
+  assert named.name == "xyz"
+}
+
+test "set on Bytes inside a list replaces the inner byte" {
+  var rows = [b"ab", b"cd"]
+  var row = rows[1]
+  row[0] = b'X'
+  assert rows[1] == b"cd"
+  assert row == b"Xd"
+  rows[0] = row
+  assert rows == [b"Xd", b"cd"]
+}
+
+test "to_lower of a slice view leaves the sliced bytes unchanged" {
+  let bytes = "ABCDEF".concat("G").to_bytes()
+  let low = bytes.slice(1, 4).to_text().to_lower()
+  assert low == "bcd"
+  assert bytes == b"ABCDEFG"
+  var held = "HIJKL".concat("M").to_bytes()
+  let up = held.slice(0, 3).to_text().to_lower()
+  assert up == "hij"
+  assert held == b"HIJKLM"
+  let lower_up = "abcdef".concat("g").to_bytes()
+  assert lower_up.slice(2, 5).to_text().to_upper() == "CDE"
+  assert lower_up == b"abcdefg"
+}
+
+fn poke(bs: Bytes) -> Bytes {
+  bs[0] = b'z'
+  bs
+}
+
+test "set on a Bytes parameter leaves the caller's Bytes unchanged" {
+  let held = "ab".concat("c").to_bytes()
+  assert poke(held) == b"zbc"
+  assert held == b"abc"
+  var kept = b"xy"
+  assert poke(kept) == b"zy"
+  assert kept == b"xy"
+  let rows = [b"ab", b"cd"]
+  assert poke(rows[1]) == b"zd"
+  assert rows == [b"ab", b"cd"]
+}
+
+test "to_lower of for and match bindings leaves the list unchanged" {
+  let names = ["AB".concat("C"), "DE".concat("F")]
+  var lows = []
+  for name in names {
+    lows.push(name.to_lower())
+  }
+  assert lows == ["abc", "def"]
+  assert names == ["ABC", "DEF"]
+  let found = match names {
+    [first, _] => first.to_lower()
+    _ => ""
+  }
+  assert found == "abc"
+  assert names == ["ABC", "DEF"]
+}
+
+test "set with a negative index fails as indexing does" {
+  var bs = b"ab"
+  bs.set(-1, 0)
+}
+
+test "set at the largest Int fails as indexing does" {
+  var bs = b"ab"
+  bs.set(9223372036854775807, 0)
+}
+
+test "set at the smallest Int fails as indexing does" {
+  var bs = b"ab"
+  bs.set(-9223372036854775807 - 1, 0)
+}
+
+test "set of an empty Bytes fails as indexing does" {
+  var bs = Bytes.empty()
+  bs[0] = 1
+}
+
+test "a byte past 255 fails as an overflow before set stores it" {
+  var bs = b"\xff"
+  bs[0] = bs[0] + 1
+}

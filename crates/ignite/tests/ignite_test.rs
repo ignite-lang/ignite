@@ -837,6 +837,51 @@ fn codespec_stderr_and_lists_on_both_targets() {
     });
 }
 
+/// `Bytes` element assignment and `std.text`'s in-place `to_lower` and
+/// `to_upper` on both targets in dev and in release
+/// (`fixtures/tests/bytes_set.ignite`): the case mapping agrees with the
+/// pushing version on every ASCII byte, leaves non-ASCII bytes and every
+/// other owner of its input (a view, a parameter, a binding) unchanged,
+/// and `set` out of range or past 255 fails as indexing and `+` do.
+#[test]
+fn bytes_set_on_both_targets() {
+    let file = fixture("bytes_set.ignite");
+    on_both_targets(|target| {
+        for profile in [&[][..], &["--release"][..]] {
+            let mut args = vec![file.as_str()];
+            args.extend(profile.iter().copied());
+            let run = ignite_test(Chain::Fixtures, target, &args);
+            let label = format!("{target} {profile:?}");
+            assert_eq!(run.status, 1, "{label}: {}\n{}", run.stdout, run.stderr);
+            let name = "fixtures.bytes_set";
+            for line in [
+                "test result: FAILED. 8 passed; 5 failed; 0 filtered out".to_string(),
+                format!(
+                    "---- {name}/set with a negative index fails as indexing does stderr ----\nerror: index failed at {file}:164:3: index -1 out of range for length 2\n"
+                ),
+                format!(
+                    "---- {name}/set at the largest Int fails as indexing does stderr ----\nerror: index failed at {file}:169:3: index 9223372036854775807 out of range for length 2\n"
+                ),
+                format!(
+                    "---- {name}/set at the smallest Int fails as indexing does stderr ----\nerror: index failed at {file}:174:3: index -9223372036854775808 out of range for length 2\n"
+                ),
+                format!(
+                    "---- {name}/set of an empty Bytes fails as indexing does stderr ----\nerror: index failed at {file}:179:3: index 0 out of range for length 0\n"
+                ),
+                format!(
+                    "---- {name}/a byte past 255 fails as an overflow before set stores it stderr ----\nerror: + failed at {file}:184:11: 255 + 1\n"
+                ),
+            ] {
+                assert!(
+                    run.stdout.contains(&line),
+                    "{label}: no `{line}` in\n{}",
+                    run.stdout
+                );
+            }
+        }
+    });
+}
+
 /// Both native targets use one preparation while retaining their normal
 /// runner selection, reports and failure status. A Rust failure must not
 /// prevent the LLVM suite from executing.
