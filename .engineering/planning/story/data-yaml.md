@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:data-yaml
 kind: story
-status: draft
+status: proposed
 title: 'std.yaml: YAML 1.2.2 core schema, safe subset'
 relations:
 - decomposes: epic:data-formats
@@ -22,7 +22,9 @@ scope:
   path: docs/yaml
 - confidence: inferred
   path: std/yaml.ignite
-revision: 5
+revision: 6
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-08T01:26:01Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"review_outcome":6}}}
 ---
 # Story: data-yaml
 

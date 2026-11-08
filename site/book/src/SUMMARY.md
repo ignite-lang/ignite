@@ -58,4 +58,7 @@
 
 - [Roadmap](roadmap.md)
 - [Planned: x.web](planned/web.md)
+- [Planned: data formats](planned/data.md)
+- [Planned: fault injection and simulation](planned/simulation.md)
+- [Planned: protocols and clients](planned/clients.md)
 - [FAQ](faq.md)

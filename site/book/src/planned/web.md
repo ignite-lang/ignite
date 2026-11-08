@@ -15,19 +15,19 @@ against your routes. You write only the exceptions.
 ```ignite,fragment
 package todo
 
-import x.web.{Web, Html, collection, page}
+import x.web.{Web, collection, page}
 
 type Todo { id: Int, title: Text, done: Bool = false }
 
-fn board(todos: Store<Todo>) -> Html =
-  <main>
-    <h1>Todos</h1>
-    <ul>{todos.values().map(|t| <li class={t.done.then("done")}>{t.title}</li>)}</ul>
-    <form action="/todos" method="post">
-      <input name="title" required/>
-      <button>Add</button>
-    </form>
-  </main>
+view board(todos: Store<Todo>) =
+  main
+    h1 Todos
+    ul
+      for t in todos.values()
+        li(class = t.done.then("done")) {t.title}
+    form("/todos", post)
+      input("title", required)
+      button Add
 
 system TodoService {
   resource ingress: TcpListener { address = "127.0.0.1", port = 8080 }
@@ -55,11 +55,12 @@ That is the whole program. It serves:
 | `ETag` headers and `304 Not Modified` | the stores each route reads |
 | a `/health` route, a probe and an availability contract that `ignite run` evaluates | `availability = 99%` |
 | an OpenAPI 3.1 document | the route table, printed at check time |
+| request ids, an access log, compression | defaults of the `Web` kind |
 
 ## Why only Ignite can do this
 
 Ignite tracks effects. A function that reads a store says so in its type, and a handler can
-only reach what it is given: no clock, no global, no file it was not handed. That has three
+only reach what it is given: no clock, no global, no file it was not handed. That has
 consequences no other web framework can rely on.
 
 - **Live pages without subscriptions.** The compiler knows that `board` reads `todos`. After
@@ -67,83 +68,158 @@ consequences no other web framework can rely on.
   open page. There is no subscribe and no broadcast to write, and none to forget.
 - **Caching that is correct by construction.** The answer to a GET depends only on the request
   and the stores it reads, so each store's version is the ETag.
-- **The app is a system member.** `ignite plan` shows the routes and the derived probe and
-  contract, `ignite run` probes the service and reports whether it meets 99 %, and
-  `ignite apply` rolls it out ([Plan, explain, run and replay](../guide/operate.md)).
+- **The app is a system member.** `ignite plan` shows the routes, the services they call and
+  the derived probe and contract, `ignite run` probes the service and reports whether it meets
+  99 %, and `ignite apply` rolls it out
+  ([Plan, explain, run and replay](../guide/operate.md)).
 
-## Markup is checked
+## Pages are views
 
-Markup is part of the language: elements, attributes, children and `{expressions}`. Text is
-escaped unless you say otherwise, a capitalised tag such as `<Card title="x"/>` calls the
-function `Card`, and every element and attribute name is checked against the HTML vocabulary.
-The page is also checked against the routes: `<input name="titel">` or `action="/todo"` is a
-compile error, because no route takes them.
+A `view` is an indented block: one element per line, its text after the name, children
+indented below it, `{expressions}` where values go, `for` and `if` lines for control. Text is
+escaped. An element is a typed function of the HTML provider, so `form("/todos", post)` passes
+the action and the method by position, and a misspelt element or attribute is a compile error.
+The page is also checked against the routes: `input("titel")` or `form("/todo", post)` does not
+compile, because no route takes them. A form for a signed-in user gets its CSRF token with no
+line written.
 
-## Exceptions are plain functions
+## Prose is Markdown
 
-When a route is more than a collection, write it. A validation rule and a custom action:
+Text-heavy pages are Markdown files with typed front matter:
 
-```ignite,fragment
-given todos: Store<Todo>
+```markdown
+---
+title: Using the board
+updated: 2026-11-08
+---
+# Using the board
 
-fn titled(new: New<Todo>) = if new.title.is_empty() { Err(bad_request("title is empty")) } else { Ok(()) }
-fn complete(id: Int) = todos.update(id, |t| Todo { done = true, ..t })?
+Every todo you add appears on [the board](/) in every open browser, without a reload.
+The [JSON API](/todos) accepts the same.
 ```
 
-with the routes
-
 ```ignite,fragment
+type Help { title: Text, updated: Text }
+
 routes = {
-  "/todos" = collection(todos, check = titled)
-  "/todos/{id}/done" = post(complete)
+  "/help" = doc<Help>(embed("help.md"), layout = article)
 }
 ```
 
-`given` makes `todos` a parameter of every function that uses it, so its effects stay visible.
-Path parameters bind by name (`{id}` to `id: Int`), the body and query decode into typed
-parameters, `?` on a missing value answers 404, and a GET handler that writes is a compile
-error. A service with no collection at all is written as annotated functions:
+The front matter is checked against `Help`, and every link that starts with `/` is checked
+against the routes: a link to a page that does not exist is a compile error with the file and
+line. The Markdown is rendered once, at build time.
+
+## Who may call a route
+
+Who may call a route is a type. A handler that takes `user: User` can only run with a `User`,
+and the only place a `User` comes from is the identity the component declares:
 
 ```ignite,fragment
-@get("/todos/{id}") fn show(id: Int) = todos.get(id)?
-@patch("/todos/{id}") fn change(id: Int, c: Patch<NewTodo>) = todos.update(id, |t| t.with(c))?
+type User { sub: Int, name: Text, roles: List<Text> = [] }
+type Admin { user: User }
+
+fn admin(user: User) -> Option<Admin> = user.roles.contains("admin").then(Admin { user })
+
+@get("/me") fn me(user: User) = user
+@delete("/todos/{id}") fn remove(_: Admin, id: Int) = todos.remove(id)?
 ```
+
+```ignite,fragment
+component server: Web {
+  identity = jwt<User>(jwt_secret)
+  roles = [admin]
+}
+```
+
+There is no guard to forget: `remove` needs an `Admin`, an `Admin` needs a `User`, and a `User`
+needs a valid token. Without one the answer is 401, without the role 403. The same works with
+sessions, API keys and OpenID Connect sign-in, and `ignite explain` lists which routes are
+public.
+
+## Policies, not middleware
+
+There is no middleware chain to put in order:
+
+```ignite,fragment
+component server: Web {
+  cors = ["https://app.example.org"]
+  limit = per_client(100, 1 minute)
+  timeout = 5 seconds
+}
+```
+
+Each concern is a property, and `x.web` applies them in the one order that works: a CORS
+preflight before sign-in, a per-client limit before sign-in, a per-user limit after it, the
+log after the answer, compression last. The checker refuses combinations that cannot be right,
+such as CORS for any origin with cookies, or a timeout longer than the rollout's drain.
+
+## Calling other services
+
+A service you call is a resource:
+
+```ignite,fragment
+resource weather_api: Service {
+  base = "https://api.weather.example/v1"
+  timeout = 2 seconds
+  attempts = 3
+  breaker = 5
+}
+
+@get("/weather/{city}") fn weather(city: Text) = weather_api.get<Weather>("/current?city={city}")?
+```
+
+`{city}` is encoded, never pasted in. The answer is decoded into `Weather`, and a failed call
+answers 502, a timeout 504. Only idempotent requests are retried. Because a handler can only
+call what it is given, `ignite plan` shows `weather_api` as a dependency of `server`, and a
+probe and a contract can cover it. Another Ignite service is called through a client derived
+from its routes, `Client<TodoService.server>`, so a removed route breaks the caller's build,
+not production.
 
 ## Testing without a socket
 
 ```ignite,fragment
 test "create and read" {
-  let api = client(TodoService.server, Pipe.pair())
+  let api = client(TodoService.server)
   let made: Todo = api.post("/todos", New<Todo> { title = "milk" })?
   assert api.get("/todos/{made.id}").status == 200
   assert api.get("/").body.contains("milk")
 }
+
+test "weather" {
+  let api = client(TodoService.server.with(weather_api = fake(|_| Weather { temp_c = 21, wind_kmh = 5 })))
+  assert api.get<Weather>("/weather/Berlin")? == Weather { temp_c = 21, wind_kmh = 5 }
+}
 ```
 
 The test client speaks HTTP/1.1 over an in-memory pipe through the same parser, framing and
-limits as a real connection.
+limits as a real connection, and a fake service runs behind the same HTTP client code as the
+real one.
 
 ## How many tokens
 
-The same todo JSON service in four frameworks and in `x.web`, counted with the `cl100k_base`
-tokenizer, imports included, comments and indentation not. The other programs are written from
-their documentation's idioms; all are in the design document.
+Counted with the `cl100k_base` tokenizer, imports included, comments and indentation not. The
+other programs are written from their documentation's idioms; all are in the design document.
 
-| | FastAPI | Hono | Axum | Go `net/http` | `x.web`, handlers written | `x.web`, declared |
-|---|---|---|---|---|---|---|
-| tokens | 296 | 348 | 563 | 620 | 230 | 89 |
-| lines | 44 | 38 | 77 | 102 | 20 | 12 |
+| task | FastAPI | Hono | Axum | Go | `x.web` |
+|---|---|---|---|---|---|
+| the todo JSON service | 296 | 348 | 563 | 620 | 89 declared, 230 with every handler written |
+| bearer tokens and an admin role | 237 | 217 | 398 | 369 | 122 |
+| request id, log, CORS, rate limit, timeout, compression, error format | 351 | 231 | 316 | 259 | 40 |
+| a third-party JSON call with timeout, retries and circuit breaker, without its test | 205 | 238 | 349 | 324 | 88 |
 
-The live page: the whole Ignite program above, API included, is 176 tokens; the Phoenix
-LiveView module for the same page alone is 214. The durable todo example of this repository,
-with its health probe and contract, goes from 1,883 tokens to 179.
+The live page: the whole Ignite program above, API included, is 150 tokens; the Phoenix
+LiveView module for the same page alone is 214. The view itself is 48 tokens, against 77 in
+JSX and HEEx. The prose page is 116 tokens as Markdown, against 197 in JSX. The durable todo
+example of this repository, with its health probe and contract, goes from 1,883 tokens to 179.
 
 ## Plan
 
 The framework needs language extensions: derived codecs, record types derived from others
-(`New<T>`, `Patch<T>`), members a component derives into the system model, markup literals,
-effect sets readable at check time, `given`, route annotations and pattern literals. A first
-version ships on today's language with hand-built routes, and each extension shortens it. The
-order and the open questions are in
+(`New<T>`, `Patch<T>`), members a component derives into the system model, views, effect sets
+readable at check time, `given`, route annotations and pattern literals, handler parameters
+filled by type, modules derived from another service's routes, and files embedded at check
+time. A first version ships on today's language with hand-built routes, and each extension
+shortens it. The order and the open questions are in
 [`docs/web.md`](https://github.com/ignite-lang/ignite/blob/main/docs/web.md) sections 5, 8 and
 10; the [roadmap](../roadmap.md) lists it with the other designs.

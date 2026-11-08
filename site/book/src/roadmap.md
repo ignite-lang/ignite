@@ -31,10 +31,29 @@ dependencies between the waves are in
 | **v0.12.0** | streamed and binary HTTP responses and effectful fn values in `map`: `std.protocol.http` sends chunked and binary response bodies, a reason phrase for every RFC 9110 status, and no body or `Content-Length` for 304, 1xx and a 2xx to CONNECT; `List.map` takes a local or parameter holding an effectful fn, and an untyped one is E042; `Bytes` set by index, `to_lower` and `to_upper` in place; associated fn names in generated Rust never collide ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.12.0)) |
 | **v0.13.0** | spawn handovers in branches and Rust names that shadow nothing: on the LLVM target a stream end passed to `spawn` at its last use inside `if`/`else` branches or `match` arms moves into the task; on the Rust target `spawn` evaluates its arguments in source order, and a program may name things after Rust primitives, crate roots or the generator's own locals; the website's pages are checked for layout and accessibility on every merge, the FAQ is in the landing page's header and text is at least 14 px ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.13.0)) |
 
-## Being built <span class="badge wip">unreleased</span>
+## What's next
 
-No slice is being implemented. The next waves are the designs below; their order is in
-[`PLAN.md`](https://github.com/ignite-lang/ignite/blob/main/PLAN.md).
+The work after v0.13.0 comes in waves of a few stories each. A wave is merged when every story
+in it passes the gate, and a release follows every third wave. The order below is the current
+plan, not a promise of dates. The plan itself is
+[`.engineering/waves/plan-2026-11-07.md`](https://github.com/ignite-lang/ignite/blob/main/.engineering/waves/plan-2026-11-07.md).
+
+### Being built <span class="badge wip">unreleased</span>
+
+| wave | content | state |
+|---|---|---|
+| 5, 6 | bounds and claims of the chunked HTTP decoder; quality metrics with a ratchet; a clean exit after a drain; user functions named like builtins; record literals as method receivers; network and process builtins that a real service needs | in progress |
+| 7 | bitwise operators; channels and timers; a drain that keeps the listeners open; a higher open-files limit; `IoError` compared in `assert`; the `std.data` value model and its bridge to `std.json` ([data formats](planned/data.md)) | in progress |
+
+### Planned
+
+| wave | content | state |
+|---|---|---|
+| 8 | protocol clients: WebSocket (RFC 6455), RESP3 with Sentinel, NATS ([protocols and clients](planned/clients.md)); `Codec<T>` and its combinators ([data formats](planned/data.md)); `ignite fmt` with a format check | planned |
+| 9 | YAML 1.2.2, the safe subset ([data formats](planned/data.md)); benchmarks of Ignite programs against the same programs in plain Rust and Go | planned |
+| 10 | one mid-level IR that both targets lower from, checked by a differential runner | planned |
+| 11 | `Store` keyed by text | planned |
+| 12 | the largest compiler files split | planned |
 
 ## Designs <span class="badge design">design</span>
 
@@ -47,7 +66,9 @@ Each has a design document or a row in the plan; none of it is implemented.
 | D async | tokio inside the substrate, Rust-target futures, LLVM-target coroutines, `Task.yield_now` | [`PLAN.md`](https://github.com/ignite-lang/ignite/blob/main/PLAN.md), [`docs/vision.md`](https://github.com/ignite-lang/ignite/blob/main/docs/vision.md) |
 | E WebAssembly P0 to P4 | machine scalars, `Buffer`, `--target wasm`, a runtime written in Ignite, `ignite run --watch`, hot reload with `migrate` | [`docs/wasm.md`](https://github.com/ignite-lang/ignite/blob/main/docs/wasm.md) |
 | G protocols P3 to P5 | ABNF grammars, user `interface` and `impl`, TLS and Unix transports | [`docs/protocols.md`](https://github.com/ignite-lang/ignite/blob/main/docs/protocols.md) |
-| x.web | a web framework shipped with Ignite under `x.*`: the web app declared in the system, routes, JSON, OpenAPI, live pages, caching and contracts derived; markup literals and other language extensions ([page](planned/web.md)) | [`docs/web.md`](https://github.com/ignite-lang/ignite/blob/main/docs/web.md) |
+| x.web | a web framework shipped with Ignite under `x.*`: the web app declared in the system, routes, JSON, OpenAPI, live pages, caching and contracts derived; identity as a type, declared policies, outgoing calls as dependencies, views and Markdown pages, and the language extensions they need ([page](planned/web.md)) | [`docs/web.md`](https://github.com/ignite-lang/ignite/blob/main/docs/web.md) |
+| data formats | one value model in `std.data`, codecs the compiler derives, JSON, YAML and TOML ([page](planned/data.md)); the first steps are waves 7 to 9 above | [`docs/serde.md`](https://github.com/ignite-lang/ignite/blob/main/docs/serde.md) |
+| fault injection and simulation | faults at the IO seam, named fault points, a simulated world driven by one seed, generated fault schedules with shrinking ([page](planned/simulation.md)); a draft for decision | [`docs/fault-injection.md`](https://github.com/ignite-lang/ignite/blob/main/docs/fault-injection.md) |
 | H self-hosting M5 to M7 | packages and manifests, the frontend in Ignite, an emitter in Ignite, a bootstrap chain | [`docs/design.md`](https://github.com/ignite-lang/ignite/blob/main/docs/design.md) section 12 |
 
 [`docs/syntax.md`](https://github.com/ignite-lang/ignite/blob/main/docs/syntax.md) is a
