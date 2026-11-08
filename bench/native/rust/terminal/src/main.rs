@@ -9,14 +9,17 @@
 //! line), each reply and the next prompt in one write; CR LF, CR NUL, a lone CR and a lone LF
 //! end a line; DO is refused with WONT and WILL with DONT; AYT is answered `[yes]` and IAC GA;
 //! IP, a line over 4096 bytes and a subnegotiation over 1024 bytes end the session; a client
-//! silent for 10 minutes is dropped. Not implemented: the Synch (TCP urgent data and the Data
-//! Mark), which costs the Ignite server one `SIOCATMARK` per read.
+//! silent for 10 minutes is dropped. The Synch as the Ignite server honours it: `SO_OOBINLINE`
+//! on every stream, one `poll` for `POLLPRI` after every read, and urgent data pending starts
+//! discarding the line and the data, commands still obeyed, up to IAC DM; so both servers make
+//! the same system calls per read.
 //! `--port P` (default 2323) on 127.0.0.1; `listening on 127.0.0.1:P` on stderr once bound.
 
 mod workers;
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
+use std::os::fd::AsRawFd;
 use std::time::Duration;
 
 const PROMPT: &[u8] = b"terminal> \xff\xf9";
@@ -31,7 +34,59 @@ const SB: u8 = 250;
 const GA: u8 = 249;
 const AYT: u8 = 246;
 const IP: u8 = 244;
+const DM: u8 = 242;
 const SE: u8 = 240;
+
+const SOL_SOCKET: i32 = 1;
+const SO_OOBINLINE: i32 = 10;
+const POLLPRI: i16 = 0x002;
+
+#[repr(C)]
+struct PollFd {
+    fd: i32,
+    events: i16,
+    revents: i16,
+}
+
+unsafe extern "C" {
+    fn setsockopt(fd: i32, level: i32, name: i32, value: *const i32, length: u32) -> i32;
+    fn poll(fds: *mut PollFd, count: u64, timeout: i32) -> i32;
+}
+
+/// Keep the urgent byte in the stream at its place, as the Ignite substrate does on every stream.
+fn set_oob_inline(stream: &TcpStream) -> std::io::Result<()> {
+    let on: i32 = 1;
+    // SAFETY: the descriptor belongs to `stream`, and `on` outlives the call with the size given.
+    let result = unsafe {
+        setsockopt(
+            stream.as_raw_fd(),
+            SOL_SOCKET,
+            SO_OOBINLINE,
+            &on,
+            std::mem::size_of::<i32>() as u32,
+        )
+    };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+/// Whether urgent data is ahead of the reader: one `poll` for `POLLPRI` with no wait, the check
+/// the Ignite substrate's `urgent_pending` makes after every read.
+fn urgent_pending(stream: &TcpStream) -> std::io::Result<bool> {
+    let mut fds = PollFd {
+        fd: stream.as_raw_fd(),
+        events: POLLPRI,
+        revents: 0,
+    };
+    // SAFETY: `fds` is one valid entry for the length of the call.
+    if unsafe { poll(&mut fds, 1, 0) } < 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(fds.revents & POLLPRI != 0)
+}
 
 #[derive(Clone, Copy)]
 enum Decoder {
@@ -114,10 +169,12 @@ fn render(lines: &[Vec<u8>], out: &mut Vec<u8>) {
 
 fn session(mut stream: TcpStream) -> std::io::Result<()> {
     stream.set_nodelay(true)?;
+    set_oob_inline(&stream)?;
     stream.set_read_timeout(Some(Duration::from_secs(600)))?;
     stream.write_all(PROMPT)?;
     let mut buffer = [0u8; 4096];
     let mut state = Decoder::Ground;
+    let mut discarding = false;
     let mut line = Vec::with_capacity(256);
     let mut out = Vec::with_capacity(4096);
     loop {
@@ -127,6 +184,10 @@ fn session(mut stream: TcpStream) -> std::io::Result<()> {
             Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
             Err(e) => return Err(e),
         };
+        if !discarding && urgent_pending(&stream)? {
+            discarding = true;
+            line.clear();
+        }
         for &b in &buffer[..count] {
             let (next, literal, end_of_line) = match (state, b) {
                 (Decoder::Ground, IAC) => (Decoder::Interpret, None, false),
@@ -145,6 +206,10 @@ fn session(mut stream: TcpStream) -> std::io::Result<()> {
                     (Decoder::Ground, None, false)
                 }
                 (Decoder::Interpret, IP) => return Ok(()),
+                (Decoder::Interpret, DM) => {
+                    discarding = false;
+                    (Decoder::Ground, None, false)
+                }
                 (Decoder::Interpret, _) => (Decoder::Ground, None, false),
                 (Decoder::Negotiation(verb), _) => {
                     if verb == DO {
@@ -169,6 +234,9 @@ fn session(mut stream: TcpStream) -> std::io::Result<()> {
                 }
             };
             state = next;
+            if discarding {
+                continue;
+            }
             if let Some(c) = literal {
                 line.push(c);
                 if line.len() > MAXIMUM_LINE {
