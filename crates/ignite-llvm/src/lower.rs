@@ -5293,9 +5293,9 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
 
     // ---- tasks -----------------------------------------------------------
 
-    /// `spawn f(args)`: the arguments are evaluated into an environment in
-    /// this frame (a borrowed one as its place's pointer); a per-site thunk
-    /// copies them into the new task's arena, calls `spawn_ready` and then `f`.
+    /// `spawn f(args)`: the arguments are evaluated and copied into an
+    /// environment in transfer memory that the new task owns
+    /// ([`Self::spawn_with`]); a per-site thunk calls `f` with them.
     fn spawn(&mut self, call: &Expr) {
         let callee = self.cx.types.callee(call).cloned();
         let args: Vec<&Expr> = match &call.kind {
@@ -5383,13 +5383,15 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         }
     }
 
-    /// Store `values` into an environment, define the thunk `thunk` that
-    /// runs `symbol` with copies of them, and start it (`docs/llvm.md`
-    /// section 4). An owned value is moved into the environment and a
-    /// borrowed aggregate goes in as its place's pointer, not copied: the
-    /// parent waits in `ignite_rt_spawn` until the thunk has deep-copied
-    /// every value into the task's own arena (`spawn_ready`), and nothing
-    /// changes the place meanwhile. The task is an owner of every stream argument
+    /// Copy `values` into an environment, define the thunk `thunk` that
+    /// runs `symbol` with them, and start it (`docs/llvm.md` section 4).
+    /// The environment is built in transfer memory
+    /// (`ignite_rt_spawn_begin`): every aggregate is deep-copied into it,
+    /// owned or borrowed, so `ignite_rt_spawn` returns at once and the
+    /// parent may change or free its places. The task owns that memory
+    /// until it ends, and the thunk passes the aggregates to `symbol` in
+    /// place: one deep copy per argument, as when the task copied from the
+    /// parent's places while the parent waited. The task is an owner of every stream argument
     /// ([`is_stream`]; a handle-table entry counts its owners): the thunk
     /// registers it with `tcp_own`, so a failure releases it, and releases
     /// it when `symbol` returns; the stream closes when its last owner
@@ -5408,32 +5410,8 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         values: Vec<(Ty, Val, bool)>,
         prefix: &str,
     ) {
-        let by_place: Vec<bool> = values
-            .iter()
-            .map(|(ty, v, _)| is_aggregate(ty) && matches!(v, Val::Ptr(_, false)))
-            .collect();
-        let layouts: Vec<Layout> = values
-            .iter()
-            .zip(&by_place)
-            .map(|((ty, _, _), &place)| {
-                if place {
-                    Layout::scalar(8)
-                } else {
-                    self.layout(ty)
-                }
-            })
-            .collect();
+        let layouts: Vec<Layout> = values.iter().map(|(ty, _, _)| self.layout(ty)).collect();
         let (offsets, env_layout) = c_struct(&layouts);
-        let env = self.f.alloca(env_layout);
-        for (((ty, v, _), offset), &place) in values.iter().zip(&offsets).zip(&by_place) {
-            let dst = self.gep(&env, *offset);
-            if place {
-                let p = self.ptr(v);
-                self.f.ins(format!("store ptr {p}, ptr {dst}, align 8"));
-            } else {
-                self.store_value(ty, &dst, v.clone());
-            }
-        }
         let callee = self.function(symbol, &sig.params, &sig.ret);
         let mut t = Lower::new(
             self.m,
@@ -5465,17 +5443,10 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         t.f.ins(format!("call void @ignite_rt_guard_push(ptr {jb})"));
         let mut operands = Vec::new();
         let mut streams = Vec::new();
-        for (((ty, _, _), offset), &place) in values.iter().zip(&offsets).zip(&by_place) {
-            let slot = t.gep("%env", *offset);
-            let src = if place {
-                t.f.val(format!("load ptr, ptr {slot}, align 8"))
-            } else {
-                slot
-            };
+        for ((ty, _, _), offset) in values.iter().zip(&offsets) {
+            let src = t.gep("%env", *offset);
             if is_aggregate(ty) {
-                let own = t.temp(ty);
-                t.copy(ty, &own, &src);
-                operands.push(Some(format!("ptr {own}")));
+                operands.push(Some(format!("ptr {src}")));
             } else if let Some(llty) = scalar_type(ty) {
                 let x = t.load_scalar(ty, &src);
                 if is_stream(ty) {
@@ -5494,7 +5465,6 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         for stream in &streams {
             t.f.ins(format!("call void @ignite_rt_tcp_own(i64 {stream})"));
         }
-        t.f.ins("call void @ignite_rt_spawn_ready()");
         let result = t.call(&callee, &sig.ret, operands);
         if let (Ty::Result(_, err), Val::Ptr(p, _)) = (&sig.ret, &result)
             && **err == Ty::IoError
@@ -5524,6 +5494,20 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                     .declare("ignite_rt_tcp_retain", "void", &["i64".into()]);
                 self.f
                     .ins(format!("call void @ignite_rt_tcp_retain(i64 {stream})"));
+            }
+        }
+        self.m.declare("ignite_rt_spawn_begin", "void", &[]);
+        self.f.ins("call void @ignite_rt_spawn_begin()");
+        let env = self.f.val(format!(
+            "call ptr @ignite.alloc(i64 {}, i64 {})",
+            env_layout.size.max(1),
+            env_layout.align
+        ));
+        for ((ty, v, _), offset) in values.iter().zip(&offsets) {
+            let dst = self.gep(&env, *offset);
+            match v {
+                Val::Ptr(src, _) if is_aggregate(ty) => self.copy(ty, &dst, src),
+                _ => self.store_value(ty, &dst, v.clone()),
             }
         }
         let started = self.f.val(format!(
