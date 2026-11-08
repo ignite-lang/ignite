@@ -1,0 +1,30 @@
+---
+format: aep.planning-md/3
+id: story:llvm-release-all-handles
+kind: story
+status: proposed
+title: LLVM releases listener, directory and capability handles
+relations:
+- decomposes: epic:leak-guard
+revision: 2
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-08T17:01:38Z", actor: "human:timo", revision: 2}
+---
+# Story: llvm-release-all-handles
+
+## Outcome
+
+The LLVM target releases listener, stream, directory, launcher and other capability handles when their owner ends, as the Rust target does, so the leak census soaks of those kinds hold flat on both targets.
+
+## Context
+
+- Epic epic:leak-guard. Found by story:leak-census: on LLVM the soaks `listener`, `stream` (listeners grow), `child` (its launcher: capabilities grow), `directory` and `capability` grow their counts; they are asserted as known failures in `leak::` (`KNOWN_ON_LLVM`). The same leak class as G30 (design docs/leak-guard.md 1.2, Q8).
+
+## Acceptance
+
+- Each of those soaks passes on LLVM; its entry leaves `KNOWN_ON_LLVM`; the seeded checks run on both targets.
+- `task gate` green.
+
+## Scope
+
+- `crates/ignite-llvm/src/own.rs`, `lower.rs`, `crates/ignite-rt` handle release, `crates/ignite/tests/leak.rs`. Inferred.
