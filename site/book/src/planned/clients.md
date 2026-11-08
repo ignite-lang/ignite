@@ -69,6 +69,6 @@ per protocol talks to a real server when one is installed and is skipped elsewhe
 
 ## Plan
 
-All three are planned for wave 8, after the bitwise operators that WebSocket's masking and
-SHA-1 need, and after the channels and timers that request deadlines use (both in wave 7). The
+All three are planned for wave 9. The bitwise operators that WebSocket's masking and SHA-1
+need and the channels and timers that request deadlines use are released in v0.15.0. The
 [roadmap](../roadmap.md) shows the waves.

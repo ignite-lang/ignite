@@ -51,8 +51,8 @@ v0.15.0.
     which resource a call acts on.
 
 [^ignite-contract]: `Availability`, `ThresholdCompliance` and `SLA` are evaluated over probe
-    attempts with missing data as `InsufficientEvidence`. The outcome a probe reports is one
-    of two built-in texts, and it all runs on one host.
+    attempts with missing data as `InsufficientEvidence`. A probe kind declares the type of
+    its outcome and a contract names a predicate over it; it all runs on one host.
 
 [^k8s-probe]: Liveness and readiness probes restart a container or take it out of service.
     There is no objective over a window of observations.
@@ -70,8 +70,9 @@ v0.15.0.
 - **One machine.** Pulumi, Kubernetes and Temporal run production systems across many
   machines. Ignite runs and applies on one local host, with no cloud provider and no
   distributed state.
-- **A young ecosystem.** No package manager, no registry, no language server. Every project in
-  the table is older and in wider use.
+- **A young ecosystem.** No package manager and no registry; the language server
+  [ignite-lsp](https://github.com/ignite-lang/ignite-lsp) lives in its own repository. Every
+  project in the table is older and in wider use.
 - **A Rust compiler.** Programs build fast on the LLVM target. The compiler itself is a Rust
   workspace and builds at Rust's speed until it is self-hosted (planned).
 

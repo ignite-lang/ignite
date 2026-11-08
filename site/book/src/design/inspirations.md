@@ -14,9 +14,9 @@ wherever something is designed and not built.
 - **Build time with many agents.** Ignite started as a replacement for Rust. In the words of
   the [README](https://github.com/ignite-lang/ignite#why-ignite), rustc's compile times "bring
   a machine to a halt when several coding agents build at the same time, and caches did not
-  fix that." The LLVM target is the fast path. At the v0.3.0 close, from a fresh output
-  directory, the todo HTTP service built in about 0.29 s on LLVM, dev, against 3.1 s on the
-  Rust target through cargo, dev
+  fix that." The LLVM target is the fast path. At release v0.15.0, on the dedicated timing host,
+  the todo HTTP service built from a fresh output directory in 1.30 s on LLVM, dev, against
+  4.12 s on the Rust target through cargo, dev
   ([Building for Rust and LLVM](../guide/targets.md#build-times-as-measured)).
   The compiler itself is still Rust, so changing the compiler is no faster. A self-hosted
   compiler is planned ([roadmap](../roadmap.md)).
@@ -267,8 +267,9 @@ that follows a given protocol"
   `std/`, generic over any `ByteStream`, and the compiler and substrate know only byte streams.
   Since v0.4.0, the requirements of five RFCs are catalogued as Ignite data.
   `ignite conformance` prints which requirements the code claims and which tests verify them.
-  The Telnet matrix claims RFC 855, and the HTTP matrix lists its gaps and claims nothing
-  ([`PLAN.md`](https://github.com/ignite-lang/ignite/blob/main/PLAN.md), slice 15).
+  The Telnet claims to RFC 854 and RFC 855 and the JSON-RPC claim to JSON-RPC 2.0 hold; the
+  HTTP claims to RFC 9112 and RFC 9110 do not hold yet, with one and two gaps
+  ([Quality](../quality.md), rows 4.1 and 4.2).
 
 ## Compile speed
 

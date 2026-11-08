@@ -1,6 +1,6 @@
 # Reference
 
-The reference describes Ignite v0.3.0 as the compiler implements it. Where the
+The reference describes Ignite as the compiler implements it. Where the
 [language design](../design/index.md) says why, these pages say exactly what: the tokens, the
 grammar, the type and effect rules, every standard-library module, every command and every
 diagnostic.

@@ -2,7 +2,7 @@
 
 Every expression in Ignite has a type, known when the program is checked. No conversion is
 implicit: an `Int` does not become a `Byte`, nor a `Text` `Bytes`, without a call. This page
-lists the types of v0.3.0 and what each one supports. The intent behind them is in
+lists the types and what each one supports. The intent behind them is in
 [the design of intent and properties](../design/intent.md).
 
 ## At a glance
