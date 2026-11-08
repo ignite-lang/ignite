@@ -1,0 +1,327 @@
+package std.digest
+
+import std.encoding.hex
+
+// SHA-1 (RFC 3174) and SHA-256 (FIPS 180-4 section 6.2) over `Bytes`, on
+// the 32-bit words `U32` (`docs/slice.md` 32). `sha1` and `sha256` digest
+// one value; a `Digest` digests input that arrives in pieces:
+// `Digest.sha256().update(a).update(b).finish()` is `sha256` of `a` and
+// `b` joined (`update` and `finish` are called by UFCS, so a caller
+// imports them with `Digest`). A leaf of the base layer; it imports
+// `std.encoding` for its tests only (`docs/layering.md`).
+
+/// The hash function a `Digest` computes.
+enum Algorithm {
+  Sha1,
+  Sha256
+}
+
+/// An incremental digest: the words of the state after every whole block
+/// (five for SHA-1, eight for SHA-256), the bytes of the block not yet
+/// whole, the length taken so far.
+type Digest {
+  algorithm: Algorithm
+  state: List<U32>
+  pending: Bytes
+  length: Int
+}
+
+/// The 20-byte SHA-1 digest of `data` (RFC 3174).
+fn sha1(data: Bytes) -> Bytes = Digest.sha1().update(data).finish()
+
+/// The 32-byte SHA-256 digest of `data` (FIPS 180-4).
+fn sha256(data: Bytes) -> Bytes = Digest.sha256().update(data).finish()
+
+/// SHA-1 before any input.
+fn Digest.sha1() -> Digest = Digest {
+  algorithm = Sha1,
+  state = [0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0],
+  pending = Bytes.empty(),
+  length = 0
+}
+
+/// SHA-256 before any input.
+fn Digest.sha256() -> Digest = Digest {
+  algorithm = Sha256,
+  state = [0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19],
+  pending = Bytes.empty(),
+  length = 0
+}
+
+/// The digest after `data` follows what `self` has taken.
+fn update(self: Digest, data: Bytes) -> Digest {
+  let taken = absorb(self.state, self.pending, data, self.algorithm == Sha256)
+  Digest { algorithm = self.algorithm, state = taken.state, pending = taken.pending, length = self.length + data.len() }
+}
+
+/// The digest of everything `self` has taken.
+fn finish(self: Digest) -> Bytes {
+  let tail = padding(self.pending, self.length)
+  big_endian(blocks(self.state, tail, 0, tail.len(), self.algorithm == Sha256))
+}
+
+// A state and the bytes after its last whole block.
+type Taken {
+  state: List<U32>
+  pending: Bytes
+}
+
+// `state` and `pending` after `data`: the pending block filled first, then
+// every whole block of `data` read where it lies, the rest kept. `wide`
+// picks SHA-256.
+fn absorb(state: List<U32>, pending: Bytes, data: Bytes, wide: Bool) -> Taken {
+  var words = state
+  var at = 0
+  if pending.len() > 0 {
+    let need = 64 - pending.len()
+    if data.len() < need {
+      var more = pending
+      more.append(data)
+      return Taken { state = words, pending = more }
+    }
+    var block = pending
+    block.append(data.slice(0, need))
+    words = blocks(words, block, 0, 64, wide)
+    at = need
+  }
+  let whole = at + (data.len() - at) / 64 * 64
+  words = blocks(words, data, at, whole, wide)
+  Taken { state = words, pending = data.slice(whole, data.len()) }
+}
+
+fn blocks(state: List<U32>, data: Bytes, from: Int, to: Int, wide: Bool) -> List<U32> {
+  if wide {
+    return sha256_blocks(state, data, from, to)
+  }
+  sha1_blocks(state, data, from, to)
+}
+
+// The last block or two: `pending`, the bit `1`, zeros, and the message
+// length in bits as 64 bits big-endian (RFC 3174 section 4, FIPS 180-4
+// section 5.1.1).
+fn padding(pending: Bytes, length: Int) -> Bytes {
+  var tail = Bytes.with_capacity(128)
+  tail.append(pending)
+  tail.push(0x80)
+  while tail.len() % 64 != 56 {
+    tail.push(0)
+  }
+  var shift = 56
+  while shift >= 0 {
+    tail.push((length * 8 >> shift).wrap_byte())
+    shift = shift - 8
+  }
+  tail
+}
+
+fn big_endian(words: List<U32>) -> Bytes {
+  var out = Bytes.with_capacity(words.len() * 4)
+  for word in words {
+    out.push((word >> 24).wrap_byte())
+    out.push((word >> 16).wrap_byte())
+    out.push((word >> 8).wrap_byte())
+    out.push(word.wrap_byte())
+  }
+  out
+}
+
+// SHA-1's compression (RFC 3174 section 6.1) of the blocks of `data` from
+// `from` to `to`, a multiple of 64 bytes apart.
+fn sha1_blocks(state: List<U32>, data: Bytes, from: Int, to: Int) -> List<U32> {
+  var h0 = state[0]
+  var h1 = state[1]
+  var h2 = state[2]
+  var h3 = state[3]
+  var h4 = state[4]
+  var w: List<U32> = List.with_capacity(80)
+  while w.len() < 80 {
+    w.push(0)
+  }
+  var block = from
+  while block < to {
+    var t = 0
+    while t < 16 {
+      let at = block + t * 4
+      w[t] = data[at].to_u32() << 24 | data[at + 1].to_u32() << 16 | data[at + 2].to_u32() << 8 | data[at + 3].to_u32()
+      t = t + 1
+    }
+    while t < 80 {
+      w[t] = (w[t - 3] ^ w[t - 8] ^ w[t - 14] ^ w[t - 16]).rotate_left(1)
+      t = t + 1
+    }
+    var a = h0
+    var b = h1
+    var c = h2
+    var d = h3
+    var e = h4
+    t = 0
+    while t < 80 {
+      var f = b ^ c ^ d
+      var k: U32 = 0xCA62C1D6
+      if t < 20 {
+        f = b & c | ~b & d
+        k = 0x5A827999
+      } else if t < 40 {
+        k = 0x6ED9EBA1
+      } else if t < 60 {
+        f = b & c | b & d | c & d
+        k = 0x8F1BBCDC
+      }
+      let temp = a.rotate_left(5) + f + e + k + w[t]
+      e = d
+      d = c
+      c = b.rotate_left(30)
+      b = a
+      a = temp
+      t = t + 1
+    }
+    h0 = h0 + a
+    h1 = h1 + b
+    h2 = h2 + c
+    h3 = h3 + d
+    h4 = h4 + e
+    block = block + 64
+  }
+  [h0, h1, h2, h3, h4]
+}
+
+// SHA-256's compression (FIPS 180-4 section 6.2.2) of the blocks of `data`
+// from `from` to `to`, a multiple of 64 bytes apart.
+fn sha256_blocks(state: List<U32>, data: Bytes, from: Int, to: Int) -> List<U32> {
+  let k: List<U32> = [
+    0x428A2F98, 0x71374491, 0xB5C0FBCF, 0xE9B5DBA5, 0x3956C25B, 0x59F111F1, 0x923F82A4, 0xAB1C5ED5,
+    0xD807AA98, 0x12835B01, 0x243185BE, 0x550C7DC3, 0x72BE5D74, 0x80DEB1FE, 0x9BDC06A7, 0xC19BF174,
+    0xE49B69C1, 0xEFBE4786, 0x0FC19DC6, 0x240CA1CC, 0x2DE92C6F, 0x4A7484AA, 0x5CB0A9DC, 0x76F988DA,
+    0x983E5152, 0xA831C66D, 0xB00327C8, 0xBF597FC7, 0xC6E00BF3, 0xD5A79147, 0x06CA6351, 0x14292967,
+    0x27B70A85, 0x2E1B2138, 0x4D2C6DFC, 0x53380D13, 0x650A7354, 0x766A0ABB, 0x81C2C92E, 0x92722C85,
+    0xA2BFE8A1, 0xA81A664B, 0xC24B8B70, 0xC76C51A3, 0xD192E819, 0xD6990624, 0xF40E3585, 0x106AA070,
+    0x19A4C116, 0x1E376C08, 0x2748774C, 0x34B0BCB5, 0x391C0CB3, 0x4ED8AA4A, 0x5B9CCA4F, 0x682E6FF3,
+    0x748F82EE, 0x78A5636F, 0x84C87814, 0x8CC70208, 0x90BEFFFA, 0xA4506CEB, 0xBEF9A3F7, 0xC67178F2
+  ]
+  var h0 = state[0]
+  var h1 = state[1]
+  var h2 = state[2]
+  var h3 = state[3]
+  var h4 = state[4]
+  var h5 = state[5]
+  var h6 = state[6]
+  var h7 = state[7]
+  var w: List<U32> = List.with_capacity(64)
+  while w.len() < 64 {
+    w.push(0)
+  }
+  var block = from
+  while block < to {
+    var t = 0
+    while t < 16 {
+      let at = block + t * 4
+      w[t] = data[at].to_u32() << 24 | data[at + 1].to_u32() << 16 | data[at + 2].to_u32() << 8 | data[at + 3].to_u32()
+      t = t + 1
+    }
+    while t < 64 {
+      let x = w[t - 15]
+      let y = w[t - 2]
+      let s0 = x.rotate_right(7) ^ x.rotate_right(18) ^ (x >> 3)
+      let s1 = y.rotate_right(17) ^ y.rotate_right(19) ^ (y >> 10)
+      w[t] = w[t - 16] + s0 + w[t - 7] + s1
+      t = t + 1
+    }
+    var a = h0
+    var b = h1
+    var c = h2
+    var d = h3
+    var e = h4
+    var f = h5
+    var g = h6
+    var h = h7
+    t = 0
+    while t < 64 {
+      let big1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25)
+      let choice = e & f ^ ~e & g
+      let first = h + big1 + choice + k[t] + w[t]
+      let big0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22)
+      let majority = a & b ^ a & c ^ b & c
+      h = g
+      g = f
+      f = e
+      e = d + first
+      d = c
+      c = b
+      b = a
+      a = first + big0 + majority
+      t = t + 1
+    }
+    h0 = h0 + a
+    h1 = h1 + b
+    h2 = h2 + c
+    h3 = h3 + d
+    h4 = h4 + e
+    h5 = h5 + f
+    h6 = h6 + g
+    h7 = h7 + h
+    block = block + 64
+  }
+  [h0, h1, h2, h3, h4, h5, h6, h7]
+}
+
+test "sha1 of RFC 3174 tests 1, 2 and 4 and of the empty message" {
+  assert hex(sha1(b"abc")) == "a9993e364706816aba3e25717850c26c9cd0d89d"
+  assert hex(sha1(b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")) == "84983e441c3bd26ebaae4aa1f95129e5e54670f1"
+  var four = Bytes.empty()
+  var i = 0
+  while i < 10 {
+    four.append(b"0123456701234567012345670123456701234567012345670123456701234567")
+    i = i + 1
+  }
+  assert hex(sha1(four)) == "dea356a2cddd90c7a7ecedc5ebb563934f460452"
+  assert hex(sha1(Bytes.empty())) == "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+  assert sha1(b"abc").len() == 20
+}
+
+test "sha1 of RFC 3174 test 3, a million a" {
+  var data = Bytes.with_capacity(1000000)
+  while data.len() < 1000000 {
+    data.push(b'a')
+  }
+  assert hex(sha1(data)) == "34aa973cd4c4daa4f61eeb2bdbad27316534016f"
+}
+
+test "sha256 of the FIPS 180-4 examples and of the empty message" {
+  assert hex(sha256(b"abc")) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+  assert hex(sha256(b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq")) == "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"
+  assert hex(sha256(b"abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu")) == "cf5b16a778af8380036ce59e7b0492370b249b11e8f07a51afac45037afee9d1"
+  assert hex(sha256(Bytes.empty())) == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  assert sha256(b"abc").len() == 32
+}
+
+test "sha256 of a million a" {
+  var data = Bytes.with_capacity(1000000)
+  while data.len() < 1000000 {
+    data.push(b'a')
+  }
+  assert hex(sha256(data)) == "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0"
+}
+
+test "the incremental form gives the one-shot digest however the input is split" {
+  var message = Bytes.empty()
+  var i = 0
+  while i < 300 {
+    message.push((i * 7 + 3).wrap_byte())
+    i = i + 1
+  }
+  for size in [1, 3, 55, 56, 63, 64, 65, 128, 300] {
+    var one = Digest.sha1()
+    var two = Digest.sha256()
+    var at = 0
+    while at < message.len() {
+      let end = if at + size < message.len() { at + size } else { message.len() }
+      one = one.update(message.slice(at, end))
+      two = two.update(message.slice(at, end))
+      at = end
+    }
+    assert one.finish() == sha1(message)
+    assert two.finish() == sha256(message)
+  }
+  assert Digest.sha1().finish() == sha1(Bytes.empty())
+  assert Digest.sha256().update(Bytes.empty()).update(b"abc").finish() == sha256(b"abc")
+}

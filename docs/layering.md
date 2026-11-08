@@ -10,7 +10,7 @@ holds the same layer table; change both together. The table of rule 6 it reads f
 
 | layer | modules | may import |
 |---|---|---|
-| base | `std.io`, `std.net`, `std.fs`, `std.process`, `std.sync` (substrate), `std.runtime` (the census and the soak, `docs/slice.md` 33), `std.option`, `std.result`, `std.text`, `std.json`, `std.data` (imports nothing; `std.json` and every later format module import it) | base |
+| base | `std.io`, `std.net`, `std.fs`, `std.process`, `std.sync` (substrate), `std.runtime` (the census and the soak, `docs/slice.md` 33), `std.option`, `std.result`, `std.text`, `std.json`, `std.data` (imports nothing; `std.json` and every later format module import it), `std.encoding` (base64, base64url and hex of RFC 4648; imports nothing), `std.digest` (SHA-1 and SHA-256; imports `std.encoding` for its tests) | base |
 | leaf | `std.sli`, `std.time`, `std.policy` (O45), `std.rfc` and every `std.rfc.*` | base, leaf |
 | general | `std.control`, `std.contract`, `std.deploy`, `std.console`, `std.cli` | base, leaf, general |
 | protocol | every `std.protocol.*` | every layer |
