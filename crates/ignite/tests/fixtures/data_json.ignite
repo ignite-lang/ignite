@@ -1,0 +1,78 @@
+package data_json
+
+import std.data.{FormatError, Value}
+import std.json.{read, write, write_pretty}
+
+// docs/slice.md 27: std.json reads ten documents into std.data values and
+// writes them back. Every fn without parameters below is evaluated by
+// ignite-eval and printed by the compiled program on both targets; the
+// three debug texts must agree (tests/data_json.rs). The last two documents
+// do not read: their format errors must agree as well.
+
+fn documents() -> List<Text> = [
+  "null",
+  "[true, false, 0, -1, 9223372036854775807, -9223372036854775808]",
+  r#"{"id": 1, "title": "milk", "done": false, "tags": []}"#,
+  "[0.5, -1.25E-3, 1e2, 12345678901234567890, -0]",
+  r#""Aé€😀 \"q\" \\ \/ \n\t\u0001""#,
+  r#"{"a": {"b": {"c": [[], {}, [null]]}}}"#,
+  "\n\t {{\r\n \"x\" : [ 1 , 2 ] }}\n",
+  r#"{"": "", "k\"": "v", "é": "€"}"#,
+  r#"{"a": 1, "a": 2}"#,
+  "[1, 2,\n 3,]"
+]
+
+fn values() -> List<Result<Value, FormatError>> = documents().map(read)
+
+// The compact text of each document that reads, else its error message.
+fn compact() -> List<Text> = values().map(|v| match v {
+  Ok(value) => match write(value) {
+    Ok(text) => text
+    Err(e) => "write error: " + e.message
+  }
+  Err(e) => "read error: " + e.message
+})
+
+// The indented text of each document that reads, else its error message.
+fn pretty() -> List<Text> = values().map(|v| match v {
+  Ok(value) => match write_pretty(value) {
+    Ok(text) => text
+    Err(e) => "write error: " + e.message
+  }
+  Err(e) => "read error: " + e.message
+})
+
+// Whether reading the compact and the indented text gives the same value
+// again; `true` for a document that does not read.
+fn round_trips() -> List<Bool> = values().map(|v| match v {
+  Ok(value) => match (write(value), write_pretty(value)) {
+    (Ok(a), Ok(b)) => read(a) == Ok(value) && read(b) == Ok(value)
+    _ => false
+  }
+  Err(_) => true
+})
+
+// The printer of tests/data_json.rs: every fn above without parameters, in
+// declaration order, one debug text per line, on both targets.
+fn show(text: Text) -> Result<Unit, IoError> requires [stdout.write] {
+  var bytes = text.to_bytes()
+  bytes.push(10)
+  return Stdout.write_all(bytes)
+}
+
+type Printer {
+  executable: Text
+}
+
+fn Printer.main(self: Printer) -> Result<Unit, IoError> {
+  show(documents().debug())?
+  show(values().debug())?
+  show(compact().debug())?
+  show(pretty().debug())?
+  show(round_trips().debug())?
+  Ok(Unit)
+}
+
+system DataJson {
+  component dataprint: Printer { executable = "dataprint" }
+}
