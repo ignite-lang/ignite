@@ -64,6 +64,9 @@ resource ingress: TcpListener {
 ```
 
 `address` and `port` are required. `exposure` defaults to `Loopback` and `backlog` to 128.
+A fifth property, `keep_through_drain = true`, keeps the listener open through the SIGTERM
+drain: it is not released and accepts until the process exits, so an admin or internal port
+keeps answering while the others drain, and a task waiting on it does not hold up the exit.
 The generated `main` binds every listener a component uses before it calls the component's
 `main`, with the `--port` override and the `listening on` log line.
 
