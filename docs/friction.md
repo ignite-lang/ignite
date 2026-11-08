@@ -42,14 +42,20 @@ names the row in its contract.
 | 57 | `List` has no `contains` | ignite-codespec story ignite-writer (`src/write.ignite:177` `has`), 2026-11-06; `story:codespec-friction`, recorded only | a hand-written `has(names, name)` loop |
 | 58 | `for` and assignment are not expressions, so neither is a match arm body or a block's value | ignite-codespec story ignite-writer, 2026-11-06; `story:codespec-friction`, recorded only | an arm body in braces, `{ x = v }` (row 38 for assignment) |
 | 59 | A sibling module needs the main file's package as its prefix (`import codespec.cir.{…}` in package `codespec`) | ignite-codespec story cir-model (`src/cir_json.ignite:7`), 2026-11-06; `story:codespec-friction`, recorded only | each sibling import names the full path |
-| 62 | No timer, condition variable or channel (`Clock.sleep` exists since `docs/slice.md` 21.20) | case study G3, 2026-11-07 | a waiter that must wake on a message, not only after a time, still reads a loopback TCP pair with an idle timeout ("bells"): two fds and a connect each |
-| 65 | The SIGTERM drain releases every listener, internal ones included (`crates/ignite-io/src/drain.rs`) | case study G6, 2026-11-07 | rebind the admin, ingress and internal ports after "draining" |
 | 68 | No YAML or regex in std; no WebSocket, NATS or Redis client | case study G9, 2026-11-07 | rules as Ignite data, a hand-written URL matcher, the three protocols over `TcpStream` |
-| 69 | No `setrlimit` (`RLIMIT_NOFILE`) | case study G10, 2026-11-07 | none: the container default caps connections |
 | 70 | No FFI | case study G11, 2026-11-07 | none of rows 60 to 69 can be closed by a thin binding |
 | 71 | `ess generate` has no Ignite target (ESS tooling, not the language) | case study G12, 2026-11-07 | hand-written code |
 | 73 | No `ignite fmt` and no format check | case study G17, 2026-11-08 | none; the format gate is a no-op |
-| 74 | `IoError` has no `==`, not even in an `assert` (E045) | case study G18, 2026-11-08 | compare `error.message`, or return errors as `Text` |
+
+## Solved in wave 7
+
+| # | friction | seen by | where the fix is tested |
+|---|---|---|---|
+| 62, the rest | No timer, condition variable or channel: a waiter that must wake on a message read a loopback TCP pair with an idle timeout ("bells") | case study G3, 2026-11-07 | story `channels-and-timers`, `std.sync` (`docs/slice.md` 30): `channels::{rust,llvm}::g3_long_poll_heartbeat_without_bells`, `channels::{rust,llvm}::a_thousand_waiters_hold_no_extra_descriptor` and the inline tests of `std/sync.ignite` |
+| 65 | The SIGTERM drain released every listener, internal ones included (`crates/ignite-io/src/drain.rs`) | case study G6, 2026-11-07 | story `drain-keeps-listeners`, `keep_through_drain` (`docs/slice.md` 16.13): `drain::a_kept_listener_accepts_through_the_drain_and_the_others_are_released` |
+| 66 | No bitwise operators: and, or, xor, shifts (`^` was E001) | case study G7 (SHA-1, base64, WebSocket masking), 2026-11-07 | story `bitwise-operators` (`docs/slice.md` 29): `bitwise::operators_agree_across_the_evaluator_and_both_targets`, `bitwise::sha1_and_base64_vectors_on_both_targets` |
+| 69 | No `setrlimit` (`RLIMIT_NOFILE`) | case study G10, 2026-11-07 | story `open-files-limit` (`docs/slice.md` 28): `open_files_limit::{rust,llvm}::the_soft_limit_is_raised_to_the_hard_limit_at_start`, `open_files_limit::open_files_limit_is_callable_in_tests_on_both_targets` |
+| 74 | `IoError` had no `==`, not even in an `assert` (E045) | case study G18, 2026-11-08 | story `ioerror-assert-equality` (`docs/slice.md` 12.3): `eval::ioerror_equality_inside_assert`, `ignite_test::ioerror_equality_inside_assert_on_both_targets`, the `ignite-types` fixture `e045_ioerror_outside_assert` |
 
 ## Solved in the process builtins story (`docs/slice.md` 21.20)
 

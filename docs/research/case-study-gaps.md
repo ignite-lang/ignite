@@ -56,6 +56,7 @@
   accepted end, which is kept in a `Store<TcpStream>`. A sleep is a read on a bell nobody rings.
   This costs two fds and a loopback connect per waiter.
 - Blocks: no (costly).
+- Closed in wave 7 by story `channels-and-timers` (`docs/slice.md` 30): bounded channels with `receive_within` wake a waiter on a message or a deadline; the sleep part was closed by the process builtins story (21.20).
 
 ## G4 An idle timeout reads as Eof, so it cannot be told from the peer closing
 
@@ -106,6 +107,7 @@
 - Workaround: on "draining", `TcpListener.bind` the admin, ingress and bell ports again. A listener
   bound after the drain began is not released.
 - Blocks: no.
+- Closed in wave 7 by story `drain-keeps-listeners` (`docs/slice.md` 16.13): a `TcpListener` with `keep_through_drain = true` keeps accepting through the drain.
 
 ## G7 No bitwise operators
 
@@ -118,6 +120,7 @@
   `& | ^ << >>`.
 - Workaround: bit-by-bit arithmetic over Int, in a hand-written module.
 - Blocks: no (slow per frame).
+- Closed in wave 7 by story `bitwise-operators` (`docs/slice.md` 29).
 
 ## G8 No wall clock
 
@@ -147,6 +150,7 @@
 - Actual: `G10.ignite:8:11: error[E003]: `Process` has no static function `set_open_files_limit``.
 - Workaround: none; the container default applies.
 - Blocks: no (it caps connections under the benchmark).
+- Closed in wave 7 by story `open-files-limit` (`docs/slice.md` 28): every program raises its open-files soft limit to the hard limit at start.
 
 ## G11 No FFI
 
@@ -231,6 +235,7 @@
 - Workaround in the service: the parser returns its errors as `Text` instead of `IoError`. Inside Ignite: compare `error.message` (`docs/slice.md` 4.4).
 - Blocks: no.
 
+- Closed in wave 7 by story `ioerror-assert-equality` (`docs/slice.md` 12.3): two `IoError`s compare equal inside `assert` when their messages are.
 
 ## G19 No HTTP client; the server role does not fit the service
 
