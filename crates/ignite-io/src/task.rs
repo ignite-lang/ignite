@@ -54,10 +54,17 @@ fn task_started() {
     *lock(&LIVE) += 1;
 }
 
+/// Count a task's end, and wake [`wait_for_tasks`] when it was the last:
+/// that is all the drain waits for. A `notify_all` is a `futex` call even
+/// without a waiter, made under `LIVE`'s lock: on every task's end it was
+/// 1.4 of the 5.2 futex calls per connection of the LLVM Telnet server
+/// under connect-8 (2026-11-08).
 fn task_ended() {
     let mut live = lock(&LIVE);
     *live = live.saturating_sub(1);
-    ENDED.notify_all();
+    if *live == 0 {
+        ENDED.notify_all();
+    }
 }
 
 /// The number of tasks started and not yet ended.
