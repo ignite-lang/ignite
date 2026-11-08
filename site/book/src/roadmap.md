@@ -1,15 +1,15 @@
 # Roadmap
 
-Ignite is an early prototype. This page separates three things: what is released, what is
-being built and not released, and what exists only as a design document. Only the first is
-described in the rest of this book, except pages titled "Planned".
+Ignite is an early prototype. This page separates what is released, what is
+being built and not released, and what exists only as a design document. The rest of this book
+describes only what is released, except pages titled "Planned".
 
 <span class="badge">released</span> in a tagged release &nbsp;
 <span class="badge wip">unreleased</span> work in progress, not in any release &nbsp;
 <span class="badge design">design</span> a design document; nothing of it is implemented
 
 The roadmap in outline is
-[`PLAN.md`](https://github.com/ignite-lang/ignite/blob/main/PLAN.md); the reasoning and the
+[`PLAN.md`](https://github.com/ignite-lang/ignite/blob/main/PLAN.md). The reasoning and the
 dependencies between the waves are in
 [`docs/vision.md`](https://github.com/ignite-lang/ignite/blob/main/docs/vision.md) section 4.
 
@@ -59,7 +59,7 @@ plan, not a promise of dates. The plan itself is
 ## Designs <span class="badge design">design</span>
 
 These waves follow in [`PLAN.md`](https://github.com/ignite-lang/ignite/blob/main/PLAN.md).
-Each has a design document or a row in the plan; none of it is implemented.
+Each has a design document or a row in the plan. None of it is implemented.
 
 | wave | content | source |
 |---|---|---|
@@ -73,17 +73,17 @@ Each has a design document or a row in the plan; none of it is implemented.
 | H self-hosting M5 to M7 | packages and manifests, the frontend in Ignite, an emitter in Ignite, a bootstrap chain | [`docs/design.md`](https://github.com/ignite-lang/ignite/blob/main/docs/design.md) section 12 |
 
 [`docs/syntax.md`](https://github.com/ignite-lang/ignite/blob/main/docs/syntax.md) is a
-proposal for syntactic sugar. It, too, is not implemented; an item is implemented only when
+proposal for syntactic sugar. It, too, is not implemented. An item is implemented only when
 the declarations of a planned step need it.
 
 ## Rules every step keeps
 
 From [`PLAN.md`](https://github.com/ignite-lang/ignite/blob/main/PLAN.md):
 
-- Both targets agree: every feature lands on both; LLVM is the default target and the Rust
+- Both targets agree: every feature lands on both. LLVM is the default target and the Rust
   target the differential check.
 - Compile time is a budget: the gate time and the program build times are measured before and
-  after each step and recorded; a rise over 10 % is a deviation to explain.
+  after each step and recorded. A rise over 10 % is a deviation to explain.
 - Each step starts with a contract section in `docs/slice.md`, reviewed before work starts,
   and each diagnostic code gets a fixture.
 - Future designs stay proposals until a wave adopts them.

@@ -11,7 +11,7 @@ Options:   -h, --help     Print help
            -V, --version  Print version
 ```
 
-`ignite <command> --help` prints the options of one command; the tables below follow it.
+`ignite <command> --help` prints the options of one command. The tables below follow it.
 
 ## Options shared by several commands
 
@@ -56,8 +56,8 @@ ignite emit [--substrate PATH] [--std DIR] FILE
 ```
 
 Print the generated Rust projects: the program, then `std/`. `--substrate` is the path of the
-`ignite-io` crate written into the generated `Cargo.toml`. Generated Rust is an artifact;
-read it, never edit it.
+`ignite-io` crate written into the generated `Cargo.toml`. Generated Rust is an artifact:
+read it, do not edit it.
 
 ## ignite build
 
@@ -67,8 +67,7 @@ ignite build [--target llvm|rust] [--out DIR] [--target-dir DIR] [--release]
 ```
 
 Build the program's executables: LLVM IR with clang (the default), or generated Rust with
-cargo (`--target rust`). Prints one `built <path>` line
-per executable. See [Building for Rust and LLVM](../guide/targets.md).
+cargo (`--target rust`). Prints one `built <path>` line per executable. See [Building for Rust and LLVM](../guide/targets.md).
 
 | option | meaning |
 |---|---|
@@ -90,7 +89,7 @@ ignite test [OPTIONS] FILE.ignite... [FILTER]
 ```
 
 Build the inline tests of the named files into one test executable per target and run them.
-Arguments ending in `.ignite` are files; at most one other argument is the filter (a
+Arguments ending in `.ignite` are files. At most one other argument is the filter (a
 substring of the test name). See [Testing with ignite test](../guide/testing.md).
 
 | option | meaning |
@@ -119,7 +118,7 @@ ignite plan FILE --for-apply --state DIR --out PLAN [--assembly NAME]
 
 Print the system model as canonical JSON (`ignite-model/0.1`), or write it to `--out`. With
 `--for-apply`, prepare a source-bound saved plan (`ignite-apply-plan/0.1`) against the running
-host of `--state`; this builds the artifacts but changes nothing that runs. See
+host of `--state`. The plan builds the artifacts but changes nothing that runs. See
 [Plan, explain, run and replay](../guide/operate.md) and [Local apply](../guide/apply.md).
 
 | exit | meaning |
@@ -189,8 +188,8 @@ a diagnostic.
 ignite host --state DIR
 ```
 
-Own and supervise a local state directory until stopped (SIGINT, SIGTERM or `stop` on
-stdin; `status` on stdin prints the status). It holds `<state>/lock` and answers on
+Own and supervise a local state directory until stopped by SIGINT, SIGTERM or `stop` on
+stdin. `status` on stdin prints the status. It holds `<state>/lock` and answers on
 `<state>/control.sock`.
 
 | exit | meaning |
@@ -229,10 +228,10 @@ status was read, not that an operation succeeded.
 
 The generated `main` of an executable binds the `TcpListener` resources its component uses
 and prints `listening on <address>:<port>` for each. `--port N` overrides the port of the
-first listener, or of an `Endpoint` the component connects to; `--port 0` binds a free port
+first listener, or of an `Endpoint` the component connects to. `--port 0` binds a free port
 and the `listening on` line reports it. `--ref <path>=<address>:<port>` (or
-`--ref=<path>=…`) binds a reference for `Endpoint.of`; `ignite run` passes it to a probe. The
-first binding with the path wins; no binding with that path is the error `no binding for
+`--ref=<path>=…`) binds a reference for `Endpoint.of`, and `ignite run` passes it to a probe. The
+first binding with the path wins. No binding with that path is the error `no binding for
 <path>`.
 
 | exit | meaning |

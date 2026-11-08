@@ -2,7 +2,7 @@
 
 Every error Ignite reports about a program has a code, `E001` to `E129`. This page lists
 each code, what it means and which command reports it. Most codes come with a small program
-that triggers it; E032 and E125 show an excerpt, and E054, E114, E119 and E126 to E128 show
+that triggers it. E032 and E125 show an excerpt, and E054, E114, E119 and E126 to E128 show
 the output of a repository fixture.
 
 ## Reading a diagnostic
@@ -60,7 +60,7 @@ read is no diagnostic: it prints `error: <file>: <reason>` and exits 3. See
 
 The examples on this page marked checked are complete programs. Each one is checked against
 the standard library with `ignite check`, and the output shown below it is the real output,
-with the file named `example.ignite`. Most fixtures in the repository have more cases; each
+with the file named `example.ignite`. Most fixtures in the repository have more cases. Each
 section links them.
 
 ## Syntax
@@ -353,7 +353,7 @@ example.ignite:1:13: error[E057]: type parameter `T` of `Marker` is never used; 
 ### E099 Malformed bound {#e099}
 
 A bound that names an interface other than `ByteStream`, a type parameter with more than
-one bound, or `ByteStream` used as a type. `ByteStream` is the only interface; use it as a
+one bound, or `ByteStream` used as a type. `ByteStream` is the only interface. Use it as a
 bound, `<S: ByteStream>`.
 
 ```ignite,fails=E099
@@ -586,7 +586,7 @@ example.ignite:1:25: error[E045]: operator `<` is not defined for `Bool`
 ### E046 Match not exhaustive {#e046}
 
 A `match` that does not cover every value. The message names the missing cases. Ranges
-split `Int` and `Byte` into intervals; literal, list and constant patterns need a
+split `Int` and `Byte` into intervals. Literal, list and constant patterns need a
 catch-all arm.
 
 ```ignite,fails=E046
@@ -712,7 +712,7 @@ example.ignite:2:11: error[E100]: a brace literal `{ .. }` needs an expected typ
 ### E101 Quantity units do not fit {#e101}
 
 An operation that mixes quantity types, or a quantity with an `Int` where that is not
-allowed. `+`, `-` and comparisons take two values of one quantity type; `*` and `/` take a
+allowed. `+`, `-` and comparisons take two values of one quantity type. `*` and `/` take a
 quantity and an `Int`.
 
 ```ignite,fails=E101
@@ -757,7 +757,7 @@ example.ignite:3:33: error[E103]: `area` has no parameter `depth`; its parameter
 
 ### E104 Component or resource property {#e104}
 
-A property of a component or resource is wrong. There are three messages: a required
+A property of a component or resource is wrong. Its three messages: a required
 field is missing, an output field (of type `Signal<T>`) is set, or `exposure = Loopback` is
 given with an address that is not a loopback address.
 
@@ -988,7 +988,7 @@ example.ignite:30:5: error[E111]: `S.h` is both a bindings key and included by `
 
 ### E112 Binding not admitted {#e112}
 
-The binding's `admits` function refuses the member; the message carries its reason. Also a
+The binding's `admits` function refuses the member. The message carries its reason. Also a
 contract or policy used as a bindings key.
 
 ```ignite,fails=E112
@@ -1070,9 +1070,8 @@ example.ignite:29:5: error[E113]: binding of `S.w` does not include `S.h`, which
 
 The program declares several assemblies and the command got no `--assembly`, or
 `--assembly` names one that does not exist. `ignite check` accepts such a program, because
-it checks every assembly; `ignite plan`, `ignite explain`, `ignite run` and `ignite replay`
-must pick one. From the
-fixture
+it checks every assembly. `ignite plan`, `ignite explain`, `ignite run` and `ignite replay`
+must pick one. From the fixture
 [`e114_assembly_selection.ignite`](https://github.com/ignite-lang/ignite/blob/main/crates/ignite/tests/fixtures/e114_assembly_selection.ignite),
 which declares the assemblies `hosted` and `workstation`:
 
@@ -1087,7 +1086,7 @@ e114_assembly_selection.ignite:1:1: error[E114]: no assembly named `nowhere`: th
 
 Evaluating a property ran out of fuel, built a value that is too large, or nested calls too
 deeply. The limits are 1,000,000 fuel units (expressions, iterations, calls) per property
-expression, 1,000,000 nodes per value and 10,000 nested fn and closure calls; `--fuel N` on
+expression, 1,000,000 nodes per value and 10,000 nested fn and closure calls. `--fuel N` on
 `plan` and `explain` changes the fuel.
 
 ```ignite,fails=E115
@@ -1175,7 +1174,7 @@ them too. E121, E122 and E129 are checked per assembly. Fixtures:
 
 ### E120 Declaration refused by validate {#e120}
 
-A declaration that its kind's `validate` hook refuses; the message carries the reason the
+A declaration that its kind's `validate` hook refuses. The message carries the reason the
 hook returns. The standard library's hooks refuse, for example, an unknown outcome or time
 zone, `maximum_attempts` below 1, a `target` outside (0 %, 100 %], or a backoff whose
 initial delay is above its maximum.
@@ -1368,7 +1367,7 @@ example.ignite:15:58: error[E124]: `S.up.window` (5 seconds) is shorter than the
 ### E129 Hosted member lacks an entry {#e129}
 
 The assembly hosts a member with a binding that runs it, but the member's kind lacks a
-function the binding needs. The binding type's `entries` function names them: in
+function the binding needs. The binding type's `entries` function lists them: in
 `std.deploy`, `NativeProcess` needs `K.machine` and `ScheduledProbeHost` needs `K.main` and
 `K.machine`.
 
@@ -1449,7 +1448,7 @@ The other message is ``assembly `<name>` runs nothing: no member it hosts has a 
 
 The state directory's journal was written for another model or another format version, or
 another `ignite run` or `ignite host` holds the state directory's lock, or the directory is
-the state of an `ignite host`. `ignite run` reports it before anything is built; `ignite replay`
+the state of an `ignite host`. `ignite run` reports it before anything is built. `ignite replay`
 reports it for a journal without a header or written for another model. Use another
 `--state`, or `--fresh` to start a new journal.
 

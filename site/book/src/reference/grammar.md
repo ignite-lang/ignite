@@ -2,17 +2,17 @@
 
 This page gives the whole grammar of Ignite as the v0.3.0 parser accepts it, then the rules
 for line breaks and the operator precedence. Tokens are described in
-[Lexical structure](lexical.md); what the declarations mean is in [Types](types.md),
+[Lexical structure](lexical.md). What the declarations mean is in [Types](types.md),
 [Effects](effects.md), [Modules and imports](modules.md) and
 [Tests and assertions](tests.md).
 
 ## Notation
 
 - `'fn'` is a keyword or punctuation token, written as in the source.
-- `ident` is an identifier. `name` is an identifier or a keyword; it appears in paths, field
+- `ident` is an identifier. `name` is an identifier or a keyword. It appears in paths, field
   names and after `.`.
 - `INT`, `DECIMAL`, `STRING`, `BYTE` and `BYTES` are literals. `STRING` covers plain,
-  interpolated and raw strings; `BYTE` is `b'c'`; `BYTES` is `b"..."` or `br"..."`.
+  interpolated and raw strings. `BYTE` is `b'c'`, and `BYTES` is `b"..."` or `br"..."`.
 - `NL` is a line break (one token for any run of them).
 - `x?` is optional, `x*` repeats zero or more times, `x+` one or more times, `a | b` is a
   choice, `( )` groups.
@@ -148,7 +148,7 @@ Declarations:
 - A bound (`<S: ByteStream>`) is allowed only on the type parameters of a fn, an associated
   fn or a protocol role. On a record, enum or alias it is E001. `ByteStream` is the only
   interface (E099 otherwise).
-- `type N = T` is an alias; `type N { .. }` is a record. `test type N = T` is E001: an alias
+- `type N = T` is an alias. `type N { .. }` is a record. `test type N = T` is E001: an alias
   cannot be test-only.
 - Type arguments are never written at a use: `swap(p)`, not `swap<Int, Text>(p)`.
 - A fn whose return type is a fn type puts that type in parentheses before its own
@@ -167,8 +167,8 @@ Expressions and statements:
   value of a fn body.
 - `if` used as a value needs an `else`.
 - `fn f(..) -> T = e` is a fn whose body is the single expression `e`.
-- The pattern of `let`, `var` and `for` must be irrefutable: a name, `_` or a tuple of those
-  (E001 otherwise; use `match`).
+- The pattern of `let`, `var` and `for` must be irrefutable: a name, `_` or a tuple of those.
+  Anything else is E001. Use `match` for it.
 - A one-element tuple `(a,)` is E001, as a value, type or pattern. Write `(a)` to group.
 - Comparisons do not chain: `a < b < c` is E001. Write `a < b && b < c`.
 - `return` has no value when a line break, `;`, `,`, `}`, `)` or `]` follows it.
@@ -185,28 +185,28 @@ skipped.
 Line breaks are **skipped**:
 
 - inside `( )` and `[ ]`: argument lists, parameter lists, tuples, list literals, patterns,
-  `requires [..]` lists, variant payloads;
-- after a binary operator, so a long expression breaks after `+`, `&&` and the like;
-- after `=`, `=>`, `->` and `,`;
-- after `{` and before `}`;
+  `requires [..]` lists, variant payloads
+- after a binary operator, so a long expression breaks after `+`, `&&` and the like
+- after `=`, `=>`, `->` and `,`
+- after `{` and before `}`
 - after the `,` between imported names in `import a.b.{X, Y}`.
 
 Line breaks **separate**:
 
-- inside `{ }` of a block: between statements, together with `;`;
+- inside `{ }` of a block: between statements, together with `;`
 - inside `{ }` of a record, enum, record literal, brace literal or `match`: between items,
-  together with `,`;
+  together with `,`
 - at the top level: between declarations.
 
 Some tokens must stay on the line of what comes before them, even inside `( )` and `[ ]`:
 
 - a postfix `(`, `[`, `.` or `?` must start on the same line as its operand. On a new line
-  it starts something new: `[a` NL `(b)]` is E001, not a call of `a`, and
-  a method chain cannot continue on the next line with a leading `.`;
-- `else` must follow the `}` of its `if` on the same line;
+  it starts something new: `[a` NL `(b)]` is E001, not a call of `a`. A method chain
+  cannot continue on the next line with a leading `.`
+- `else` must follow the `}` of its `if` on the same line
 - the `{` of a block starts on the line of its header (`fn ..`, `if cond`, `while cond`,
-  `for x in e`, `loop`, `match e`);
-- `requires` stays on the line of the signature, and its `[` on the line of `requires`;
+  `for x in e`, `loop`, `match e`)
+- `requires` stays on the line of the signature, and its `[` on the line of `requires`
 - a unit name stays on the line of its number (`200 ms`).
 
 So a long expression breaks after an operator, never before it:
@@ -244,9 +244,8 @@ fn both(a: Bool, b: Bool) -> Bool = a
   && b
 ```
 
-Trailing commas: allowed in braces (records, enums, literals, `match`), in tuples and in
-tuple and list patterns;
-not allowed in argument lists, parameter lists, list literals or import lists.
+Trailing commas are allowed in braces (records, enums, literals, `match`), in tuples and in
+tuple and list patterns. They are not allowed in argument lists, parameter lists, list literals or import lists.
 
 ## Operator precedence
 
@@ -270,8 +269,8 @@ From the tightest binding to the loosest:
 
 - Postfix binds tighter than prefix: `-x.len()` is `-(x.len())`, and `!s.is_empty()` is
   `!(s.is_empty())`.
-- The bitwise operators `&`, `|`, `^`, `<<`, `>>` and `~` take `Int` only (E040 for any other
-  type) and never fail. They bind as in Rust: tighter than the comparisons, so
+- The bitwise operators `&`, `|`, `^`, `<<`, `>>` and `~` take `Int` only and never fail. Any
+  other type is E040. They bind as in Rust: tighter than the comparisons, so
   `flags & MASK == 0` is `(flags & MASK) == 0`, and looser than `+`, so `1 << n + 1` is
   `1 << (n + 1)`.
 - `>>` is arithmetic: it copies the sign bit. A shift by an amount outside 0 to 63 is
