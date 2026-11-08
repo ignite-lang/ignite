@@ -13,6 +13,12 @@ Options:   -h, --help     Print help
 
 `ignite <command> --help` prints the options of one command; the tables below follow it.
 
+`ignite --version` prints `ignite X.Y.Z` for a clean build of the release tag `vX.Y.Z`, and
+`ignite X.Y.Z+g<commit>` (the first 12 hex digits, `.dirty` appended when a tracked source
+of the compiler's crates was modified) for any other build from a git checkout. A build from a source archive without git
+names the commit in the archive's `COMMIT` file, as the toolchain image's source has it, or
+prints `ignite X.Y.Z+unknown`.
+
 ## Options shared by several commands
 
 | option | commands | meaning |

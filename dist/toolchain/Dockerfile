@@ -24,8 +24,13 @@ RUN test -n "${VERSION}" \
  && mkdir -p /usr/local/share/ignite \
  && cp -R "${name}/share/ignite/std" /usr/local/share/ignite/std \
  && rm -rf "${name}" "${name}.tar.gz" "${name}.tar.gz.sha256" \
- && curl -fsSL "https://github.com/ignite-lang/ignite/archive/refs/tags/v${VERSION}.tar.gz" | tar -xz \
+ && curl -fsSL -o source.tar.gz "https://github.com/ignite-lang/ignite/archive/refs/tags/v${VERSION}.tar.gz" \
+ && gzip -dc source.tar.gz | git get-tar-commit-id > COMMIT \
+ && grep -qxE '[0-9a-f]{40}' COMMIT \
+ && tar -xzf source.tar.gz \
+ && rm source.tar.gz \
  && mv "ignite-${VERSION}" ignite \
+ && mv COMMIT ignite/COMMIT \
  && ignite --version | grep -qx "ignite ${VERSION}"
 
 RUN root="$(ignite emit /usr/local/src/ignite/examples/todo/todo.ignite \

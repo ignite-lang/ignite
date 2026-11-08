@@ -125,6 +125,109 @@ system HelloWorld {
 }
 "#;
 
+/// `git -C <workspace> args…`, trimmed, when git answers for this checkout.
+fn git(args: &[&str]) -> Option<String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(workspace())
+        .args(args)
+        .output()
+        .ok()?;
+    output
+        .status
+        .success()
+        .then(|| text(&output.stdout).trim().to_string())
+}
+
+#[test]
+fn version_names_the_commit_of_a_source_build() {
+    let output = ignite(&["--version"]);
+    assert!(output.status.success(), "{output:?}");
+    let printed = text(&output.stdout);
+    let printed = printed.trim_end();
+    let release = env!("CARGO_PKG_VERSION");
+    let toplevel = git(&["rev-parse", "--show-toplevel"]).map(PathBuf::from);
+    let checkout =
+        toplevel.is_some_and(|top| top.canonicalize().ok() == workspace().canonicalize().ok());
+    if !checkout {
+        let rest = printed
+            .strip_prefix(&format!("ignite {release}+"))
+            .unwrap_or_else(|| panic!("{printed:?} names no source build"));
+        assert!(
+            rest == "unknown"
+                || rest.strip_prefix('g').is_some_and(
+                    |hex| hex.len() == 12 && hex.bytes().all(|b| b.is_ascii_hexdigit())
+                ),
+            "{printed:?}"
+        );
+        return;
+    }
+    let commit = git(&["rev-parse", "HEAD"]).expect("HEAD");
+    let tagged = git(&["tag", "--points-at", "HEAD"])
+        .unwrap_or_default()
+        .lines()
+        .any(|tag| tag == format!("v{release}"));
+    let mut status = vec!["status", "--porcelain", "--untracked-files=no", "--"];
+    status.extend(ignite::version::SOURCES);
+    let dirty = !git(&status).expect("git status").is_empty();
+    let expected = if tagged && !dirty {
+        format!("ignite {release}")
+    } else if dirty {
+        format!("ignite {release}+g{}.dirty", &commit[..12])
+    } else {
+        format!("ignite {release}+g{}", &commit[..12])
+    };
+    assert_eq!(
+        printed, expected,
+        "HEAD {commit}, the driver's sources modified: {dirty}"
+    );
+}
+
+#[test]
+fn version_of_a_release_a_checkout_and_an_archive() {
+    use ignite::version::{Source, describe};
+    let commit = "0123456789abcdef0123456789abcdef01234567";
+    let tags = vec!["v0.15.0".to_string()];
+    let git = |dirty, tags: &Vec<String>| Source::Git {
+        commit: commit.to_string(),
+        dirty,
+        tags: tags.clone(),
+    };
+    assert_eq!(describe("0.15.0", &git(false, &tags)), "0.15.0");
+    assert_eq!(
+        describe("0.15.0", &git(true, &tags)),
+        "0.15.0+g0123456789ab.dirty"
+    );
+    assert_eq!(
+        describe("0.16.0", &git(false, &tags)),
+        "0.16.0+g0123456789ab"
+    );
+    assert_eq!(
+        describe("0.15.0", &git(true, &Vec::new())),
+        "0.15.0+g0123456789ab.dirty"
+    );
+    assert_eq!(
+        describe("0.15.0", &Source::recorded(&format!("{commit}\n"))),
+        "0.15.0+g0123456789ab"
+    );
+    for text in ["", "$Format:%H$\n", "not a commit", &commit[..12]] {
+        assert_eq!(
+            describe("0.15.0", &Source::recorded(text)),
+            "0.15.0+unknown",
+            "{text:?}"
+        );
+    }
+    assert_eq!(describe("0.15.0", &Source::Unknown), "0.15.0+unknown");
+    assert_eq!(ignite::version::VERSION, {
+        let printed = text(&ignite(&["--version"]).stdout);
+        printed
+            .trim_end()
+            .strip_prefix("ignite ")
+            .unwrap()
+            .to_string()
+    });
+}
+
 #[test]
 fn check_acceptance_program_is_silent() {
     let output = ignite(&["check", "examples/terminal/terminal.ignite"]);
