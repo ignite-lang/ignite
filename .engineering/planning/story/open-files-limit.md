@@ -2,11 +2,12 @@
 format: aep.planning-md/3
 id: story:open-files-limit
 kind: story
-status: proposed
+status: active
 title: Programs raise the open-files limit at start
-revision: 2
+revision: 3
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T01:26:00Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-11-08T01:26:48Z", actor: "human:timo", revision: 3}
 ---
 # Story: open-files-limit
 
