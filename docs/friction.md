@@ -55,6 +55,8 @@ names the row in its contract.
 | 70 | No FFI | case study G11, 2026-11-07 | none of rows 60 to 69 can be closed by a thin binding |
 | 71 | `ess generate` has no Ignite target (ESS tooling, not the language) | case study G12, 2026-11-07 | hand-written code |
 | 72 | No `flush()` builtin although `ignite_io::flush` exists (`docs/slice.md` 7); a write just before `main` returns while draining is never sent | case study G13, 2026-11-07 | write order chosen so a later `connect` flushes |
+| 73 | No `ignite fmt` and no format check | case study G17, 2026-11-08 | none; the format gate is a no-op |
+| 74 | `IoError` has no `==`, not even in an `assert` (E045) | case study G18, 2026-11-08 | compare `error.message`, or return errors as `Text` |
 
 ## Solved in story codespec-friction (`docs/slice.md` 25)
 

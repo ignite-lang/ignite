@@ -212,6 +212,25 @@
   Then `main` returns `Ok`. A SIGTERM with idle clients now exits 0 within about 4 s with a 1 s window.
 - Blocks: it blocked shutdown. Without the workaround the process never exits after SIGTERM.
 
+
+## G17 No formatter and no format check
+
+- Version: ignite 0.13.0. Target: both.
+- Kind: missing-tool.
+- What the service needs: a format gate, as every other implementation of the case study has (`gofmt`, `prettier`).
+- What Ignite does: there is no `ignite fmt` and no `--check` mode; the service's `task fmt` is a no-op that prints this.
+- Blocks: no.
+
+## G18 `IoError` has no `==`, not even inside `assert`
+
+- Version: ignite 0.13.0. Target: both.
+- Kind: missing-feature.
+- What the service needs: to unit-test that parsing a bad port gives the expected error.
+- What Ignite does: `assert port("x") == Err(IoError.new("bad port"))` is E045 ("operator `==` is not defined for `Result<Int, IoError>`, not even in an `assert`"), as `docs/slice.md` 12.3 states for any type holding an `IoError`.
+- Not a gap: `Result.is_err` exists as a UFCS helper in `std.result` (`std/result.ignite:30`); it needs `import std.result.*` (friction row 6). `assert port("x").is_err()` checks.
+- Workaround in the service: the parser returns its errors as `Text` instead of `IoError`. Inside Ignite: compare `error.message` (`docs/slice.md` 4.4).
+- Blocks: no.
+
 ## G13 (update) Missing flush hit in the stop path
 
 - `close()` sends only its own stream (`crates/ignite-io/src/net.rs:438`). A write made just before `main` returns is never sent while draining, because `ignite_rt_exit` waits for tasks without flushing first.
