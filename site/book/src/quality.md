@@ -39,7 +39,7 @@ Current values: run `bar` on 2026-11-07, commit `9a775116`.
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | rust/patterns | 71 | 71 |  |
 | 1.4 | generated-code goldens changed without a `CODEGEN_REVISION` bump | gate | all | 0 | 0 |  |
 | 1.5 | random programs on which the consumers disagree | gate | | unmeasured: no program generator yet (out of scope of story:quality-ratchet) | | |
-| 1.6 | corpus units the evaluator cannot run | ratchet | eval | 220 | 194 |  |
+| 1.6 | corpus units the evaluator cannot run | ratchet | eval | 235 | 194 |  |
 | 1.7 | known differences marked intermittent | gate | all | 1 | 1 |  |
 
 ## 2 Front end: the checker refuses exactly the wrong programs
@@ -71,7 +71,7 @@ Current values: run `bar` on 2026-11-07, commit `9a775116`.
 | 3.3 | throughput and p99 latency of terminald and todod | ratchet | | unmeasured: no load baseline yet (out of scope of story:quality-ratchet) | | |
 | 3.4 | peak RSS, leaked handles and threads after a load run | gate | | unmeasured: no number: the named tests gate it in task gate | | |
 | 3.5 | runtime entries that can unwind a panic across `extern "C"` | gate | llvm | 0 | 0 |  |
-| 3.6 | `unsafe` sites in the substrate a target links | ratchet | llvm | 76 | 73 |  |
+| 3.6 | `unsafe` sites in the substrate a target links | ratchet | llvm | 79 | 73 |  |
 | 3.6 | `unsafe` sites in the substrate a target links | ratchet | rust | 9 | 7 |  |
 
 ## 4 Standard library and protocols
@@ -119,7 +119,7 @@ Current values: run `bar` on 2026-11-07, commit `9a775116`.
 | # | metric | kind | target | bar | current | trend |
 |---|---|---|---|---|---|---|
 | 7.1 | flaky tests per gate | ratchet | | unmeasured: no instrument reads the gate logs; known: apply_transition::a_failed_start_first_replacement, slice10::executable_component_main | | |
-| 7.2 | ignored tests | ratchet | all | 23 | 21 |  |
+| 7.2 | ignored tests | ratchet | all | 24 | 21 |  |
 | 7.3 | source files over 3,000 lines | ratchet | all | 4 | 4 |  |
 | 7.4 | language friction rows open | ratchet | all | 43 | 34 |  |
 | 7.5 | mutants that survive the suite on the compiler crates | ratchet | | unmeasured: no mutation testing yet (out of scope of story:quality-ratchet) | | |

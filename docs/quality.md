@@ -109,7 +109,7 @@ metric, the target, the value before and after, and the run of `task quality` th
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | lower | `quality::static_metrics_hold_the_bar`: per consumer crate, `PatternKind::` mentions (patterns) and distinct `Builtin::` variants named (builtins) | eval/builtins 112, eval/patterns 13, llvm/builtins 12, llvm/patterns 30, rust/builtins 43, rust/patterns 71 | one implementation per rule: after story:mid-level-ir the backends name no `PatternKind` and no `Builtin` the IR lowers |
 | 1.4 | generated-code goldens changed without a `CODEGEN_REVISION` bump | gate | lower | `quality::static_metrics_hold_the_bar`: golden `.rs` and `.ll` outputs changed against the merge base with main while `CODEGEN_REVISION` is unchanged | all 0 |  |
 | 1.5 | random programs on which the consumers disagree | gate | lower | a typed program generator, N seeds per gate | unmeasured: no program generator yet (out of scope of story:quality-ratchet) |  |
-| 1.6 | corpus units the evaluator cannot run | ratchet | lower | the differential runner: units the evaluator has no rule for (IO, tasks, fuel), each listed with its reason in `quality/baseline.json` `eval_cannot_run` | eval 220 |  |
+| 1.6 | corpus units the evaluator cannot run | ratchet | lower | the differential runner: units the evaluator has no rule for (IO, tasks, fuel), each listed with its reason in `quality/baseline.json` `eval_cannot_run` | eval 235 |  |
 | 1.7 | known differences marked intermittent | gate | lower | `quality::check_differential` (every merge): entries of `known_differences` marked `intermittent`, each naming a story of the planning store; a difference so marked may show or not in a run | all 1 |  |
 
 ### 2 Front end: the checker refuses exactly the wrong programs
@@ -132,7 +132,7 @@ metric, the target, the value before and after, and the run of `task quality` th
 | 3.3 | throughput and p99 latency of terminald and todod | ratchet | higher | `ignite-load matrix` (`task bench-throughput`) | unmeasured: no load baseline yet (out of scope of story:quality-ratchet) |  |
 | 3.4 | peak RSS, leaked handles and threads after a load run | gate | lower | `llvm_memory::` and `terminal::idle_terminald_runs_one_thread` (every merge) | unmeasured: no number: the named tests gate it in task gate |  |
 | 3.5 | runtime entries that can unwind a panic across `extern "C"` | gate | lower | `quality::static_metrics_hold_the_bar`, the rule of `contain::tests::every_entry_is_guarded`: `extern "C"` entries of `ignite-rt` not run through `crate::entry` | llvm 0 |  |
-| 3.6 | `unsafe` sites in the substrate a target links | ratchet | lower | `quality::static_metrics_hold_the_bar`: `unsafe` blocks, fns, impls and extern blocks; rust counts `ignite-io`, llvm `ignite-io` and `ignite-rt` | llvm 76, rust 9 |  |
+| 3.6 | `unsafe` sites in the substrate a target links | ratchet | lower | `quality::static_metrics_hold_the_bar`: `unsafe` blocks, fns, impls and extern blocks; rust counts `ignite-io`, llvm `ignite-io` and `ignite-rt` | llvm 79, rust 9 |  |
 
 ### 4 Standard library and protocols
 
@@ -165,7 +165,7 @@ metric, the target, the value before and after, and the run of `task quality` th
 | # | metric | kind | better | instrument | bar | target |
 |---|---|---|---|---|---|---|
 | 7.1 | flaky tests per gate | ratchet | lower | gate logs | unmeasured: no instrument reads the gate logs; known: apply_transition::a_failed_start_first_replacement, slice10::executable_component_main |  |
-| 7.2 | ignored tests | ratchet | lower | `quality::static_metrics_hold_the_bar`: `#[ignore` attributes under crates/ and tools/ | all 23 |  |
+| 7.2 | ignored tests | ratchet | lower | `quality::static_metrics_hold_the_bar`: `#[ignore` attributes under crates/ and tools/ | all 24 |  |
 | 7.3 | source files over 3,000 lines | ratchet | lower | `quality::static_metrics_hold_the_bar`: Rust files under crates/*/src and tools/*/src and std modules over 3,000 lines | all 4 |  |
 | 7.4 | language friction rows open | ratchet | lower | `quality::static_metrics_hold_the_bar`: rows of the Open table of docs/friction.md | all 43 |  |
 | 7.5 | mutants that survive the suite on the compiler crates | ratchet | lower | `cargo mutants` sample | unmeasured: no mutation testing yet (out of scope of story:quality-ratchet) |  |
