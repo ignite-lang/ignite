@@ -93,8 +93,8 @@ Current values: run `v0.14.0` on 2026-11-08, commit `d87fd798`.
 | 3.3 | throughput against plain Rust | ratchet | go/todo/patch-16 | reference, no bar | 0.884× | ec2:c7i.metal-24xl |
 | 3.4 | peak RSS, leaked handles and threads after a load run | gate | | unmeasured: no number: the named tests gate it in task gate | | |
 | 3.5 | runtime entries that can unwind a panic across `extern "C"` | gate | llvm | 0 | 0 | = |
-| 3.6 | `unsafe` sites in the substrate a target links | ratchet | llvm | 82 | 76 | +3 worse |
-| 3.6 | `unsafe` sites in the substrate a target links | ratchet | rust | 12 | 9 | +2 worse |
+| 3.6 | `unsafe` sites in the substrate a target links | ratchet | llvm | 90 | 76 | +3 worse |
+| 3.6 | `unsafe` sites in the substrate a target links | ratchet | rust | 20 | 9 | +2 worse |
 | 3.7 | p99 latency against plain Rust | ratchet | llvm/terminal/connect-8 | 1.132× | 1.132× | ec2:c7i.metal-24xl |
 | 3.7 | p99 latency against plain Rust | ratchet | llvm/terminal/rr-1 | 1.017× | 1.017× | ec2:c7i.metal-24xl |
 | 3.7 | p99 latency against plain Rust | ratchet | llvm/terminal/rr-64 | 1.240× | 1.240× | ec2:c7i.metal-24xl |
