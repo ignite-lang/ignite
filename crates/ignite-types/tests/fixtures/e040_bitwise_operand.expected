@@ -1,0 +1,6 @@
+e040_bitwise_operand.ignite:4:11: error[E040]: type mismatch: expected `Int`, found `Bool`
+e040_bitwise_operand.ignite:5:11: error[E040]: type mismatch: expected `Int`, found `Byte`
+e040_bitwise_operand.ignite:6:15: error[E040]: type mismatch: expected `Int`, found `Text`
+e040_bitwise_operand.ignite:7:11: error[E040]: type mismatch: expected `Int`, found `Text`
+e040_bitwise_operand.ignite:8:12: error[E040]: type mismatch: expected `Int`, found `Bool`
+e040_bitwise_operand.ignite:9:17: error[E040]: type mismatch: expected `Byte`, found `Int`

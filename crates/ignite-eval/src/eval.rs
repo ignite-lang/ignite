@@ -107,6 +107,19 @@ impl From<EvalError> for Flow {
 
 type Eval<T> = Result<T, Flow>;
 
+/// `a op b` for a bitwise `op` (`docs/slice.md` 29.2): a shift by an
+/// amount outside `0..64` gives 0 for `<<` and the sign fill for `>>`.
+fn bitwise(op: BinaryOp, a: i64, b: i64) -> i64 {
+    let amount = u32::try_from(b).ok().filter(|n| *n < 64);
+    match op {
+        BinaryOp::BitAnd => a & b,
+        BinaryOp::BitOr => a | b,
+        BinaryOp::BitXor => a ^ b,
+        BinaryOp::Shl => amount.map_or(0, |n| a << n),
+        _ => a >> amount.unwrap_or(63),
+    }
+}
+
 /// A failure of the evaluator itself: an expression the type checker
 /// accepted but the interpreter has no rule for. Reported as E117 so the
 /// compiler never panics on it.
@@ -1632,6 +1645,7 @@ impl<'p> Evaluator<'p> {
                 None => Err(self.fail(cx, e, FailureOp::Sub, &format!("-({n})"))),
             },
             (UnaryOp::Neg, Value::Byte(0)) => Ok(Value::Byte(0)),
+            (UnaryOp::BitNot, Value::Int(n)) => Ok(Value::Int(!n)),
             (op, value) => Err(internal(format!(
                 "unary `{op:?}` on `{}`",
                 value.debug_text()
@@ -1709,6 +1723,17 @@ impl<'p> Evaluator<'p> {
                     Le => ordering.is_le(),
                     _ => ordering.is_ge(),
                 }));
+            }
+            BitAnd | BitOr | BitXor | Shl | Shr => {
+                let (Value::Int(a), Value::Int(b)) = (&l, &r) else {
+                    return Err(internal(format!(
+                        "`{}` on `{}` and `{}`",
+                        op.symbol(),
+                        l.debug_text(),
+                        r.debug_text()
+                    )));
+                };
+                return Ok(Value::Int(bitwise(op, *a, *b)));
             }
             _ => {}
         }

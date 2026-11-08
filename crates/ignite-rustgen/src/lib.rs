@@ -3313,7 +3313,7 @@ impl<'a> Generator<'a> {
             }
             ExprKind::Unary { op, operand } => {
                 let symbol = match op {
-                    UnaryOp::Not => "!",
+                    UnaryOp::Not | UnaryOp::BitNot => "!",
                     UnaryOp::Neg => "-",
                 };
                 let text = self.value(operand);
@@ -3369,6 +3369,20 @@ impl<'a> Generator<'a> {
             } if matches!(self.type_of(expr), Some(Ty::List(_))) => {
                 let (l, r) = (self.operand(left), self.operand(right));
                 format!("[&({l})[..], &({r})[..]].concat()")
+            }
+            ExprKind::Binary {
+                op: op @ (BinaryOp::Shl | BinaryOp::Shr),
+                left,
+                right,
+            } => {
+                // `docs/slice.md` 29.2: an amount outside `0..64` gives 0
+                // for `<<` and the sign fill for `>>` (63 places).
+                let (l, r) = (self.operand(left), self.operand(right));
+                if *op == BinaryOp::Shl {
+                    format!("i64::checked_shl({l}, u64::min(({r}) as u64, 64) as u32).unwrap_or(0)")
+                } else {
+                    format!("i64::wrapping_shr({l}, u64::min(({r}) as u64, 63) as u32)")
+                }
             }
             ExprKind::Binary { op, left, right } => {
                 if let Some(chunked) = self.chunked_spine(expr) {
