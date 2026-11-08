@@ -9719,7 +9719,7 @@ Layers:
 | Rust target | `::ignite_io::open_files_limit()` |
 | LLVM target | `call i64 @ignite_rt_open_files_limit()` |
 
-`CODEGEN_REVISION` is `ignite-codegen/0.1.0-42`.
+`CODEGEN_REVISION` is `ignite-codegen/0.1.0-43` (wave 7, one bump for its four generation changes).
 
 ### 28.3 Tests
 
@@ -9939,7 +9939,7 @@ and `<Receiver>`.
 | LLVM target | an end is an `i64` handle; a value crosses as a heap copy made, read and freed by the element's `Store` glue (`to_heap`, `from_heap`, `free_heap`); `receive` fills an `Option<T>` through `option_from` |
 | evaluator | no value at compile time, as every substrate builtin |
 
-`CODEGEN_REVISION` is `ignite-codegen/0.1.0-42`.
+`CODEGEN_REVISION` is `ignite-codegen/0.1.0-43` (wave 7, one bump for its four generation changes).
 
 ### 30.5 Tests
 
