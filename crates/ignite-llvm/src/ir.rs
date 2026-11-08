@@ -161,6 +161,19 @@ pub enum Glue {
     /// value at `value` to the `Bytes` at `buf` (`docs/slice.md` section
     /// 13.6).
     Debug,
+    /// `void own_handles.<T>(ptr value)`: register every handle inside the
+    /// value at `value` as the current task's (`ignite_rt_tcp_own`), so
+    /// the block that owns the value releases them when it is left
+    /// ([`crate::own`]).
+    OwnHandles,
+    /// `void retain_handles.<T>(ptr value)`: add an owner to every handle
+    /// inside the value at `value` (`ignite_rt_tcp_retain`): a heap copy
+    /// in a store or a channel, or a copy taken out of one.
+    RetainHandles,
+    /// `void release_handles.<T>(ptr value)`: drop one owner of every
+    /// handle inside the value at `value` (`ignite_rt_handle_release`):
+    /// a heap copy that is freed.
+    ReleaseHandles,
 }
 
 impl Glue {
@@ -176,6 +189,9 @@ impl Glue {
             Glue::Upsert => "store_upsert",
             Glue::Eq => "eq",
             Glue::Debug => "debug",
+            Glue::OwnHandles => "own_handles",
+            Glue::RetainHandles => "retain_handles",
+            Glue::ReleaseHandles => "release_handles",
         }
     }
 }

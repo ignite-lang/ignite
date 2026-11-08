@@ -10063,9 +10063,37 @@ and `<Receiver>`.
 - The value argument of `send` and `try_send` is a move position, like the element of
   `Store.put`: a value dead after the call goes into the channel without a copy; a value read
   later is copied. The receiver gets its own value either way; nothing is shared between tasks.
-- LLVM target: a block owns an end its `let` created and releases it when the block is left,
-  as a stream (`own.rs`); an end sent as a value on another channel is left unowned (never
-  released, never closed early).
+- LLVM target: an end moved into a second binding, an annotated tuple, a record field or a
+  `Store` is released with its last owner, as on the Rust target (case study gap G30). The
+  rules (`own.rs`, `docs/llvm.md` section 4), which cover every handle kind (listeners,
+  streams, pipe ends, channel ends, capabilities):
+  - A block owns the handles of a binding whose `let` takes a value no one else owns: a
+    builtin that creates handles (`Channel.bounded`, `Pipe.pair`, `TcpListener.bind`,
+    `accept`, `connect`, `Launcher.new`, `Entropy.new`, `Directory.temporary`, …), with or
+    without `?`; a copy out of a store or a channel (`get`, `remove`, `values`, `update`,
+    `upsert`, `receive`, `receive_within`); or a call of a fn of the same module whose result
+    holds only handles it created (its final expression such a value, a binding of one that
+    escapes only there, or a tuple or record literal of those; no `return` of a value with a
+    handle). A `match` statement owns such a scrutinee when every arm keeps what it binds.
+    The block registers every handle in the value (`own_handles.<T>`) and releases them when
+    it is left.
+  - The handles stay owned while every later mention keeps them in the block: a receiver of a
+    builtin method that does not hand it on, a value `put` in a store or sent on a channel, a
+    `spawn` argument, a plain argument of a call whose result holds no handle or only fresh
+    ones; a field or element of the binding counts as the binding (`ends.0.close()`,
+    `w.wake.receive()`), one of a type without handles keeps it anywhere (`w.id`). A `let` of
+    the binding, of a field of it, or of a tuple or record literal around it makes an alias,
+    which keeps it while the alias is kept in turn (`let r: Receiver<Int> = rx`,
+    `let w = Waiter { id, wake = rx }`). Any other mention leaves the binding unowned, as
+    before: never released, never closed early.
+  - A heap copy in a store or a channel is an owner of its own: `copy_to_heap` adds an owner to
+    every handle in it and `free_heap` drops it (`ignite_rt_handle_release`); `copy_from_heap`
+    adds one for the copy it makes, so `remove` and `receive` hand the stored owner to their
+    caller. A store's `update` and `upsert` call their fn on a copy that shares the stored
+    handles.
+  - `spawn` adds an owner in the parent for every handle inside a tuple, record or enum
+    argument (`retain_handles.<T>`); the task registers them and releases them when its fn
+    returns, as it does a stream argument.
 
 ### 30.4 Lowering
 
@@ -10081,11 +10109,12 @@ and `<Receiver>`.
 
 ### 30.5 Tests
 
-- `std/sync.ignite`: eight inline tests on both targets (`task test-ignite`): order and
+- `std/sync.ignite`: twelve inline tests on both targets (`task test-ignite`): order and
   `try_send` on a full channel, `receive_within` at its deadline, a send from another task
   waking a receiver, `send` waiting while full, close ending every waiter (a blocked sender
   refused, blocked receivers ended), queued values after a close, the last sender's task ending
-  closing the channel, a sent value independent of the sender's later changes.
+  closing the channel, a sent value independent of the sender's later changes, and the four
+  G30 soaks of 30.3 (33.4).
 - `channels::{rust,llvm}::g3_long_poll_heartbeat_without_bells`
   (`crates/ignite/tests/channels.rs`, `fixtures/channels/g3.ignite`): a long-poll held to its
   200 ms deadline, one woken by a message after 50 ms, a heartbeat that ticks until its stop
@@ -10388,15 +10417,17 @@ counted object holds (both targets). Release builds ignore the variable.
   its drop returns it within 64 KiB.
 - `leak::every_soak_passes_without_a_seeded_leak` and
   `leak::each_seeded_leak_fails_its_soak_naming_the_kind` over
-  `crates/ignite/tests/fixtures/leak/seeded.ignite`, both targets. On the LLVM target five
-  soaks are known failures without a seed, each asserted red with the kind it names: the
-  lowering releases only the channel ends, pipe ends and streams a block owns (`own.rs`), so a
-  listener (`soak: listener`, `soak: stream`), a directory and a capability (`soak: child` by
-  its launcher, `soak: capability`) stay in the handle table until the process exits
-  (`docs/leak-guard.md` 1.2, Q8); their seeds are checked on the Rust target only. For the
-  same reason the census test of a capability checks its release on neither target.
-- G30 (`docs/leak-guard.md` 6.1): `fixtures/leak/g30.ignite` holds "a channel end bound a
-  second time is released (G30)" and "a channel end kept in a record field is released (G30)";
-  `leak::g30_soaks_pass_on_rust_and_are_known_failures_on_llvm` asserts both pass on Rust and
-  both fail on LLVM naming `handles` and `channels`. `story:channel-release-on-close` turns the
-  LLVM half green and moves the two tests into `std/sync.ignite`.
+  `crates/ignite/tests/fixtures/leak/seeded.ignite`, both targets: every soak passes without a
+  seed and each seed fails its soak on both targets. Until `story:llvm-release-all-handles` five
+  soaks were known failures on the LLVM target (`soak: listener`, `soak: stream`, `soak:
+  child` by its launcher, `soak: directory`, `soak: capability`): the lowering released only
+  the channel ends, pipe ends and streams a block owned; since 30.3 it releases every handle
+  kind. The census test of a capability checks its release on both targets.
+- G30 (`docs/leak-guard.md` 6.1): the soaks "a channel end bound a second time is released
+  (G30)", "a channel end kept in a record field is released (G30)", "an annotated pair of
+  channel ends is released (G30)" and "a channel end put in a store and taken out is released
+  (G30)" are inline tests of `std/sync.ignite` (2,000 runs each), green on both targets; on the
+  LLVM target before 30.3's rules each grew `handles` and `channels` by one or two per run.
+  `leak::g30_reproducer_stays_flat_in_every_mode` builds the case study's reproducer
+  (`fixtures/leak/repro.ignite`) on both targets and runs every mode at `N=20000`: each mode's
+  peak resident size (`VmHWM`, the lowest of up to three runs) is within 2 MB of `none`'s.

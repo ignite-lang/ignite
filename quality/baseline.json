@@ -24,8 +24,7 @@
     "crates/ignite/tests/fixtures/conformance/adversary_std_telnet.ignite::adversary: replies and the prompt after a reply are NVT data": "builtin `PipePair` has no value at compile time",
     "crates/ignite/tests/fixtures/conformance/adversary_two_specs/main.ignite::padding exits with seven": "builtin `ProcessExit` has no value at compile time",
     "crates/ignite/tests/fixtures/conformance/signal.ignite::never ends": "exceeds the evaluator's fuel of 10000000 units",
-    "crates/ignite/tests/fixtures/leak/g30.ignite::a channel end bound a second time is released (G30)": "builtin `RuntimeCensus` has no value at compile time",
-    "crates/ignite/tests/fixtures/leak/g30.ignite::a channel end kept in a record field is released (G30)": "builtin `RuntimeCensus` has no value at compile time",
+    "crates/ignite/tests/fixtures/leak/repro.ignite::main repro": "a main does IO; the evaluator has none",
     "crates/ignite/tests/fixtures/leak/seeded.ignite::a channel made and dropped": "builtin `ChannelBounded` has no value at compile time",
     "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: arena": "builtin `RuntimeCensus` has no value at compile time",
     "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: bytes": "builtin `RuntimeCensus` has no value at compile time",
@@ -256,9 +255,13 @@
     "std/runtime.ignite::a task counts until it ends": "builtin `RuntimeCensus` has no value at compile time",
     "std/runtime.ignite::a task's megabyte counts in heap and arena bytes until the task ends": "builtin `RuntimeCensus` has no value at compile time",
     "std/runtime.ignite::the census counts a channel while it lives": "builtin `RuntimeCensus` has no value at compile time",
+    "std/sync.ignite::a channel end bound a second time is released (G30)": "builtin `RuntimeCensus` has no value at compile time",
+    "std/sync.ignite::a channel end kept in a record field is released (G30)": "builtin `RuntimeCensus` has no value at compile time",
+    "std/sync.ignite::a channel end put in a store and taken out is released (G30)": "builtin `StoreNew` has no value at compile time",
     "std/sync.ignite::a closed channel still gives what was sent before": "builtin `ChannelBounded` has no value at compile time",
     "std/sync.ignite::a send from another task wakes a waiting receiver": "builtin `ChannelBounded` has no value at compile time",
     "std/sync.ignite::a value sent is the receiver's own": "builtin `ChannelBounded` has no value at compile time",
+    "std/sync.ignite::an annotated pair of channel ends is released (G30)": "builtin `RuntimeCensus` has no value at compile time",
     "std/sync.ignite::closing a channel ends every waiter": "builtin `ChannelBounded` has no value at compile time",
     "std/sync.ignite::receive_within returns None at its deadline": "builtin `ChannelBounded` has no value at compile time",
     "std/sync.ignite::send waits while the channel is full": "builtin `ChannelBounded` has no value at compile time",
@@ -277,41 +280,6 @@
     "crates/ignite/tests/fixtures/tests/store_load.ignite::values under updates of one shard: every id, values grow, no long wait, no lost write": "story:llvm-store-update-off-lock, 2026-11-07: the 500 ms wait assertion fails on LLVM at load 35 to 39, also when run alone, and passes at lower load"
   },
   "known_differences": {
-    "crates/ignite/tests/fixtures/leak/g30.ignite::a channel end bound a second time is released (G30)": {
-      "consumer": "llvm",
-      "story": "story:channel-release-on-close",
-      "what": "Rust passes; on LLVM the soak fails naming `handles` and `channels`: the lowering releases only the channel ends a block owns (docs/leak-guard.md 6.1, docs/slice.md 33.4; asserted red by leak::g30_soaks_pass_on_rust_and_are_known_failures_on_llvm)"
-    },
-    "crates/ignite/tests/fixtures/leak/g30.ignite::a channel end kept in a record field is released (G30)": {
-      "consumer": "llvm",
-      "story": "story:channel-release-on-close",
-      "what": "Rust passes; on LLVM the soak fails naming `handles` and `channels`: the lowering releases only the channel ends a block owns (docs/leak-guard.md 6.1, docs/slice.md 33.4; asserted red by leak::g30_soaks_pass_on_rust_and_are_known_failures_on_llvm)"
-    },
-    "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: capability": {
-      "consumer": "llvm",
-      "story": "story:llvm-release-all-handles",
-      "what": "Rust passes; on LLVM a capability stays in the handle table until the process exits, so the soak fails naming its kind: the lowering releases only the channel ends, pipe ends and streams a block owns (docs/leak-guard.md 1.2 and Q8, docs/slice.md 33.4; asserted red by leak::every_soak_passes_without_a_seeded_leak)"
-    },
-    "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: child": {
-      "consumer": "llvm",
-      "story": "story:llvm-release-all-handles",
-      "what": "Rust passes; on LLVM the child's launcher stays in the handle table until the process exits, so the soak fails naming its kind: the lowering releases only the channel ends, pipe ends and streams a block owns (docs/leak-guard.md 1.2 and Q8, docs/slice.md 33.4; asserted red by leak::every_soak_passes_without_a_seeded_leak)"
-    },
-    "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: directory": {
-      "consumer": "llvm",
-      "story": "story:llvm-release-all-handles",
-      "what": "Rust passes; on LLVM a directory stays in the handle table until the process exits, so the soak fails naming its kind: the lowering releases only the channel ends, pipe ends and streams a block owns (docs/leak-guard.md 1.2 and Q8, docs/slice.md 33.4; asserted red by leak::every_soak_passes_without_a_seeded_leak)"
-    },
-    "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: listener": {
-      "consumer": "llvm",
-      "story": "story:llvm-release-all-handles",
-      "what": "Rust passes; on LLVM a listener stays in the handle table until the process exits, so the soak fails naming its kind: the lowering releases only the channel ends, pipe ends and streams a block owns (docs/leak-guard.md 1.2 and Q8, docs/slice.md 33.4; asserted red by leak::every_soak_passes_without_a_seeded_leak)"
-    },
-    "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: stream": {
-      "consumer": "llvm",
-      "story": "story:llvm-release-all-handles",
-      "what": "Rust passes; on LLVM the listener of the stream stays in the handle table until the process exits, so the soak fails naming its kind: the lowering releases only the channel ends, pipe ends and streams a block owns (docs/leak-guard.md 1.2 and Q8, docs/slice.md 33.4; asserted red by leak::every_soak_passes_without_a_seeded_leak)"
-    },
     "crates/ignite/tests/fixtures/tests/basics.ignite::try on err fails": {
       "consumer": "eval",
       "story": "story:eval-try-report",
@@ -348,7 +316,7 @@
         },
         "llvm": {
           "decision": "story leak-census (2026-11-08), accepted by the coordinator: the seven LLVM soaks of crates/ignite/tests/fixtures/leak/ fail on LLVM by design: G30's two until story:channel-release-on-close, listener, stream, child, directory and capability until story:llvm-release-all-handles (docs/leak-guard.md 1.2, Q8); listed in known_differences and asserted red in leak::",
-          "value": 7
+          "value": 0
         }
       },
       "direction": "lower",
@@ -366,10 +334,10 @@
           "value": 467
         },
         "llvm": {
-          "value": 724
+          "value": 727
         },
         "rust": {
-          "value": 724
+          "value": 727
         }
       },
       "direction": "higher",
@@ -440,8 +408,8 @@
       "area": "Semantics: one meaning across the three consumers",
       "bars": {
         "eval": {
-          "decision": "story leak-census (2026-11-08), accepted by the coordinator: the 21 census tests of std/runtime.ignite and crates/ignite/tests/fixtures/leak/ read Runtime.census() or make channels, which have no value at compile time (docs/slice.md 33.2); listed in eval_cannot_run",
-          "value": 257
+          "decision": "story channel-release-on-close (2026-11-08), wave 8 unit leaks: the four G30 soaks now in std/sync.ignite read Runtime.census() or make a store, and the main of the case study's reproducer (crates/ignite/tests/fixtures/leak/repro.ignite) does IO, none with a value at compile time (docs/slice.md 33.4); the two soaks of the removed fixtures/leak/g30.ignite left the list; listed in eval_cannot_run",
+          "value": 260
         }
       },
       "direction": "lower",
@@ -888,10 +856,10 @@
           "value": 209
         },
         "llvm": {
-          "value": 358
+          "value": 362
         },
         "rust": {
-          "value": 358
+          "value": 362
         }
       },
       "direction": "higher",
