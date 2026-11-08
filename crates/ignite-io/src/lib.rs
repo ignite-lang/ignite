@@ -120,10 +120,10 @@ thread_local! {
 /// `read_into` runs, so a nested read uses a fresh one. A larger read
 /// allocates its own buffer, as the allocator hands out large zeroed
 /// blocks as fresh pages without writing them.
-fn read_input(
+fn read_input<E>(
     maximum: i64,
-    read_into: impl FnOnce(&mut [u8]) -> Result<usize, IoError>,
-) -> Result<Input, IoError> {
+    read_into: impl FnOnce(&mut [u8]) -> Result<usize, E>,
+) -> Result<Input, E> {
     let size = usize::try_from(maximum.max(1))
         .unwrap_or(MAX_READ)
         .min(MAX_READ);
@@ -837,6 +837,14 @@ pub mod args {
 mod tests {
     use super::*;
 
+    /// [`super::read_input`] with the substrate's error, as the tests read.
+    fn read_input(
+        maximum: i64,
+        read_into: impl FnOnce(&mut [u8]) -> Result<usize, IoError>,
+    ) -> Result<Input, IoError> {
+        super::read_input(maximum, read_into)
+    }
+
     /// `docs/slice.md` 21.8: hooks run in registration order, each once,
     /// whichever exit path runs them first.
     #[test]
@@ -1092,6 +1100,14 @@ pub use limits::{OPEN_FILES_REPORT_BELOW, open_files_limit, raise_open_files_lim
 // `docs/slice.md` 30: bounded channels between tasks.
 pub mod channel;
 pub use channel::{Channel, Receiver, Sender};
+// `docs/readiness-io.md` 4.2 and 3.4: one waiter for every wait, and the
+// readiness source behind one interface.
+pub mod reactor;
+pub mod wait;
+// `docs/readiness-io.md` 4.1, 4.3 to 4.6 (phase R1): stackful tasks on
+// epoll workers, the IO mode `readiness`.
+mod sched;
+pub use sched::{IoMode, TASK_STACK, TaskLocals, io_mode, set_task_locals, worker_limit};
 // Story `text-fast-search`: the byte search of `Bytes.index_of` and
 // `Text.pieces`.
 pub mod text;

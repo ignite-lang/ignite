@@ -625,12 +625,12 @@
       "area": "Generated code and runtime behaviour",
       "bars": {
         "llvm": {
-          "decision": "native parity round 1 integration (2026-11-08): story text-fast-search adds two unsafe blocks (memchr/memmem in ignite_io::text, the pieces list in ignite-rt), accepted by the coordinator; story fs-resolve-beneath adds two in ignite-io fs.rs (the getdents64 syscall that lists a directory and the slice over the bytes it filled); story rt-hot-path removes one in ignite-rt",
-          "value": 82
+          "decision": "readiness IO (2026-11-08): story readiness-waiters adds three unsafe sites in ignite-io reactor.rs (BorrowedFd::borrow_raw of a registered descriptor in epoll and poll), story readiness-scheduler five in ignite-io sched.rs (the coroutine yielder of the running task, installing and restoring the SIGSEGV and SIGBUS handlers that report a task stack overflow, the alternate signal stack, si_addr in that handler)",
+          "value": 88
         },
         "rust": {
-          "decision": "native parity round 1 integration (2026-11-08): story text-fast-search adds one unsafe block (memchr/memmem in ignite_io::text), accepted by the coordinator; story fs-resolve-beneath adds two in ignite-io fs.rs (the getdents64 syscall that lists a directory and the slice over the bytes it filled)",
-          "value": 12
+          "decision": "readiness IO (2026-11-08): story readiness-waiters adds three unsafe sites in ignite-io reactor.rs (BorrowedFd::borrow_raw of a registered descriptor in epoll and poll), story readiness-scheduler five in ignite-io sched.rs (the coroutine yielder of the running task, installing and restoring the SIGSEGV and SIGBUS handlers that report a task stack overflow, the alternate signal stack, si_addr in that handler)",
+          "value": 18
         }
       },
       "direction": "lower",

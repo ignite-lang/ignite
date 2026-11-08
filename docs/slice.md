@@ -885,14 +885,70 @@ impl Stdin {
 }
 ```
 
-**Tasks.** A task runs on one OS thread for as long as it runs. A thread that finishes a
-task waits up to `LINGER` for the next one; `spawn` hands a task to the thread that went
-idle most recently and starts a new thread only when none is idle. A task that panics
-ends its thread. Thread-local state survives from one task to the next on the same thread.
-The substrate's pending writes are always empty between tasks, because each task ends
-with a flush. When the operating system cannot start a thread, the task is dropped without
-running (a task that owns a stream closes it), the first such failure after a successful
-start is logged as `cannot start a task: <reason>`, and the process continues.
+**IO modes** (`docs/readiness-io.md`, phase R1). The substrate runs spawned tasks in one of
+two modes, chosen once per process by the environment variable `IGNITE_IO`: `readiness`
+(the default; also any value other than `threads`) or `threads`. Both modes run the same
+operations with the same results; only cost differs. `main` runs on the process's main
+thread in both.
+
+```rust
+pub enum IoMode { Threads, Readiness }
+pub fn io_mode() -> IoMode;                                  // IGNITE_IO, read once
+pub fn worker_limit() -> usize;                              // IGNITE_WORKERS, else available_parallelism
+pub const TASK_STACK: usize;                                 // 2 MiB: the stack of a task in `readiness`
+pub trait TaskLocals { fn swap(&mut self); }                 // a runtime's per-task thread-locals
+pub fn set_task_locals(make: fn() -> Box<dyn TaskLocals>);   // each new task gets make()
+```
+
+- `readiness`: a task is a stackful coroutine with its own `TASK_STACK` stack (`mmap`, one
+  guard page below it) on a **worker**, an OS thread named `worker` that runs its tasks until
+  each waits and then waits in `epoll_wait` for a descriptor, a timer or a wake. A worker
+  starts when a task needs one, up to `worker_limit()`. `spawn` from a task places the new
+  task on the caller's worker while that worker has at most one task more than the least
+  loaded worker (a worker not yet started counts as one with none). Otherwise, and from a
+  thread that is no worker, it places the task on an idle worker, else on a new worker, else
+  on the one with the fewest tasks. A worker whose only task is blocked in a read (below)
+  counts as busy: placement passes it, and only when every worker is busy and none can start
+  does a task go to it, to run when the read returns. A task stays on its worker (no
+  stealing, no migration). A worker without a task waits up to
+  `LINGER` for one, then ends, so an idle server runs no worker. A wait of a task (a read, a
+  write that finds the socket buffer full, `accept`, a channel, a pipe, a timer, a child,
+  standard input) parks the task and lets its worker run another. Sockets block, as in
+  `threads` mode (an accepted one from a single `accept4` with `SOCK_CLOEXEC`); a task's
+  `recv` and `send` pass `MSG_DONTWAIT`, and a socket is registered edge-triggered with the
+  worker's epoll on its first wait. A read that left the socket empty (it read
+  less than it asked for, or nothing) makes the next read of the stream wait for readiness
+  before its first `recv`. A read that filled its buffer lets the next one try at once. A worker creates
+  its epoll and eventfd when a task first waits for a descriptor, so tasks that wait only for
+  each other cost no descriptor; a worker that cannot create them (the process is out of
+  descriptors) looks at the descriptor every 10 ms instead, until it can. A worker runs at
+  most 128 tasks in a row before it polls for descriptors without waiting. The only task of a
+  worker with nothing else to run waits for its descriptor with one `poll` on the worker's
+  thread, as a blocked thread would, and a hand-over to the worker ends that wait. A read
+  without a deadline of its own by such a task, on a worker with no hand-over pending, is one
+  blocking `recv` instead, while fewer tasks live than `worker_limit()` (never with one
+  worker), so a spawn meanwhile finds an idle worker or starts one; the worker counts as busy
+  for that read. Each wait reads the clock once.
+  `connect`, name resolution, `Directory`, `Launcher` and stdout run inline on the worker. The
+  idle timeout (26.2) is `SO_RCVTIMEO` for a blocking `recv` and the deadline of the read's
+  wait otherwise. A panic in a task ends the task, not
+  its worker, as `task ended with error: <report>`; a stack overflow writes `thread 'worker'
+  has overflowed its stack` and aborts the process, as Rust does on a thread. Thread-locals
+  are the worker's: a runtime that keeps per-task state in thread-locals registers
+  `set_task_locals`, whose `swap` exchanges them whenever a different task resumes, and
+  borrows none across a wait.
+- `threads`: every task is an OS thread, as below. Sockets block: a read or send waits in the
+  kernel and the idle timeout is `SO_RCVTIMEO`.
+
+**Tasks.** In `threads` mode a task runs on one OS thread for as long as it runs. A thread
+that finishes a task waits up to `LINGER` for the next one; `spawn` hands a task to the
+thread that went idle most recently and starts a new thread only when none is idle. A task
+that panics ends its thread. Thread-local state survives from one task to the next on the
+same thread. In both modes the substrate's pending writes are always empty between tasks,
+because each task ends with a flush and flushes before it waits. When the operating system
+cannot start a thread (or map a task's stack), the task is dropped without running (a task
+that owns a stream closes it), the first such failure after a successful start is logged as
+`cannot start a task: <reason>`, and the process continues.
 
 **Freed memory.** A `Store` that replaces or removes a value, and an LLVM task whose arenas
 held more than 1 MiB at its end, call `released_memory`. On Linux with glibc the substrate

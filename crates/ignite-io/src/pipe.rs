@@ -24,15 +24,16 @@
 //!
 //! Every handle of an end is a clone that shares the end: its queue, batch
 //! counter, idle timeout, closed flag and kept failure. A read holds only
-//! the end's read lock and its queue's lock while it waits on the queue's
-//! condition variable, so a write to the same end does not wait for it.
+//! the end's read lock while it waits on the queue's wait list
+//! ([`crate::wait`]), so a write to the same end does not wait for it.
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use crate::net::{Buffered, lock_until, register};
+use crate::wait::{Lock, LockGuard, WaitList, park_in};
 use crate::{Input, IoError, SEND_BUFFER, flush, read_input};
 
 /// Unread bytes a receive queue holds before a delivery into it fails.
@@ -70,7 +71,6 @@ pub struct PipeStream {
 #[derive(Debug, Default)]
 struct Queue {
     state: Mutex<Received>,
-    ready: Condvar,
 }
 
 #[derive(Debug, Default)]
@@ -84,6 +84,8 @@ struct Received {
     gone: bool,
     /// The urgent byte's index in `bytes`, until a read returns it.
     urgent: Option<usize>,
+    /// Readers waiting for bytes or the end of the stream.
+    readers: WaitList,
 }
 
 #[derive(Debug)]
@@ -92,8 +94,8 @@ struct End {
     incoming: Arc<Queue>,
     /// The peer's `incoming`, which this end's deliveries fill.
     outgoing: Arc<Queue>,
-    reading: Mutex<()>,
-    writing: Mutex<Out>,
+    reading: Lock<()>,
+    writing: Lock<Out>,
     /// A delivery by a flush failed; the error waits in `Out::failed`.
     failed: AtomicBool,
     /// `close` was called on some handle.
@@ -138,7 +140,7 @@ impl Queue {
             }
             state.bytes.extend(buffer.iter());
             state.batches += 1;
-            self.ready.notify_all();
+            state.readers.wake_all();
             Ok(())
         };
         drop(state);
@@ -151,14 +153,15 @@ impl Queue {
 
     /// The writing end will deliver nothing more.
     fn end(&self) {
-        lock(&self.state).ended = true;
-        self.ready.notify_all();
+        let mut state = lock(&self.state);
+        state.ended = true;
+        state.readers.wake_all();
     }
 }
 
 impl End {
-    fn out(&self) -> MutexGuard<'_, Out> {
-        lock(&self.writing)
+    fn out(&self) -> LockGuard<'_, Out> {
+        self.writing.lock()
     }
 
     /// Deliver the buffer; the caller holds the write lock.
@@ -211,11 +214,7 @@ impl Buffered for End {
 /// write half, and fail every later delivery into this end's queue.
 impl Drop for End {
     fn drop(&mut self) {
-        let mut out = std::mem::take(
-            self.writing
-                .get_mut()
-                .unwrap_or_else(PoisonError::into_inner),
-        );
+        let mut out = std::mem::take(self.writing.get_mut());
         let _ = self.send(&mut out);
         self.outgoing.end();
         let mut incoming = lock(&self.incoming.state);
@@ -231,8 +230,8 @@ impl PipeStream {
             end: Arc::new(End {
                 incoming,
                 outgoing,
-                reading: Mutex::new(()),
-                writing: Mutex::new(Out::default()),
+                reading: Lock::new(()),
+                writing: Lock::new(Out::default()),
                 failed: AtomicBool::new(false),
                 closed: AtomicBool::new(false),
                 idle: AtomicI64::new(0),
@@ -254,7 +253,7 @@ impl PipeStream {
         flush();
         let end = &self.end;
         end.check_failure()?;
-        let _reading = lock(&end.reading);
+        let _reading = end.reading.lock();
         let deadline = idle(end.idle.load(Ordering::Acquire)).map(|wait| Instant::now() + wait);
         let queue = &end.incoming;
         let mut state = lock(&queue.state);
@@ -278,23 +277,10 @@ impl PipeStream {
             if state.ended || buffer.is_empty() {
                 return Ok(0);
             }
-            state = match deadline {
-                None => queue
-                    .ready
-                    .wait(state)
-                    .unwrap_or_else(PoisonError::into_inner),
-                Some(deadline) => {
-                    let now = Instant::now();
-                    if now >= deadline {
-                        return Ok(0);
-                    }
-                    queue
-                        .ready
-                        .wait_timeout(state, deadline - now)
-                        .unwrap_or_else(PoisonError::into_inner)
-                        .0
-                }
-            };
+            if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                return Ok(0);
+            }
+            state = park_in(&queue.state, state, |s| &mut s.readers, deadline).0;
         }
     }
 

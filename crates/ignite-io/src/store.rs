@@ -47,7 +47,9 @@ use std::convert::Infallible;
 use std::fmt;
 use std::iter::Peekable;
 use std::sync::atomic::{AtomicI64, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+
+use crate::wait::{WaitList, park_in};
 
 /// The number of shards of every store, a power of two.
 const SHARDS: usize = 16;
@@ -71,16 +73,15 @@ struct Shared<T> {
 
 struct Shard<T> {
     map: Mutex<Map<T>>,
-    /// Notified when a taken slot is put back while a task waits.
-    returned: Condvar,
 }
 
 struct Map<T> {
     slots: BTreeMap<i64, Slot<T>>,
     /// Slots an `upsert` has taken for an absent id: `Slot::Taken(None)`.
     taken_absent: usize,
-    /// Tasks waiting in [`Shard::returned`].
-    waiting: usize,
+    /// Tasks waiting for a taken slot to be put back; woken at every
+    /// put-back.
+    returned: WaitList,
 }
 
 impl<T> Map<T> {
@@ -128,9 +129,8 @@ impl<T> Shard<T> {
             map: Mutex::new(Map {
                 slots: BTreeMap::new(),
                 taken_absent: 0,
-                waiting: 0,
+                returned: WaitList::new(),
             }),
-            returned: Condvar::new(),
         }
     }
 
@@ -142,12 +142,7 @@ impl<T> Shard<T> {
     fn lock_when(&self, ready: impl Fn(&Map<T>) -> bool) -> MutexGuard<'_, Map<T>> {
         let mut map = self.lock();
         while !ready(&map) {
-            map.waiting += 1;
-            map = self
-                .returned
-                .wait(map)
-                .unwrap_or_else(PoisonError::into_inner);
-            map.waiting -= 1;
+            map = park_in(&self.map, map, |m| &mut m.returned, None).0;
         }
         map
     }
@@ -168,9 +163,7 @@ impl<T> Shard<T> {
         if let Some(value) = value() {
             map.slots.insert(id, Slot::Held(value));
         }
-        if map.waiting > 0 {
-            self.returned.notify_all();
-        }
+        map.returned.wake_all();
     }
 }
 

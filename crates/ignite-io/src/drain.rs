@@ -4,7 +4,8 @@
 //! started afterwards inherits the block, and starts the signal thread,
 //! which takes SIGTERM with `sigwait`. The first SIGTERM begins the drain
 //! ([`begin`]): every bound [`crate::TcpListener`] is shut down for
-//! reading, which wakes a pending `accept`, then closed and announced on
+//! reading and the waiters of a pending `accept` are woken
+//! ([`crate::wait`]), then it is closed and announced on
 //! stderr as `released <address>:<port>`, in bind order; from then on
 //! `accept` fails with "draining" ([`DRAINING`]). [`crate::run`] (the Rust
 //! target) and the runtime's `exit` and `fail` entries (the LLVM target)
