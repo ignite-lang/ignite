@@ -338,7 +338,8 @@ pub(crate) fn lent_bytes(program: &Program, types: &TypedProgram) -> BTreeMap<St
 }
 
 /// Whether `stmts` read the `Bytes` variable `name` only as a slice: every
-/// use is the receiver of `len`, `is_empty`, `at`, `slice` or `to_text`, or
+/// use is the receiver of `len`, `is_empty`, `at`, `slice`, `to_text` or
+/// `index_of`, or
 /// an argument by position to a parameter `lends` says is a lent `Bytes`
 /// parameter, outside any closure or `spawn`, and nothing assigns it. A
 /// backend may then hold the bytes as a borrowed slice. Names are not
@@ -372,6 +373,7 @@ pub fn reads_as_slice(
                             | Builtin::ListAt
                             | Builtin::ListSlice
                             | Builtin::BytesToText
+                            | Builtin::BytesIndexOf
                     ),
                     Some(c @ Callee::Fn(_)) => types.named_args(e).is_none() && lends(c, 0),
                     _ => false,
