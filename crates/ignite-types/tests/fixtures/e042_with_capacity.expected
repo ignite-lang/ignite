@@ -1,0 +1,3 @@
+e042_with_capacity.ignite:2:11: error[E042]: cannot infer the element type of `List.with_capacity(..)`; add a type annotation
+e042_with_capacity.ignite:3:31: error[E040]: type mismatch: expected `Int`, found `Text`
+e042_with_capacity.ignite:4:17: error[E040]: type mismatch: expected `Text`, found a list

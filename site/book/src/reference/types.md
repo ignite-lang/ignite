@@ -138,7 +138,9 @@ Offsets into a `Text` are byte offsets, and matching is byte for byte.
 
 `List<T>` is an ordered list of values of one type. `[1, 2, 3]` is a literal; `[]` and
 `List.empty()` are the empty list, whose element type comes from an annotation or a later
-use.
+use. `List.with_capacity(n)` and `Bytes.with_capacity(n)` are the empty list too, with room for
+`n` elements before `push` has to grow it; only speed tells them apart from `List.empty()`, and
+a negative `n` counts as 0.
 
 | method | type | note |
 |---|---|---|

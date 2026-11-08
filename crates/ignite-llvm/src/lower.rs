@@ -4645,6 +4645,23 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 )
             }
             BytesEmpty | ListEmpty => self.empty_list(),
+            BytesWithCapacity | ListWithCapacity => {
+                let element = match self.ty(e) {
+                    Ty::List(t) => *t,
+                    _ => Ty::Byte,
+                };
+                let n = self.scalar_arg(&args[0]);
+                let list = self.empty_list();
+                let p = self.ptr(&list);
+                let layout = self.layout(&element);
+                // `@ignite.reserve` allocates once for `n > 0` (at least 4
+                // elements) and leaves the empty list alone for `n <= 0`.
+                self.f.ins(format!(
+                    "call void @ignite.reserve(ptr {p}, i64 {n}, i64 {}, i64 {})",
+                    layout.size, layout.align
+                ));
+                list
+            }
             StoreNew => unreachable!("`Store.new()` is lowered by `store_new`"),
             DirectoryTemporary
             | DirectoryReadFile

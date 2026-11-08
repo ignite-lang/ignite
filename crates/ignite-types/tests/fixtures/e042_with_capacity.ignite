@@ -1,0 +1,6 @@
+fn f() -> Int {
+  let l = List.with_capacity(8)
+  let b = Bytes.with_capacity("eight")
+  let t: Text = List.with_capacity(2)
+  return 0
+}
