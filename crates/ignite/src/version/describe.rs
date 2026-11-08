@@ -3,11 +3,40 @@
 //! `IGNITE_VERSION` to [`describe`]'s answer; this file needs nothing of the
 //! crate.
 
+/// The workspace paths the driver is built from: a tracked change under one
+/// of them makes a checkout's build `.dirty`, and `build.rs` reruns when one
+/// changes. Edits elsewhere (`std/`, which the driver reads at run time,
+/// docs, tests) change no driver and do not make it `.dirty`.
+pub const SOURCES: &[&str] = &[
+    "Cargo.toml",
+    "Cargo.lock",
+    "crates/ignite/Cargo.toml",
+    "crates/ignite/build.rs",
+    "crates/ignite/src",
+    "crates/ignite-syntax/Cargo.toml",
+    "crates/ignite-syntax/src",
+    "crates/ignite-check/Cargo.toml",
+    "crates/ignite-check/src",
+    "crates/ignite-types/Cargo.toml",
+    "crates/ignite-types/src",
+    "crates/ignite-rustgen/Cargo.toml",
+    "crates/ignite-rustgen/src",
+    "crates/ignite-llvm/Cargo.toml",
+    "crates/ignite-llvm/src",
+    "crates/ignite-eval/Cargo.toml",
+    "crates/ignite-eval/src",
+    "crates/ignite-io/Cargo.toml",
+    "crates/ignite-io/src",
+    "crates/ignite-rt/Cargo.toml",
+    "crates/ignite-rt/src",
+];
+
 /// Where a build's source came from.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Source {
     /// A git checkout whose top level is the workspace: the full `HEAD`
-    /// commit, whether a tracked file differs from it, and the tags at `HEAD`.
+    /// commit, whether a tracked file under [`SOURCES`] differs from it, and
+    /// the tags at `HEAD`.
     Git {
         commit: String,
         dirty: bool,
@@ -36,7 +65,7 @@ impl Source {
 /// `version` alone for a clean checkout at the tag `v<version>`, the release
 /// build; otherwise `version` with the semver build metadata `+g<the first 12
 /// digits of the commit>`, `.dirty` appended for a checkout that modifies a
-/// tracked file, or `+unknown` when the commit is not known.
+/// tracked file under [`SOURCES`], or `+unknown` when the commit is not known.
 pub fn describe(version: &str, source: &Source) -> String {
     match source {
         Source::Git {

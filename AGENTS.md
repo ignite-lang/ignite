@@ -92,7 +92,7 @@ Rules of the layout:
 | all tests | `task test` |
 | format and lint | `task check` |
 | merge gate | `task gate` |
-| pack the release binary | `task dist` (release `ignite` for Linux x86_64, glibc linked statically, with `std/` as `target/dist/ignite-VERSION-x86_64-linux.tar.gz`: `bin/ignite`, `share/ignite/std`; a driver at `<prefix>/bin/ignite` reads `<prefix>/share/ignite/std` first when it exists) |
+| pack the release binary | `task dist` (release `ignite` for Linux x86_64, glibc linked statically, with `std/` as `target/dist/ignite-VERSION-x86_64-linux.tar.gz`: `bin/ignite`, `share/ignite/std`; a driver at `<prefix>/bin/ignite` reads `<prefix>/share/ignite/std` first when it exists; fails unless the driver prints the bare `ignite VERSION`, a clean build of the tag `vVERSION`, which must exist) |
 | build and check the toolchain image | `task image VERSION=X.Y.Z` (`dist/toolchain/Dockerfile`, tags `ghcr.io/ignite-lang/ignite-toolchain:X.Y.Z` from release vX.Y.Z's archive and the tag's source), `task image-check VERSION=X.Y.Z [IMAGE=REF]` (`image::` in `crates/ignite/tests/image.rs`, ignored elsewhere: needs docker) |
 | compile the example | `task compile` (`ignite build --target rust`; writes `target/ignite/terminal/`, prints `built …/terminald` and `built …/tn`) |
 | run the compiled server | `task server` |

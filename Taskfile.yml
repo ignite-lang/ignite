@@ -122,17 +122,20 @@ tasks:
         sh: cargo pkgid -p ignite | sed 's/.*[#@]//'
       NAME: ignite-{{.VERSION}}-x86_64-linux
       DIR: '{{.T}}/dist/{{.NAME}}'
+      RELEASE_COMMIT:
+        sh: git rev-parse --verify 'v{{.VERSION}}^{commit}'
     env:
       CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C target-feature=+crt-static
+      IGNITE_RELEASE_COMMIT: '{{.RELEASE_COMMIT}}'
     cmds:
       - cargo build --release --locked -p ignite --target x86_64-unknown-linux-gnu
       - rm -rf '{{.DIR}}' '{{.DIR}}.tar.gz'
       - mkdir -p '{{.DIR}}/bin' '{{.DIR}}/share/ignite'
       - cp '{{.T}}/x86_64-unknown-linux-gnu/release/ignite' '{{.DIR}}/bin/ignite'
+      - 'v="$(''{{.DIR}}/bin/ignite'' --version)" && echo "$v" && test "$v" = ''ignite {{.VERSION}}'''
       - cp -R std '{{.DIR}}/share/ignite/std'
       - cp README.md '{{.DIR}}/'
       - tar -czf '{{.DIR}}.tar.gz' -C '{{.T}}/dist' '{{.NAME}}'
-      - '''{{.DIR}}/bin/ignite'' --version'
       - echo 'built {{.DIR}}.tar.gz'
 
   image:

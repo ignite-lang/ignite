@@ -139,23 +139,6 @@ fn git(args: &[&str]) -> Option<String> {
         .then(|| text(&output.stdout).trim().to_string())
 }
 
-/// The sources whose change reruns `crates/ignite/build.rs`, so a binary
-/// built from a tree that modifies one of them says `.dirty`.
-const COMPILER_SOURCES: &[&str] = &[
-    "Cargo.toml",
-    "Cargo.lock",
-    "crates/ignite/build.rs",
-    "crates/ignite/src",
-    "crates/ignite-syntax/src",
-    "crates/ignite-check/src",
-    "crates/ignite-types/src",
-    "crates/ignite-rustgen/src",
-    "crates/ignite-llvm/src",
-    "crates/ignite-eval/src",
-    "crates/ignite-io/src",
-    "crates/ignite-rt/src",
-];
-
 #[test]
 fn version_names_the_commit_of_a_source_build() {
     let output = ignite(&["--version"]);
@@ -184,26 +167,20 @@ fn version_names_the_commit_of_a_source_build() {
         .unwrap_or_default()
         .lines()
         .any(|tag| tag == format!("v{release}"));
-    let clean = git(&["status", "--porcelain", "--untracked-files=no"])
-        .is_some_and(|status| status.is_empty());
-    if tagged && clean {
-        assert_eq!(printed, format!("ignite {release}"));
-        return;
-    }
-    let source = format!("ignite {release}+g{}", &commit[..12]);
-    assert!(
-        printed == source || printed == format!("{source}.dirty"),
-        "{printed:?}, expected {source:?} with or without `.dirty`"
-    );
     let mut status = vec!["status", "--porcelain", "--untracked-files=no", "--"];
-    status.extend(COMPILER_SOURCES);
-    if git(&status).is_some_and(|status| !status.is_empty()) {
-        assert_eq!(
-            printed,
-            format!("{source}.dirty"),
-            "the compiler's sources are modified"
-        );
-    }
+    status.extend(ignite::version::SOURCES);
+    let dirty = !git(&status).expect("git status").is_empty();
+    let expected = if tagged && !dirty {
+        format!("ignite {release}")
+    } else if dirty {
+        format!("ignite {release}+g{}.dirty", &commit[..12])
+    } else {
+        format!("ignite {release}+g{}", &commit[..12])
+    };
+    assert_eq!(
+        printed, expected,
+        "HEAD {commit}, the driver's sources modified: {dirty}"
+    );
 }
 
 #[test]
