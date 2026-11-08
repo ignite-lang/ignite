@@ -111,6 +111,7 @@
     "examples/todo/todo.ignite::handle answers 400, 404 and 405": "builtin `DirectoryTemporary` has no value at compile time",
     "examples/todo/todo.ignite::handle creates, lists, reads, updates and deletes": "builtin `DirectoryTemporary` has no value at compile time",
     "examples/todo/todo.ignite::ids past 65,536 go to the next shard and load from it": "builtin `DirectoryTemporary` has no value at compile time",
+    "examples/todo/todo.ignite::saves that finish out of order leave only the newest file": "builtin `DirectoryTemporary` has no value at compile time",
     "std/fs.ignite::a file over the read bound is refused": "builtin `DirectoryTemporary` has no value at compile time",
     "std/fs.ignite::a file written is read back, listed, nested and removed": "builtin `DirectoryTemporary` has no value at compile time",
     "std/fs.ignite::a legal 250-byte name is written": "builtin `DirectoryTemporary` has no value at compile time",
@@ -305,13 +306,13 @@
       "area": "Semantics: one meaning across the three consumers",
       "bars": {
         "eval": {
-          "value": 445
+          "value": 448
         },
         "llvm": {
-          "value": 680
+          "value": 684
         },
         "rust": {
-          "value": 680
+          "value": 684
         }
       },
       "direction": "higher",
@@ -382,8 +383,8 @@
       "area": "Semantics: one meaning across the three consumers",
       "bars": {
         "eval": {
-          "decision": "wave 7 integration (2026-11-08): stories channels-and-timers, open-files-limit and bitwise-operators add 15 units that do IO, call a substrate builtin with no compile-time value (ChannelBounded, ProcessOpenFilesLimit) or exceed the fuel (SHA-1 of RFC 3174 test 3); each is listed in eval_cannot_run with its reason",
-          "value": 235
+          "decision": "native parity round 1 integration (2026-11-08): story todo-save-without-races adds the inline test of saves that finish out of order, which needs Directory.temporary (DirectoryTemporary has no compile-time value); listed in eval_cannot_run",
+          "value": 236
         }
       },
       "direction": "lower",
@@ -585,12 +586,12 @@
       "area": "Generated code and runtime behaviour",
       "bars": {
         "llvm": {
-          "decision": "wave 7 integration (2026-11-08): story channels-and-timers adds three unsafe blocks in ignite-rt channel.rs, the boxing of a channel element across the C ABI (read, write, free)",
-          "value": 79
+          "decision": "native parity round 1 integration (2026-11-08): story text-fast-search adds two unsafe blocks (memchr/memmem in ignite_io::text, the pieces list in ignite-rt), accepted by the coordinator; story fs-resolve-beneath adds two in ignite-io fs.rs (the getdents64 syscall that lists a directory and the slice over the bytes it filled); story rt-hot-path removes one in ignite-rt",
+          "value": 82
         },
         "rust": {
-          "decision": "wave 5 integration (2026-11-08): the substrate entries of wave 6 (story process-builtins: environment, sleep, clocks, flush; story net-builtins: peer address, timed-out reads, connect timeout) add unsafe sites in ignite-io and ignite-rt",
-          "value": 9
+          "decision": "native parity round 1 integration (2026-11-08): story text-fast-search adds one unsafe block (memchr/memmem in ignite_io::text), accepted by the coordinator; story fs-resolve-beneath adds two in ignite-io fs.rs (the getdents64 syscall that lists a directory and the slice over the bytes it filled)",
+          "value": 12
         }
       },
       "direction": "lower",
@@ -667,13 +668,13 @@
       "area": "Standard library and protocols",
       "bars": {
         "eval": {
-          "value": 206
+          "value": 209
         },
         "llvm": {
-          "value": 346
+          "value": 350
         },
         "rust": {
-          "value": 346
+          "value": 350
         }
       },
       "direction": "higher",
