@@ -11,6 +11,10 @@
 //! archive built for that target, the musl start files, `libc.a` and
 //! `libunwind.a`. [`musl_kit`] writes it the same way, one file at a time,
 //! to `<cache>/<kit hash>/`.
+//!
+//! A `-linux-gnu` driver also carries the runtime as bitcode, the archive
+//! of `ignite build --release` with LTO (`docs/llvm.md` section 1);
+//! [`materialize_lto`] writes it to `<cache>/lto-<hash>/libignite_rt.a`.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -31,6 +35,40 @@ pub(crate) struct Kit {
 }
 
 include!(concat!(env!("OUT_DIR"), "/musl_kit.rs"));
+
+/// The bitcode runtime `build.rs` built with `-Clinker-plugin-lto`, the
+/// archive of release builds with LTO (`docs/llvm.md` section 1): the
+/// triple it was built for, the major LLVM version of its rustc, the hash
+/// of its bytes and the bytes.
+pub(crate) struct LtoRuntime {
+    pub(crate) triple: &'static str,
+    pub(crate) llvm_major: u32,
+    hash: &'static str,
+    archive: &'static [u8],
+}
+
+include!(concat!(env!("OUT_DIR"), "/lto_runtime.rs"));
+
+/// The bitcode runtime this driver carries, if it carries one.
+pub(crate) fn lto_runtime() -> Option<&'static LtoRuntime> {
+    LTO_RUNTIME.as_ref()
+}
+
+/// The cached copy of the carried bitcode runtime,
+/// `<cache>/lto-<hash>/libignite_rt.a`, written first if it is missing or
+/// of another size; `None` when this driver carries none or the cache
+/// cannot be written, so that the build links the native archive.
+pub(crate) fn materialize_lto() -> Option<PathBuf> {
+    let runtime = LTO_RUNTIME.as_ref()?;
+    let dir = cache_root()?.join(format!("lto-{}", runtime.hash));
+    let path = dir.join("libignite_rt.a");
+    if std::fs::metadata(&path).is_ok_and(|metadata| metadata.len() == runtime.archive.len() as u64)
+    {
+        return Some(path);
+    }
+    write(&dir, &path, runtime.archive).ok()?;
+    Some(path)
+}
 
 /// `$XDG_CACHE_HOME/ignite/runtime`, else `$HOME/.cache/ignite/runtime`.
 pub(crate) fn cache_root() -> Option<PathBuf> {

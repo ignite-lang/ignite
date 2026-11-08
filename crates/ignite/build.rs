@@ -16,6 +16,15 @@
 //! `self-contained` directory: the kit `ignite build --static` links
 //! (`docs/slice.md` 23.3). Without that target the file says `None`, and
 //! `--static` then needs the target installed (23.4).
+//!
+//! For a `-linux-gnu` driver a second `cargo build`, run beside the first
+//! into `ignite-runtime-lto`, builds the same archive with
+//! `-Clinker-plugin-lto`: its Rust code is LLVM bitcode, which
+//! `ignite build --release` links with LTO (`docs/llvm.md` section 1).
+//! `$OUT_DIR/lto_runtime.rs` carries it with the triple and the major LLVM
+//! version of the rustc that built it, which the driver compares with
+//! clang's; when that build fails the file says `None` and release builds
+//! link the native archive.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -53,37 +62,91 @@ fn main() {
     let target = env("TARGET");
     let release = env("PROFILE") == "release";
     let musl = musl_self_contained(&target);
-    let mut command = Command::new(env("CARGO"));
-    command
-        .args([
-            "build",
-            "--locked",
-            "-p",
-            "ignite-rt",
-            "--features",
-            "runner",
-        ])
-        .arg("--manifest-path")
-        .arg(crates.join("ignite-rt/Cargo.toml"))
-        .arg("--target")
-        .arg(&target)
-        .arg("--target-dir")
-        .arg(&target_dir)
-        .env_remove("RUSTC_WORKSPACE_WRAPPER")
-        .env_remove("CARGO_TARGET_DIR")
-        .env_remove("CARGO_BUILD_TARGET");
+    let runtime_build = |target_dir: &Path| {
+        let mut command = Command::new(env("CARGO"));
+        command
+            .args([
+                "build",
+                "--locked",
+                "-p",
+                "ignite-rt",
+                "--features",
+                "runner",
+            ])
+            .arg("--manifest-path")
+            .arg(crates.join("ignite-rt/Cargo.toml"))
+            .arg("--target")
+            .arg(&target)
+            .arg("--target-dir")
+            .arg(target_dir)
+            .env_remove("RUSTC_WORKSPACE_WRAPPER")
+            .env_remove("CARGO_TARGET_DIR")
+            .env_remove("CARGO_BUILD_TARGET");
+        if release {
+            command.arg("--release");
+        }
+        command
+    };
+    let mut command = runtime_build(&target_dir);
     if let Some((triple, _)) = &musl {
         command.arg("--target").arg(triple);
     }
-    if release {
-        command.arg("--release");
-    }
+    let lto_dir = target_dir.with_file_name("ignite-runtime-lto");
+    let llvm = rustc_llvm_major();
+    let lto_build = match llvm {
+        Some(_) if target.ends_with("-linux-gnu") => {
+            let mut flags = std::env::var("CARGO_ENCODED_RUSTFLAGS").unwrap_or_default();
+            if !flags.is_empty() {
+                flags.push('\u{1f}');
+            }
+            flags.push_str("-Clinker-plugin-lto");
+            let mut lto = runtime_build(&lto_dir);
+            lto.env("CARGO_ENCODED_RUSTFLAGS", flags)
+                .env_remove("RUSTFLAGS");
+            Some(
+                lto.spawn()
+                    .map(|child| (lto, child))
+                    .unwrap_or_else(|error| panic!("start the bitcode runtime build: {error}")),
+            )
+        }
+        _ => None,
+    };
     let status = command
         .status()
         .unwrap_or_else(|error| panic!("start {command:?}: {error}"));
     assert!(status.success(), "{command:?} failed with {status}");
 
     let profile = if release { "release" } else { "debug" };
+    let lto = match (lto_build, llvm) {
+        (Some((command, mut child)), Some(major)) => {
+            let status = child
+                .wait()
+                .unwrap_or_else(|error| panic!("wait for {command:?}: {error}"));
+            if status.success() {
+                let archive = lto_dir.join(&target).join(profile).join("libignite_rt.a");
+                let bytes = std::fs::read(&archive)
+                    .unwrap_or_else(|error| panic!("read {}: {error}", archive.display()));
+                let path = archive.to_str().expect("a UTF-8 path");
+                format!(
+                    "Some(LtoRuntime {{ triple: {target:?}, llvm_major: {major}, hash: \"{:016x}\", archive: include_bytes!({path:?}) }})",
+                    fnv1a(FNV_OFFSET, &bytes)
+                )
+            } else {
+                println!(
+                    "cargo::warning=the bitcode runtime did not build ({status}); release builds link without LTO"
+                );
+                "None".to_string()
+            }
+        }
+        _ => "None".to_string(),
+    };
+    let lto_file = out.join("lto_runtime.rs");
+    std::fs::write(
+        &lto_file,
+        format!("static LTO_RUNTIME: Option<LtoRuntime> = {lto};\n"),
+    )
+    .unwrap_or_else(|error| panic!("write {}: {error}", lto_file.display()));
+
     let archive = target_dir
         .join(&target)
         .join(profile)
@@ -156,6 +219,18 @@ fn musl_self_contained(target: &str) -> Option<(String, PathBuf)> {
             .iter()
             .all(|name| self_contained.join(name).is_file()))
     .then_some((triple, self_contained))
+}
+
+/// The major version of the LLVM the compiling rustc uses (`rustc -vV`,
+/// `LLVM version: X.Y.Z`).
+fn rustc_llvm_major() -> Option<u32> {
+    let rustc = std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
+    let output = Command::new(rustc).arg("-vV").output().ok()?;
+    let text = String::from_utf8(output.stdout).ok()?;
+    let version = text
+        .lines()
+        .find_map(|line| line.strip_prefix("LLVM version: "))?;
+    version.split('.').next()?.trim().parse().ok()
 }
 
 /// `<target>/<profile>/build/ignite-runtime` for an output directory
