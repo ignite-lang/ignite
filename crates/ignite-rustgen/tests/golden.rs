@@ -271,7 +271,7 @@ fn generics_stores_and_builtins() {
         "pub fn swap<A: Clone + Send + Sync + 'static, B: Clone + Send + Sync + 'static>(p: Pair<A, B>) -> Pair<B, A>",
         "pub fn serve<S: Clone + Send + Sync + 'static>(mut stream: ::ignite_io::TcpStream, mut app: App<S>)",
         "let id: ::std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync> = (::std::sync::Arc::new(|__a0: i64| identity::<i64>(__a0)) as ::std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync>);",
-        "counts.values().iter().cloned().map(&*(::std::sync::Arc::new(|__a0: i64| show(&__a0)) as ::std::sync::Arc<dyn Fn(i64) -> String + Send + Sync>)).collect::<Vec<_>>()",
+        "counts.values().iter().map(|__a0| show(__a0)).collect::<Vec<_>>()",
         "counts.update(id.clone(), &*(::std::sync::Arc::new(|__a0: i64| bump(&__a0)) as ::std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync>))",
         "Some(rest) => ::ignite_io::parse_int(&rest),",
         "u8::try_from(n).ok()",
@@ -453,7 +453,7 @@ fn parameters_are_borrowed_unless_changed() {
         "pub fn same(a: &String, b: &String) -> bool { (*a) == (*b) }",
         "pub fn grow(mut items: Vec<i64>) -> Vec<i64> { items.push(1); items }",
         "pub fn keep(text: String) -> String { text }",
-        "::ignite_io::checked::add(count(text, &2), count(&String::from(\"x\"), &1), \"test.ignite\", 6, 30)",
+        "::ignite_io::checked::add(count(text, &2), count({ static TEXT: ::std::sync::LazyLock<String> = ::std::sync::LazyLock::new(|| String::from(\"x\")); &*TEXT }, &1), \"test.ignite\", 6, 30)",
     ] {
         assert!(lib.contains(expected), "missing `{expected}` in\n{lib}");
     }

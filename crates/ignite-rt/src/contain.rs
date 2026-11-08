@@ -29,9 +29,10 @@
 //! [`ignite_io::catch`] marks the thread as catching, so the panic hook
 //! records the report instead of printing it and exiting. `init` has no
 //! guard: it installs the runtime's panic hook (exit 101 for a panic no
-//! entry catches), which the first [`ignite_io::catch`] wraps; a guard
-//! around `init` would install `ignite-io`'s hook first and let `init`'s
-//! replace it.
+//! entry catches) and then `ignite-io`'s, which wraps it; a guard around
+//! `init` would install `ignite-io`'s hook first and let `init`'s replace
+//! it. `arena_state` has none either: it cannot panic, and it is the
+//! hottest entry (its docs; the test lists both).
 
 use std::convert::Infallible;
 
@@ -53,12 +54,24 @@ pub(crate) fn entry_never(body: impl FnOnce() -> Infallible) -> ! {
     match entry(body) {}
 }
 
+/// Entries without a guard: `init` (module docs), and the entries whose
+/// whole body is the given expression, which cannot panic (see each
+/// entry's docs). An edit to such a body fails
+/// `contain::tests::every_entry_is_guarded` (and quality row 3.5, which
+/// reads this list) until the entry is guarded again or the new body is
+/// shown not to panic.
+pub const UNGUARDED_ENTRIES: [(&str, Option<&str>); 2] = [
+    ("ignite_rt_init", None),
+    ("ignite_rt_arena_state", Some("state()")),
+];
+
 #[cfg(test)]
 mod tests {
+    use super::UNGUARDED_ENTRIES as UNGUARDED;
+
     /// Every `extern "C"` entry of the crate runs its body through
     /// [`super::entry`] or [`super::entry_never`], or builds its report in
-    /// [`super::entry`] before it fails; `init` is the one exception
-    /// (module docs).
+    /// [`super::entry`] before it fails; the exceptions are [`UNGUARDED`].
     #[test]
     fn every_entry_is_guarded() {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
@@ -77,7 +90,13 @@ mod tests {
                 entries += 1;
                 let guarded =
                     body.contains("crate::entry(") || body.contains("crate::entry_never(");
-                if !guarded && name != "ignite_rt_init" {
+                let excepted = UNGUARDED.iter().any(|(entry, whole)| {
+                    *entry == name
+                        && whole.is_none_or(|whole| {
+                            body.split_once("{\n").map(|(_, inside)| inside.trim()) == Some(whole)
+                        })
+                });
+                if !guarded && !excepted {
                     unguarded.push(format!("{}: {name}", path.display()));
                 }
             }

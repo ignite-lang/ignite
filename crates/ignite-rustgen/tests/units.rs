@@ -528,11 +528,11 @@ fn builtin_methods() {
         (method(name("x"), "trim", vec![]), "x.trim().to_string()"),
         (
             method(name("x"), "starts_with", vec![text("p")]),
-            "x.starts_with(&String::from(\"p\"))",
+            "x.starts_with(\"p\")",
         ),
         (
             method(name("x"), "strip_prefix", vec![text("p")]),
-            "x.strip_prefix(&String::from(\"p\")).map(|s| s.to_string())",
+            "x.strip_prefix(\"p\").map(|s| s.to_string())",
         ),
         (method(name("x"), "first_word", vec![]), "x.first_word()"),
         (
@@ -566,10 +566,7 @@ fn builtin_methods() {
             "b.extend_from_slice(&g())",
         ),
         (method(name("b"), "clear", vec![]), "b.clear()"),
-        (
-            method(name("l"), "join", vec![text(",")]),
-            "l.join(&String::from(\",\"))",
-        ),
+        (method(name("l"), "join", vec![text(",")]), "l.join(\",\")"),
         (method(name("x"), "copy", vec![]), "x.clone()"),
         (method(name("Bytes"), "empty", vec![]), "Vec::<u8>::new()"),
         (

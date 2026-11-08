@@ -618,7 +618,13 @@ pub enum Builtin {
     TextStripPrefix,
     TextConcat,
     TextToBytes,
+    /// `t.pieces(separator)`: the texts between the separators, the body of
+    /// `std.text.split` (`docs/slice.md` section 13).
+    TextPieces,
     BytesToText,
+    /// `b.index_of(needle, start)`: the offset of the first `needle` at or
+    /// after `start` (`docs/slice.md` section 13).
+    BytesIndexOf,
     ListLen,
     ListIsEmpty,
     ListAt,
@@ -928,6 +934,12 @@ pub struct ModuleTypes {
     /// Consumed parameters per fn, associated fn (`Owner.name`) and role
     /// (`Protocol.role`), one entry per parameter (`docs/slice.md` 20.3.3).
     pub consumed: BTreeMap<String, Vec<bool>>,
+    /// Fn-typed parameters a fn or associated fn only calls, one entry per
+    /// parameter (`docs/slice.md` 20.3.7).
+    pub called_only: BTreeMap<String, Vec<bool>>,
+    /// `Bytes` parameters a fn or associated fn only reads as a slice, one
+    /// entry per parameter (`docs/slice.md` 20.3.7).
+    pub lent_bytes: BTreeMap<String, Vec<bool>>,
 }
 
 impl ModuleTypes {
@@ -947,6 +959,8 @@ impl ModuleTypes {
             generics: self.generics.clone(),
             bounds: self.bounds.clone(),
             consumed: self.consumed.clone(),
+            called_only: self.called_only.clone(),
+            lent_bytes: self.lent_bytes.clone(),
             ..ModuleTypes::default()
         }
     }
@@ -1801,6 +1815,46 @@ impl TypedProgram {
             .unwrap_or(false)
     }
 
+    /// Whether the fn `callee` only calls its fn-typed parameter `index`
+    /// (`docs/slice.md` 20.3.7). Defined for a declared fn or associated fn
+    /// of this module or a module it was typed against; false for every
+    /// other callee and parameter.
+    pub fn called_only(&self, callee: &Callee, index: usize) -> bool {
+        let Callee::Fn(q) = callee else {
+            return false;
+        };
+        self.modules
+            .get(&q.module)
+            .and_then(|m| m.called_only.get(&q.name))
+            .and_then(|params| params.get(index))
+            .copied()
+            .unwrap_or(false)
+    }
+
+    /// Whether the fn `callee` only reads its `Bytes` parameter `index` as
+    /// a slice (`docs/slice.md` 20.3.7). Defined as
+    /// [`TypedProgram::called_only`].
+    pub fn lent_bytes(&self, callee: &Callee, index: usize) -> bool {
+        let Callee::Fn(q) = callee else {
+            return false;
+        };
+        self.modules
+            .get(&q.module)
+            .and_then(|m| m.lent_bytes.get(&q.name))
+            .and_then(|params| params.get(index))
+            .copied()
+            .unwrap_or(false)
+    }
+
+    /// Whether `stmts`, the statements after a binding of `name` in one
+    /// block, read the `Bytes` value of `name` only as a slice
+    /// (`docs/slice.md` 20.3.7), as a lent `Bytes` parameter's body does.
+    pub fn reads_as_slice(&self, stmts: &[ignite_syntax::ast::Stmt], name: &str) -> bool {
+        moves::reads_as_slice(stmts, name, self, &|callee, index| {
+            self.lent_bytes(callee, index)
+        })
+    }
+
     /// Whether the closure literal `closure` consumes its parameter `index`
     /// (`docs/slice.md` 20.3.1): its body changes the parameter in place or
     /// moves it on every path. A backend that lends a caller's place to a
@@ -2087,5 +2141,15 @@ pub fn type_module(
         own.consumed = found.consumed.clone();
     }
     program_types.exports.consumed = found.consumed;
+    let called = moves::called_only(program, &program_types);
+    if let Some(own) = program_types.modules.get_mut(&program_types.module) {
+        own.called_only = called.clone();
+    }
+    program_types.exports.called_only = called;
+    let lent = moves::lent_bytes(program, &program_types);
+    if let Some(own) = program_types.modules.get_mut(&program_types.module) {
+        own.lent_bytes = lent.clone();
+    }
+    program_types.exports.lent_bytes = lent;
     Ok(program_types)
 }

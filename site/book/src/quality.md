@@ -28,9 +28,9 @@ Current values: run `v0.14.0` on 2026-11-08, commit `d87fd798`.
 |---|---|---|---|---|---|---|
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | eval | 4 | 4 | = |
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | llvm | 0 | 0 | = |
-| 1.2 | differential corpus size | ratchet | eval | 445 | 423 | +3 better |
-| 1.2 | differential corpus size | ratchet | llvm | 680 | 643 | +29 better |
-| 1.2 | differential corpus size | ratchet | rust | 680 | 643 | +29 better |
+| 1.2 | differential corpus size | ratchet | eval | 448 | 423 | +3 better |
+| 1.2 | differential corpus size | ratchet | llvm | 684 | 643 | +29 better |
+| 1.2 | differential corpus size | ratchet | rust | 684 | 643 | +29 better |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/builtins | 112 | 120 | +8 worse |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/patterns | 13 | 13 | = |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | llvm/builtins | 12 | 13 | +1 worse |
@@ -39,7 +39,7 @@ Current values: run `v0.14.0` on 2026-11-08, commit `d87fd798`.
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | rust/patterns | 71 | 71 | = |
 | 1.4 | generated-code goldens changed without a `CODEGEN_REVISION` bump | gate | all | 0 | 0 | = |
 | 1.5 | random programs on which the consumers disagree | gate | | unmeasured: no program generator yet (out of scope of story:quality-ratchet) | | |
-| 1.6 | corpus units the evaluator cannot run | ratchet | eval | 235 | 220 | +26 worse |
+| 1.6 | corpus units the evaluator cannot run | ratchet | eval | 236 | 220 | +26 worse |
 | 1.7 | known differences marked intermittent | gate | all | 1 | 1 | = |
 
 ## 2 Front end: the checker refuses exactly the wrong programs
@@ -59,7 +59,7 @@ Current values: run `v0.14.0` on 2026-11-08, commit `d87fd798`.
 | # | metric | kind | target | bar | current | trend |
 |---|---|---|---|---|---|---|
 | 3.1 | copies in the generated code of the golden corpus | ratchet | llvm | 90 | 90 | = |
-| 3.1 | copies in the generated code of the golden corpus | ratchet | rust | 168 | 168 | = |
+| 3.1 | copies in the generated code of the golden corpus | ratchet | rust | 166 | 168 | = |
 | 3.2 | binary size | ratchet | llvm/terminald/dev | 7563720 B | 7780040 B | +216320 |
 | 3.2 | binary size | ratchet | llvm/terminald/release | 1468648 B | 1505048 B | +36400 |
 | 3.2 | binary size | ratchet | llvm/todod/dev | 8230560 B | 8452816 B | +222256 |
@@ -71,8 +71,8 @@ Current values: run `v0.14.0` on 2026-11-08, commit `d87fd798`.
 | 3.3 | throughput and p99 latency of terminald and todod | ratchet | | unmeasured: no load baseline yet (out of scope of story:quality-ratchet) | | |
 | 3.4 | peak RSS, leaked handles and threads after a load run | gate | | unmeasured: no number: the named tests gate it in task gate | | |
 | 3.5 | runtime entries that can unwind a panic across `extern "C"` | gate | llvm | 0 | 0 | = |
-| 3.6 | `unsafe` sites in the substrate a target links | ratchet | llvm | 79 | 76 | +3 worse |
-| 3.6 | `unsafe` sites in the substrate a target links | ratchet | rust | 9 | 9 | +2 worse |
+| 3.6 | `unsafe` sites in the substrate a target links | ratchet | llvm | 82 | 76 | +3 worse |
+| 3.6 | `unsafe` sites in the substrate a target links | ratchet | rust | 12 | 9 | +2 worse |
 
 ## 4 Standard library and protocols
 
@@ -90,9 +90,9 @@ Current values: run `v0.14.0` on 2026-11-08, commit `d87fd798`.
 | 4.2 | gaps per claimed spec | ratchet | rust/rfc855 | 0 | 0 | = |
 | 4.2 | gaps per claimed spec | ratchet | rust/rfc9110 | 2 | 2 | +1 worse |
 | 4.2 | gaps per claimed spec | ratchet | rust/rfc9112 | 1 | 1 | = |
-| 4.3 | inline tests per target | ratchet | eval | 206 | 191 | = |
-| 4.3 | inline tests per target | ratchet | llvm | 346 | 322 | +13 better |
-| 4.3 | inline tests per target | ratchet | rust | 346 | 322 | +13 better |
+| 4.3 | inline tests per target | ratchet | eval | 209 | 191 | = |
+| 4.3 | inline tests per target | ratchet | llvm | 350 | 322 | +13 better |
+| 4.3 | inline tests per target | ratchet | rust | 350 | 322 | +13 better |
 | 4.4 | std functions with no inline test | ratchet | | unmeasured: no instrument yet: needs the call graph of the test bodies | | |
 
 ## 5 Operations: run, apply, host

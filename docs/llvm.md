@@ -218,7 +218,12 @@ takes or returns Ignite values):
   4). A call through a fn pointer passes copies, or the moved place, which is correct for
   both kinds of parameter, except where the callee is known to only read the parameter
   (section 3.1). A borrowed parameter reads the caller's memory, which stays
-  valid for the whole call: no callee releases below its own loops' marks.
+  valid for the whole call: no callee releases below its own loops' marks. A borrowed
+  parameter of a defined function is `ptr noalias readonly`: the callee never writes through
+  it, and nothing else writes the memory it points to while the call runs (a borrowed
+  argument is a place no other argument of the call mentions or modifies, `docs/slice.md`
+  20.3.2; every other argument is a fresh copy or a moved place), so LLVM keeps its loads
+  out of loops. An owned parameter carries neither attribute.
 - An aggregate result is written to a pointer passed as the first argument (plain `ptr`, no LLVM `sret` attribute).
 - Symbol names: `"<module>.<name>"` (`"std.protocol.telnet.decode"`), roles
   `"<module>.<Protocol>.<role>"`, constants `"<module>.<NAME>"` and field defaults
@@ -350,7 +355,9 @@ position, even with no buffer.
   `alwaysinline` function of every IR module). It bumps the task's bump state
   (`ignite_rt_arena_state`, section 5) when the request fits in the current chunk. Otherwise
   it calls `ignite_rt_alloc(size, align)`. Growing a list allocates a new buffer and copies;
-  the old one stays in the arena until a release.
+  the old one stays in the arena until a release. `@ignite.reserve` is the inline capacity
+  check (`alwaysinline`); the growth is the out-of-line `@ignite.grow` (`noinline cold`), so
+  a `push` in a loop costs a compare on the common path.
 - An arena is a stack of 64 KiB chunks with a bump pointer in the last one. The runtime
   gives a request over 16 KiB its own block; the inline path puts any request that fits
   into the current chunk. Every block is allocated zeroed. In a debug build of the runtime
@@ -359,8 +366,10 @@ position, even with no buffer.
   a position in that stack: the bump state's `cursor + offset`. `@ignite.arena_release(mark)`
   frees everything allocated after the mark. When the mark is inside the last chunk, this
   resets the cursor inline; otherwise it calls `ignite_rt_arena_release`. Released chunks
-  are kept for reuse, up to 16 per arena; larger blocks and further chunks go back to the
-  system allocator (both measured equal on the memory test). Chunks are anonymous
+  are kept for reuse, up to 16 per arena, and released large blocks up to 8 and 8 MiB per
+  arena (a reused block is the smallest kept one that holds the request, its old bytes
+  left in place); further chunks and blocks go back to the system allocator, and
+  `task_end` gives back all but one chunk. Chunks are anonymous
   mappings of their own (`mmap`, given back with `munmap`), not `malloc` blocks, so a freed
   chunk leaves the RSS at once instead of waiting for the next heap trim, and a live chunk
   pins no freed heap memory below it; large blocks come from `malloc`. Each task also has a scratch
@@ -374,7 +383,7 @@ position, even with no buffer.
   shadowing body only adds copies. At each back-edge (end of the body, `continue`, for
   `for` after the counter step):
   - no carried variables: `@ignite.arena_release(mark)`;
-  - otherwise, when `@ignite.arena_due(mark, kept)` (inline: more than max(64 KiB, 4 × kept)
+  - otherwise, when `@ignite.arena_due(mark, kept)` (inline: more than max(16 KiB, 4 × kept)
     bytes above the mark): scratch on, deep-copy each carried variable into its scratch
     slot, scratch off, release to the mark, deep-copy each back into its variable, clear
     the scratch arena, set `kept` to the bytes now above the mark. Releasing only when due
@@ -383,6 +392,14 @@ position, even with no buffer.
     of a list has capacity = length, so its next growth alone allocates twice what was
     kept, and with a factor of 2 that one doubling would make the next release due, copying
     the whole list at every growth step past 64 KiB.
+  - none at all when the code the loop emitted, from its head to the back-edge, calls nothing
+    that can allocate (`region::allocates`): only intrinsics, `@ignite.arena_mark`,
+    `@ignite.arena_due`, `ignite_rt_arena_state`, the failure entries, `ignite_rt_exit`,
+    `ignite_rt_process_exit`, `text_eq`, `text_starts_with`, and functions of the same module
+    defined earlier whose bodies call only these or themselves. Nothing lies above the mark at
+    the back-edge, so there is nothing to release; the mark taken at the entry is dead and
+    folds away. A nested loop that allocates puts its allocating calls into the outer loop's
+    code, so the outer loop keeps its region.
 
   `break`, `return` and `?` leave a loop without a release; the enclosing loop's release
   covers what it allocated. Releasing is sound because values never share buffers (value
@@ -500,7 +517,8 @@ position, even with no buffer.
   call adapter; unreachable`), which passes the operation, the site's `<file>`, `<line>`
   and `<col>` (`TypedProgram::failure_site`) and the operands to one of
   `ignite_rt_fail_arith`, `fail_neg`, `fail_index`, `fail_slice`, `fail_match`,
-  `assert_failed` or `try_failed` (section 5). The adapter builds the report with
+  `assert_failed` or `try_failed` (section 5), each declared `cold noreturn` (as is
+  `ignite_rt_fail`), so LLVM lays the block out off the hot path. The adapter builds the report with
   `ignite-io`'s report fns, so both targets print byte-identical text:
   `<operation> failed at <file>:<line>:<col>: <detail>`, the details being `<left> <op>
   <right>` in base units (`+`, `-`, `*`, `/`, `%`), `-(<value>)` (unary `-`), `index <i>
@@ -522,7 +540,8 @@ position, even with no buffer.
     and a failure inside a `Store.update` thunk would hold the store's lock: both are a
     later milestone, no current program reaches them;
   - a Rust panic inside the runtime is a failure of the task that called the entry: every
-    entry but `init` runs its body under `catch_unwind` (`crates/ignite-rt/src/contain.rs`)
+    entry but `init` and `arena_state` (which cannot panic: a thread-local read) runs its
+    body under `catch_unwind` (`crates/ignite-rt/src/contain.rs`)
     and ends the task as an adapter does, with the report `panic at <file>:<line>:<col>:
     <message>`, so no unwind crosses a generated frame. The entries that end the task
     themselves guard the building of their report and `longjmp` after the catch returned,
@@ -562,10 +581,10 @@ calling task (section 4). `T*` means a pointer to the section-3 layout;
 | `ptr arena_state()` | the calling thread's bump state `{ ptr cursor, ptr limit, i64 offset, ptr base }`, for the inline helpers below; `memory(none)` in the IR declaration, since a thread's state never moves |
 | `i8 spawn(ptr fn, ptr env)` | start `fn(env)` as a new task (`ignite_io::try_spawn`) with a new arena; returns 1 after the task called `spawn_ready`, or 0 at once when no thread can start (then `fn` does not run and the caller releases the stream handles in `env`, section 4) |
 | `void spawn_ready()` | see above |
-| `void task_end()` | free the current task's arena and scratch arena, keeping one chunk for the thread's next task; the last call of every task |
+| `void task_end()` | free the current task's arena and scratch arena, kept large blocks included, keeping one chunk for the thread's next task; the last call of every task |
 | `i64 arena_mark()` | the current position of the task's arena (section 4) |
 | `void arena_release(i64 mark)` | free everything the task's arena handed out after `mark`; a mark at or above the current position frees nothing; the scratch arena is not touched |
-| `i8 arena_due(i64 mark, i64 kept)` | 1 when more than max(64 KiB, 4 × `kept`) bytes lie above `mark` |
+| `i8 arena_due(i64 mark, i64 kept)` | 1 when more than max(16 KiB, 4 × `kept`) bytes lie above `mark` (`ARENA_DUE`; 64 KiB until 2026-11-08 left every server session a fully touched chunk) |
 | `void arena_scratch(i8 on)` | 1: later allocations of this task go to its scratch arena; 0: to its arena again |
 | `void arena_scratch_clear()` | free everything in the scratch arena |
 | `i32 args_port(i64* out_port, i32* present, IoError* err)` | `--port N`; malformed is an error with exit code 2 |
@@ -577,7 +596,7 @@ calling task (section 4). `T*` means a pointer to the section-3 layout;
 | `i32 tcp_accept(i64 listener, i64* out, IoError* err)` | |
 | `i64 tcp_local_port(i64 listener)` | |
 | `i32 tcp_connect(Text* address, i64 port, i64* out, IoError* err)` | |
-| `i32 tcp_read(i64 stream, i64 maximum, Input* out, IoError* err)` | one read: up to 16 KiB straight into a `maximum`-byte arena block whose unused tail is given back; above 16 KiB into a per-thread buffer (kept up to 64 KiB) and then the bytes read copied into the arena, so a large `maximum` costs neither a zeroed block of its own nor the current chunk; a concurrent `tcp_write_all` on the same stream from another task does not wait for it |
+| `i32 tcp_read(i64 stream, i64 maximum, Input* out, IoError* err)` | one read, like every stream operation without the table's lock (the thread reuses its clone of the stream it used last while the handle is live): up to 16 KiB straight into a `maximum`-byte arena block whose unused tail is given back; above 16 KiB into a per-thread buffer (kept up to 64 KiB until the task ends) and then the bytes read copied into the arena, so a large `maximum` costs neither a zeroed block of its own nor the current chunk; a concurrent `tcp_write_all` on the same stream from another task does not wait for it |
 | `i32 tcp_write_all(i64 stream, List* bytes, IoError* err)` | appends to the stream's send buffer (`docs/slice.md` section 7) |
 | `i32 tcp_close(i64 stream, IoError* err)` | shut down the write half |
 | `void tcp_release(i64 handle)` | drop a listener, stream or pipe-end handle, and forget it as owned by the task (`tcp_own`); later use of it is an error |

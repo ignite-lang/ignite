@@ -145,7 +145,7 @@ fn standard_library_types_in_import_order() {
     );
     assert_eq!(
         telnet.enums["Event"][3],
-        ("Answer".to_string(), vec![bytes()])
+        ("Answer".to_string(), vec![Ty::Byte, Ty::Byte])
     );
     assert!(
         !telnet.records.contains_key("Console"),
@@ -211,18 +211,21 @@ fn standard_library_expressions_are_typed() {
         Some(&Callee::Builtin(Builtin::ProcessExit))
     );
     assert_eq!(type_of_text(&typed, src, prog, "Bytes.empty()"), bytes());
-    assert_eq!(type_of_text(&typed, src, prog, "[IAC, WONT, b]"), bytes());
+    assert_eq!(
+        type_of_text(&typed, src, prog, "[IAC, verb, option]"),
+        bytes()
+    );
     assert_eq!(type_of_text(&typed, src, prog, "IAC"), Ty::Byte);
     assert_eq!(
         typed.callee(find(src, prog, "IAC")[0]),
         Some(&Callee::Const(qual("std.protocol.telnet", "IAC")))
     );
     assert_eq!(
-        type_of_text(&typed, src, prog, "Answer([IAC, WONT, b])"),
+        type_of_text(&typed, src, prog, "Answer(WONT, b)"),
         Ty::Enum(qual("std.protocol.telnet", "Event"))
     );
     assert_eq!(
-        typed.callee(find(src, prog, "Answer([IAC, WONT, b])")[0]),
+        typed.callee(find(src, prog, "Answer(WONT, b)")[0]),
         Some(&Callee::Variant {
             enum_: qual("std.protocol.telnet", "Event"),
             index: 3
@@ -299,7 +302,14 @@ fn standard_library_expressions_are_typed() {
         binding(&typed, src, "Subnegotiation(count)", "count"),
         Ty::Int
     );
-    assert_eq!(binding(&typed, src, "Answer(answer)", "answer"), bytes());
+    assert_eq!(
+        binding(&typed, src, "Answer(verb, option)", "verb"),
+        Ty::Byte
+    );
+    assert_eq!(
+        binding(&typed, src, "Answer(verb, option)", "option"),
+        Ty::Byte
+    );
     assert_eq!(
         binding(&typed, src, "let (next, event)", "next"),
         Ty::Enum(qual("std.protocol.telnet", "Decoder"))

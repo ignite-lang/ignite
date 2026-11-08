@@ -612,14 +612,16 @@ meaning. The generator emits exactly the Rust on the right.
 | `t.len()` | `(t.len() as i64)` | Text, Bytes, List |
 | `t.is_empty()` | `t.is_empty()` | |
 | `t.trim()` | `t.trim().to_string()` | |
-| `t.starts_with(p)` | `t.starts_with(&p)` | |
-| `t.strip_prefix(p)` | `t.strip_prefix(&p).map(\|s\| s.to_string())` | |
+| `t.starts_with(p)` | `t.starts_with(&p)`; `t.starts_with("..")` for a literal (20.3.7) | |
+| `t.strip_prefix(p)` | `t.strip_prefix(&p).map(\|s\| s.to_string())`; a literal as a `&str` (20.3.7) | |
 | `t.concat(u)` | `format!("{}{}", t, u)` | |
-| `t.to_bytes()` | `t.clone().into_bytes()`; `t.into_bytes()` when `t` is a fresh text nothing else owns (a literal, a `+` chain or interpolation, `to_text` of Int, Byte or Bool, `concat`, `trim`) | |
+| `t.to_bytes()` | `t.clone().into_bytes()`; `t.into_bytes()` when `t` is a fresh text nothing else owns (a literal, a `+` chain or interpolation, `to_text` of Int, Byte or Bool, `concat`, `trim`) | `t.as_bytes()` to a lent bytes parameter and in the other borrowed forms of 20.3.7 |
 | `b.to_text()` | `String::from_utf8_lossy(&b).into_owned()` | |
 | `b.slice(i, j).to_text()` | `String::from_utf8_lossy(::ignite_io::checked::slice_ref(&b, i, j, <site>)).into_owned()`: the slice is borrowed, not copied, with the failure of `checked::slice` | Bytes |
+| `b.index_of(n, i) -> Option<Int>` | `::ignite_io::text::index_of(&b, &n, i)`: the offset of the first `n` at or after `i` (a negative `i` reads as 0; `None` when `i` is past the end, also for an empty `n`), by `memchr` or `memmem`; `t.to_bytes()` and a checked `slice` are borrowed, not copied. The LLVM runtime's `bytes_index_of` calls the same function (-1 for `None`). Story `text-fast-search` | Bytes |
+| `t.pieces(s) -> List<Text>` | `::ignite_io::text::pieces(&t, &s)`: the texts between the separators, empty pieces kept, `[t]` for an empty `s`; no piece is checked for UTF-8 again, since valid text cut at a valid separator stays valid. `std.text.split` is this builtin. The LLVM runtime's `text_pieces` uses the same search. Story `text-fast-search` | Text |
 | `b.at(i)` | `b[(i) as usize]`, then `.clone()` when the element is not `Int`, `Byte` or `Bool` (also `l[i]`) | Bytes, List |
-| `l.map(f)` | `l.iter().cloned().map(f).collect::<Vec<_>>()` | List |
+| `l.map(f)` | `l.iter().cloned().map(f).collect::<Vec<_>>()` | List; `l.iter().map(..)` without the copy in the cases of 20.3.7 |
 | `b.to_int()` | `(b as i64)` | Byte |
 | `i.to_byte()` | `u8::try_from(i).ok()` | Int |
 | `Int.parse(t)` | `::ignite_io::parse_int(&t)`: decimal digits with an optional leading `-`, `None` for a leading `+` and for anything `str::parse::<i64>` rejects; the LLVM runtime's `int_parse` calls the same function | static |
@@ -630,7 +632,7 @@ meaning. The generator emits exactly the Rust on the right.
 | `b.push(x)` | `b.push(x)` | Bytes, List |
 | `b.append(c)` | `b.extend_from_slice(&c)`, `c` borrowed; `&c.clone()` when `c` is rooted at the variable of `b` | Bytes, List |
 | `b.clear()` | `b.clear()` | |
-| `l.join(sep)` | `l.join(&sep)` | List<Text> |
+| `l.join(sep)` | `l.join(&sep)`; `l.join("..")` for a literal | List<Text> |
 | `x.copy()` | `x.clone()` | |
 | `Bytes.empty()` | `Vec::<u8>::new()` | static |
 | `Bytes.of(list)` | `(list).iter().map(\|x\| *x as u8).collect::<Vec<u8>>()` | static |
@@ -7019,7 +7021,7 @@ call makes more copies than before.
 
 - A consumed parameter is declared by value, `p: T`, or `mut p: T` when the body changes it; the
   entry copy of section 6 disappears for it. Every other parameter keeps today's form: `&T`,
-  scalars and fn types included (`x: &i64`, cloned on entry when Copy), and a role's parameters
+  scalars and fn types included (`x: &i64`, cloned on entry when Copy; a called-only fn or lent bytes parameter is lent, 20.3.7), and a role's parameters
   stay `mut name: T` by value whether consumed or not.
 - A moving place is emitted bare, without `.clone()` or `&`, to a consumed parameter, to any
   role parameter and through a fn value. A non-moving argument to a consumed parameter is
@@ -7066,6 +7068,58 @@ call makes more copies than before.
 
 Unchanged. `ignite-eval` copies values by construction and reads neither `moves` nor
 `consumed`.
+
+#### 20.3.7 Lent parameters and fewer copies on the Rust target (story `rustgen-fewer-allocations`)
+
+Two more parameter sets, beside `consumed`, decided once per module after it and read from
+the typed modules for imported fns. Names are not resolved: a shadowing binding's uses count
+against the parameter, an extra copy and never a missed one.
+
+- *Called only* (`ModuleTypes::called_only`, `TypedProgram::called_only`): a fn-typed
+  parameter of a fn or associated fn whose every use is the callee of a call, none inside a
+  closure or a `spawn`, and that nothing assigns.
+- *Lent bytes* (`ModuleTypes::lent_bytes`, `TypedProgram::lent_bytes`): a `Bytes` parameter that
+  is not consumed and that its body reads only as a slice (`TypedProgram::reads_as_slice`):
+  every use is the receiver of `len`, `is_empty`, `at`, `slice` or `to_text`, or a positional
+  argument to a lent bytes parameter, outside any closure or `spawn`, never assigned. The
+  greatest fixpoint over the module's fns, so a recursive call keeps it.
+
+The Rust target (20.3.4 otherwise):
+
+- A called-only parameter is `p: &(dyn Fn(A) -> R + Send + Sync)`, not copied on entry. A
+  closure literal passed to it is a plain closure that borrows its captures,
+  `&|a: A| -> R { .. }`, with no `Arc` and no copy of a capture; a fn of the module or an
+  imported one named there is its fn-value closure without the `Arc`, `&|__a0: A| f(&__a0)`;
+  any other argument passes the
+  `Arc`'s `dyn Fn` as `&*f` (a generic callee would not get it by deref coercion), and so do
+  the calls the generator writes itself (fn-value wrappers, `spawn`, reordered named
+  arguments).
+- A lent bytes parameter is `p: &[u8]`; the argument `t.to_bytes()` of a `Text` place `t` is
+  `t.as_bytes()`, and `let b = t.to_bytes()` without an annotation, whose following statements
+  in its block read `b` only as a slice, bind no other `b` and do not change `t`'s variable, is
+  `let b: &[u8] = t.as_bytes();`, read like a borrowed parameter. `t.to_bytes().slice(i, j)
+  .to_text()` borrows `t.as_bytes()`, and `for x in t.to_bytes()` over a `Text` place whose
+  variable the body does not change iterates `t.bytes()`.
+- A `Text` literal read by reference (an argument by reference, a `Map` key) is a `static`
+  `LazyLock<String>` built once, `""` is `&String::new()`; as an operand of `==` or `!=` on
+  `Text` and as the argument of `starts_with`, `strip_prefix` and `join` it is a `&str`. An
+  operand `l.at(i)` of `==` or `!=` compares the element in place, `(*checked::at(..))`.
+- A `Text` `+` chain is flattened through its right operands too (an interpolation,
+  `a + "{b}c"`) into one `format!`. `x = x + ..` on a local `Text` variable that the appended
+  parts do not name appends in place: `write!(x, ..)`, or `x.push_str("..")` when every part is
+  a literal.
+- A fn body's tail `x.to_bytes()` or `x.to_text()` on a variable the fn owns (not a borrowed
+  parameter, not a capture) takes its buffer: `x.into_bytes()`,
+  `String::from_utf8(x).unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned())`.
+- `l.map(f)` with a closure literal that does not consume its parameter
+  (`TypedProgram::closure_consumed`) maps `l.iter()`, the parameter a reference read like a
+  borrowed parameter; with a fn of the module or an imported one that does not consume its
+  parameter, `l.iter().map(|__a0| f(__a0))`. Neither copies an element.
+- The `for` over a list place of section 6 that iterates by reference also takes
+  `l.slice(i, j)` of a list place whose bounds change nothing: it iterates
+  `(checked::slice_ref(&l, i, j, <site>)).iter()`, with no copy of the slice.
+
+The LLVM target and the evaluator read none of this.
 
 ### 20.4 Closures and calls of fn-typed expressions (D4, D5)
 
@@ -7677,6 +7731,25 @@ then checks the component with `fstatat(.., AT_SYMLINK_NOFOLLOW)` and reports `s
 missing for an instant) is an ordinary `Err`; it never reaches outside the root. Symlinks that
 stay inside the root are refused too; following them is 21.15's.
 
+As landed by story `fs-resolve-beneath` (2026-11-08): where the kernel has `openat2` (Linux
+5.6), a path is first opened from the root descriptor in one call with `RESOLVE_BENEATH |
+RESOLVE_NO_SYMLINKS`, which fails on a symlink at any component, magic links included, and on
+any step out of the root, so it confines exactly as the walk does. `read_file` opens the whole
+path that way, `read_directory` the listed directory, `create_directory` returns at once when
+the path is an existing directory, and `write_file`, `remove` and `remove_tree` open the parent
+once and act on the last component relative to it (the root's own descriptor when the parent is
+the root). When that call fails for any reason the operation walks as above, which either
+succeeds (the path changed in between) or gives the error this section words, naming the
+component; the walk is also the whole resolution once `openat2` answered `ENOSYS` or `EPERM` (a
+kernel before 5.6, a seccomp filter). A listing reads the directory with `getdents64` itself.
+Every behaviour above, its errors included, is the same in both resolutions; the substrate's
+tests run on both (`fs::tests`, `Scratch::both`). Measured with `strace -c` on the todo example's
+patch workload (16 connections on one todo, LLVM, release): 108.5 syscalls per reply before,
+45.8 after, the plain-Rust reference 16.0. Of the 45.8, 8.1 are failed `remove`s of versions a
+concurrent save already removed (`unlinkat` `ENOENT`, 3 syscalls each with the parent's
+`openat2` and `close`); the reference fails 0.3 per reply. That count is set by how many saves
+of one todo overlap, not by the resolution.
+
 Errors from the operating system are `IoError` values whose message is `path <p>: <reason>` with
 the OS reason text.
 
@@ -7951,7 +8024,7 @@ Changed codes:
 | D1 | capabilities are resource handles passed in values | ambient statics with effects such as `fs.write` | P3: a handler may act only on its state; vision invariant 4 |
 | D2 | four kinds, one per authority, each with its own op names | one `Host` capability with all four | a handler that only reads files should not be able to run programs; the state record composes them (probe p4), and distinct ops keep `requires [b.read]` from granting more than reads (21.3) |
 | D3 | effects checked by the receiver's declared type, with `static_type` arms for the constructors and `start` | by method name in `EFFECTFUL_METHODS` | a by-name table would capture user fns named `start`, `value`, `wait`, `kill` or `execute` (F5); the arms spare tests the annotations `Store` needs |
-| D4 | confinement by an `openat` walk with `O_NOFOLLOW`, every symlink refused | `openat2` with `RESOLVE_BENEATH` (follows inside links); `canonicalize` and a prefix check | the walk needs no kernel 5.6 feature; the prefix check races (row 4); inside links are rare in a workspace |
+| D4 | confinement by an `openat` walk with `O_NOFOLLOW`, every symlink refused | `openat2` with `RESOLVE_BENEATH` (follows inside links); `canonicalize` and a prefix check | the walk needs no kernel 5.6 feature; the prefix check races (row 4); inside links are rare in a workspace. Since story `fs-resolve-beneath` the walk is the fallback: `openat2` with `RESOLVE_BENEATH \| RESOLVE_NO_SYMLINKS` refuses inside links as the walk does and resolves in one call (21.4) |
 | D5 | no `Directory.subdirectory` (attenuation) in this slice | `open(path) -> Directory` sharing the receiver's roots | on LLVM every call would hold a table slot until exit (F10), unbounded in a handler; relative paths cover the playground |
 | D6 | `execute` beside `start` | only `start` and `wait` | `execute` allocates no LLVM slot and is what a run button does |
 | D7 | one watcher thread per child, which also starts it | one shared reaper thread with `poll` over every pipe | the test runner's loop already works per child (F12); `PR_SET_PDEATHSIG` needs the starting thread to live as long as the child; `maximum_children` bounds the threads |
@@ -8587,6 +8660,8 @@ type Todo {
   version: Int = 1
   deleted: Bool = false
   deleted_by: Int = 0
+  stored: Int = 0
+  superseded: Int = 0
 }
 
 type Todos {
@@ -8664,8 +8739,14 @@ Behaviour:
   handler then creates `<shard>/<id>` (`create_directory`; `write_file` needs its parent, 21.4)
   and writes the returned value's file before it answers. A failed write answers 500 with the
   body `not stored\n`; 500 means "not durable", not "not applied": the memory value stays, and a
-  later successful write of that id persists it. After the write, files of that id with a lower version are
-  removed; a failed removal is ignored (the next load takes the highest version).
+  later successful write of that id persists it. After the write, the save removes one file, decided
+  in a second atomic `update` over the memory-only fields `stored` (the newest version whose file
+  this process wrote or loaded) and `superseded` (the one that file replaced): a save newer than
+  `stored` takes its place and removes the file of `superseded`; a save older than `stored` (its
+  rename came after a newer save's) removes its own file. Concurrent saves of one todo therefore
+  remove each superseded file once and list no directory (story `todo-save-without-races`); a
+  failed removal is ignored (the next load takes the highest version), and a file a crash leaves
+  between rename and removal stays on disk, where loads skip it as older.
 - Load: each request first checks `loaded.get(0)`; while it is not `Some(true)`, the request
   loads: `create_directory("todos")`, then for each shard directory at the root of `data`
   (`todos/` and every `todos-<digits>/`; other entries are skipped) and each `<id>/` in it the

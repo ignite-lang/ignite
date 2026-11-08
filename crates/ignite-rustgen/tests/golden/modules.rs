@@ -14,8 +14,7 @@ pub fn pick(mode: &Mode) -> ::std::sync::Arc<dyn Fn(String) -> String + Send + S
     }
 }
 
-pub fn apply_twice(f: &::std::sync::Arc<dyn Fn(String) -> String + Send + Sync>, line: String) -> String {
-    let mut f = f.clone();
+pub fn apply_twice(f: &(dyn Fn(String) -> String + Send + Sync), line: String) -> String {
     return f(f(line));
 }
 

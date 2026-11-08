@@ -64,37 +64,86 @@ fn hex_digit(n: Byte) -> Byte = if n < 10 { b'0' + n } else { b'a' + n - 10 }
 // `text` as a JSON string literal: quote, backslash and the control
 // characters escaped, every other character as it is.
 fn quote(text: Text) -> Text {
-  var out = b"\""
-  for b in text.to_bytes() {
-    match b {
-      b'"' => out.append(br#"\""#)
-      b'\\' => out.append(br"\\")
-      b'\n' => out.append(br"\n")
-      b'\r' => out.append(br"\r")
-      b'\t' => out.append(br"\t")
-      0x08 => out.append(br"\b")
-      0x0c => out.append(br"\f")
-      0..=0x1f => {
-        out.append(br"\u00")
-        out.push(hex_digit(b / 16))
-        out.push(hex_digit(b % 16))
-      }
-      _ => out.push(b)
-    }
-  }
-  out.push(b'"')
+  let out = write_quoted(Bytes.empty(), text)
   out.to_text()
 }
 
+// `out` with `text` appended as a JSON string literal (`quote`). The
+// encoder writes every value into one buffer this way instead of joining
+// the texts of its parts.
+fn write_quoted(out: Bytes, text: Text) -> Bytes {
+  var buffer = out
+  buffer.push(b'"')
+  for b in text.to_bytes() {
+    match b {
+      b'"' => buffer.append(br#"\""#)
+      b'\\' => buffer.append(br"\\")
+      b'\n' => buffer.append(br"\n")
+      b'\r' => buffer.append(br"\r")
+      b'\t' => buffer.append(br"\t")
+      0x08 => buffer.append(br"\b")
+      0x0c => buffer.append(br"\f")
+      0..=0x1f => {
+        buffer.append(br"\u00")
+        buffer.push(hex_digit(b / 16))
+        buffer.push(hex_digit(b % 16))
+      }
+      _ => buffer.push(b)
+    }
+  }
+  buffer.push(b'"')
+  buffer
+}
+
 // The compact JSON text of `value`: no whitespace, members in their order.
-fn encode(value: Json) -> Text = match value {
-  Null => "null"
-  Bool(b) => b.to_text()
-  Number(n) => n.to_text()
-  Decimal(text) => text
-  Str(text) => quote(text)
-  Array(items) => "[{items.map(encode).join(",")}]"
-  Object(members) => "{{" + members.map(|m| quote(m.0) + ":" + encode(m.1)).join(",") + "}}"
+fn encode(value: Json) -> Text {
+  let out = write_value(Bytes.empty(), value)
+  out.to_text()
+}
+
+// `out` with the compact JSON text of `value` appended (`encode`).
+fn write_value(out: Bytes, value: Json) -> Bytes {
+  var buffer = out
+  match value {
+    Null => buffer.append(b"null")
+    Bool(b) => if b {
+      buffer.append(b"true")
+    } else {
+      buffer.append(b"false")
+    }
+    Number(n) => buffer.append(n.to_text().to_bytes())
+    Decimal(text) => buffer.append(text.to_bytes())
+    Str(text) => {
+      buffer = write_quoted(buffer, text)
+    }
+    Array(items) => {
+      buffer.push(b'[')
+      var first = true
+      for item in items {
+        if !first {
+          buffer.push(b',')
+        }
+        first = false
+        buffer = write_value(buffer, item)
+      }
+      buffer.push(b']')
+    }
+    Object(members) => {
+      buffer.push(b'{')
+      var first = true
+      for member in members {
+        if !first {
+          buffer.push(b',')
+        }
+        first = false
+        buffer = write_quoted(buffer, member.0)
+        buffer.push(b':')
+        buffer = write_value(buffer, member.1)
+      }
+      buffer.push(b'}')
+    }
+  }
+  buffer
 }
 
 test "encode writes every kind compactly" {
