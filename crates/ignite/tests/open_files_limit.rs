@@ -91,7 +91,7 @@ macro_rules! both_targets {
 
 both_targets!(the_soft_limit_is_raised_to_the_hard_limit_at_start);
 
-/// 27: started with soft 256 and hard 65536, the process runs with soft
+/// 28: started with soft 256 and hard 65536, the process runs with soft
 /// 65536 by the time `K.main` logs, and `Process.open_files_limit()`
 /// reads that value. Nothing is printed besides the logged line.
 fn the_soft_limit_is_raised_to_the_hard_limit_at_start(target: Target) {
@@ -123,7 +123,7 @@ fn the_soft_limit_is_raised_to_the_hard_limit_at_start(target: Target) {
     assert_eq!(status.code(), Some(0));
 }
 
-/// 27: the fixture's inline test calls `Process.open_files_limit()` on
+/// 28: the fixture's inline test calls `Process.open_files_limit()` on
 /// both targets.
 #[test]
 fn open_files_limit_is_callable_in_tests_on_both_targets() {

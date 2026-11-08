@@ -737,7 +737,7 @@ mod tests {
         ignite_rt_flush();
     }
 
-    /// 27: `Process.open_files_limit()` reads the soft limit `init` raised.
+    /// 28: `Process.open_files_limit()` reads the soft limit `init` raised.
     #[test]
     fn open_files_limit_reads_the_soft_limit() {
         assert_eq!(ignite_rt_open_files_limit(), ignite_io::open_files_limit());

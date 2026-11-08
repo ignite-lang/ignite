@@ -77,7 +77,7 @@ pub fn open_files_limit() -> i64 {
 mod tests {
     use super::{open_files_limit, raise_open_files_limit, report};
 
-    /// 27: a failed raise is reported only from a soft limit under 4,096.
+    /// 28: a failed raise is reported only from a soft limit under 4,096.
     #[test]
     fn a_failure_is_reported_only_under_4096() {
         assert_eq!(
@@ -89,7 +89,7 @@ mod tests {
         assert_eq!(report(65536, "EPERM"), None);
     }
 
-    /// 27: after the raise the soft limit equals the hard limit (or the
+    /// 28: after the raise the soft limit equals the hard limit (or the
     /// kernel's ceiling when the hard limit is unlimited).
     #[test]
     fn the_raise_reaches_the_hard_limit() {
