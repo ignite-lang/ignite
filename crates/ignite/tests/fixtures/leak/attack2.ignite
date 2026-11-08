@@ -1,0 +1,368 @@
+package attack2
+
+// Adversary cases, pass 2, against the correction of `own::handovers`,
+// `own::owned_match` and `own::owned_iter` (`docs/slice.md` 30.3): an
+// aliased end handed to a task stays usable through nested records and in
+// branches, an end a broadcast hands to a task stays the task's, and the
+// stored ends a server reads through `for`, nested `match`es and temporaries
+// keep the census flat however the loop around them is left. Each test
+// passes on the Rust target; `crates/ignite/tests/leak.rs` runs them on both.
+
+import std.runtime.{soak}
+import std.option.{is_some}
+
+test type Waiter {
+  id: Int
+  wake: Receiver<Int>
+}
+
+test type Outer {
+  tag: Int
+  inner: Waiter
+}
+
+test fn finish(r: Receiver<Int>, done: Sender<Int>) -> Result<Unit, IoError> {
+  let sent = done.send(1)
+  Ok(())
+}
+
+// The alias two records deep.
+test "an alias in a nested record stays usable after its end was handed to a task" {
+  let tasks = Runtime.census().tasks
+  let (dtx, drx) = Channel.bounded(1)
+  let (tx, rx) = Channel.bounded(1)
+  let o = Outer { tag = 1, inner = Waiter { id = 1, wake = rx } }
+  spawn finish(rx, dtx)
+  assert drx.receive() == Some(1)
+  assert Runtime.settle(tasks, 5 seconds)
+  assert tx.try_send(9)
+  assert o.inner.wake.receive_within(1 seconds) == Some(9)
+}
+
+// The alias and the handover both inside a branch.
+test "an alias in a branch stays usable after its end was handed to a task there" {
+  let tasks = Runtime.census().tasks
+  let (dtx, drx) = Channel.bounded(1)
+  let (tx, rx) = Channel.bounded(1)
+  if tasks >= 0 {
+    let r: Receiver<Int> = rx
+    spawn finish(rx, dtx)
+    assert drx.receive() == Some(1)
+    assert Runtime.settle(tasks, 5 seconds)
+    assert tx.try_send(10)
+    assert r.receive_within(1 seconds) == Some(10)
+  }
+}
+
+// The alias outside, the handover in a branch.
+test "an alias outside a branch stays usable after the branch handed its end to a task" {
+  let tasks = Runtime.census().tasks
+  let (dtx, drx) = Channel.bounded(1)
+  let (tx, rx) = Channel.bounded(1)
+  let w = Waiter { id = 2, wake = rx }
+  if tasks >= 0 {
+    spawn finish(rx, dtx)
+  }
+  assert drx.receive() == Some(1)
+  assert Runtime.settle(tasks, 5 seconds)
+  assert tx.try_send(11)
+  assert w.wake.receive_within(1 seconds) == Some(11)
+}
+
+// A stored sender whose only owner is the store.
+test fn open(senders: Store<Sender<Int>>) -> Waiter {
+  let (tx, rx) = Channel.bounded(1)
+  let id = senders.next_id()
+  senders.put(id, tx)
+  Waiter { id, wake = rx }
+}
+
+test fn close(senders: Store<Sender<Int>>, id: Int) -> Unit {
+  match senders.remove(id) {
+    Some(found) => {
+      let t: Sender<Int> = found
+      t.close()
+    }
+    None => {}
+  }
+}
+
+test fn forget(senders: Store<Sender<Int>>, id: Int) -> Unit {
+  match senders.remove(id) {
+    Some(found) => {
+      let t: Sender<Int> = found
+    }
+    None => {}
+  }
+}
+
+test fn ping_after(s: Sender<Int>, gate: Receiver<Int>, done: Sender<Int>) -> Result<Unit, IoError> {
+  let g = gate.receive()
+  let ok = s.try_send(5)
+  let d = done.send(if ok { 1 } else { 0 })
+  Ok(())
+}
+
+test fn spawn_all(senders: Store<Sender<Int>>, gate: Receiver<Int>, done: Sender<Int>) -> Unit {
+  for s in senders.values() {
+    spawn ping_after(s, gate, done)
+  }
+}
+
+// A broadcast that hands each stored end to a task: the store drops the
+// end before the task sends on it.
+test "an end a broadcast hands to a task stays the task's after the store drops it" {
+  let tasks = Runtime.census().tasks
+  let senders: Store<Sender<Int>> = Store.new()
+  let (gtx, grx) = Channel.bounded(1)
+  let (dtx, drx) = Channel.bounded(1)
+  let w: Waiter = open(senders)
+  spawn_all(senders, grx, dtx)
+  forget(senders, w.id)
+  assert gtx.try_send(1)
+  assert drx.receive_within(5 seconds) == Some(1)
+  assert w.wake.receive_within(1 seconds) == Some(5)
+}
+
+// A broadcast inside a loop left by `continue` and `break`.
+test fn broadcast_loop(senders: Store<Sender<Int>>) -> Unit {
+  let w: Waiter = open(senders)
+  var i = 0
+  while i < 4 {
+    i = i + 1
+    for s in senders.values() {
+      let rung = s.try_send(i)
+      let got = w.wake.receive_within(0 ms)
+    }
+    if i == 2 {
+      continue
+    }
+    if i == 3 {
+      break
+    }
+  }
+  close(senders, w.id)
+}
+
+test "a broadcast in a loop left by continue and break is released (G30)" {
+  let senders: Store<Sender<Int>> = Store.new()
+  assert soak(2000, |run| broadcast_loop(senders)).growth == []
+}
+
+// A broadcast left by `break` and `continue` inside its own body.
+test fn broadcast_break(senders: Store<Sender<Int>>) -> Unit {
+  let a: Waiter = open(senders)
+  let b: Waiter = open(senders)
+  for s in senders.values() {
+    if s.try_send(1) {
+      continue
+    }
+    break
+  }
+  close(senders, a.id)
+  close(senders, b.id)
+  let x = a.wake.receive_within(0 ms)
+  let y = b.wake.receive_within(0 ms)
+}
+
+test "a broadcast left by break and continue in its body is released (G30)" {
+  let senders: Store<Sender<Int>> = Store.new()
+  assert soak(2000, |run| broadcast_break(senders)).growth == []
+}
+
+// An early `return` from inside the broadcast's body.
+test fn first_open(senders: Store<Sender<Int>>) -> Bool {
+  for s in senders.values() {
+    if s.try_send(2) {
+      return true
+    }
+  }
+  false
+}
+
+test fn return_once(senders: Store<Sender<Int>>) -> Unit {
+  let w: Waiter = open(senders)
+  let found = first_open(senders)
+  close(senders, w.id)
+  let got = w.wake.receive_within(0 ms)
+}
+
+test "a broadcast left by return is released (G30)" {
+  let senders: Store<Sender<Int>> = Store.new()
+  assert soak(2000, |run| return_once(senders)).growth == []
+}
+
+// An early `return` from inside an arm of a `let`'s `match`.
+test fn probe_return(senders: Store<Sender<Int>>, id: Int) -> Bool {
+  let present = match senders.get(id) {
+    Some(s) => {
+      let t: Sender<Int> = s
+      if t.try_send(3) {
+        return true
+      }
+      true
+    }
+    None => false
+  }
+  present
+}
+
+test fn probe_return_once(senders: Store<Sender<Int>>) -> Unit {
+  let w: Waiter = open(senders)
+  let found = probe_return(senders, w.id)
+  close(senders, w.id)
+  let got = w.wake.receive_within(0 ms)
+}
+
+test "a look through a let's match left by return is released (G30)" {
+  let senders: Store<Sender<Int>> = Store.new()
+  assert soak(2000, |run| probe_return_once(senders)).growth == []
+}
+
+// A nested `match`: the inner one is an arm's value.
+test fn nested_once(senders: Store<Sender<Int>>) -> Unit {
+  let a: Waiter = open(senders)
+  let b: Waiter = open(senders)
+  let both = match senders.get(a.id) {
+    Some(s) => match senders.get(b.id) {
+      Some(t) => {
+        let u: Sender<Int> = t
+        u.try_send(4)
+      }
+      None => false
+    }
+    None => false
+  }
+  close(senders, a.id)
+  close(senders, b.id)
+  let x = a.wake.receive_within(0 ms)
+  let y = b.wake.receive_within(0 ms)
+}
+
+test "a nested match over stored ends is released (G30)" {
+  let senders: Store<Sender<Int>> = Store.new()
+  assert soak(2000, |run| nested_once(senders)).growth == []
+}
+
+// Nested broadcasts.
+test fn pairs_once(senders: Store<Sender<Int>>) -> Unit {
+  let a: Waiter = open(senders)
+  let b: Waiter = open(senders)
+  for s in senders.values() {
+    for t in senders.values() {
+      let rung = t.try_send(1)
+    }
+    let rung = s.try_send(1)
+  }
+  close(senders, a.id)
+  close(senders, b.id)
+  let x = a.wake.receive_within(0 ms)
+  let y = b.wake.receive_within(0 ms)
+}
+
+test "nested broadcasts are released (G30)" {
+  let senders: Store<Sender<Int>> = Store.new()
+  assert soak(2000, |run| pairs_once(senders)).growth == []
+}
+
+// A broadcast written inside the soak's closure.
+test "a broadcast inside a closure is released (G30)" {
+  let senders: Store<Sender<Int>> = Store.new()
+  let grown = soak(2000, |run| {
+    let w: Waiter = open(senders)
+    for s in senders.values() {
+      let rung = s.try_send(run)
+    }
+    close(senders, w.id)
+    let got = w.wake.receive_within(0 ms)
+  })
+  assert grown.growth == []
+}
+
+// A broadcast over stored records that hold ends.
+test fn waiters_once(waiters: Store<Waiter>) -> Unit {
+  let (wtx, wrx) = Channel.bounded(1)
+  let id = waiters.next_id()
+  let made = Waiter { id, wake = wrx }
+  waiters.put(id, made)
+  for w in waiters.values() {
+    let got = w.wake.receive_within(0 ms)
+  }
+  match waiters.remove(id) {
+    Some(found) => {
+      let gone: Waiter = found
+      let got = gone.wake.receive_within(0 ms)
+    }
+    None => {}
+  }
+  let rung = wtx.try_send(1)
+}
+
+test "a broadcast over stored records is released (G30)" {
+  let waiters: Store<Waiter> = Store.new()
+  assert soak(2000, |run| waiters_once(waiters)).growth == []
+}
+
+// The same record put as a literal argument, removed again; no broadcast.
+test fn literal_once(waiters: Store<Waiter>) -> Unit {
+  let (wtx, wrx) = Channel.bounded(1)
+  let id = waiters.next_id()
+  waiters.put(id, Waiter { id, wake = wrx })
+  match waiters.remove(id) {
+    Some(found) => {
+      let gone: Waiter = found
+      let got = gone.wake.receive_within(0 ms)
+    }
+    None => {}
+  }
+  let rung = wtx.try_send(1)
+}
+
+test "a record put as a literal and removed is released (G30)" {
+  let waiters: Store<Waiter> = Store.new()
+  assert soak(2000, |run| literal_once(waiters)).growth == []
+}
+
+// A look at a stored end through `std.option`'s `is_some`.
+test fn present_once(senders: Store<Sender<Int>>) -> Unit {
+  let w: Waiter = open(senders)
+  let present = senders.get(w.id).is_some()
+  close(senders, w.id)
+  let got = w.wake.receive_within(0 ms)
+}
+
+test "a stored end looked at through is_some is released (G30)" {
+  let senders: Store<Sender<Int>> = Store.new()
+  assert soak(2000, |run| present_once(senders)).growth == []
+}
+
+// A stored end removed and dropped by a bare statement.
+test fn drop_once(senders: Store<Sender<Int>>) -> Unit {
+  let w: Waiter = open(senders)
+  senders.remove(w.id)
+  let got = w.wake.receive_within(0 ms)
+}
+
+test "a stored end removed by a bare statement is released (G30)" {
+  let senders: Store<Sender<Int>> = Store.new()
+  assert soak(2000, |run| drop_once(senders)).growth == []
+}
+
+// A received end looked at through a `let`'s `match`.
+test fn relay_once(ends: (Sender<Sender<Int>>, Receiver<Sender<Int>>)) -> Unit {
+  let (tx, rx) = Channel.bounded(1)
+  let sent = ends.0.send(tx)
+  let rung = match ends.1.receive_within(0 ms) {
+    Some(s) => {
+      let t: Sender<Int> = s
+      t.try_send(6)
+    }
+    None => false
+  }
+  let got = rx.receive_within(0 ms)
+}
+
+test "a received end looked at through a let's match is released (G30)" {
+  let ends: (Sender<Sender<Int>>, Receiver<Sender<Int>>) = Channel.bounded(1)
+  assert soak(2000, |run| relay_once(ends)).growth == []
+}

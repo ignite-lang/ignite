@@ -118,10 +118,24 @@ pub extern "C" fn ignite_rt_tcp_retain(handle: i64) {
             return;
         };
         let mut entry = lock(&slot.entry);
+        // Saturating: an owner a program never releases (a store `get`
+        // whose copy no block owns) keeps the handle open instead of
+        // wrapping the count to an early close.
         if entry.generation == generation && entry.handle.is_some() {
-            entry.owners += 1;
+            entry.owners = entry.owners.saturating_add(1);
         }
     })
+}
+
+/// `void handle_release(i64 handle)`: drop one owner of `handle` that no
+/// block or task registered: the owner a heap copy in a store or a channel
+/// holds (`docs/slice.md` 30.3), dropped when the copy is freed. Unlike
+/// [`ignite_rt_tcp_release`] it leaves the current task's registrations
+/// alone, so a block that owns the same handle still releases its own.
+/// Nothing for a released or unknown handle.
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_handle_release(handle: i64) {
+    crate::entry(move || release_owner(handle, None))
 }
 
 #[derive(Clone)]

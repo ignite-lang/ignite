@@ -144,6 +144,141 @@ pub fn function(module: &mut Module<'_>, kind: Glue, ty: &Ty) -> String {
         Glue::Upsert => upsert_thunk(module, ty),
         Glue::Eq => eq_function(module, ty),
         Glue::Debug => debug_function(module, ty),
+        Glue::OwnHandles | Glue::RetainHandles | Glue::ReleaseHandles => {
+            handles_function(module, kind, ty)
+        }
+    }
+}
+
+/// The runtime entry the handle glue `kind` calls once per handle.
+fn handle_entry(kind: Glue) -> &'static str {
+    match kind {
+        Glue::OwnHandles => "ignite_rt_tcp_own",
+        Glue::RetainHandles => "ignite_rt_tcp_retain",
+        _ => "ignite_rt_handle_release",
+    }
+}
+
+/// Whether `ty` is a handle itself, an `i64` slot of the handle table.
+fn is_handle(ty: &Ty) -> bool {
+    matches!(
+        ty,
+        Ty::TcpListener
+            | Ty::TcpStream
+            | Ty::PipeStream
+            | Ty::Sender(_)
+            | Ty::Receiver(_)
+            | Ty::Capability(_)
+    )
+}
+
+/// Run the handle glue `kind` (`own_handles`, `retain_handles` or
+/// `release_handles`) on the `ty` at `at`: one runtime call for a handle,
+/// the glue function of an aggregate, nothing for a type that holds no
+/// handle ([`TypeEnv::holds_handles`]).
+pub fn handles_at(module: &mut Module<'_>, f: &mut Func, kind: Glue, ty: &Ty, at: &str) {
+    let ty = &repr(ty);
+    if !module.env.holds_handles(ty) {
+        return;
+    }
+    if is_handle(ty) {
+        let entry = handle_entry(kind);
+        module.declare(entry, "void", &["i64".into()]);
+        let handle = f.val(format!("load i64, ptr {at}, align 8"));
+        f.ins(format!("call void @{entry}(i64 {handle})"));
+    } else {
+        let glue = module.glue_of(kind, ty);
+        f.ins(format!("call void {glue}(ptr {at})"));
+    }
+}
+
+/// `void own_handles.<T>(ptr value)`, `retain_handles.<T>` and
+/// `release_handles.<T>`: the handle glue of [`handles_at`] on every
+/// position of the aggregate at `value` that holds a handle: list and map
+/// elements, record and tuple fields, the payload of the variant the
+/// value holds; a boxed position through its box.
+fn handles_function(module: &mut Module<'_>, kind: Glue, ty: &Ty) -> String {
+    let env = module.env;
+    let mut f = header(kind, ty, "void", "ptr %src");
+    match ty {
+        Ty::List(_) | Ty::Map(..) => {
+            let element = list_element(ty);
+            let size = env.layout(&element).size.max(1);
+            let lenp = f.val("getelementptr inbounds i8, ptr %src, i64 8");
+            let len = f.val(format!("load i64, ptr {lenp}, align 8"));
+            let data = f.val("load ptr, ptr %src, align 8");
+            each_element(&mut f, &data, &len, size, |f, at| {
+                let e = f.val(format!("getelementptr inbounds i8, ptr {data}, i64 {at}"));
+                handles_at(module, f, kind, &element, &e);
+            });
+        }
+        Ty::Record(_) | Ty::GenericRecord(..) => {
+            for (_, position) in record_positions(env, ty) {
+                if env.holds_handles(&position.ty) {
+                    let at = position_ptr(&mut f, "%src", &position);
+                    handles_at(module, &mut f, kind, &position.ty, &at);
+                }
+            }
+        }
+        Ty::Tuple(elements) => {
+            let (offsets, _) = env.tuple_layout(elements);
+            for (element, offset) in elements.iter().zip(offsets) {
+                if env.holds_handles(element) {
+                    let at = f.val(format!("getelementptr inbounds i8, ptr %src, i64 {offset}"));
+                    handles_at(module, &mut f, kind, element, &at);
+                }
+            }
+        }
+        Ty::Option(_) | Ty::Result(..) | Ty::Enum(_) | Ty::GenericEnum(..) => {
+            let variants = variant_positions(env, ty);
+            let tag = f.val("load i32, ptr %src, align 4");
+            let done = f.label();
+            let mut cases = Vec::new();
+            for (index, (_, fields)) in variants.iter().enumerate() {
+                let held: Vec<Position> = fields
+                    .iter()
+                    .filter(|p| env.holds_handles(&p.ty))
+                    .cloned()
+                    .collect();
+                if !held.is_empty() {
+                    cases.push((index, f.label(), held));
+                }
+            }
+            let table: Vec<String> = cases
+                .iter()
+                .map(|(index, label, _)| format!("i32 {index}, label %{label}"))
+                .collect();
+            f.term(format!(
+                "switch i32 {tag}, label %{done} [ {} ]",
+                table.join(" ")
+            ));
+            for (_, label, held) in cases {
+                f.place(&label);
+                for position in &held {
+                    let at = position_ptr(&mut f, "%src", position);
+                    handles_at(module, &mut f, kind, &position.ty, &at);
+                }
+                f.br(&done);
+            }
+            f.place(&done);
+        }
+        _ => {}
+    }
+    f.finish("ret void")
+}
+
+/// A copy of the `ty` at `src` into `dst` in the task's arena, sharing
+/// its handles: `copy.<T>`, or a `memcpy` when no glue is needed.
+fn copy_plain(module: &mut Module<'_>, f: &mut Func, ty: &Ty, dst: &str, src: &str) {
+    let env = module.env;
+    let size = env.layout(ty).size;
+    if env.needs_glue(ty) {
+        let glue = module.glue(ty);
+        f.ins(format!("call void {glue}(ptr {dst}, ptr {src})"));
+    } else if size > 0 {
+        f.ins(format!(
+            "call void @llvm.memcpy.p0.p0.i64(ptr {dst}, ptr {src}, i64 {size}, i1 false)"
+        ));
     }
 }
 
@@ -773,31 +908,30 @@ fn to_heap(module: &mut Module<'_>, ty: &Ty) -> String {
             "call void @llvm.memcpy.p0.p0.i64(ptr {heap}, ptr %src, i64 {size}, i1 false)"
         ));
     }
+    // The heap copy is an owner of every handle in it, as a Rust value in a
+    // store or a channel holds its own `Arc` (`docs/slice.md` 30.3).
+    handles_at(module, &mut f, Glue::RetainHandles, ty, &heap);
     f.term(format!("ret ptr {heap}"));
     f.finish("unreachable")
 }
 
 /// `void copy_from_heap.<T>(ptr dst, ptr heap)`: `copy.<T>`, which reads
-/// its source wherever it lives.
+/// its source wherever it lives; the copy is an owner of every handle in
+/// it, which a `remove` or a `receive` hands to its caller as the heap
+/// copy is freed (`docs/slice.md` 30.3).
 fn from_heap(module: &mut Module<'_>, ty: &Ty) -> String {
-    let env = module.env;
     let mut f = header(Glue::FromHeap, ty, "void", "ptr %dst, ptr %src");
-    let size = env.layout(ty).size;
-    if env.needs_glue(ty) {
-        let glue = module.glue(ty);
-        f.ins(format!("call void {glue}(ptr %dst, ptr %src)"));
-    } else if size > 0 {
-        f.ins(format!(
-            "call void @llvm.memcpy.p0.p0.i64(ptr %dst, ptr %src, i64 {size}, i1 false)"
-        ));
-    }
+    copy_plain(module, &mut f, ty, "%dst", "%src");
+    handles_at(module, &mut f, Glue::RetainHandles, ty, "%dst");
     f.finish("ret void")
 }
 
-/// `void free_heap.<T>(ptr heap)`.
+/// `void free_heap.<T>(ptr heap)`: drop the heap copy's owner of every
+/// handle in it, then free it.
 fn free_heap(module: &mut Module<'_>, ty: &Ty) -> String {
     let env = module.env;
     let mut f = header(Glue::FreeHeap, ty, "void", "ptr %src");
+    handles_at(module, &mut f, Glue::ReleaseHandles, ty, "%src");
     if env.needs_glue(ty) {
         let glue = module.glue_of(Glue::HeapFree, ty);
         f.ins(format!("call void {glue}(ptr %src)"));
@@ -825,8 +959,9 @@ fn update_thunk(module: &mut Module<'_>, ty: &Ty) -> String {
     let (code, fenv) = fn_value_parts(&mut f);
     if is_aggregate(ty) {
         let arg = f.alloca(layout);
-        let from = module.glue_of(Glue::FromHeap, ty);
-        f.ins(format!("call void {from}(ptr {arg}, ptr %old)"));
+        // A copy that shares the old value's handles: the stored heap copy
+        // stays their owner until the new one replaces it.
+        copy_plain(module, &mut f, ty, &arg, "%old");
         f.ins(format!(
             "call void {code}(ptr {fenv}, ptr {result}, ptr {arg})"
         ));
@@ -869,7 +1004,6 @@ fn upsert_thunk(module: &mut Module<'_>, ty: &Ty) -> String {
     let none = enum_layout.index("None").expect("Option has None");
     let payload = enum_layout.variants[some].1[0].1;
     let to_heap = module.glue_of(Glue::ToHeap, ty);
-    let from = module.glue_of(Glue::FromHeap, ty);
     guard_callback(module, &mut f);
     let result = f.alloca(layout);
     let arg = f.alloca(enum_layout.layout);
@@ -885,7 +1019,7 @@ fn upsert_thunk(module: &mut Module<'_>, ty: &Ty) -> String {
     let at = f.val(format!(
         "getelementptr inbounds i8, ptr {arg}, i64 {payload}"
     ));
-    f.ins(format!("call void {from}(ptr {at}, ptr %old)"));
+    copy_plain(module, &mut f, ty, &at, "%old");
     f.br(&call);
     f.place(&call);
     if is_aggregate(ty) {

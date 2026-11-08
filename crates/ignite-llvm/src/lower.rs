@@ -173,6 +173,10 @@ pub struct Lower<'a, 'm, 'e> {
     /// their task (`own::handovers`); recorded at the binding's `let`,
     /// taken by [`Lower::spawn`].
     handovers: Vec<Handover>,
+    /// The `match` statements of open blocks that own their scrutinee
+    /// (`own::owned_scrutinee`), by [`expr_key`]; recorded before the
+    /// statement, taken when its scrutinee is lowered.
+    owned_matches: Vec<usize>,
 }
 
 /// An owned stream binding `name` whose last use is the spawned call with
@@ -227,6 +231,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             subst: (Vec::new(), Vec::new()),
             moved_streams: Vec::new(),
             handovers: Vec::new(),
+            owned_matches: Vec::new(),
         }
     }
 
@@ -532,28 +537,60 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     /// their handles (`docs/llvm.md` section 4): registered with
     /// `tcp_own`, so a failure releases them, and released when the block
     /// is left. The block's mark is taken at its first owned binding.
-    fn own_streams(&mut self, names: &[String]) {
+    fn own_streams(&mut self, names: &[String]) -> Vec<String> {
+        let mut owned = Vec::new();
+        for name in names {
+            let Some(local) = self
+                .scopes
+                .last()
+                .and_then(|scope| scope.iter().rev().find(|l| l.name == *name))
+                .cloned()
+            else {
+                continue;
+            };
+            if !self.env.holds_handles(&local.ty) {
+                continue;
+            }
+            self.own_mark();
+            if let Some(local) = self
+                .scopes
+                .last_mut()
+                .and_then(|scope| scope.iter_mut().rev().find(|l| l.name == *name))
+            {
+                local.owned = true;
+            }
+            crate::glue::handles_at(self.m, &mut self.f, Glue::OwnHandles, &local.ty, &local.ptr);
+            owned.push(name.clone());
+        }
+        owned
+    }
+
+    /// Take the current block's owner mark (`ignite_rt_own_mark`) unless it
+    /// has one.
+    fn own_mark(&mut self) {
         self.m.declare("ignite_rt_own_mark", "i64", &[]);
         self.m
             .declare("ignite_rt_own_release", "void", &["i64".into()]);
-        self.m.declare("ignite_rt_tcp_own", "void", &["i64".into()]);
         if matches!(self.own_marks.last(), Some(None)) {
             let mark = self.f.val("call i64 @ignite_rt_own_mark()");
             *self.own_marks.last_mut().expect("a block is open") = Some(mark);
         }
-        for name in names {
-            let Some(local) = self
-                .scopes
-                .last_mut()
-                .and_then(|scope| scope.iter_mut().rev().find(|l| l.name == *name))
-            else {
-                continue;
-            };
-            local.owned = true;
-            let local = local.clone();
-            let handle = self.load_scalar(&local.ty, &local.ptr);
-            self.f
-                .ins(format!("call void @ignite_rt_tcp_own(i64 {handle})"));
+    }
+
+    /// Make the current block the owner of every handle in the value `v`
+    /// of type `ty` (an owned `match` scrutinee, [`crate::own`]); its
+    /// mark was taken before the statement.
+    fn own_value(&mut self, ty: &Ty, v: &Val) {
+        match v {
+            Val::Ptr(p, _) => {
+                let p = p.clone();
+                crate::glue::handles_at(self.m, &mut self.f, Glue::OwnHandles, ty, &p);
+            }
+            Val::Scalar(x) if self.env.holds_handles(ty) => {
+                self.m.declare("ignite_rt_tcp_own", "void", &["i64".into()]);
+                self.f.ins(format!("call void @ignite_rt_tcp_own(i64 {x})"));
+            }
+            _ => {}
         }
     }
 
@@ -570,6 +607,11 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             self.f
                 .ins(format!("call void @ignite_rt_own_release(i64 {mark})"));
         }
+    }
+
+    /// The inputs of the ownership rules of [`crate::own`] for this module.
+    fn own_cx(&self) -> crate::own::Cx<'a> {
+        crate::own::Cx::new(self.cx.types, self.cx.program, &self.cx.module)
     }
 
     /// The `continue` (`next`) or `break` target of the innermost loop,
@@ -1093,6 +1135,19 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             {
                 self.moved_streams = crate::region::moved_to_task(&block.stmts, i, call);
             }
+            if let Some(e) = crate::own::owned_match(stmt, &self.own_cx())
+                && let ExprKind::Match { scrutinee, .. } = &e.kind
+                && self.env.holds_handles(&self.ty(scrutinee))
+            {
+                self.own_mark();
+                self.owned_matches.push(expr_key(e));
+            }
+            if let Some(iter) = crate::own::owned_iter(stmt, &self.own_cx())
+                && self.env.holds_handles(&self.ty(iter))
+            {
+                self.own_mark();
+                self.owned_matches.push(expr_key(iter));
+            }
             match &stmt.kind {
                 StmtKind::Expr(e) if last && want => value = self.expr(e, true),
                 _ => self.stmt(stmt),
@@ -1102,10 +1157,12 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 StmtKind::Let { .. } | StmtKind::LetPattern { .. }
             ) && !self.f.is_terminated()
             {
-                let owned = crate::own::owned(&block.stmts, i, self.cx.types);
+                let owned = crate::own::owned(&block.stmts, i, &self.own_cx());
                 if !owned.is_empty() {
-                    self.own_streams(&owned);
-                    for name in owned {
+                    for name in self.own_streams(&owned) {
+                        if !self.lookup(&name).is_some_and(|local| is_stream(&local.ty)) {
+                            continue;
+                        }
                         for call in crate::own::handovers(&block.stmts[i + 1..], &name) {
                             self.handovers.push(Handover {
                                 call: expr_key(call),
@@ -1279,6 +1336,14 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             other => panic!("for over {other:?}"),
         };
         let v = self.expr(iter, true);
+        // An owned iterated value (`own::owned_iter`): the block is the
+        // owner of its handles, the loop binds its elements in place.
+        if v != Val::Never
+            && let Some(at) = self.owned_matches.iter().position(|k| *k == expr_key(iter))
+        {
+            self.owned_matches.remove(at);
+            self.own_value(&list_ty, &v);
+        }
         let names = ownership::changed_in_block(body, Some(self.cx.types));
         let keep = Self::root(iter).is_some_and(|root| !names.contains(root));
         let v = if keep { v } else { self.owned(&list_ty, v) };
@@ -1592,6 +1657,10 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 let s = if keep { s } else { self.owned(&sty, s) };
                 if s == Val::Never {
                     return Val::Never;
+                }
+                if let Some(at) = self.owned_matches.iter().position(|k| *k == expr_key(e)) {
+                    self.owned_matches.remove(at);
+                    self.own_value(&sty, &s);
                 }
                 let slot = (want && !is_void(&ty)).then(|| self.temp(&ty));
                 let end = self.f.label();
@@ -5640,6 +5709,25 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         for stream in &streams {
             t.f.ins(format!("call void @ignite_rt_tcp_own(i64 {stream})"));
         }
+        // The handles inside a tuple, record or enum argument get an owner
+        // of their own too (`docs/slice.md` 30.3): the parent adds it with
+        // `retain_handles` below, the task registers each above a mark of
+        // its own and releases them when `symbol` returns.
+        let held: Vec<(Ty, String)> = values
+            .iter()
+            .zip(&offsets)
+            .filter(|((ty, _, _), _)| is_aggregate(ty) && self.env.holds_handles(ty))
+            .map(|((ty, _, _), offset)| (ty.clone(), t.gep("%env", *offset)))
+            .collect();
+        let task_mark = (!held.is_empty()).then(|| {
+            t.m.declare("ignite_rt_own_mark", "i64", &[]);
+            t.m.declare("ignite_rt_own_release", "void", &["i64".into()]);
+            let mark = t.f.val("call i64 @ignite_rt_own_mark()");
+            for (ty, at) in &held {
+                crate::glue::handles_at(t.m, &mut t.f, Glue::OwnHandles, ty, at);
+            }
+            mark
+        });
         let result = t.call(&callee, &sig.ret, operands);
         if let (Ty::Result(_, err), Val::Ptr(p, _)) = (&sig.ret, &result)
             && **err == Ty::IoError
@@ -5647,6 +5735,9 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             t.log_error(&sig.ret, p, prefix);
         }
         t.f.ins("call void @ignite_rt_guard_pop()");
+        if let Some(mark) = &task_mark {
+            t.f.ins(format!("call void @ignite_rt_own_release(i64 {mark})"));
+        }
         for stream in &streams {
             t.f.ins(format!("call void @ignite_rt_tcp_release(i64 {stream})"));
         }
@@ -5671,6 +5762,18 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                     .ins(format!("call void @ignite_rt_tcp_retain(i64 {stream})"));
             }
         }
+        let shared: Vec<(Ty, String)> = values
+            .iter()
+            .filter_map(|(ty, v, _)| match v {
+                Val::Ptr(src, _) if is_aggregate(ty) && self.env.holds_handles(ty) => {
+                    Some((ty.clone(), src.clone()))
+                }
+                _ => None,
+            })
+            .collect();
+        for (ty, src) in &shared {
+            crate::glue::handles_at(self.m, &mut self.f, Glue::RetainHandles, ty, src);
+        }
         self.m.declare("ignite_rt_spawn_begin", "void", &[]);
         self.f.ins("call void @ignite_rt_spawn_begin()");
         let env = self.f.val(format!(
@@ -5689,7 +5792,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             "call i8 @ignite_rt_spawn(ptr {}, ptr {env})",
             global(thunk)
         ));
-        if !parents.is_empty() {
+        if !parents.is_empty() || !shared.is_empty() {
             let failed = self.f.val(format!("icmp eq i8 {started}, 0"));
             let (close, done) = (self.f.label(), self.f.label());
             self.f.cond_br(&failed, &close, &done);
@@ -5697,6 +5800,9 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             for stream in &parents {
                 self.f
                     .ins(format!("call void @ignite_rt_tcp_release(i64 {stream})"));
+            }
+            for (ty, src) in &shared {
+                crate::glue::handles_at(self.m, &mut self.f, Glue::ReleaseHandles, ty, src);
             }
             self.f.br(&done);
             self.f.place(&done);

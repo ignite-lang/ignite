@@ -497,12 +497,30 @@ position, even with no buffer.
     returned). When no thread can start, `ignite_rt_spawn` returns 0 without running the
     thunk and the parent releases the task's owners at once; the substrate logs the failure
     once per run of failures and the service keeps accepting.
-  - a block, for a stream binding it owns (`own::owned`): a `let` that creates the stream
-    (`let stream = listener.accept()?`, `TcpStream.connect(..)?`, `let (a, b) =
-    Pipe.pair()`) whose every later mention in the block keeps it inside the block: the
-    receiver of a builtin stream method other than `copy()`, an argument of `spawn`, or a
-    plain argument of a call whose result type cannot hold a stream (no record, enum, fn
-    value or type parameter in it). The block registers the binding with `tcp_own` after
+  - a task, for every handle inside a tuple, record or enum argument: the parent adds an
+    owner with `retain_handles.<T>` before the start (and drops it with
+    `release_handles.<T>` when no thread can start), the thunk registers each above an
+    owner mark of its own and releases them when the callee returns.
+  - a heap copy in a store or a channel: `copy_to_heap` adds an owner to every handle in it,
+    `free_heap` drops it with `handle_release` (which leaves the task's registrations
+    alone), and `copy_from_heap` adds one for the copy it makes, so a `remove` or a
+    `receive` hands the stored owner to its caller (`docs/slice.md` 30.3).
+  - a block, for a binding it owns (`own::owned`, `docs/slice.md` 30.3, every handle kind
+    since case study gap G30): a `let` of a value no one else owns (a builtin that creates
+    handles such as `let stream = listener.accept()?`, `TcpListener.bind(..)`, `let (a, b) =
+    Pipe.pair()`, `Launcher.new()`; a copy out of a store or a channel; a call of a fn of
+    the module whose result holds only handles it created), or a `match` statement on such
+    a value whose arms keep what they bind, whose every later mention in the block keeps it
+    inside the block: the receiver of a builtin method that does not hand it on, a value
+    `put` in a store or sent on a channel, an argument of `spawn`, or a plain argument of a
+    call whose result type cannot hold a handle (no record, enum, fn value or type parameter
+    in it) or holds only fresh ones. A field or element of the binding counts as the
+    binding, and a `let` of the binding or of a literal around it is an alias that keeps it
+    while the alias is kept; such a binding is not handed over to a `spawn` that is its
+    last mention. A `match` that is a `let`'s value and a `for` over such a value
+    (`for s in senders.values()`) own it the same way, the loop's elements bound in place.
+    The block registers every handle of the value with `tcp_own`
+    (`own_handles.<T>` for an aggregate) after
     an owner mark (`own_mark`, the length of the task's registration list) taken at its
     first owned binding, and `own_release(mark)` releases every registration since the mark
     when the block is left: at its end, before a `return` or the return of `?` (from the
@@ -511,9 +529,8 @@ position, even with no buffer.
     without `spawn` closes it at the end of the iteration (the review's L1 kept one socket
     per connection). A binding with any other mention (returned, stored in a field or a
     list, captured, assigned, `copy()`) is not owned and, as before, is not released before
-    the process exits. A callee that keeps a stream it was passed beyond its return other
-    than through its result (in a `Store`) would see it closed; no std module or example
-    does.
+    the process exits. A callee that keeps a handle it was passed beyond its return does so
+    in a store, a channel or a task, each an owner of its own.
   - At a `spawn` that is the last use of an owned binding (`own::handovers`: in the
     binding's block or in an `if`, `else` or `match` arm nested in it that is itself the
     last use, up to a binding that shadows the name; not in a loop body), the block releases
