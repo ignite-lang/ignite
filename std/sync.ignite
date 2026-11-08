@@ -1,0 +1,170 @@
+package std.sync
+
+// Bounded channels between the tasks of one process (`docs/slice.md` 30):
+// the substrate's waitable signal. A long-poll, a heartbeat, a ping interval
+// or a drain window waits on a channel with a deadline instead of reading a
+// loopback socket nobody writes to. The module declares nothing; it is the
+// substrate's `Channel`, `Sender<T>` and `Receiver<T>`, and their tests.
+//
+//   Channel.bounded(capacity: Int) -> (Sender<T>, Receiver<T>)      T from the expected type or later use;
+//                                                                   a capacity below 1 fails the task
+//   sender.send(value: T) -> Bool                                  effect sender.send; waits while full,
+//                                                                   false when the channel is closed
+//   sender.try_send(value: T) -> Bool                              effect sender.send; false when full or closed
+//   sender.close() -> Unit                                         effect sender.send
+//   receiver.receive() -> Option<T>                                effect receiver.receive; waits for a value,
+//                                                                   None once the channel is closed and empty
+//   receiver.receive_within(timeout: Duration) -> Option<T>        effect receiver.receive; None at the deadline too
+//   receiver.closed() -> Bool                                      effect receiver.receive
+//   receiver.close() -> Unit                                       effect receiver.receive
+//
+// Both ends are handles: a copy shares the end, and a spawned task takes the
+// end it is given. A value is moved into the channel by `send` and out of it
+// by `receive`; no two tasks share it. `close` on either end, or the last
+// handle of all senders or of all receivers going away, closes the channel:
+// every waiting `send` returns false, and every waiting `receive` returns
+// what was sent before, then `None`.
+
+test fn ring_after(bell: Sender<Text>, delay: Duration) -> Result<Unit, IoError> {
+  Clock.sleep(delay)
+  bell.send("ring")
+  Ok(())
+}
+
+test fn take_after(values: Receiver<Int>, delay: Duration, taken: Sender<Int>) -> Result<Unit, IoError> {
+  Clock.sleep(delay)
+  match values.receive() {
+    Some(value) => taken.send(value)
+    None => taken.send(0 - 1)
+  }
+  Ok(())
+}
+
+test fn wait_and_report(values: Receiver<Int>, reports: Sender<Text>) -> Result<Unit, IoError> {
+  let report = match values.receive() {
+    Some(_) => "value"
+    None => "ended"
+  }
+  reports.send(report)
+  Ok(())
+}
+
+test fn send_and_report(values: Sender<Int>, reports: Sender<Text>) -> Result<Unit, IoError> {
+  let report = if values.send(2) { "sent" } else { "refused" }
+  reports.send(report)
+  Ok(())
+}
+
+test fn produce(values: Sender<Int>, count: Int) -> Result<Unit, IoError> {
+  var i = 0
+  while i < count {
+    values.send(i)
+    i = i + 1
+  }
+  Ok(())
+}
+
+test "values arrive in order and a full channel refuses try_send" {
+  let (tx, rx) = Channel.bounded(2)
+  assert tx.try_send(1)
+  assert tx.try_send(2)
+  assert !tx.try_send(3)
+  assert rx.receive() == Some(1)
+  assert tx.send(3)
+  assert rx.receive() == Some(2)
+  assert rx.receive() == Some(3)
+}
+
+test "receive_within returns None at its deadline" {
+  let (tx, rx) = Channel.bounded(1)
+  let started = Clock.monotonic()
+  assert rx.receive_within(50 ms) == None
+  assert Clock.monotonic() - started >= 50 ms
+  assert !rx.closed()
+  assert tx.send(7)
+  assert rx.receive_within(0 ms) == Some(7)
+  assert rx.receive_within(0 ms - 1 seconds) == None
+}
+
+test "a send from another task wakes a waiting receiver" {
+  let (bell, rings) = Channel.bounded(1)
+  let started = Clock.monotonic()
+  spawn ring_after(bell, 50 ms)
+  assert rings.receive_within(5 seconds) == Some("ring")
+  let waited = Clock.monotonic() - started
+  assert waited >= 50 ms
+  assert waited < 4 seconds
+}
+
+test "send waits while the channel is full" {
+  let (tx, rx) = Channel.bounded(1)
+  let (taken, took) = Channel.bounded(1)
+  assert tx.send(1)
+  let started = Clock.monotonic()
+  spawn take_after(rx, 50 ms, taken)
+  assert tx.send(2)
+  assert Clock.monotonic() - started >= 50 ms
+  assert took.receive_within(5 seconds) == Some(1)
+  assert rx.receive() == Some(2)
+}
+
+test "closing a channel ends every waiter" {
+  let (tx, rx) = Channel.bounded(1)
+  let (report, reports) = Channel.bounded(8)
+  spawn wait_and_report(rx, report)
+  spawn wait_and_report(rx, report)
+  spawn wait_and_report(rx, report)
+  Clock.sleep(50 ms)
+  tx.close()
+  assert reports.receive_within(5 seconds) == Some("ended")
+  assert reports.receive_within(5 seconds) == Some("ended")
+  assert reports.receive_within(5 seconds) == Some("ended")
+  assert rx.closed()
+  assert !tx.send(1)
+  assert !tx.try_send(1)
+  let (full, sink) = Channel.bounded(1)
+  assert full.send(1)
+  spawn send_and_report(full, report)
+  Clock.sleep(50 ms)
+  sink.close()
+  assert reports.receive_within(5 seconds) == Some("refused")
+}
+
+test "a closed channel still gives what was sent before" {
+  let (tx, rx) = Channel.bounded(4)
+  assert tx.send(1)
+  assert tx.send(2)
+  tx.close()
+  assert rx.closed()
+  assert rx.receive() == Some(1)
+  assert rx.receive_within(1 seconds) == Some(2)
+  assert rx.receive() == None
+}
+
+test "the last sender gone closes the channel" {
+  let (tx, rx) = Channel.bounded(2)
+  spawn produce(tx, 5)
+  var sum = 0
+  var count = 0
+  loop {
+    match rx.receive_within(5 seconds) {
+      Some(value) => {
+        sum = sum + value
+        count = count + 1
+      }
+      None => break
+    }
+  }
+  assert count == 5
+  assert sum == 10
+  assert rx.closed()
+}
+
+test "a value sent is the receiver's own" {
+  let (tx, rx) = Channel.bounded(1)
+  var items = [1, 2]
+  assert tx.send(items)
+  items.push(3)
+  assert rx.receive() == Some([1, 2])
+  assert items == [1, 2, 3]
+}

@@ -165,6 +165,8 @@ fn unify(pattern: &Ty, found: &Ty, binds: &mut BTreeMap<String, Ty>) {
         (Ty::List(a), Ty::List(b))
         | (Ty::Option(a), Ty::Option(b))
         | (Ty::Store(a), Ty::Store(b))
+        | (Ty::Sender(a), Ty::Sender(b))
+        | (Ty::Receiver(a), Ty::Receiver(b))
         | (Ty::Signal(a), Ty::Signal(b))
         | (Ty::Ref(Some(a)), Ty::Ref(Some(b))) => unify(a, b, binds),
         (Ty::Result(a1, a2), Ty::Result(b1, b2)) | (Ty::Map(a1, a2), Ty::Map(b1, b2)) => {
@@ -223,12 +225,14 @@ fn needs_expected(expr: &Expr, ambiguous: &dyn Fn(&str) -> bool) -> bool {
                 || matches!(&callee.kind, ExprKind::Field { receiver, name } if is(receiver, "List") && name.name == "empty")
                 || matches!(&callee.kind, ExprKind::Field { receiver, name } if is(receiver, "Map") && name.name == "empty")
                 || matches!(&callee.kind, ExprKind::Field { receiver, name } if is(receiver, "Store") && name.name == "new")
+                || matches!(&callee.kind, ExprKind::Field { receiver, name } if is(receiver, "Channel") && name.name == "bounded")
                 || matches!(&callee.kind, ExprKind::Name(id) if id.name == "module")
         }
         ExprKind::Method { receiver, name, .. } => {
             is(receiver, "List") && name.name == "empty"
                 || is(receiver, "Map") && name.name == "empty"
                 || is(receiver, "Store") && name.name == "new"
+                || is(receiver, "Channel") && name.name == "bounded"
         }
         ExprKind::Brace { .. } => true,
         ExprKind::Block(block) => block_needs_expected(block, ambiguous),
@@ -273,6 +277,8 @@ fn substitute(ty: &Ty, params: &[String], args: &[Ty]) -> Ty {
             effects.clone(),
         ),
         Ty::Store(t) => Ty::Store(sub(t)),
+        Ty::Sender(t) => Ty::Sender(sub(t)),
+        Ty::Receiver(t) => Ty::Receiver(sub(t)),
         Ty::Signal(t) => Ty::Signal(sub(t)),
         Ty::Ref(Some(t)) => Ty::Ref(Some(sub(t))),
         Ty::Map(k, v) => Ty::Map(sub(k), sub(v)),
@@ -1169,7 +1175,7 @@ impl<'a> Typer<'a> {
         };
         let arity = match (&alias, name) {
             (Some(alias), _) => alias.params.len(),
-            (None, "List" | "Option" | "Store" | "Signal" | "Module") => 1,
+            (None, "List" | "Option" | "Store" | "Signal" | "Module" | "Sender" | "Receiver") => 1,
             (None, "Result" | "Map") => 2,
             (None, "Ref") => usize::from(!ty.args.is_empty()),
             _ => declared.as_ref().map_or(0, |q| self.generics_of(q).len()),
@@ -1216,6 +1222,8 @@ impl<'a> Typer<'a> {
             "List" => Ty::List(arg(0)),
             "Option" => Ty::Option(arg(0)),
             "Store" => Ty::Store(arg(0)),
+            "Sender" => Ty::Sender(arg(0)),
+            "Receiver" => Ty::Receiver(arg(0)),
             "Result" => {
                 let ok = arg(0);
                 Ty::Result(ok, arg(1))
@@ -1716,6 +1724,8 @@ impl<'a> Typer<'a> {
             | Ty::TcpStream
             | Ty::PipeStream
             | Ty::Store(_)
+            | Ty::Sender(_)
+            | Ty::Receiver(_)
             | Ty::Param(_) => false,
         }
     }
@@ -1837,7 +1847,21 @@ impl<'a> Typer<'a> {
     fn stmt(&mut self, stmt: &Stmt) -> Option<Ty> {
         match &stmt.kind {
             StmtKind::LetPattern { pattern, value, .. } => {
-                let ty = self.synth(value);
+                let ty = match self.let_hints.get(&pattern.span).cloned() {
+                    Some(hint) => {
+                        self.check(value, &hint);
+                        Some(hint)
+                    }
+                    None => {
+                        let ty = self.synth(value);
+                        if let (Some(holes), Some(ty)) = (&mut self.holes, &ty)
+                            && ty.has_param(&is_hole)
+                        {
+                            holes.lets.push((pattern.span, ty.clone()));
+                        }
+                        ty
+                    }
+                };
                 self.pattern(pattern, ty.as_ref());
                 Some(if ty == Some(Ty::Never) {
                     Ty::Never
@@ -2921,6 +2945,55 @@ impl<'a> Typer<'a> {
                 }
             };
         }
+        if owner == "Channel" && name.name == "bounded" {
+            self.callees
+                .insert(key(expr), Callee::Builtin(crate::Builtin::ChannelBounded));
+            self.arguments(expr.span, &what, &[Ty::Int], args);
+            let ends = |item: Ty| {
+                Ty::Tuple(vec![
+                    Ty::Sender(Box::new(item.clone())),
+                    Ty::Receiver(Box::new(item)),
+                ])
+            };
+            let ty = match expected {
+                Some(Ty::Tuple(items)) => match items.as_slice() {
+                    [Ty::Sender(a), Ty::Receiver(b)] if a == b => Some(ends((**a).clone())),
+                    _ => None,
+                },
+                Some(_) => None,
+                None => match self.hole() {
+                    Some(hole) => return Some(ends(hole)),
+                    None => {
+                        self.error(
+                            "E042",
+                            expr.span,
+                            "cannot infer the element type of `Channel.bounded(..)`; add a type annotation or send a value"
+                                .to_string(),
+                        );
+                        return None;
+                    }
+                },
+            };
+            return match ty {
+                Some(ty) => {
+                    if let Some(callee) = callee {
+                        self.record(callee, Some(fn_ty(vec![Ty::Int], ty.clone())));
+                    }
+                    Some(ty)
+                }
+                None => {
+                    let other = expected.map(Ty::to_string).unwrap_or_default();
+                    self.error(
+                        "E040",
+                        expr.span,
+                        format!(
+                            "type mismatch: expected `{other}`, found a channel `(Sender<T>, Receiver<T>)`"
+                        ),
+                    );
+                    None
+                }
+            };
+        }
         if owner == "Map" && name.name == "empty" {
             self.callees
                 .insert(key(expr), Callee::Builtin(crate::Builtin::MapEmpty));
@@ -3309,7 +3382,7 @@ impl<'a> Typer<'a> {
             _ => None,
         };
         if let Some(sig) = bounded.or_else(|| builtins::method(&receiver_ty, &name.name)) {
-            if matches!(receiver_ty, Ty::Store(_)) {
+            if matches!(receiver_ty, Ty::Store(_) | Ty::Sender(_) | Ty::Receiver(_)) {
                 self.effect_site(expr, &name.name);
             }
             if let Ty::Capability(kind) = receiver_ty {

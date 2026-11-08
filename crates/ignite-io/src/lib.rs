@@ -1089,6 +1089,9 @@ pub use environment::Environment;
 // `docs/slice.md` 28: the open-files limit.
 mod limits;
 pub use limits::{OPEN_FILES_REPORT_BELOW, open_files_limit, raise_open_files_limit};
+// `docs/slice.md` 30: bounded channels between tasks.
+pub mod channel;
+pub use channel::{Channel, Receiver, Sender};
 
 static EXIT_HOOKS: std::sync::Mutex<Vec<fn()>> = std::sync::Mutex::new(Vec::new());
 

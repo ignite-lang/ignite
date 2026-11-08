@@ -340,7 +340,7 @@ pub extern "C" fn ignite_rt_flush() {
     crate::entry(ignite_io::flush)
 }
 
-/// `i64 open_files_limit()`: `Process.open_files_limit()` (27): the current
+/// `i64 open_files_limit()`: `Process.open_files_limit()` (28): the current
 /// open-files soft limit (`ignite_io::open_files_limit`).
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_open_files_limit() -> i64 {

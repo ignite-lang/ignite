@@ -594,6 +594,8 @@ fn decode(json: &Json, ty: &Ty, types: &TypedProgram, path: &str) -> Result<Valu
         | Ty::PipeStream
         | Ty::IoError
         | Ty::Store(_)
+        | Ty::Sender(_)
+        | Ty::Receiver(_)
         | Ty::Never
         | Ty::Param(_) => Err(fail(format!("a value of type `{ty}` cannot be decoded"))),
     }

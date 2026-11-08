@@ -98,6 +98,8 @@ pub(crate) fn method(receiver: &Ty, name: &str) -> Option<Sig> {
         (Ty::TcpStream, "peer") => sig(TcpStreamPeer, vec![], endpoint()),
         (Ty::TcpStream, "timed_out") => sig(TcpStreamTimedOut, vec![], Ty::Bool),
         (Ty::Capability(kind), _) => capability_method(*kind, name),
+        (Ty::Sender(item), _) => sender_method(item, name),
+        (Ty::Receiver(item), _) => receiver_method(item, name),
         _ => None,
     }
 }
@@ -214,9 +216,13 @@ fn named_in(ty: &Ty, modules: &mut BTreeSet<String>, capabilities: &mut Vec<Capa
             modules.insert(q.module.clone());
             items.iter().collect()
         }
-        Ty::List(t) | Ty::Option(t) | Ty::Store(t) | Ty::Signal(t) | Ty::Ref(Some(t)) => {
-            vec![&**t]
-        }
+        Ty::List(t)
+        | Ty::Option(t)
+        | Ty::Store(t)
+        | Ty::Signal(t)
+        | Ty::Ref(Some(t))
+        | Ty::Sender(t)
+        | Ty::Receiver(t) => vec![&**t],
         Ty::Result(a, b) | Ty::Map(a, b) => vec![&**a, &**b],
         Ty::Fn(params, ret) | Ty::EffectFn(params, ret, _) => {
             params.iter().chain(std::iter::once(&**ret)).collect()
@@ -294,6 +300,34 @@ fn map_method(k: &Ty, v: &Ty, name: &str) -> Option<Sig> {
         "keys" => sig(MapKeys, vec![], Ty::List(Box::new(k.clone()))),
         "len" => sig(MapLen, vec![], Ty::Int),
         "contains" => sig(MapContains, vec![k.clone()], Ty::Bool),
+        _ => None,
+    }
+}
+
+/// `sender.name(..)` on a `Sender<item>` (`docs/slice.md` 30).
+fn sender_method(item: &Ty, name: &str) -> Option<Sig> {
+    use Builtin::*;
+    match name {
+        "send" => sig(SenderSend, vec![item.clone()], Ty::Bool),
+        "try_send" => sig(SenderTrySend, vec![item.clone()], Ty::Bool),
+        "close" => sig(SenderClose, vec![], Ty::Unit),
+        _ => None,
+    }
+}
+
+/// `receiver.name(..)` on a `Receiver<item>` (`docs/slice.md` 30).
+fn receiver_method(item: &Ty, name: &str) -> Option<Sig> {
+    use Builtin::*;
+    let option = Ty::Option(Box::new(item.clone()));
+    match name {
+        "receive" => sig(ReceiverReceive, vec![], option),
+        "receive_within" => sig(
+            ReceiverReceiveWithin,
+            vec![Ty::Quantity(QuantityKind::Duration)],
+            option,
+        ),
+        "closed" => sig(ReceiverClosed, vec![], Ty::Bool),
+        "close" => sig(ReceiverClose, vec![], Ty::Unit),
         _ => None,
     }
 }

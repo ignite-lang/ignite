@@ -1,0 +1,10 @@
+const ENDS: (Sender<Int>, Receiver<Int>) = Channel.bounded(1)
+
+fn notify(bell: Sender<Int>) -> Bool requires [] = bell.send(1)
+
+fn wait(bell: Receiver<Int>) -> Option<Int> requires [] = bell.receive()
+
+fn declared(bell: Sender<Int>, inbox: Receiver<Int>) -> Bool requires [bell.send, inbox.receive] {
+  inbox.close()
+  bell.try_send(2)
+}

@@ -183,7 +183,15 @@ pub fn change(builtin: Builtin) -> Option<Change> {
         | ClockSleep
         | ClockNow
         | ProcessFlush
-        | ProcessOpenFilesLimit => None,
+        | ProcessOpenFilesLimit
+        | ChannelBounded
+        | SenderSend
+        | SenderTrySend
+        | SenderClose
+        | ReceiverReceive
+        | ReceiverReceiveWithin
+        | ReceiverClosed
+        | ReceiverClose => None,
     }
 }
 

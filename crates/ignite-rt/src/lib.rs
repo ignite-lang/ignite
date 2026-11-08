@@ -271,6 +271,15 @@ impl IgniteList {
     }
 }
 
+// `docs/slice.md` 30: the channel entries, after the tests for the same
+// reason.
+mod channel;
+pub use channel::{
+    ignite_rt_channel_bounded, ignite_rt_channel_close, ignite_rt_channel_closed,
+    ignite_rt_channel_receive, ignite_rt_channel_receive_within, ignite_rt_channel_send,
+    ignite_rt_channel_try_send,
+};
+
 // Panic containment at the C ABI (`crate::contain`), after the tests for
 // the same reason.
 mod contain;

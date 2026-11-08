@@ -32,7 +32,7 @@ package std.process
 //   Process.open_files_limit() -> Int                              effect process.limit; the open-files soft limit (28)
 //
 // A program raises its open-files soft limit to the hard limit before
-// `K.main` runs, on both targets (27).
+// `K.main` runs, on both targets (28).
 //
 // Under `ignite run --clock manual` both clocks stay real: the manual clock
 // times the driver's reducers only (21.20).

@@ -1,0 +1,2 @@
+e042_channel_element.ignite:2:18: error[E042]: cannot infer the element type of `Channel.bounded(..)`; add a type annotation or send a value
+e042_channel_element.ignite:17:16: error[E040]: type mismatch: expected `Int`, found a channel `(Sender<T>, Receiver<T>)`

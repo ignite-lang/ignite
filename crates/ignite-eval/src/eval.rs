@@ -1428,7 +1428,14 @@ impl<'p> Evaluator<'p> {
                 | Builtin::CommandLineArguments
                 | Builtin::EnvironmentGet
                 | Builtin::TcpStreamPeer
-                | Builtin::TcpStreamTimedOut,
+                | Builtin::TcpStreamTimedOut
+                | Builtin::SenderSend
+                | Builtin::SenderTrySend
+                | Builtin::SenderClose
+                | Builtin::ReceiverReceive
+                | Builtin::ReceiverReceiveWithin
+                | Builtin::ReceiverClosed
+                | Builtin::ReceiverClose,
                 _,
             ) => Err(internal(format!(
                 "builtin `{builtin:?}` has no value at compile time"
@@ -2288,6 +2295,7 @@ fn is_static(builtin: Builtin) -> bool {
             | Builtin::ProcessFlush
             | Builtin::ProcessOpenFilesLimit
             | Builtin::TcpStreamConnectWithin
+            | Builtin::ChannelBounded
     )
 }
 
