@@ -107,7 +107,7 @@ metric, the target, the value before and after, and the run of `task quality` th
 | # | metric | kind | better | instrument | bar | target |
 |---|---|---|---|---|---|---|
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | lower | `differential::corpus_agrees_across_rust_llvm_and_the_evaluator` (every merge): units of the corpus whose exit, stdout or failure text differs from the Rust target's | eval 4, llvm 0 |  |
-| 1.2 | differential corpus size | ratchet | higher | the differential runner: units (inline tests and executables) each consumer ran | eval 448, llvm 684, rust 684 |  |
+| 1.2 | differential corpus size | ratchet | higher | the differential runner: units (inline tests and executables) each consumer ran | eval 452, llvm 688, rust 688 |  |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | lower | `quality::static_metrics_hold_the_bar`: per consumer crate, `PatternKind::` mentions (patterns) and distinct `Builtin::` variants named (builtins) | eval/builtins 112, eval/patterns 13, llvm/builtins 12, llvm/patterns 30, rust/builtins 43, rust/patterns 71 | one implementation per rule: after story:mid-level-ir the backends name no `PatternKind` and no `Builtin` the IR lowers |
 | 1.4 | generated-code goldens changed without a `CODEGEN_REVISION` bump | gate | lower | `quality::static_metrics_hold_the_bar`: golden `.rs` and `.ll` outputs changed against the merge base with main while `CODEGEN_REVISION` is unchanged | all 0 |  |
 | 1.5 | random programs on which the consumers disagree | gate | lower | a typed program generator, N seeds per gate | unmeasured: no program generator yet (out of scope of story:quality-ratchet) |  |
@@ -122,7 +122,7 @@ metric, the target, the value before and after, and the run of `task quality` th
 | 2.2 | accepted programs that fail in a backend | gate | lower | the differential runner: corpus programs that check and do not build on a target | llvm 0, rust 0 |  |
 | 2.3 | soundness holes open (effects, ownership, exhaustiveness) | ratchet | lower | count of open stories that are soundness holes | unmeasured: the planning store tags no story as a soundness hole; known open: story:map-put-handle-roots, story:immutable-binding-e006 |  |
 | 2.4 | compiler panics on any input | gate | lower | fuzz the parser and checker on a mutated corpus | unmeasured: no fuzzer yet (out of scope of story:quality-ratchet) |  |
-| 2.5 | diagnostic fixtures (one diagnostic per error site, its span) | ratchet | higher | `quality::static_metrics_hold_the_bar`: `.expected` diagnostic fixtures; each is compared by its crate's fixture test every merge | all 328 |  |
+| 2.5 | diagnostic fixtures (one diagnostic per error site, its span) | ratchet | higher | `quality::static_metrics_hold_the_bar`: `.expected` diagnostic fixtures; each is compared by its crate's fixture test every merge | all 329 |  |
 | 2.6 | checking time stays linear (limit tests) | gate | higher | `quality::static_metrics_hold_the_bar`: the `limits::` tests of `ignite-check` and `ignite-types`, each a linearity bound run every merge | all 5 |  |
 
 ### 3 Generated code and runtime behaviour

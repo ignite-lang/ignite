@@ -306,13 +306,13 @@
       "area": "Semantics: one meaning across the three consumers",
       "bars": {
         "eval": {
-          "value": 448
+          "value": 452
         },
         "llvm": {
-          "value": 684
+          "value": 688
         },
         "rust": {
-          "value": 684
+          "value": 688
         }
       },
       "direction": "higher",
@@ -467,7 +467,7 @@
       "area": "Front end: the checker refuses exactly the wrong programs",
       "bars": {
         "all": {
-          "value": 328
+          "value": 329
         }
       },
       "direction": "higher",
