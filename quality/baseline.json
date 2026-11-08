@@ -289,27 +289,27 @@
     },
     "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: capability": {
       "consumer": "llvm",
-      "story": "story:channel-release-on-close",
+      "story": "story:llvm-release-all-handles",
       "what": "Rust passes; on LLVM a capability stays in the handle table until the process exits, so the soak fails naming its kind: the lowering releases only the channel ends, pipe ends and streams a block owns (docs/leak-guard.md 1.2 and Q8, docs/slice.md 33.4; asserted red by leak::every_soak_passes_without_a_seeded_leak)"
     },
     "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: child": {
       "consumer": "llvm",
-      "story": "story:channel-release-on-close",
+      "story": "story:llvm-release-all-handles",
       "what": "Rust passes; on LLVM the child's launcher stays in the handle table until the process exits, so the soak fails naming its kind: the lowering releases only the channel ends, pipe ends and streams a block owns (docs/leak-guard.md 1.2 and Q8, docs/slice.md 33.4; asserted red by leak::every_soak_passes_without_a_seeded_leak)"
     },
     "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: directory": {
       "consumer": "llvm",
-      "story": "story:channel-release-on-close",
+      "story": "story:llvm-release-all-handles",
       "what": "Rust passes; on LLVM a directory stays in the handle table until the process exits, so the soak fails naming its kind: the lowering releases only the channel ends, pipe ends and streams a block owns (docs/leak-guard.md 1.2 and Q8, docs/slice.md 33.4; asserted red by leak::every_soak_passes_without_a_seeded_leak)"
     },
     "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: listener": {
       "consumer": "llvm",
-      "story": "story:channel-release-on-close",
+      "story": "story:llvm-release-all-handles",
       "what": "Rust passes; on LLVM a listener stays in the handle table until the process exits, so the soak fails naming its kind: the lowering releases only the channel ends, pipe ends and streams a block owns (docs/leak-guard.md 1.2 and Q8, docs/slice.md 33.4; asserted red by leak::every_soak_passes_without_a_seeded_leak)"
     },
     "crates/ignite/tests/fixtures/leak/seeded.ignite::soak: stream": {
       "consumer": "llvm",
-      "story": "story:channel-release-on-close",
+      "story": "story:llvm-release-all-handles",
       "what": "Rust passes; on LLVM the listener of the stream stays in the handle table until the process exits, so the soak fails naming its kind: the lowering releases only the channel ends, pipe ends and streams a block owns (docs/leak-guard.md 1.2 and Q8, docs/slice.md 33.4; asserted red by leak::every_soak_passes_without_a_seeded_leak)"
     },
     "crates/ignite/tests/fixtures/tests/basics.ignite::try on err fails": {
@@ -347,7 +347,7 @@
           "value": 4
         },
         "llvm": {
-          "decision": "story leak-census (2026-11-08), accepted by the coordinator: the seven LLVM soaks of crates/ignite/tests/fixtures/leak/ (G30's two, listener, stream, child, directory, capability) fail on LLVM by design until story:channel-release-on-close releases every handle kind a block holds (docs/leak-guard.md Q8); listed in known_differences and asserted red in leak::",
+          "decision": "story leak-census (2026-11-08), accepted by the coordinator: the seven LLVM soaks of crates/ignite/tests/fixtures/leak/ fail on LLVM by design: G30's two until story:channel-release-on-close, listener, stream, child, directory and capability until story:llvm-release-all-handles (docs/leak-guard.md 1.2, Q8); listed in known_differences and asserted red in leak::",
           "value": 7
         }
       },
