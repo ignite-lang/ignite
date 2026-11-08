@@ -15,6 +15,9 @@ fn main() {
         Mode::VerifyLlvmReadiness(args) => {
             std::process::exit(readiness::exit_status(readiness::verify(&args)))
         }
+        Mode::Quality(args) => {
+            std::process::exit(readiness::exit_status(ignite_perf::quality::measure(&args)))
+        }
         Mode::Smoke(args) => ("smoke", args),
         Mode::Prepare(args) => ("prepare", args),
         Mode::Cold(args) => ("cold", args),

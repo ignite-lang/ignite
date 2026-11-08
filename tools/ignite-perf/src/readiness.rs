@@ -708,7 +708,7 @@ fn echo(port: u16) -> R<()> {
         .map_err(io_err("socket"))?;
     read_until(
         &mut connection,
-        |s| s.ends_with(b"terminal> "),
+        |s| s.windows(10).any(|w| w == b"terminal> "),
         "terminal prompt",
     )?;
     connection
