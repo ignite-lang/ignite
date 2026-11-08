@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-08T06:50:13Z",
+  "actor": "human:timo",
+  "artifact": "story:drain-keeps-listeners",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on bd16cbd70 (PR 118): 1506 cargo passed, 0 failed, 24 ignored; 346 inline per target; task ux 304",
+    "reference": "https://github.com/ignite-lang/ignite/pull/118"
+  }
+}

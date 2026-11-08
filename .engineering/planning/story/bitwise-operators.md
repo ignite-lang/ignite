@@ -2,12 +2,13 @@
 format: aep.planning-md/3
 id: story:bitwise-operators
 kind: story
-status: active
+status: implemented
 title: Bitwise operators on Int
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T01:25:59Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-08T01:26:47Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-08T06:51:08Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: bitwise-operators
 
