@@ -27,7 +27,8 @@ use crate::perf::{R, ensure, io_err, loadavg, path_str, sha256};
 pub struct QualityArgs {
     #[arg(long, default_value_os_t = default_repo())]
     pub repo: PathBuf,
-    /// The compiler to time; default `<repo>/target/debug/ignite`.
+    /// The compiler to time; default `debug/ignite` under `CARGO_TARGET_DIR`, else under
+    /// `<repo>/target` ([`default_cli`]).
     #[arg(long)]
     pub cli: Option<PathBuf>,
     /// The runtime archive with the test runner the LLVM builds and `ignite run` link.
@@ -102,11 +103,22 @@ fn size_of(paths: &[PathBuf], name: &str) -> R<i64> {
     Ok(fs::metadata(path).map_err(io_err(path.display()))?.len() as i64)
 }
 
+/// The compiler `quality` times without `--cli`: `debug/ignite` under `cargo_target_dir`
+/// (`CARGO_TARGET_DIR`; relative to `repo` when relative), else under `<repo>/target`, where
+/// `task quality`'s `cargo build` put it.
+pub fn default_cli(repo: &Path, cargo_target_dir: Option<&std::ffi::OsStr>) -> PathBuf {
+    let target = match cargo_target_dir.filter(|d| !d.is_empty()) {
+        Some(dir) => repo.join(dir),
+        None => repo.join("target"),
+    };
+    target.join("debug/ignite")
+}
+
 impl QualityArgs {
     fn cli(&self) -> PathBuf {
-        self.cli
-            .clone()
-            .unwrap_or_else(|| self.repo.join("target/debug/ignite"))
+        self.cli.clone().unwrap_or_else(|| {
+            default_cli(&self.repo, std::env::var_os("CARGO_TARGET_DIR").as_deref())
+        })
     }
 
     /// The `ignite build` command of `source` on `target` into `out`.

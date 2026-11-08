@@ -498,7 +498,8 @@ without waiting for a person.
 - Quality gate (`docs/quality.md`): in the release commit, run `task quality RUN=vX.Y.Z`, which
   appends the run to `quality/history.jsonl` and regenerates `quality/trend.md` and the book's
   quality page. The release is refused, and not cut, when it fails: a count row worse than at
-  the last release (or the bar) beyond its tolerance. Timing rows are recorded as `host: local`
+  the last release (or the bar) beyond its tolerance, or worse than a bar a `decision` moved since
+  the last release. Timing rows are recorded as `host: local`
   and are not part of the refusal yet; they join it once `story:quality-timing-host` measures
   them on its dedicated EC2 host. Commit the regenerated files with the release; the release
   notes carry the release's row of `quality/trend.md`.
