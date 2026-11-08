@@ -1103,6 +1103,21 @@ section h2 {
   font-size: 0.97rem;
 }
 
+/* Outlook */
+
+.doc-cards.doc-cards-pair {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.outlook-lead {
+  max-width: 62rem;
+  color: var(--muted);
+}
+
+.outlook .more {
+  margin-top: 1.6rem;
+}
+
 /* Status */
 
 .status-inner {
@@ -1261,7 +1276,8 @@ section h2 {
 
   .fuse,
   .cards,
-  .doc-cards {
+  .doc-cards,
+  .doc-cards.doc-cards-pair {
     grid-template-columns: minmax(0, 1fr);
   }
 
