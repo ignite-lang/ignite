@@ -1,9 +1,11 @@
-//! `ignite-load`: a load generator for the terminal example's `terminald`.
+//! `ignite-load`: a load generator for the terminal example's `terminald` and the todo
+//! example's `todod`, and for their plain-Rust and Go references (`bench/native/`).
 //!
 //! ```text
-//! ignite-load --workload rr|pipe|connect --connections N [--port P]
+//! ignite-load --workload rr|pipe|connect|get|patch --connections N [--port P]
 //!            [--server PATH | --pid PID] [--duration S] [--warmup S]
 //!            [--payload BYTES] [--depth N] [--label TEXT] [--out FILE] [--quickack]
+//!            [--workdir DIR] [--server-cpus LIST --load-cpus LIST] [--pass N]
 //! ```
 //!
 //! One std thread per connection. Every connection is opened and has seen
@@ -16,6 +18,21 @@
 //!   Latency is send to last byte of the reply's prompt.
 //! - `connect`: connect, wait for the prompt, send `quit\r\n`, wait for
 //!   `bye\r\n` and the server's close. Latency is connect to close.
+//! - `get` (todo): `GET /todos/1` on a keep-alive connection, one request in
+//!   flight, after one `POST /todos` made the todo; the reply must be 200
+//!   with the todo's JSON. Latency is send to the last byte of the body.
+//! - `patch` (todo): `PATCH /todos/1` with `{"done":true}`, each a new
+//!   version written to the server's disk before it answers; otherwise as
+//!   `get`.
+//!
+//! `--workdir DIR` starts the server in a fresh `DIR` (removed and made
+//! again, removed at the end), so a todo server starts with no data.
+//! `--server-cpus` and `--load-cpus` pin the server (and every thread it
+//! starts) and this process's connection threads to two CPU lists, which
+//! should be disjoint. `--pass N` is copied into the result.
+//!
+//! `ignite-load check ...` is the functional check of a server before it is
+//! timed (`check.rs`).
 //!
 //! Telnet: the server does not start negotiation; any `IAC DO x` is
 //! answered `IAC WONT x`, `IAC WILL x` with `IAC DONT x`, other commands and
@@ -40,7 +57,12 @@
 //! `ignite-load matrix ...` runs a whole matrix of these runs against one or
 //! more servers and prints a table per workload (`matrix.rs`).
 
+mod check;
+mod http;
 mod matrix;
+mod pin;
+#[cfg(test)]
+mod tests;
 
 use std::fs;
 use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
@@ -88,6 +110,8 @@ enum Workload {
     Rr,
     Pipe,
     Connect,
+    Get,
+    Patch,
 }
 
 impl Workload {
@@ -96,6 +120,8 @@ impl Workload {
             Workload::Rr => "rr",
             Workload::Pipe => "pipe",
             Workload::Connect => "connect",
+            Workload::Get => "get",
+            Workload::Patch => "patch",
         }
     }
 }
@@ -112,13 +138,21 @@ struct Options {
     pid: Option<u32>,
     label: String,
     out: Option<String>,
+    workdir: Option<String>,
+    server_cpus: Option<Vec<usize>>,
+    load_cpus: Option<Vec<usize>>,
+    pass: usize,
 }
 
 fn usage(message: &str) -> ! {
     eprintln!("ignite-load: {message}");
     eprintln!(
-        "usage: ignite-load --workload rr|pipe|connect --connections N [--port P] [--server PATH | --pid PID] [--duration S] [--warmup S] [--payload BYTES] [--depth N] [--label TEXT] [--out FILE] [--quickack]"
+        "usage: ignite-load --workload rr|pipe|connect|get|patch --connections N [--port P] [--server PATH | --pid PID] [--duration S] [--warmup S] [--payload BYTES] [--depth N] [--label TEXT] [--out FILE] [--quickack] [--workdir DIR] [--server-cpus LIST --load-cpus LIST] [--pass N]"
     );
+    eprintln!(
+        "       ignite-load check --program todo|terminal --server PATH [--port P] [--workdir DIR]"
+    );
+    eprintln!("       ignite-load matrix ...");
     std::process::exit(2);
 }
 
@@ -135,6 +169,10 @@ fn parse_options() -> Options {
         pid: None,
         label: String::new(),
         out: None,
+        workdir: None,
+        server_cpus: None,
+        load_cpus: None,
+        pass: 0,
     };
     let mut args = std::env::args().skip(1);
     while let Some(flag) = args.next() {
@@ -149,6 +187,8 @@ fn parse_options() -> Options {
                     "rr" => Workload::Rr,
                     "pipe" => Workload::Pipe,
                     "connect" => Workload::Connect,
+                    "get" => Workload::Get,
+                    "patch" => Workload::Patch,
                     other => usage(&format!("unknown workload {other}")),
                 }
             }
@@ -172,11 +212,22 @@ fn parse_options() -> Options {
             "--label" => options.label = value(),
             "--out" => options.out = Some(value()),
             "--quickack" => QUICKACK.store(true, Ordering::Relaxed),
+            "--workdir" => options.workdir = Some(value()),
+            "--server-cpus" => {
+                options.server_cpus = Some(pin::parse_cpus(&value()).unwrap_or_else(|e| usage(&e)))
+            }
+            "--load-cpus" => {
+                options.load_cpus = Some(pin::parse_cpus(&value()).unwrap_or_else(|e| usage(&e)))
+            }
+            "--pass" => options.pass = value().parse().unwrap_or_else(|_| usage("bad --pass")),
             other => usage(&format!("unknown argument {other}")),
         }
     }
     if options.connections == 0 || options.depth == 0 {
         usage("--connections and --depth must be positive");
+    }
+    if options.server_cpus.is_some() != options.load_cpus.is_some() {
+        usage("--server-cpus and --load-cpus go together");
     }
     if options.server.is_some() && options.pid.is_some() {
         usage("--server and --pid exclude each other");
@@ -517,6 +568,76 @@ fn connect(address: SocketAddr, phase: &AtomicU8, ready: &Barrier) -> Tally {
     tally
 }
 
+/// The todo the HTTP workloads read and change, made by [`seed`].
+const SEED: &str = r#"{"title":"bench"}"#;
+
+/// The request of an HTTP workload and the body its 200 must carry.
+fn http_exchange(workload: Workload) -> (Vec<u8>, &'static [u8]) {
+    match workload {
+        Workload::Patch => (
+            http::request("PATCH", "/todos/1", r#"{"done":true}"#),
+            br#"{"id":1,"title":"bench","done":true}"#,
+        ),
+        _ => (
+            http::request("GET", "/todos/1", ""),
+            br#"{"id":1,"title":"bench","done":false}"#,
+        ),
+    }
+}
+
+/// Make the todo the HTTP workloads use: `POST /todos`, which must answer 201 with id 1.
+fn seed(address: SocketAddr) -> Result<(), String> {
+    let mut client = http::Client::open(address).map_err(|e| format!("connect: {e}"))?;
+    let response = client.exchange(&http::request("POST", "/todos", SEED))?;
+    if response.status != 201 || response.body != br#"{"id":1,"title":"bench","done":false}"# {
+        return Err(format!(
+            "seeding answered {} {:?}",
+            response.status,
+            String::from_utf8_lossy(&response.body)
+        ));
+    }
+    Ok(())
+}
+
+fn http_rr(address: SocketAddr, workload: Workload, phase: &AtomicU8, ready: &Barrier) -> Tally {
+    let mut tally = Tally::default();
+    let (request, body) = http_exchange(workload);
+    let opened = http::Client::open(address);
+    ready.wait();
+    let mut client = match opened {
+        Ok(client) => client,
+        Err(error) => {
+            tally.fail(Failure::Io(error));
+            return tally;
+        }
+    };
+    loop {
+        let started_in = phase.load(Ordering::Relaxed);
+        if started_in == STOP {
+            break;
+        }
+        let sent = Instant::now();
+        match client.exchange(&request) {
+            Ok(response) if response.status == 200 && response.body == body => {}
+            Ok(_) => {
+                tally.fail(Failure::Mismatch);
+                break;
+            }
+            Err(error) => {
+                tally.fail(Failure::Io(std::io::Error::other(error)));
+                break;
+            }
+        }
+        let elapsed = sent.elapsed().as_nanos() as u64;
+        if started_in == MEASURE && phase.load(Ordering::Relaxed) == MEASURE {
+            tally.replies += 1;
+            tally.reply_bytes += body.len() as u64;
+            tally.latencies.push(elapsed);
+        }
+    }
+    tally
+}
+
 /// `utime + stime` of the process in clock ticks (USER_HZ, 100 on Linux).
 fn cpu_ticks(pid: u32) -> Option<u64> {
     let stat = fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
@@ -564,10 +685,30 @@ fn runnable_mean() -> f64 {
 struct Server {
     child: Child,
     session_errors: Arc<AtomicU64>,
+    workdir: Option<String>,
 }
 
-fn start_server(path: &str, port: u16) -> Server {
-    let mut child = Command::new(path)
+impl Server {
+    /// Kill the server, reap it and remove its working directory.
+    fn stop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        if let Some(dir) = &self.workdir {
+            let _ = fs::remove_dir_all(dir);
+        }
+    }
+}
+
+/// Start `path --port P`, in a fresh `workdir` when one is given, and wait until it reports
+/// `listening on`.
+fn start_server(path: &str, port: u16, workdir: Option<&str>) -> Server {
+    let mut command = Command::new(path);
+    if let Some(dir) = workdir {
+        let _ = fs::remove_dir_all(dir);
+        fs::create_dir_all(dir).unwrap_or_else(|e| usage(&format!("cannot make {dir}: {e}")));
+        command.current_dir(dir);
+    }
+    let mut child = command
         .arg("--port")
         .arg(port.to_string())
         .stdin(Stdio::null())
@@ -600,6 +741,7 @@ fn start_server(path: &str, port: u16) -> Server {
     Server {
         child,
         session_errors,
+        workdir: workdir.map(str::to_string),
     }
 }
 
@@ -612,9 +754,16 @@ fn percentile(sorted: &[u64], q: f64) -> f64 {
 }
 
 fn main() {
-    if std::env::args().nth(1).as_deref() == Some("matrix") {
-        matrix::main(std::env::args().skip(2));
-        return;
+    match std::env::args().nth(1).as_deref() {
+        Some("matrix") => {
+            matrix::main(std::env::args().skip(2));
+            return;
+        }
+        Some("check") => {
+            check::main(std::env::args().skip(2));
+            return;
+        }
+        _ => {}
     }
     let options = Arc::new(parse_options());
     let nproc = std::thread::available_parallelism()
@@ -626,15 +775,29 @@ fn main() {
         .parse()
         .expect("address");
 
+    if let Some(cpus) = &options.server_cpus {
+        pin::pin(cpus).unwrap_or_else(|e| usage(&e));
+    }
     let mut server = options
         .server
         .as_deref()
-        .map(|path| start_server(path, options.port));
+        .map(|path| start_server(path, options.port, options.workdir.as_deref()));
+    if let Some(cpus) = &options.load_cpus {
+        pin::pin(cpus).unwrap_or_else(|e| usage(&e));
+    }
     let pid = server
         .as_ref()
         .map(|server| server.child.id())
         .or(options.pid)
         .unwrap_or(0);
+    if matches!(options.workload, Workload::Get | Workload::Patch)
+        && let Err(error) = seed(address)
+    {
+        if let Some(server) = server.as_mut() {
+            server.stop();
+        }
+        usage(&error);
+    }
 
     let phase = Arc::new(AtomicU8::new(WARMUP));
     let ready = Arc::new(Barrier::new(options.connections + 1));
@@ -649,6 +812,9 @@ fn main() {
                 Workload::Rr => rr(address, &options, &phase, &ready),
                 Workload::Pipe => pipe(address, &options, &phase, &ready),
                 Workload::Connect => connect(address, &phase, &ready),
+                Workload::Get | Workload::Patch => {
+                    http_rr(address, options.workload, &phase, &ready)
+                }
             })
             .expect("worker thread");
         workers.push(worker);
@@ -701,8 +867,7 @@ fn main() {
         .map(|server| server.session_errors.load(Ordering::Relaxed))
         .unwrap_or(0);
     if let Some(server) = server.as_mut() {
-        let _ = server.child.kill();
-        let _ = server.child.wait();
+        server.stop();
     }
 
     total.latencies.sort_unstable();
@@ -719,7 +884,7 @@ fn main() {
     let (threads, rss_peak_sampled) = *peak.lock().unwrap();
     let json = format!(
         concat!(
-            "{{\"label\":\"{}\",\"quickack\":{},\"workload\":\"{}\",\"connections\":{},\"duration_s\":{:.3},",
+            "{{\"label\":\"{}\",\"pass\":{},\"quickack\":{},\"workload\":\"{}\",\"connections\":{},\"duration_s\":{:.3},",
             "\"replies\":{},\"replies_per_s\":{:.1},\"reply_mb_per_s\":{:.3},",
             "\"p50_us\":{:.1},\"p99_us\":{:.1},\"p999_us\":{:.1},",
             "\"server_cpu_s\":{:.2},\"cpu_ms_per_1000\":{:.3},\"peak_rss_kib\":{},",
@@ -727,6 +892,7 @@ fn main() {
             "\"server_session_errors\":{},\"nproc\":{},\"load1\":{:.2},\"runnable_mean\":{:.2}}}"
         ),
         options.label,
+        options.pass,
         QUICKACK.load(Ordering::Relaxed),
         options.workload.name(),
         options.connections,

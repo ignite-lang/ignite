@@ -504,12 +504,12 @@
     "3.3": {
       "area": "Generated code and runtime behaviour",
       "direction": "higher",
-      "instrument": "`ignite-load matrix` (`task bench-throughput`)",
+      "instrument": "`ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): replies per second of todod and terminald over the plain-Rust implementation's, per cell",
       "kind": "ratchet",
-      "name": "throughput and p99 latency of terminald and todod",
+      "name": "throughput against plain Rust",
       "tolerance": "10%",
-      "unit": "count",
-      "unmeasured": "no load baseline yet (out of scope of story:quality-ratchet)"
+      "unit": "permille",
+      "unmeasured": "no benchmark run on the dedicated host yet"
     },
     "3.4": {
       "area": "Generated code and runtime behaviour",
@@ -553,6 +553,36 @@
       "source": "static",
       "tolerance": 0,
       "unit": "count"
+    },
+    "3.7": {
+      "area": "Generated code and runtime behaviour",
+      "direction": "lower",
+      "instrument": "`ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): p99 reply latency over the plain-Rust implementation's, per cell",
+      "kind": "ratchet",
+      "name": "p99 latency against plain Rust",
+      "tolerance": "20%",
+      "unit": "permille",
+      "unmeasured": "no benchmark run on the dedicated host yet"
+    },
+    "3.8": {
+      "area": "Generated code and runtime behaviour",
+      "direction": "lower",
+      "instrument": "`ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): the server's peak RSS over the plain-Rust implementation's, per cell",
+      "kind": "ratchet",
+      "name": "peak RSS under load against plain Rust",
+      "tolerance": "10%",
+      "unit": "permille",
+      "unmeasured": "no benchmark run on the dedicated host yet"
+    },
+    "3.9": {
+      "area": "Generated code and runtime behaviour",
+      "direction": "lower",
+      "instrument": "`ignite-perf quality-remote` (`bench/native/`): the stripped release binary over the plain-Rust implementation's, per program",
+      "kind": "ratchet",
+      "name": "stripped binary size against plain Rust",
+      "tolerance": "5%",
+      "unit": "permille",
+      "unmeasured": "no benchmark run on the dedicated host yet"
     },
     "4.1": {
       "area": "Standard library and protocols",

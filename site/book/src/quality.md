@@ -20,6 +20,11 @@ Timing rows (build, check and restart times) are measured on a single-tenant EC2
 run (`ec2:<type>`, its trend against the run before on that host type); until such a run exists
 they show the shared workstation's values (`host: local`), recorded but not comparable.
 
+Throughput, p99 latency, peak RSS and stripped binary size of the todo service and the terminal
+server (3.3, 3.7 to 3.9) are ratios against a plain-Rust implementation of the same program,
+measured on that host in the same run (`bench/native/`); a Go implementation is shown as a
+reference without a bar.
+
 Current values: run `bar` on 2026-11-07, commit `9a775116`.
 
 ## 1 Semantics: one meaning across the three consumers
@@ -68,11 +73,14 @@ Current values: run `bar` on 2026-11-07, commit `9a775116`.
 | 3.2 | binary size | ratchet | rust/terminald/release | 681368 B | 681368 B |  |
 | 3.2 | binary size | ratchet | rust/todod/dev | 7405864 B | 7405864 B |  |
 | 3.2 | binary size | ratchet | rust/todod/release | 961880 B | 961880 B |  |
-| 3.3 | throughput and p99 latency of terminald and todod | ratchet | | unmeasured: no load baseline yet (out of scope of story:quality-ratchet) | | |
+| 3.3 | throughput against plain Rust | ratchet | | unmeasured: no benchmark run on the dedicated host yet | | |
 | 3.4 | peak RSS, leaked handles and threads after a load run | gate | | unmeasured: no number: the named tests gate it in task gate | | |
 | 3.5 | runtime entries that can unwind a panic across `extern "C"` | gate | llvm | 0 | 0 |  |
 | 3.6 | `unsafe` sites in the substrate a target links | ratchet | llvm | 73 | 73 |  |
 | 3.6 | `unsafe` sites in the substrate a target links | ratchet | rust | 7 | 7 |  |
+| 3.7 | p99 latency against plain Rust | ratchet | | unmeasured: no benchmark run on the dedicated host yet | | |
+| 3.8 | peak RSS under load against plain Rust | ratchet | | unmeasured: no benchmark run on the dedicated host yet | | |
+| 3.9 | stripped binary size against plain Rust | ratchet | | unmeasured: no benchmark run on the dedicated host yet | | |
 
 ## 4 Standard library and protocols
 

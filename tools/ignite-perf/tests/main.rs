@@ -3,6 +3,7 @@
 //! are `<file>::<test>`.
 
 mod args;
+mod bench;
 mod common;
 mod compare;
 mod cycle;

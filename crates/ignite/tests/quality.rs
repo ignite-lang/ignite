@@ -8,8 +8,9 @@
 //! A metric is measured by one source: `static` (counts over the tree,
 //! [`static_metrics_hold_the_bar`]), `differential` (the runner of
 //! `differential.rs`), `conformance` ([`conformance_claims_hold_the_bar`],
-//! the claim lines of `ignite conformance`) or `perf` (`ignite-perf
-//! quality`, timing and sizes, measured by `task quality` only). Each value
+//! the claim lines of `ignite conformance`), `perf` (`ignite-perf
+//! quality`, timing and sizes, measured by `task quality` only) or `bench`
+//! (the native benchmark of `ignite-perf quality-remote`, [`BENCH`]). Each value
 //! is held against its bar as the UI ratchet (`site::ux`) does: a value
 //! worse than the bar beyond the metric's tolerance, a bar the run did not
 //! measure, a measured value without a bar and an improvement not written
@@ -141,7 +142,7 @@ pub struct Metric {
     pub direction: Direction,
     pub unit: String,
     pub instrument: String,
-    /// `static`, `differential`, `conformance` or `perf`; `None` for a
+    /// `static`, `differential`, `conformance`, `perf` or `bench`; `None` for a
     /// metric without a number.
     pub source: Option<String>,
     pub tolerance: Tolerance,
@@ -201,7 +202,7 @@ fn optional(fields: &BTreeMap<String, Json>, key: &str) -> Option<String> {
 }
 
 const KINDS: [&str; 3] = ["gate", "ratchet", "hill-climb"];
-const SOURCES: [&str; 4] = ["static", "differential", "conformance", "perf"];
+const SOURCES: [&str; 5] = ["static", "differential", "conformance", "perf", "bench"];
 const CONSUMERS: [&str; 4] = ["rust", "llvm", "eval", "all"];
 
 pub fn read_baseline(json: &Json) -> Result<Baseline, String> {
@@ -1425,13 +1426,114 @@ fn is_timing(id: &str) -> bool {
     TIMING.contains(&id)
 }
 
+/// The rows of the native benchmark (`bench/native/`, source `bench`): Ignite
+/// against plain Rust as a ratio in permille, measured by `ignite-perf
+/// quality-remote` on the dedicated host only: throughput, p99 latency, peak
+/// RSS and stripped binary size. Targets are `<consumer>/<program>/<cell>`
+/// (`<consumer>/<program>` for the size), the consumer `llvm`, `rust` (the
+/// Rust target) or `go`, the Go reference, recorded without a bar. A release
+/// is refused in the run against BASE (`tools/ignite-perf/src/remote.rs`); the
+/// bars are the first run's ratios, ratcheted by [`bless_bench`].
+const BENCH: [&str; 4] = ["3.3", "3.7", "3.8", "3.9"];
+
+fn is_bench(id: &str) -> bool {
+    BENCH.contains(&id)
+}
+
+/// The short label of a benchmark row in the trend.
+fn bench_label(id: &str) -> &'static str {
+    match id {
+        "3.3" => "rps",
+        "3.7" => "p99",
+        "3.8" => "RSS",
+        _ => "size",
+    }
+}
+
 /// A value with its unit.
 fn shown(value: i64, unit: &str) -> String {
     match unit {
         "ms" => format!("{value} ms"),
         "bytes" => format!("{value} B"),
+        "permille" => format!("{:.3}×", value as f64 / 1000.0),
         _ => value.to_string(),
     }
+}
+
+/// The values of the benchmark in the latest dedicated-host run that has
+/// them, by `(metric, target)`.
+fn latest_bench(history: &[Record]) -> BTreeMap<(String, String), i64> {
+    host_runs(history)
+        .into_iter()
+        .rev()
+        .map(|(_, values)| values)
+        .find(|values| values.keys().any(|(id, _)| is_bench(id)))
+        .map(|values| {
+            values
+                .into_iter()
+                .filter(|((id, _), _)| is_bench(id))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Whether a benchmark target gets a bar: Ignite's targets do, the Go
+/// reference does not.
+fn barred(target: &str) -> bool {
+    !target.starts_with("go/")
+}
+
+/// The refusals of the benchmark's bars against the latest dedicated-host
+/// run: a target without a bar and an improvement beyond the tolerance not
+/// written into the baseline (`IGNITE_BLESS=1`, [`bless_bench`]). A worse
+/// ratio is not refused here: runs on different days are different hosts,
+/// so a release compares within one run (`ignite-perf quality-remote`).
+fn bench_bars(baseline: &Baseline, history: &[Record]) -> Vec<String> {
+    let mut errors = Vec::new();
+    for ((id, target), value) in latest_bench(history) {
+        let Some(metric) = baseline.metrics.get(&id) else {
+            errors.push(format!("{id}: recorded but not in quality/baseline.json"));
+            continue;
+        };
+        if !barred(&target) {
+            continue;
+        }
+        match metric.bars.get(&target) {
+            None => errors.push(format!(
+                "{id} {target}: {value} has no bar (IGNITE_BLESS=1)"
+            )),
+            Some(bar) if metric.direction.better(bar.value, value, metric.tolerance) => errors
+                .push(format!(
+                    "{id} {target}: improved to {value} from {}; write it into quality/baseline.json (IGNITE_BLESS=1)",
+                    bar.value
+                )),
+            Some(_) => {}
+        }
+    }
+    errors
+}
+
+/// `baseline` with a bar for every benchmark target of the latest
+/// dedicated-host run that has none and every improved bar raised to it.
+fn bless_bench(baseline: &Baseline, history: &[Record]) -> Baseline {
+    let mut out = baseline.clone();
+    for ((id, target), value) in latest_bench(history) {
+        let Some(metric) = out.metrics.get_mut(&id) else {
+            continue;
+        };
+        if !barred(&target) {
+            continue;
+        }
+        let direction = metric.direction;
+        let bar = metric.bars.entry(target).or_insert(Bar {
+            value,
+            decision: None,
+        });
+        if direction.better(bar.value, value, Tolerance::Count(0)) {
+            bar.value = value;
+        }
+    }
+    out
 }
 
 /// The change from `from` to `to` of a metric, in words.
@@ -1505,7 +1607,19 @@ pub fn render_trend(baseline: &Baseline, history: &[Record]) -> String {
         ));
         previous = Some(values);
     }
-    let hosts = host_runs(history);
+    let all_hosts = host_runs(history);
+    let hosts: HostRuns = all_hosts
+        .iter()
+        .map(|(key, values)| {
+            let timing = values
+                .iter()
+                .filter(|((id, _), _)| is_timing(id))
+                .map(|(k, v)| (k.clone(), *v))
+                .collect();
+            (key.clone(), timing)
+        })
+        .filter(|(_, values): &(_, BTreeMap<_, _>)| !values.is_empty())
+        .collect();
     if !hosts.is_empty() {
         out.push_str(
             "\n## Timing on the dedicated host\n\nRuns of `ignite-perf quality-remote` (`task quality-remote`): the timing rows only, measured on a\nsingle-tenant EC2 host made for the run, HEAD's median over interleaved passes; the changes are\nagainst the run before on a host of the same type.\n\n| run | commit | date | host | values | changes |\n|---|---|---|---|---|---|\n",
@@ -1562,6 +1676,42 @@ pub fn render_trend(baseline: &Baseline, history: &[Record]) -> String {
                 &commit[..commit.len().min(8)],
                 shown_values.join("; ")
             ));
+        }
+    }
+    let bench_runs: Vec<_> = all_hosts
+        .iter()
+        .filter(|(_, values)| values.keys().any(|(id, _)| is_bench(id)))
+        .collect();
+    if !bench_runs.is_empty() {
+        out.push_str(
+            "\n## Against plain Rust on the dedicated host\n\nThe native benchmark of `ignite-perf quality-remote` (`bench/native/`, `docs/quality.md` row 3.3):\none row per run and cell, each implementation's median over the run's passes against the plain\nRust reference measured in the same pass (above 1 means more replies per second, a longer p99, more\npeak RSS or a larger stripped binary than plain Rust).\n\n| run | commit | date | host | cell | Ignite LLVM / Rust | Ignite Rust target / Rust | Go / Rust |\n|---|---|---|---|---|---|---|---|\n",
+        );
+        for ((run, commit, date, host), values) in bench_runs {
+            let cells: BTreeSet<&str> = values
+                .keys()
+                .filter(|(id, _)| is_bench(id))
+                .filter_map(|(_, target)| target.split_once('/').map(|(_, rest)| rest))
+                .collect();
+            for cell in cells {
+                let column = |consumer: &str| {
+                    BENCH
+                        .iter()
+                        .filter_map(|id| {
+                            values
+                                .get(&(id.to_string(), format!("{consumer}/{cell}")))
+                                .map(|v| format!("{} {}", bench_label(id), shown(*v, "permille")))
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                };
+                out.push_str(&format!(
+                    "| {run} | {} | {date} | {host} | {cell} | {} | {} | {} |\n",
+                    &commit[..commit.len().min(8)],
+                    column("llvm"),
+                    column("rust"),
+                    column("go")
+                ));
+            }
         }
     }
     out
@@ -1653,7 +1803,11 @@ Targets: `rust` is the Rust target, `llvm` the LLVM target, `eval` the compile-t
 three, is checked on every merge by running one corpus of programs on all three.\n\n\
 Timing rows (build, check and restart times) are measured on a single-tenant EC2 host made for the\n\
 run (`ec2:<type>`, its trend against the run before on that host type); until such a run exists\n\
-they show the shared workstation's values (`host: local`), recorded but not comparable.\n\n",
+they show the shared workstation's values (`host: local`), recorded but not comparable.\n\n\
+Throughput, p99 latency, peak RSS and stripped binary size of the todo service and the terminal\n\
+server (3.3, 3.7 to 3.9) are ratios against a plain-Rust implementation of the same program,\n\
+measured on that host in the same run (`bench/native/`); a Go implementation is shown as a\n\
+reference without a bar.\n\n",
     );
     let hosts = host_runs(history);
     out.push_str(&format!("Current values: run {current_run}.\n"));
@@ -1681,7 +1835,7 @@ they show the shared workstation's values (`host: local`), recorded but not comp
                 let key = (id.clone(), target.clone());
                 let mut now = current.get(&key);
                 let on_host = hosts.iter().rposition(|(_, v)| v.contains_key(&key));
-                if let Some(at) = on_host.filter(|_| is_timing(id)) {
+                if let Some(at) = on_host.filter(|_| is_timing(id) || is_bench(id)) {
                     let ((_, _, _, host), values) = &hosts[at];
                     now = values.get(&key);
                     let before = hosts[..at]
@@ -1715,6 +1869,24 @@ they show the shared workstation's values (`host: local`), recorded but not comp
                     m.kind,
                     shown(bar.value, &m.unit),
                     now.map_or(String::new(), |v| shown(*v, &m.unit))
+                ));
+            }
+            if !is_bench(id) {
+                continue;
+            }
+            let Some(((_, _, _, host), values)) = hosts
+                .iter()
+                .rev()
+                .find(|(_, v)| v.keys().any(|(i, _)| i == id))
+            else {
+                continue;
+            };
+            for ((_, target), value) in values.iter().filter(|((i, t), _)| i == id && !barred(t)) {
+                out.push_str(&format!(
+                    "| {id} | {} | {} | {target} | reference, no bar | {} | {host} |\n",
+                    m.name,
+                    m.kind,
+                    shown(*value, &m.unit)
                 ));
             }
         }
@@ -1811,7 +1983,7 @@ pub fn release_refusals(baseline: &Baseline, history: &[Record], values: &[Value
 fn record() {
     let dir = quality_dir();
     let mut values = Vec::new();
-    for source in SOURCES {
+    for source in SOURCES.iter().filter(|s| **s != "bench") {
         values.extend(read_measured(&dir.join(format!("{source}-metrics.json"))));
     }
     let perf: Measured = values
@@ -1913,6 +2085,14 @@ fn the_baseline_is_well_formed() {
             is_timing(id),
             "{id}: the timing rows are exactly {TIMING:?}, labelled `source: perf`, `unit: ms`"
         );
+        let bench_labels = metric.source.as_deref() == Some("bench");
+        assert!(
+            metric.source.is_none() || bench_labels == is_bench(id),
+            "{id}: the benchmark rows are exactly {BENCH:?}, labelled `source: bench`"
+        );
+        if bench_labels {
+            assert_eq!(metric.unit, "permille", "{id}: a benchmark row is a ratio");
+        }
         if metric.kind == "hill-climb" {
             assert!(
                 metric.goal.is_some(),
@@ -1931,20 +2111,45 @@ fn the_baseline_is_well_formed() {
         );
         assert_eq!(record.line(), line, "a history line not in canonical form");
     }
+    for line in std::fs::read_to_string(workspace().join("quality/bench.jsonl"))
+        .unwrap_or_default()
+        .lines()
+    {
+        let record = parse(line, "quality/bench.jsonl");
+        assert_eq!(
+            record.compact(),
+            line,
+            "a quality/bench.jsonl line not in canonical form"
+        );
+        for key in ["commit", "host", "implementation", "program", "cell"] {
+            assert!(
+                record.get(key).and_then(Json::as_str).is_some(),
+                "{line}: no `{key}`"
+            );
+        }
+    }
 }
 
 /// The generated texts are the ones the baseline and history give.
 #[test]
 fn trend_and_docs_are_generated_from_quality() {
-    let baseline = load_baseline();
+    let mut baseline = load_baseline();
     let history = read_history();
     assert!(
         history.iter().any(Record::is_release),
         "quality/history.jsonl holds no first assessment (`bar`)"
     );
     if blessing() {
+        baseline = bless_bench(&baseline, &history);
+        save_baseline(&baseline);
         write_pages(&baseline, &history);
     }
+    let errors = bench_bars(&baseline, &history);
+    assert!(
+        errors.is_empty(),
+        "the benchmark's bars do not hold the latest dedicated-host run:\n  {}",
+        errors.join("\n  ")
+    );
     assert_eq!(
         std::fs::read_to_string(trend_path()).unwrap(),
         render_trend(&baseline, &history),
@@ -2303,6 +2508,167 @@ fn a_dedicated_host_run_has_its_own_timing_trend() {
     assert_eq!(
         (parsed.base.as_deref(), parsed.base_value, parsed.value),
         (Some("b"), Some(400), 380)
+    );
+}
+
+/// The baseline and history of one benchmark run on the dedicated host: the
+/// todo cell `get-1` and the todo size, each for Ignite's two targets and the
+/// Go reference, against plain Rust (permille).
+fn bench_case() -> (Baseline, Vec<Record>) {
+    let ratio = |direction, tolerance, bars: &[(&str, i64)]| {
+        let mut m = metric(direction, tolerance, bars);
+        m.source = Some("bench".to_string());
+        m.unit = "permille".to_string();
+        m
+    };
+    let baseline = baseline_of(&[
+        (
+            "3.3",
+            ratio(
+                Direction::Higher,
+                Tolerance::Percent(10),
+                &[("llvm/todo/get-1", 800)],
+            ),
+        ),
+        ("3.7", ratio(Direction::Lower, Tolerance::Percent(20), &[])),
+        (
+            "3.9",
+            ratio(
+                Direction::Lower,
+                Tolerance::Percent(5),
+                &[("llvm/todo", 2000)],
+            ),
+        ),
+        ("6.2", {
+            let mut timing = metric(Direction::Lower, Tolerance::Percent(10), &[("llvm", 900)]);
+            timing.source = Some("perf".to_string());
+            timing.unit = "ms".to_string();
+            timing
+        }),
+    ]);
+    let ec2 = "ec2:c7i.metal-24xl";
+    let record = |metric: &str, target: &str, value: i64| Record {
+        commit: "e".to_string(),
+        date: "2026-11-08".to_string(),
+        run: "run".to_string(),
+        metric: metric.to_string(),
+        target: target.to_string(),
+        value,
+        host: ec2.to_string(),
+        load: Some("0.10".to_string()),
+        base: Some("e".to_string()),
+        base_value: Some(value),
+        machine: None,
+    };
+    let history = vec![
+        record("6.2", "llvm", 380),
+        record("3.3", "go/todo/get-1", 500),
+        record("3.3", "llvm/todo/get-1", 873),
+        record("3.3", "rust/todo/get-1", 640),
+        record("3.7", "llvm/todo/get-1", 1500),
+        record("3.7", "rust/todo/get-1", 1200),
+        record("3.9", "go/todo", 6000),
+        record("3.9", "llvm/todo", 2100),
+        record("3.9", "rust/todo", 900),
+    ];
+    (baseline, history)
+}
+
+/// The native benchmark (`docs/quality.md` row 3.3 and its companions 3.7 to
+/// 3.9) has a table of its own in the trend, one row per run and cell with
+/// the ratios of Ignite's two targets and Go against plain Rust; the timing
+/// table keeps the timing rows only; the page shows the latest ratios and
+/// the Go reference without a bar.
+#[test]
+fn the_native_benchmark_has_its_own_trend_and_page_rows() {
+    let (baseline, history) = bench_case();
+    assert_eq!(shown(873, "permille"), "0.873×");
+    assert_eq!(BENCH, ["3.3", "3.7", "3.8", "3.9"]);
+    let trend = render_trend(&baseline, &history);
+    assert!(
+        trend.contains(
+            "| run | e | 2026-11-08 | ec2:c7i.metal-24xl | 6.2 llvm 380 ms | first on this host |"
+        ),
+        "{trend}"
+    );
+    assert!(
+        trend.contains("## Against plain Rust on the dedicated host"),
+        "{trend}"
+    );
+    assert!(
+        trend.contains(
+            "| run | e | 2026-11-08 | ec2:c7i.metal-24xl | todo/get-1 | rps 0.873×, p99 1.500× | rps 0.640×, p99 1.200× | rps 0.500× |"
+        ),
+        "{trend}"
+    );
+    assert!(
+        trend.contains(
+            "| run | e | 2026-11-08 | ec2:c7i.metal-24xl | todo | size 2.100× | size 0.900× | size 6.000× |"
+        ),
+        "{trend}"
+    );
+    let page = render_site_page(&baseline, &history);
+    assert!(
+        page.contains("| llvm/todo/get-1 | 0.800× | 0.873× | ec2:c7i.metal-24xl |"),
+        "{page}"
+    );
+    assert!(
+        page.contains("| go/todo/get-1 | reference, no bar | 0.500× | ec2:c7i.metal-24xl |"),
+        "{page}"
+    );
+}
+
+/// The bars of the benchmark are its first run's ratios, ratcheted: a target
+/// of the latest host run without a bar and an improvement beyond the
+/// tolerance are refused until `IGNITE_BLESS=1` writes them; a worse ratio is
+/// not refused here (another host, another day), the release refusal within
+/// one run is in `ignite-perf quality-remote`; Go has no bar.
+#[test]
+fn the_bench_bars_take_the_latest_host_run() {
+    let (baseline, history) = bench_case();
+    let errors = bench_bars(&baseline, &history);
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.starts_with("3.3 rust/todo/get-1: 640 has no bar")),
+        "{errors:?}"
+    );
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.starts_with("3.7 llvm/todo/get-1: 1500 has no bar")),
+        "{errors:?}"
+    );
+    assert!(!errors.iter().any(|e| e.contains("go/")), "{errors:?}");
+    assert!(
+        !errors.iter().any(|e| e.starts_with("3.9 llvm/todo")),
+        "a worse size within the run was refused: {errors:?}"
+    );
+    let blessed = bless_bench(&baseline, &history);
+    assert_eq!(blessed.metrics["3.3"].bars["llvm/todo/get-1"].value, 873);
+    assert_eq!(blessed.metrics["3.3"].bars["rust/todo/get-1"].value, 640);
+    assert_eq!(blessed.metrics["3.9"].bars["llvm/todo"].value, 2000);
+    assert!(!blessed.metrics["3.3"].bars.contains_key("go/todo/get-1"));
+    assert!(
+        bench_bars(&blessed, &history).is_empty(),
+        "{:?}",
+        bench_bars(&blessed, &history)
+    );
+    let mut improved = blessed.clone();
+    improved
+        .metrics
+        .get_mut("3.3")
+        .unwrap()
+        .bars
+        .get_mut("llvm/todo/get-1")
+        .unwrap()
+        .value = 700;
+    assert!(
+        bench_bars(&improved, &history)
+            .iter()
+            .any(|e| e.starts_with("3.3 llvm/todo/get-1: improved to 873 from 700")),
+        "{:?}",
+        bench_bars(&improved, &history)
     );
 }
 

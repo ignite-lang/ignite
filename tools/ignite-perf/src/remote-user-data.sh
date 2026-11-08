@@ -13,7 +13,7 @@ done
 while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do sleep 2; done
 apt-get update -q
 apt-get install -y -q --no-install-recommends build-essential pkg-config curl ca-certificates gnupg lsb-release wget \
-  software-properties-common psmisc
+  software-properties-common psmisc golang-go
 curl -sSfL -o /var/lib/ignite-quality/llvm.sh https://apt.llvm.org/llvm.sh
 installed=
 for major in 23 22 21 20; do

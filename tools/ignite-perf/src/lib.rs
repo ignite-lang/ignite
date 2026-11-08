@@ -2,6 +2,7 @@
 //! LLVM readiness verifier (`ignite-perf verify-llvm-readiness`). Neither is linked into a
 //! compiled program or a compiler crate.
 
+pub mod bench;
 pub mod cli;
 pub mod cycle;
 pub mod json;
@@ -15,6 +16,7 @@ pub mod remote;
 /// the criteria is auditable even when the compiler is unchanged.
 pub const HARNESS_SOURCE: &[(&str, &str)] = &[
     ("Cargo.toml", include_str!("../Cargo.toml")),
+    ("src/bench.rs", include_str!("bench.rs")),
     ("src/cli.rs", include_str!("cli.rs")),
     ("src/cycle.rs", include_str!("cycle.rs")),
     ("src/json.rs", include_str!("json.rs")),

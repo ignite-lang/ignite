@@ -273,7 +273,7 @@ pub fn host_command(passes: usize, check_runs: usize, build_runs: usize) -> Stri
     let inner = format!(
         ". \"$HOME/.cargo/env\" && cd harness && CARGO_INCREMENTAL=0 cargo build -q --locked -p ignite-perf \
          && target/debug/ignite-perf quality-host --root \"$HOME/q\" --passes {passes} \
-         --check-runs {check_runs} --build-runs {build_runs}; echo $? > \"$HOME/q/run.exit\""
+         --check-runs {check_runs} --build-runs {build_runs} --bench-passes {passes}; echo $? > \"$HOME/q/run.exit\""
     );
     format!(
         "cd q && rm -f run.exit && {{ setsid nohup sh -c {} > run.log 2>&1 < /dev/null & }}",
@@ -292,6 +292,11 @@ pub struct HostArgs {
     pub check_runs: usize,
     #[arg(long, default_value_t = 3)]
     pub build_runs: usize,
+    /// Only the timing rows: leave out the native benchmark (`bench.rs`).
+    #[arg(long)]
+    pub no_bench: bool,
+    #[command(flatten)]
+    pub bench: crate::bench::BenchArgs,
 }
 
 fn read_trimmed(path: &str, absent: &str) -> String {
@@ -378,6 +383,7 @@ pub fn host_state() -> Json {
         ("governors", Json::from(governors.join(","))),
         ("clang", Json::from(first_line(&["clang", "--version"]))),
         ("rustc", Json::from(first_line(&["rustc", "--version"]))),
+        ("go", Json::from(first_line(&["go", "version"]))),
         ("loadavg", Json::from(read_trimmed("/proc/loadavg", ""))),
     ])
 }
@@ -398,7 +404,8 @@ fn cargo(dir: &Path, args: &[&str]) -> R<()> {
 /// `ignite-perf quality-host`, the part of a run on the host: the compiler and runtime of BASE
 /// and HEAD, `out/host-state.json`, then
 /// `quality --timing-only` of each tree in the order of [`schedule`] into
-/// `out/<tree>-<pass>.json`.
+/// `out/<tree>-<pass>.json`, then (unless `--no-bench`) the native benchmark
+/// ([`crate::bench::host`]).
 pub fn host_main(args: &HostArgs) -> R<()> {
     let root = &args.root;
     let out = root.join("out");
@@ -439,6 +446,9 @@ pub fn host_main(args: &HostArgs) -> R<()> {
             timing_only: true,
             repo,
         })?;
+    }
+    if !args.no_bench {
+        crate::bench::host(root, &out, &args.bench)?;
     }
     Ok(())
 }
@@ -1518,7 +1528,7 @@ pub fn rows(out: &Path, passes: usize) -> R<Vec<Row>> {
 }
 
 /// `value` as one compact line, keys sorted, as `quality/history.jsonl` holds it.
-fn compact(value: &Json) -> String {
+pub fn compact(value: &Json) -> String {
     match value {
         Json::Obj(entries) => {
             let mut sorted: Vec<&(String, Json)> = entries.iter().collect();
@@ -1570,6 +1580,14 @@ pub fn history_lines(
         .collect()
 }
 
+/// `value` in `unit`: a ratio in permille as `0.873×`, anything else with its unit.
+pub fn shown(value: i64, unit: &str) -> String {
+    match unit {
+        "permille" => format!("{:.3}×", value as f64 / 1000.0),
+        unit => format!("{value} {unit}"),
+    }
+}
+
 /// The refusals of a release: a row whose HEAD median is worse than BASE's beyond the
 /// tolerance of its metric in `baseline` (`quality/baseline.json`).
 pub fn refusals(baseline: &Json, rows: &[Row]) -> R<Vec<String>> {
@@ -1599,10 +1617,13 @@ pub fn refusals(baseline: &Json, rows: &[Row]) -> R<Vec<String>> {
             other => return Err(format!("{}: direction {other:?}", row.metric)),
         };
         if worse {
+            let unit = metric.field("unit").as_str().unwrap_or("ms");
             out.push(format!(
-                "{} {}: {base} ms at the base, {head} ms now ({direction}, {})",
+                "{} {}: {} at the base, {} now ({direction}, {})",
                 row.metric,
                 row.target,
+                shown(base, unit),
+                shown(head, unit),
                 compact(tolerance)
             ));
         }
@@ -1639,6 +1660,9 @@ pub fn machine(info: &Json) -> Json {
         ("rustc", Json::from(read("rustc"))),
         ("market", info.field("market").clone()),
     ];
+    if !read("go").is_empty() {
+        fields.push(("go", Json::from(read("go"))));
+    }
     for key in ["usd_per_hour", "instance_hours", "cost_usd"] {
         if let Some(value) = info.field(key).as_str() {
             fields.push((key, Json::from(value)));
@@ -1752,7 +1776,17 @@ pub fn main(args: &RemoteArgs) -> R<i32> {
             state.join("fetched/run.log").display()
         ));
     }
-    let rows = rows(&state.join("fetched/out"), args.passes)?;
+    let fetched = state.join("fetched/out");
+    let mut rows = rows(&fetched, args.passes)?;
+    let bench = fetched.join("bench.jsonl");
+    let mut bench_records = Vec::new();
+    if bench.exists() {
+        let text = fs::read_to_string(&bench).map_err(io_err(bench.display()))?;
+        let samples = crate::bench::read_samples(&text)?;
+        let sizes = crate::perf::read_json(&fetched.join("bench-sizes.json"))?;
+        rows.extend(crate::bench::rows(&samples, &sizes, args.passes)?);
+        bench_records = crate::bench::records(&samples, &sizes, args.passes);
+    }
     let baseline = crate::perf::read_json(&args.repo.join("quality/baseline.json"))?;
     let refused = if args.run.starts_with('v') {
         refusals(&baseline, &rows)?
@@ -1781,13 +1815,39 @@ pub fn main(args: &RemoteArgs) -> R<i32> {
     for line in &lines {
         writeln!(file, "{line}").map_err(io_err(history.display()))?;
     }
+    if !bench_records.is_empty() {
+        let host = format!("ec2:{}", args.instance_type);
+        let path = args.repo.join("quality/bench.jsonl");
+        let mut file = fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(&path)
+            .map_err(io_err(path.display()))?;
+        let date = civil_date(secs);
+        for line in crate::bench::record_lines(&bench_records, &base, &head, label, &date, &host) {
+            writeln!(file, "{line}").map_err(io_err(path.display()))?;
+        }
+        println!(
+            "appended {} records to {}",
+            bench_records.len(),
+            path.display()
+        );
+    }
     for row in &rows {
         let (b, h) = (median(&row.base), median(&row.head));
+        let unit = baseline
+            .field("metrics")
+            .field(&row.metric)
+            .field("unit")
+            .as_str()
+            .unwrap_or("ms");
         println!(
-            "{} {}: base {b} ms {:?}, head {h} ms {:?}, ratio {:.3}",
+            "{} {}: base {} {:?}, head {} {:?}, ratio {:.3}",
             row.metric,
             row.target,
+            shown(b, unit),
             row.base,
+            shown(h, unit),
             row.head,
             h as f64 / b.max(1) as f64
         );

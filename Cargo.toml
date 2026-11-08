@@ -13,6 +13,7 @@ members = [
     "crates/ignite-eval",
     "tools/ignite-perf",
 ]
+exclude = ["bench/native/rust"]
 
 [workspace.package]
 version = "0.13.0"
