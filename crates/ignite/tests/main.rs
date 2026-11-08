@@ -32,6 +32,7 @@ mod llvm;
 mod llvm_build;
 mod llvm_memory;
 mod net_builtins;
+mod open_files_limit;
 mod plan;
 mod process_builtins;
 mod reachability;

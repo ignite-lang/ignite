@@ -9533,3 +9533,82 @@ positive`. `connect(address, port)` keeps waiting for the kernel's retries.
   `tcp::timed_out_tells_an_idle_timeout_from_a_close`, `tcp::connect_within_bounds_the_wait`;
   `ignite-rt` `abi::peer_timed_out_and_connect_within`; `ignite-types`
   `builtins::tests::substrate_methods_name_net_for_peer`.
+
+## 27 The open-files limit
+
+**Status: implemented in the open-files-limit story.**
+
+Source: the case study's G10 (`docs/research/case-study-gaps.md`). A server accepts as many
+connections as it has descriptors. A container's default soft limit for `RLIMIT_NOFILE` (often
+1,024) caps the connections far under its hard limit, and the reference implementation raises
+the soft limit at start. An Ignite program had no way to.
+
+### 27.1 The raise at start
+
+Every compiled program raises its open-files soft limit to the hard limit before `K.main`
+runs, on both targets, without code:
+
+- Rust target: `ignite_io::run`, first, before it arms the drain (16.13).
+- LLVM target: `ignite_rt_init`, the first call of every generated `main`, after storing the
+  arguments and before arming the drain. The test runner's `main` calls it too.
+- Both call `ignite_io::raise_open_files_limit`, which runs once per process.
+- When the hard limit is unlimited, the target is the kernel's ceiling
+  `/proc/sys/fs/nr_open`, because `setrlimit` refuses an unlimited `RLIMIT_NOFILE`.
+- The hard limit is never changed. A soft limit already at the target is left alone.
+- A failure (of `getrlimit` or of `setrlimit`) is ignored. It is reported once on stderr, as
+  `warning: open-files limit stays at <soft>: <the operating system's message>`, only when
+  the soft limit stays under 4,096 (`ignite_io::OPEN_FILES_REPORT_BELOW`). A failure above that
+  prints nothing, so a working server's stderr stays as it was.
+
+Decisions:
+
+- A raise at start, not a static G10's reproducer guessed (`Process.set_open_files_limit(n)`).
+  The hard limit is the operator's bound; a program that wanted less than it would not run out
+  of descriptors, so no program needs to choose. No new authority is granted either: any
+  process may raise its soft limit up to its hard limit.
+- Before `main` and before any task, so the limit holds for every descriptor the program opens
+  and for the children it starts. A child inherits the raised soft limit (21.5); a program it
+  launches can lower its own.
+- `ignite run` and `ignite apply` start members unchanged; the raise is the member's own.
+
+### 27.2 `Process.open_files_limit()`
+
+| Ignite | type | effect | builtin |
+|---|---|---|---|
+| `Process.open_files_limit()` | `() -> Int` | `process.limit` | `ProcessOpenFilesLimit` |
+
+The current soft limit; an unlimited one, or one past `Int`, is the largest `Int`; one the
+operating system cannot report is 0. It never fails.
+
+- The effect is ambient under the existing head `process` (`AMBIENT_HEADS`), as `process.exit`
+  and `process.args` are: it reads the process's state, and a value read at compile time would
+  be the compiler's. The evaluator gives it no value, as every effectful builtin.
+- An `HttpApp` handler cannot call it (E017), as with `Clock.now`.
+
+Layers:
+
+| layer | |
+|---|---|
+| `ignite-io` | `limits`: `raise_open_files_limit`, `open_files_limit`, `OPEN_FILES_REPORT_BELOW`; `nix` feature `resource` (no new dependency) |
+| `ignite-rt` | `i64 ignite_rt_open_files_limit()`; `ignite_rt_init` raises |
+| `ignite-check` | rows of `BUILTIN_STATICS`, `BUILTIN_STATIC_ARITIES`, `EFFECTFUL_STATICS`, `static_effect` |
+| `ignite-types` | `Builtin::ProcessOpenFilesLimit`, effect `process.limit` |
+| Rust target | `::ignite_io::open_files_limit()` |
+| LLVM target | `call i64 @ignite_rt_open_files_limit()` |
+
+`CODEGEN_REVISION` is `ignite-codegen/0.1.0-42`.
+
+### 27.3 Tests
+
+- `open_files_limit::{rust,llvm}::the_soft_limit_is_raised_to_the_hard_limit_at_start`
+  (`crates/ignite/tests/open_files_limit.rs`, `fixtures/open_files_limit/limits.ignite`):
+  the built program is started under `prlimit --nofile=256:65536`; its `/proc/<pid>/limits`
+  shows soft and hard 65536, it logs `open files 65536` from `Process.open_files_limit()`, and
+  its stderr holds nothing else.
+- `open_files_limit::open_files_limit_is_callable_in_tests_on_both_targets`: the fixture's
+  inline test on both targets.
+- The inline test "the open-files soft limit is a positive count" in `std/process.ignite`.
+- `ignite-io` `limits::tests::a_failure_is_reported_only_under_4096` and
+  `the_raise_reaches_the_hard_limit`; `ignite-rt`
+  `process::tests::open_files_limit_reads_the_soft_limit`.
+- `ignite-check` fixture `e016_open_files_limit`.

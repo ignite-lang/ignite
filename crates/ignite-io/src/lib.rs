@@ -275,15 +275,17 @@ pub mod terminal {
 /// `std::process::exit`, which ends them. Terminal attributes saved by
 /// [`Stdin::set_raw`] are restored when `main` returns and when it fails.
 ///
-/// `run` arms the drain on SIGTERM first ([`drain`]). When `main` returns
-/// while the process drains, the result is not the exit status: an error
-/// other than [`DRAINING`] (the refused `accept` that ends a server's
-/// loop) is logged, then `run` waits for the live tasks to end
+/// `run` raises the open-files soft limit to the hard limit first
+/// ([`raise_open_files_limit`], `docs/slice.md` 27), then arms the drain on
+/// SIGTERM ([`drain`]). When `main` returns while the process drains, the
+/// result is not the exit status: an error other than [`DRAINING`] (the
+/// refused `accept` that ends a server's loop) is logged, then `run` waits for the live tasks to end
 /// ([`wait_for_tasks`], no bound) and returns 0.
 pub fn run<F>(main: F) -> i32
 where
     F: FnOnce() -> Result<(), IoError>,
 {
+    raise_open_files_limit();
     drain();
     let restore = terminal::Restore;
     let result = report::catch(main);
@@ -1084,6 +1086,9 @@ pub use fs::Directory;
 // `docs/slice.md` 21.20: the capability `Environment`.
 pub mod environment;
 pub use environment::Environment;
+// `docs/slice.md` 27: the open-files limit.
+mod limits;
+pub use limits::{OPEN_FILES_REPORT_BELOW, open_files_limit, raise_open_files_limit};
 
 static EXIT_HOOKS: std::sync::Mutex<Vec<fn()>> = std::sync::Mutex::new(Vec::new());
 

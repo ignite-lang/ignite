@@ -817,6 +817,9 @@ pub enum Builtin {
     /// `Process.flush() -> Unit`: send what the calling task wrote (21.20);
     /// pure, as `log`.
     ProcessFlush,
+    /// `Process.open_files_limit() -> Int`: the current open-files soft
+    /// limit (`docs/slice.md` 27); effect `process.limit`.
+    ProcessOpenFilesLimit,
     /// `s.peer() -> std.net.Endpoint` on a `TcpStream`: the other end's
     /// address and port; pure (`docs/slice.md` 26.1).
     TcpStreamPeer,

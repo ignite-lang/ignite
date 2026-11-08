@@ -2203,6 +2203,7 @@ fn is_static(builtin: Builtin) -> bool {
             | Builtin::ClockSleep
             | Builtin::ClockNow
             | Builtin::ProcessFlush
+            | Builtin::ProcessOpenFilesLimit
             | Builtin::TcpStreamConnectWithin
     )
 }

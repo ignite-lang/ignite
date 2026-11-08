@@ -20,6 +20,7 @@ An effect is a dotted name. It has one of two roots.
 | `stderr.write` | `Stderr.write_all(bytes)` |
 | `process.exit` | `Process.exit(code)` |
 | `process.args` | `Endpoint.of(ref)` |
+| `process.limit` | `Process.open_files_limit()` |
 | `net.listen` | `TcpListener.bind(address, port)` |
 | `net.connect` | `TcpStream.connect(address, port)` |
 | `clock.read` | `Clock.monotonic()`, `Clock.now()` |

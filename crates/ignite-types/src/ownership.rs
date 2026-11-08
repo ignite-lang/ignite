@@ -182,7 +182,8 @@ pub fn change(builtin: Builtin) -> Option<Change> {
         | EnvironmentGet
         | ClockSleep
         | ClockNow
-        | ProcessFlush => None,
+        | ProcessFlush
+        | ProcessOpenFilesLimit => None,
     }
 }
 

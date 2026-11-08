@@ -78,6 +78,7 @@ fn builtin_effect(builtin: Builtin) -> Option<(Effect, &'static str)> {
         EnvironmentOf => (Effect::Ambient("environment.new"), "Environment.of"),
         ClockSleep => (Effect::Ambient("clock.sleep"), "Clock.sleep"),
         ClockNow => (Effect::Ambient("clock.read"), "Clock.now"),
+        ProcessOpenFilesLimit => (Effect::Ambient("process.limit"), "Process.open_files_limit"),
         DirectoryReadFile => (Effect::Receiver("read"), "read_file"),
         DirectoryReadDirectory => (Effect::Receiver("read"), "read_directory"),
         DirectoryAbsolutePath => (Effect::Receiver("read"), "absolute_path"),

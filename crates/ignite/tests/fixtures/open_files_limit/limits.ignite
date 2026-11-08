@@ -1,0 +1,27 @@
+package limits
+
+// `docs/slice.md` 27: the executable `limits` logs the open-files soft
+// limit it found, then stays alive until standard input ends, so the test
+// reads its `/proc/<pid>/limits` while it runs.
+
+type LimitApp {
+  executable: Text
+}
+
+fn LimitApp.main(self: LimitApp) -> Result<Unit, IoError> {
+  log("open files {Process.open_files_limit()}")
+  loop {
+    match Stdin.read(4096)? {
+      Eof => return Ok(())
+      Data(_) => {}
+    }
+  }
+}
+
+system Limits {
+  component limits: LimitApp { executable = "limits" }
+}
+
+test "the open-files soft limit is positive" {
+  assert Process.open_files_limit() > 0
+}
