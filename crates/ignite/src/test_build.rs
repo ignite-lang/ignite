@@ -481,6 +481,15 @@ fn build_group(
                 .collect();
             let ir_dir = out.join("llvm");
             std::fs::create_dir_all(&ir_dir).map_err(io_error(&ir_dir))?;
+            // A test build links the native runtime it names, never the
+            // bitcode one of a release build with LTO: the target is
+            // probed with that runtime set, as `link` sees it.
+            let runtime = crate::runtime_for(build)?;
+            let build = BuildOptions {
+                out: Some(out),
+                runtime: Some(runtime.clone()),
+                ..build.clone()
+            };
             let options = ignite_llvm::Options {
                 test_modules: group.options.test_modules.clone(),
                 sources: group
@@ -489,20 +498,14 @@ fn build_group(
                     .iter()
                     .map(|(p, s)| (p.clone(), s))
                     .collect(),
-                target: Some(crate::llvm_build::target(build, &ir_dir)?),
+                target: Some(crate::llvm_build::target(&build, &ir_dir)?),
                 directory: std::env::current_dir()
                     .ok()
                     .map(|d| d.display().to_string()),
                 siblings: Vec::new(),
             };
             let generated = ignite_llvm::generate_tests(&std_inputs, &inputs, &options);
-            let runtime = crate::runtime_for(build)?;
             check_runner(&runtime)?;
-            let build = BuildOptions {
-                out: Some(out),
-                runtime: Some(runtime),
-                ..build.clone()
-            };
             let output = crate::llvm_build::link(name, &generated, &build)?;
             output
                 .executables

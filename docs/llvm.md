@@ -40,6 +40,26 @@ Size. Every function and datum is in its own section (rustc emits the runtime's 
 way by default), so `--gc-sections` drops what no executable reaches. The workspace builds `ignite-rt` with `codegen-units = 1` in the release
 profile.
 
+LTO (story `llvm-lto-runtime`). A `-linux-gnu` driver carries the runtime twice: the native
+archive and the same archive built with `-Clinker-plugin-lto`, whose Rust code is LLVM
+bitcode (`crates/ignite/build.rs`, a second nested `cargo build` beside the first, in the
+driver's profile), with the triple and the major LLVM version of the rustc that built it.
+A build with `--release` and none of `--runtime`, `--triple` and `--static` compiles each
+unit with `-O2 -flto=thin` and links each executable with
+`clang -flto=thin -O2 -fuse-ld=lld -Wl,--thinlto-cache-policy=cache_size_bytes=64m
+-Wl,--thinlto-cache-dir=DIR/llvm/lto-cache` and the bitcode runtime, written to
+`<cache>/lto-<hash>/libignite_rt.a`, in place of the native archive, so runtime entries
+inline into Ignite code (`ignite_rt_arena_state`'s 169 calls in `todod` go). Such a build
+pins its IR to the runtime's triple (`x86_64-unknown-linux-gnu`, which clang reads as its
+own `x86_64-pc-linux-gnu`), so that lld links modules of one triple. It needs clang of the
+same major LLVM version as that rustc, read from the `llvm.ident` of the target probe and
+cached in `target.stamp`, and `ld.lld` next to clang or on `PATH`; without either, and with
+any of the three flags, the release build is the per-unit `-O2` build against the native
+archive described above. ThinLTO rather than full LTO: in the probe that chose it (todo
+get-64, 5 interleaved runs) full LTO cut user instructions per reply 4.5 % and thin 7.9 %,
+and thin links in 1.6 s per executable against 2.7 s. `ignite test --release` links the
+native archive.
+
 Reachable std only (slice 11, `docs/slice.md` 15.1 item 2). `std.ll` holds only the std
 fns, constants, field defaults and glue reachable from the program: the program module and
 the mains are lowered first, every symbol they name is a root, and the std module keeps a
