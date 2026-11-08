@@ -2,14 +2,15 @@
 format: aep.planning-md/3
 id: story:spawn-without-handshake
 kind: story
-status: active
+status: implemented
 title: Spawning a task does not wait for the worker to copy its environment
 relations:
 - decomposes: epic:native-parity
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T03:59:06Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-08T06:03:41Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-08T12:30:37Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: spawn-without-handshake
 
