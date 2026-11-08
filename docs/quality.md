@@ -127,7 +127,7 @@ metric, the target, the value before and after, and the run of `task quality` th
 
 | # | metric | kind | better | instrument | bar | target |
 |---|---|---|---|---|---|---|
-| 3.1 | copies in the generated code of the golden corpus | ratchet | lower | `quality::static_metrics_hold_the_bar`: `.clone()` in the Rust generator's goldens, calls of `copy.*` in the LLVM goldens | llvm 90, rust 168 |  |
+| 3.1 | copies in the generated code of the golden corpus | ratchet | lower | `quality::static_metrics_hold_the_bar`: `.clone()` in the Rust generator's goldens, calls of `copy.*` in the LLVM goldens | llvm 90, rust 166 |  |
 | 3.2 | binary size | ratchet | lower | `ignite-perf quality` (task quality): size of `todod` and `terminald` per target and profile | llvm/terminald/dev 7563720 B, llvm/terminald/release 1468648 B, llvm/todod/dev 8230560 B, llvm/todod/release 2042752 B, rust/terminald/dev 6223520 B, rust/terminald/release 681368 B, rust/todod/dev 7405864 B, rust/todod/release 961880 B |  |
 | 3.3 | throughput and p99 latency of terminald and todod | ratchet | higher | `ignite-load matrix` (`task bench-throughput`) | unmeasured: no load baseline yet (out of scope of story:quality-ratchet) |  |
 | 3.4 | peak RSS, leaked handles and threads after a load run | gate | lower | `llvm_memory::` and `terminal::idle_terminald_runs_one_thread` (every merge) | unmeasured: no number: the named tests gate it in task gate |  |

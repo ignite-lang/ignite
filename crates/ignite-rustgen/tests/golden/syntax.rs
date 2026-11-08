@@ -180,22 +180,22 @@ impl Syntax {
         (show(&nested(&Some((false, vec![1])))))?;
         (show(&nested(&None)))?;
         (show(&nested(&Some((true, vec![3])))))?;
-        let e = vowel(&String::from("e"));
-        let x = vowel(&String::from("x"));
+        let e = vowel({ static TEXT: ::std::sync::LazyLock<String> = ::std::sync::LazyLock::new(|| String::from("e")); &*TEXT });
+        let x = vowel({ static TEXT: ::std::sync::LazyLock<String> = ::std::sync::LazyLock::new(|| String::from("x")); &*TEXT });
         (show(&(format!("{} {}", e, x))))?;
         (show(&first_positive(&vec![::ignite_io::checked::neg(1, "crates/ignite-rustgen/tests/golden/syntax.ignite", 130, 26), 0, 5, 6]).to_string()))?;
         (show(&(format!("{}{}{}", sign(&0), sign(&3), sign(&(::ignite_io::checked::neg(3, "crates/ignite-rustgen/tests/golden/syntax.ignite", 131, 35)))))))?;
         (show(&count_spaces(&String::from("a b c ").into_bytes()).to_string()))?;
         let n = 21;
         (show(&twice(&n).to_string()))?;
-        (show(&shout(&String::from("hey"))))?;
+        (show(&shout({ static TEXT: ::std::sync::LazyLock<String> = ::std::sync::LazyLock::new(|| String::from("hey")); &*TEXT })))?;
         let h = Handler { name: String::from("h"), respond: (::std::sync::Arc::new(|__a0: String| shout(&__a0)) as ::std::sync::Arc<dyn Fn(String) -> String + Send + Sync>) };
         (show(&(h.respond)(h.name)))?;
         let r = Reply { lines: vec![String::from("l")], action: Reply::default_action(), code: Reply::default_code() };
         (show(&(format!("code {}", r.code))))?;
         match &r.action {
-            Action::Continue => (show(&String::from("continue")))?,
-            Action::Close => (show(&String::from("close")))?,
+            Action::Continue => (show({ static TEXT: ::std::sync::LazyLock<String> = ::std::sync::LazyLock::new(|| String::from("continue")); &*TEXT }))?,
+            Action::Close => (show({ static TEXT: ::std::sync::LazyLock<String> = ::std::sync::LazyLock::new(|| String::from("close")); &*TEXT }))?,
         };
         let flag = true;
         let space = SPACE();
@@ -213,14 +213,14 @@ impl Syntax {
         let spare = (1, String::from("a"));
         let (mut p, mut q) = spare.clone();
         p = ::ignite_io::checked::add(p, 1, "crates/ignite-rustgen/tests/golden/syntax.ignite", 159, 9);
-        q = format!("{}b", q);
+        q.push_str("b");
         (show(&(format!("{}{}", p, q))))?;
         let _ = twice(&1);
         let _ = twice(&2);
         let light: Light = Light::Off;
         match &light {
-            Light::Off => (show(&String::from("light off")))?,
-            Light::On => (show(&String::from("light on")))?,
+            Light::Off => (show({ static TEXT: ::std::sync::LazyLock<String> = ::std::sync::LazyLock::new(|| String::from("light off")); &*TEXT }))?,
+            Light::On => (show({ static TEXT: ::std::sync::LazyLock<String> = ::std::sync::LazyLock::new(|| String::from("light on")); &*TEXT }))?,
         };
         (show(&(format!("{} {}", lower_case(&3), lower_case(&4)))))?;
         Ok(())

@@ -219,6 +219,208 @@ fn bodies<'p>(program: &'p Program, types: &TypedProgram) -> Vec<Body<'p>> {
     out
 }
 
+/// The fn-typed parameters of every fn and associated fn of `program` (key
+/// as [`crate::ModuleTypes::consumed`]) that its body only calls
+/// (`docs/slice.md` 20.3.7): every use of the name is the callee of a call,
+/// none inside a closure or a `spawn`, and nothing assigns it. A backend
+/// may then lend the callee a fn that lives only as long as the call.
+/// Names are not resolved: a shadowing binding's uses count against the
+/// parameter, an extra `Arc` and never a missed one.
+pub(crate) fn called_only(program: &Program, types: &TypedProgram) -> BTreeMap<String, Vec<bool>> {
+    let mut out = BTreeMap::new();
+    for decl in &program.decls {
+        let Decl::Fn(f) = decl else { continue };
+        let params = f
+            .params
+            .iter()
+            .map(|p| {
+                matches!(
+                    types.resolved_type(&p.ty),
+                    Some(Ty::Fn(..) | Ty::EffectFn(..))
+                ) && only_called(&f.body, &p.name.name)
+            })
+            .collect();
+        out.insert(f.qualified_name(), params);
+    }
+    out
+}
+
+/// Whether every use of `name` in `block` is the callee of a call outside
+/// any closure or `spawn`, and no assignment targets it.
+fn only_called(block: &Block, name: &str) -> bool {
+    let mut roots = Vec::new();
+    block_children(block, &mut roots);
+    let mut stack: Vec<(Node<'_>, bool)> = roots.into_iter().map(|n| (n, false)).collect();
+    let mut children = Vec::new();
+    while let Some((node, nested)) = stack.pop() {
+        let e = match node {
+            Node::Target(target) if target.base.name == name => return false,
+            Node::Target(_) => continue,
+            Node::Expr(e) => e,
+        };
+        match &e.kind {
+            ExprKind::Name(id) if id.name == name => return false,
+            ExprKind::Call { callee, args } if matches!(&callee.kind, ExprKind::Name(id) if id.name == name) =>
+            {
+                if nested {
+                    return false;
+                }
+                stack.extend(args.iter().map(|a| (Node::Expr(a), nested)));
+                continue;
+            }
+            _ => {}
+        }
+        let inner = nested || matches!(e.kind, ExprKind::Closure(_) | ExprKind::Spawn(_));
+        expr_children(e, &mut children);
+        stack.extend(children.drain(..).map(|n| (n, inner)));
+    }
+    true
+}
+
+/// The `Bytes` parameters of every fn and associated fn of `program` (key
+/// as [`crate::ModuleTypes::consumed`]) that its body only reads as a
+/// slice (`docs/slice.md` 20.3.7, [`reads_as_slice`]), with `modules`'
+/// sets for imported callees. The greatest fixpoint over the module's fns:
+/// every `Bytes` parameter starts lent and loses it when a use is not a
+/// slice read, so a recursive call keeps it.
+pub(crate) fn lent_bytes(program: &Program, types: &TypedProgram) -> BTreeMap<String, Vec<bool>> {
+    let fns: Vec<&ignite_syntax::ast::FnDecl> = program
+        .decls
+        .iter()
+        .filter_map(|d| match d {
+            Decl::Fn(f) => Some(f),
+            _ => None,
+        })
+        .collect();
+    let mut lent: BTreeMap<String, Vec<bool>> = fns
+        .iter()
+        .map(|f| {
+            let key = f.qualified_name();
+            let params = f
+                .params
+                .iter()
+                .enumerate()
+                .map(|(i, p)| {
+                    types.resolved_type(&p.ty) == Some(&crate::builtins::bytes())
+                        && !types.consumed(
+                            &Callee::Fn(crate::QualName::new(types.module.clone(), key.clone())),
+                            i,
+                        )
+                })
+                .collect();
+            (key, params)
+        })
+        .collect();
+    loop {
+        let mut changed = false;
+        for f in &fns {
+            let key = f.qualified_name();
+            for (i, p) in f.params.iter().enumerate() {
+                if !lent[&key][i] {
+                    continue;
+                }
+                let lends = |callee: &Callee, index: usize| match callee {
+                    Callee::Fn(q) if q.module == types.module => {
+                        lent.get(&q.name).and_then(|ps| ps.get(index)).copied() == Some(true)
+                    }
+                    _ => types.lent_bytes(callee, index),
+                };
+                if !reads_as_slice(&f.body.stmts, &p.name.name, types, &lends) {
+                    lent.get_mut(&key).expect("an entry per fn")[i] = false;
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            return lent;
+        }
+    }
+}
+
+/// Whether `stmts` read the `Bytes` variable `name` only as a slice: every
+/// use is the receiver of `len`, `is_empty`, `at`, `slice` or `to_text`, or
+/// an argument by position to a parameter `lends` says is a lent `Bytes`
+/// parameter, outside any closure or `spawn`, and nothing assigns it. A
+/// backend may then hold the bytes as a borrowed slice. Names are not
+/// resolved: a shadowing binding's uses count against `name`.
+pub fn reads_as_slice(
+    stmts: &[Stmt],
+    name: &str,
+    types: &TypedProgram,
+    lends: &dyn Fn(&Callee, usize) -> bool,
+) -> bool {
+    let is_name = |e: &Expr| matches!(&e.kind, ExprKind::Name(id) if id.name == name);
+    let mut roots = Vec::new();
+    stmts_children(stmts, &mut roots);
+    let mut stack: Vec<(Node<'_>, bool)> = roots.into_iter().map(|n| (n, false)).collect();
+    let mut children = Vec::new();
+    while let Some((node, nested)) = stack.pop() {
+        let e = match node {
+            Node::Target(target) if target.base.name == name => return false,
+            Node::Target(_) => continue,
+            Node::Expr(e) => e,
+        };
+        let callee = types.callee(e);
+        match &e.kind {
+            ExprKind::Name(id) if id.name == name => return false,
+            ExprKind::Method { receiver, args, .. } if !nested && is_name(receiver) => {
+                let read = match callee {
+                    Some(Callee::Builtin(b)) => matches!(
+                        b,
+                        Builtin::ListLen
+                            | Builtin::ListIsEmpty
+                            | Builtin::ListAt
+                            | Builtin::ListSlice
+                            | Builtin::BytesToText
+                    ),
+                    Some(c @ Callee::Fn(_)) => types.named_args(e).is_none() && lends(c, 0),
+                    _ => false,
+                };
+                if !read {
+                    return false;
+                }
+                stack.extend(args.iter().map(|a| (Node::Expr(a), nested)));
+                continue;
+            }
+            ExprKind::Method { receiver, args, .. }
+                if !nested
+                    && types.named_args(e).is_none()
+                    && matches!(callee, Some(Callee::Fn(_))) =>
+            {
+                let callee = callee.expect("a fn callee");
+                stack.push((Node::Expr(receiver), nested));
+                for (i, a) in args.iter().enumerate() {
+                    if !(is_name(a) && lends(callee, i + 1)) {
+                        stack.push((Node::Expr(a), nested));
+                    }
+                }
+                continue;
+            }
+            ExprKind::Call {
+                callee: target,
+                args,
+            } if !nested
+                && types.named_args(e).is_none()
+                && matches!(callee, Some(Callee::Fn(_))) =>
+            {
+                let callee = callee.expect("a fn callee");
+                stack.push((Node::Expr(target), nested));
+                for (i, a) in args.iter().enumerate() {
+                    if !(is_name(a) && lends(callee, i)) {
+                        stack.push((Node::Expr(a), nested));
+                    }
+                }
+                continue;
+            }
+            _ => {}
+        }
+        let inner = nested || matches!(e.kind, ExprKind::Closure(_) | ExprKind::Spawn(_));
+        expr_children(e, &mut children);
+        stack.extend(children.drain(..).map(|n| (n, inner)));
+    }
+    true
+}
+
 fn key(expr: &Expr) -> NodeId {
     expr.id
 }
@@ -674,7 +876,12 @@ pub(crate) fn expr_children<'a>(e: &'a Expr, out: &mut Vec<Node<'a>>) {
 }
 
 pub(crate) fn block_children<'a>(block: &'a Block, out: &mut Vec<Node<'a>>) {
-    for stmt in &block.stmts {
+    stmts_children(&block.stmts, out);
+}
+
+/// [`block_children`] of a run of statements.
+pub(crate) fn stmts_children<'a>(stmts: &'a [Stmt], out: &mut Vec<Node<'a>>) {
+    for stmt in stmts {
         match &stmt.kind {
             StmtKind::Let { value, .. } | StmtKind::LetPattern { value, .. } => {
                 out.push(Node::Expr(value))

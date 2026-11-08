@@ -20,7 +20,7 @@ use ignite_syntax::ast::{Block, Expr, ExprKind, StmtKind};
 
 pub use ignite_check::{Change, IN_PLACE, InPlace};
 
-use crate::moves::{Node, block_children, expr_children};
+use crate::moves::{Node, block_children, expr_children, stmts_children};
 use crate::{Builtin, Callee, Ty, TypedProgram, builtins};
 
 /// Method names counted as an in-place change whatever the callee, so a
@@ -258,6 +258,35 @@ pub fn changed_in_block<'a>(block: &'a Block, types: Option<&TypedProgram>) -> B
     let mut stack = Vec::new();
     block_children(block, &mut stack);
     changed(stack, types)
+}
+
+/// The names a run of statements changes in place, as [`changed_in_block`].
+pub fn changed_in_stmts<'a>(
+    stmts: &'a [ignite_syntax::ast::Stmt],
+    types: Option<&TypedProgram>,
+) -> BTreeSet<&'a str> {
+    let mut stack = Vec::new();
+    stmts_children(stmts, &mut stack);
+    changed(stack, types)
+}
+
+/// Whether `e` names `name` anywhere: a read, an assignment target or a
+/// capture, closure bodies included, by name (a shadowing binding counts).
+pub fn mentions(e: &Expr, name: &str) -> bool {
+    let mut stack = vec![Node::Expr(e)];
+    while let Some(node) = stack.pop() {
+        match node {
+            Node::Target(target) if target.base.name == name => return true,
+            Node::Target(_) => {}
+            Node::Expr(e) => {
+                if matches!(&e.kind, ExprKind::Name(id) if id.name == name) {
+                    return true;
+                }
+                expr_children(e, &mut stack);
+            }
+        }
+    }
+    false
 }
 
 /// The names `e` changes in place, as [`changed_in_block`].

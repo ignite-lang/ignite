@@ -59,7 +59,7 @@ Current values: run `bar` on 2026-11-07, commit `9a775116`.
 | # | metric | kind | target | bar | current | trend |
 |---|---|---|---|---|---|---|
 | 3.1 | copies in the generated code of the golden corpus | ratchet | llvm | 90 | 90 |  |
-| 3.1 | copies in the generated code of the golden corpus | ratchet | rust | 168 | 168 |  |
+| 3.1 | copies in the generated code of the golden corpus | ratchet | rust | 166 | 168 |  |
 | 3.2 | binary size | ratchet | llvm/terminald/dev | 7563720 B | 7563720 B |  |
 | 3.2 | binary size | ratchet | llvm/terminald/release | 1468648 B | 1468648 B |  |
 | 3.2 | binary size | ratchet | llvm/todod/dev | 8230560 B | 8230560 B |  |

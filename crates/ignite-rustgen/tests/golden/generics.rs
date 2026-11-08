@@ -53,8 +53,7 @@ pub fn count<T: Clone + Send + Sync + 'static>(choice: &Choice<T>) -> i64 {
     }
 }
 
-pub fn twice<T: Clone + Send + Sync + 'static>(f: &::std::sync::Arc<dyn Fn(T) -> T + Send + Sync>, value: T) -> T {
-    let mut f = f.clone();
+pub fn twice<T: Clone + Send + Sync + 'static>(f: &(dyn Fn(T) -> T + Send + Sync), value: T) -> T {
     f(f(value))
 }
 
@@ -77,7 +76,7 @@ pub fn generic_line() -> String {
     let labelled = Labelled { value: pair.second.clone(), label: Labelled::<i64>::default_label() };
     let choice: Choice<String> = Choice::Two(String::from("a"), String::from("b"));
     let id: ::std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync> = (::std::sync::Arc::new(|__a0: i64| identity::<i64>(__a0)) as ::std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync>);
-    format!("{} {} {} {} {}", pair.first, labelled.value, labelled.label, count(&choice), twice(&(::std::sync::Arc::new(|__a0: i64| bump(&__a0)) as ::std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync>), id(5)))
+    format!("{} {} {} {} {}", pair.first, labelled.value, labelled.label, count(&choice), twice(&|__a0: i64| bump(&__a0), id(5)))
 }
 
 pub fn number(line: &String, command: &String) -> ::std::option::Option<i64> {
@@ -88,23 +87,23 @@ pub fn number(line: &String, command: &String) -> ::std::option::Option<i64> {
 }
 
 pub fn respond(mut counts: ::ignite_io::Store<i64>, line: &String) -> String {
-    if (*line) == String::from("new") {
+    if (*line) == "new" {
         let id = counts.next_id();
         counts.put(id.clone(), 0);
         return id.to_string();
     };
-    if (*line) == String::from("all") {
-        return counts.values().iter().cloned().map(&*(::std::sync::Arc::new(|__a0: i64| show(&__a0)) as ::std::sync::Arc<dyn Fn(i64) -> String + Send + Sync>)).collect::<Vec<_>>().join(&String::from(","));
+    if (*line) == "all" {
+        return counts.values().iter().map(|__a0| show(__a0)).collect::<Vec<_>>().join(",");
     };
-    if (*line) == String::from("generic") {
+    if (*line) == "generic" {
         return generic_line();
     };
-    match number(line, &String::from("inc ")) {
+    match number(line, { static TEXT: ::std::sync::LazyLock<String> = ::std::sync::LazyLock::new(|| String::from("inc ")); &*TEXT }) {
         Some(id) => return show(&or(&counts.update(id.clone(), &*(::std::sync::Arc::new(|__a0: i64| bump(&__a0)) as ::std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync>)), &(::ignite_io::checked::neg(1, "crates/ignite-rustgen/tests/golden/generics.ignite", 73, 57)))),
         None => {
         },
     };
-    match number(line, &String::from("get ")) {
+    match number(line, { static TEXT: ::std::sync::LazyLock<String> = ::std::sync::LazyLock::new(|| String::from("get ")); &*TEXT }) {
         Some(id) => return match counts.get(id.clone()) {
             Some(value) => show(&value),
             None => String::from("missing"),
@@ -112,7 +111,7 @@ pub fn respond(mut counts: ::ignite_io::Store<i64>, line: &String) -> String {
         None => {
         },
     };
-    match number(line, &String::from("del ")) {
+    match number(line, { static TEXT: ::std::sync::LazyLock<String> = ::std::sync::LazyLock::new(|| String::from("del ")); &*TEXT }) {
         Some(id) => return match counts.remove(id.clone()) {
             Some(value) => format!("removed {}", value),
             None => String::from("missing"),
@@ -120,7 +119,7 @@ pub fn respond(mut counts: ::ignite_io::Store<i64>, line: &String) -> String {
         None => {
         },
     };
-    match number(line, &String::from("byte ")) {
+    match number(line, { static TEXT: ::std::sync::LazyLock<String> = ::std::sync::LazyLock::new(|| String::from("byte ")); &*TEXT }) {
         Some(n) => match u8::try_from(n).ok() {
             Some(b) => format!("byte {}", (b as i64)),
             None => String::from("not a byte"),

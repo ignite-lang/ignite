@@ -39,10 +39,10 @@ pub fn Greeter__main(mut self_: Greeter) -> ::std::result::Result<(), ::ignite_i
     let stream = (self_.listener.accept())?;
     let id = self_.seen.next_id();
     self_.seen.put(id.clone(), self_.banner.text.clone());
-    (stream.write_all((format!("{}{}", self_.banner.text, format!(" {} {}\n", { let __ignite_v = &self_.banner.width; let mut __ignite_text = String::new(); (&mut __ignite_text).push_str(&::ignite_io::quantity_debug(::ignite_io::Quantity::ByteSize, *__ignite_v)); __ignite_text }, { let __ignite_v = &self_.idle; let mut __ignite_text = String::new(); (&mut __ignite_text).push_str(&::ignite_io::quantity_debug(::ignite_io::Quantity::Duration, *__ignite_v)); __ignite_text }))).into_bytes()))?;
+    (stream.write_all((format!("{} {} {}\n", self_.banner.text, { let __ignite_v = &self_.banner.width; let mut __ignite_text = String::new(); (&mut __ignite_text).push_str(&::ignite_io::quantity_debug(::ignite_io::Quantity::ByteSize, *__ignite_v)); __ignite_text }, { let __ignite_v = &self_.idle; let mut __ignite_text = String::new(); (&mut __ignite_text).push_str(&::ignite_io::quantity_debug(::ignite_io::Quantity::Duration, *__ignite_v)); __ignite_text })).into_bytes()))?;
     match (stream.read(4096))? {
         ::ignite_io::Input::Eof => Ok(()),
-        ::ignite_io::Input::Data(bytes) => if String::from_utf8_lossy(&bytes).into_owned().trim().to_string() == String::from("fail") {
+        ::ignite_io::Input::Data(bytes) => if String::from_utf8_lossy(&bytes).into_owned().trim().to_string() == "fail" {
             Err(::ignite_io::IoError::new(String::from("asked to fail")).with_exit_code((3) as i32))
         } else {
             Ok(())

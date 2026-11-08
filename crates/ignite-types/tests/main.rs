@@ -12,6 +12,7 @@ mod effectful_map_adversary;
 mod fixtures;
 mod generics;
 mod inline_tests;
+mod lent;
 mod limits;
 mod moves;
 mod moves_adversary;

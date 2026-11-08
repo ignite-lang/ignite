@@ -1743,8 +1743,39 @@ fn byte_items(bytes: &[u8]) -> String {
     format!("[{}u8]", items.join("u8, "))
 }
 
+/// Whether `pattern` binds `name`.
+fn pattern_binds(pattern: &Pattern, name: &str) -> bool {
+    match &pattern.kind {
+        PatternKind::Binding(id) => id.name == name,
+        PatternKind::Rest(Some(id)) => id.name == name,
+        PatternKind::Or(items) | PatternKind::Tuple(items) | PatternKind::List(items) => {
+            items.iter().any(|p| pattern_binds(p, name))
+        }
+        PatternKind::Variant { args, .. } => args.iter().any(|p| pattern_binds(p, name)),
+        PatternKind::Range { start, end } => pattern_binds(start, name) || pattern_binds(end, name),
+        PatternKind::Wildcard
+        | PatternKind::Int(_)
+        | PatternKind::Str(_)
+        | PatternKind::Bool(_)
+        | PatternKind::Rest(None) => false,
+    }
+}
+
 fn borrow(expr: &Expr, text: String) -> String {
     format!("&{}", wrap(expr, text))
+}
+
+/// A `Text` literal read by reference: a `static` built once, instead of a
+/// `String` allocated on every evaluation; the empty text is
+/// `String::new()`, which does not allocate.
+fn borrowed_text_literal(text: &str) -> String {
+    if text.is_empty() {
+        return "&String::new()".to_string();
+    }
+    format!(
+        "{{ static TEXT: ::std::sync::LazyLock<String> = ::std::sync::LazyLock::new(|| String::from(\"{}\")); &*TEXT }}",
+        escape_str(text)
+    )
 }
 
 struct Generator<'a> {
@@ -1773,6 +1804,9 @@ struct Generator<'a> {
     /// `for` elements that are references (`&T`) in their body, with the
     /// index of the scope that binds them ([`Generator::borrowed_for`]).
     borrowed_elements: Vec<(usize, String)>,
+    /// Set while the next block generated is a fn body: its tail runs
+    /// once, after every other use of the fn's variables.
+    fn_body: bool,
     /// The source the module was read from, for `assert` and `?` reports.
     source: Option<&'a SourceFile>,
     /// Fixed filename escaped once for every failure site in this module.
@@ -1879,6 +1913,7 @@ impl<'a> Generator<'a> {
             renamed_uses: BTreeSet::new(),
             borrowed: BTreeSet::new(),
             borrowed_elements: Vec::new(),
+            fn_body: false,
             source,
             escaped_site_file: escape_str(source.map_or(module, |source| source.path.as_str())),
             module: module.to_string(),
@@ -2046,6 +2081,47 @@ impl<'a> Generator<'a> {
         }
     }
 
+    /// Whether `callee` only calls its fn-typed parameter `index`
+    /// (`docs/slice.md` 20.3.7), so the parameter is a lent `&dyn Fn`.
+    fn lends_fn(&self, callee: Option<&Callee>, index: usize) -> bool {
+        match (self.types, callee) {
+            (Some(types), Some(callee)) => {
+                types.called_only(callee, index) && !types.consumed(callee, index)
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether `callee` only reads its `Bytes` parameter `index` as a slice
+    /// (`docs/slice.md` 20.3.7), so the parameter is a `&[u8]`.
+    fn lends_bytes(&self, callee: Option<&Callee>, index: usize) -> bool {
+        match (self.types, callee) {
+            (Some(types), Some(callee)) => {
+                types.lent_bytes(callee, index) && !types.consumed(callee, index)
+            }
+            _ => false,
+        }
+    }
+
+    /// `(dyn Fn(A) -> R + Send + Sync)`, the type behind a lent fn
+    /// parameter ([`Generator::lends_fn`]) declared as `ty`.
+    fn lent_fn_type(&self, callee: Option<&Callee>, index: usize, ty: &Type) -> Option<String> {
+        if !self.lends_fn(callee, index) {
+            return None;
+        }
+        match self.types?.resolved_type(ty)? {
+            Ty::Fn(params, ret) | Ty::EffectFn(params, ret, _) => {
+                let params: Vec<String> = params.iter().map(|t| self.rust_ty(t)).collect();
+                Some(format!(
+                    "(dyn Fn({}) -> {} + Send + Sync)",
+                    params.join(", "),
+                    self.rust_ty(ret)
+                ))
+            }
+            _ => None,
+        }
+    }
+
     /// Whether the call `expr` of the non-local name `id` calls a fn of the
     /// module or an imported one (not a variant, `log` or a constant).
     fn calls_fn(&self, expr: &Expr, id: &Ident) -> bool {
@@ -2083,9 +2159,13 @@ impl<'a> Generator<'a> {
     /// nor the variable `iter` is rooted at. The element is then a
     /// reference in `body`, read like a borrowed parameter.
     fn borrowed_for(&self, name: &str, iter: &Expr, body: &Block) -> bool {
-        if !self.is_place(iter) {
+        let place = if self.is_place(iter) {
+            iter
+        } else if let Some(list) = self.sliced_place(iter) {
+            list
+        } else {
             return false;
-        }
+        };
         let Some(Ty::List(element)) = self.type_of(iter) else {
             return false;
         };
@@ -2106,7 +2186,23 @@ impl<'a> Generator<'a> {
         }
         let mut mutated = BTreeSet::new();
         mutated.extend(ownership::changed_in_block(body, self.types));
-        !mutated.contains(name) && place_root(iter).is_some_and(|root| !mutated.contains(root))
+        !mutated.contains(name) && place_root(place).is_some_and(|root| !mutated.contains(root))
+    }
+
+    /// The list place `l` of `l.slice(i, j)` whose bounds change nothing,
+    /// so the slice can be borrowed from `l` (`checked::slice_ref`) instead
+    /// of copied (`docs/slice.md` 20.3.7).
+    fn sliced_place<'e>(&self, expr: &'e Expr) -> Option<&'e Expr> {
+        let ExprKind::Method { receiver, args, .. } = &expr.kind else {
+            return None;
+        };
+        (matches!(self.callee(expr), Some(Callee::Builtin(Builtin::ListSlice)))
+            && self.is_place(receiver)
+            && self.types.and_then(|t| t.failure_site(expr)).is_some()
+            && args
+                .iter()
+                .all(|a| ownership::changed_in(a, self.types).is_empty()))
+        .then_some(&**receiver)
     }
 
     /// `name` as a Rust operand that must not be a reference: `(*name)`
@@ -2146,6 +2242,16 @@ impl<'a> Generator<'a> {
                 if self.consumes(callee, index) {
                     return self.value(arg);
                 }
+                if self.lends_fn(callee, index) {
+                    if let Some(f) = self.passed_closure(arg) {
+                        return format!("&{f}");
+                    }
+                    if let Some(f) = self.lent_fn_value(arg) {
+                        return format!("&{f}");
+                    }
+                    let text = self.bare(arg);
+                    return format!("&*{}", wrap(arg, text));
+                }
                 let root = if let Some((list, _, _)) = self.borrowed_at(arg) {
                     place_root(list)
                 } else if self.is_place(arg) {
@@ -2156,10 +2262,15 @@ impl<'a> Generator<'a> {
                     None
                 };
                 if root.is_some_and(|r| modified.contains(r)) {
-                    format!("&{}", self.value(arg))
-                } else {
-                    self.ref_arg(arg)
+                    return format!("&{}", self.value(arg));
                 }
+                if self.lends_bytes(callee, index)
+                    && let Some(text) = self.text_bytes_place(arg)
+                    && place_root(text).is_none_or(|r| !modified.contains(r))
+                {
+                    return format!("{}.as_bytes()", self.receiver(text));
+                }
+                self.ref_arg(arg)
             })
             .collect()
     }
@@ -2185,8 +2296,31 @@ impl<'a> Generator<'a> {
                 byte_items(&bytes)
             );
         }
+        if let Some(text) = self.text_literal(arg) {
+            return borrowed_text_literal(text);
+        }
         let text = self.value(arg);
         borrow(arg, text)
+    }
+
+    /// `&text`, the argument `expr` already written as `text`, read by
+    /// reference; a `Text` literal is a `static`.
+    fn borrow_arg(&self, expr: &Expr, text: String) -> String {
+        match self.text_literal(expr) {
+            Some(literal) => borrowed_text_literal(literal),
+            None => borrow(expr, text),
+        }
+    }
+
+    /// The text of `expr` when it is a `Text` literal written as one (not
+    /// a reference's text, which [`Generator::expr`] writes first).
+    fn text_literal<'e>(&self, expr: &'e Expr) -> Option<&'e str> {
+        match &expr.kind {
+            ExprKind::Str(text) if self.types.and_then(|t| t.reference(expr)).is_none() => {
+                Some(text)
+            }
+            _ => None,
+        }
     }
 
     /// `place.at(i)` with a failure site, whose element an argument by
@@ -2237,14 +2371,22 @@ impl<'a> Generator<'a> {
         names
             .iter()
             .enumerate()
-            .map(|(index, name)| {
-                if self.consumes(callee, index) {
-                    name.clone()
-                } else {
-                    format!("&{name}")
-                }
-            })
+            .map(|(index, name)| format!("{}{name}", self.pass_prefix(callee, index)))
             .collect()
+    }
+
+    /// How a call the generator writes itself passes an owned local to
+    /// parameter `index` of `callee`: by value to a consumed parameter,
+    /// `&*` to a lent fn parameter (the `Arc`'s `dyn Fn`, which a generic
+    /// callee would not get by deref coercion), else `&`.
+    fn pass_prefix(&self, callee: Option<&Callee>, index: usize) -> &'static str {
+        if self.consumes(callee, index) {
+            ""
+        } else if self.lends_fn(callee, index) {
+            "&*"
+        } else {
+            "&"
+        }
     }
 
     /// A fn of the module or an imported one used as a value: a closure
@@ -2257,6 +2399,35 @@ impl<'a> Generator<'a> {
         let target = format!("{}{}", self.name(id), self.turbofish(expr));
         let arity = self.symbols.functions.get(&id.name).map(|info| info.arity);
         self.fn_value_of(expr, target, arity)
+    }
+
+    /// A fn of the module or an imported one named as an argument to a lent
+    /// fn parameter (`docs/slice.md` 20.3.7): the closure of
+    /// [`Generator::fn_value`] without its `Arc`, `|__a0: A| f(&__a0)`.
+    fn lent_fn_value(&mut self, arg: &Expr) -> Option<String> {
+        let ExprKind::Name(id) = &arg.kind else {
+            return None;
+        };
+        if self.is_local(&id.name) || !matches!(self.callee(arg), Some(Callee::Fn(_))) {
+            return None;
+        }
+        let Some(Ty::Fn(params, _) | Ty::EffectFn(params, _, _)) = self.type_of(arg) else {
+            return None;
+        };
+        let params = params.clone();
+        let target = format!("{}{}", self.name(id), self.turbofish(arg));
+        let names: Vec<String> = (0..params.len()).map(|i| format!("__a{i}")).collect();
+        let refs = self.wrapper_args(self.callee(arg), &names);
+        let typed: Vec<String> = names
+            .iter()
+            .zip(&params)
+            .map(|(n, t)| format!("{n}: {}", self.rust_ty(t)))
+            .collect();
+        Some(format!(
+            "|{}| {target}({})",
+            typed.join(", "),
+            refs.join(", ")
+        ))
     }
 
     /// [`Generator::fn_value`] of the Rust fn path `target`; `arity` is
@@ -2755,6 +2926,14 @@ impl<'a> Generator<'a> {
                     };
                     return format!("{mutability}{name}: {ty}");
                 }
+                if let Some(lent) = self.lent_fn_type(callee.as_ref(), index, &p.ty) {
+                    self.borrowed.insert(p.name.name.clone());
+                    return format!("{name}: &{lent}");
+                }
+                if self.lends_bytes(callee.as_ref(), index) {
+                    self.borrowed.insert(p.name.name.clone());
+                    return format!("{name}: &[u8]");
+                }
                 if mutated.contains(p.name.name.as_str()) || self.is_copy(&p.ty) {
                     prologue.push(format!("let mut {name} = {name}.clone();"));
                 } else {
@@ -2773,6 +2952,7 @@ impl<'a> Generator<'a> {
             .is_some_and(|ty| !(ty.name.name == "Unit" && ty.args.is_empty()));
         self.scopes = vec![decl.params.iter().map(|p| p.name.name.clone()).collect()];
         self.indent = w.indent;
+        self.fn_body = true;
         let mut body = self.block(&decl.body, value);
         self.type_params.clear();
         self.scopes.clear();
@@ -2930,6 +3110,21 @@ impl<'a> Generator<'a> {
         }
     }
 
+    /// The place `t` of `t.to_bytes()` when `t` is a `Text` place: its bytes
+    /// can be read where they are, without the copy `to_bytes` makes.
+    fn text_bytes_place<'e>(&self, expr: &'e Expr) -> Option<&'e Expr> {
+        let ExprKind::Method { receiver, args, .. } = &expr.kind else {
+            return None;
+        };
+        (args.is_empty()
+            && matches!(
+                self.callee(expr),
+                Some(Callee::Builtin(Builtin::TextToBytes))
+            )
+            && self.is_place(receiver))
+        .then_some(&**receiver)
+    }
+
     /// Whether the Rust value of the `Text` expression `expr` is a `String`
     /// of its own that nothing else reads: a literal, a concatenation or
     /// interpolation, or a builtin that builds a new text. `to_bytes` then
@@ -2957,18 +3152,94 @@ impl<'a> Generator<'a> {
         self.indent += 1;
         let mut out = String::from("{\n");
         let count = block.stmts.len();
+        let lent_before = self.borrowed_elements.len();
+        let fn_body = std::mem::take(&mut self.fn_body);
         for (index, stmt) in block.stmts.iter().enumerate() {
             let tail = value && index + 1 == count;
-            let text = self.stmt(stmt, tail);
+            let moved = match &stmt.kind {
+                StmtKind::Expr(expr) if tail && fn_body => self.final_conversion(expr),
+                _ => None,
+            };
+            let text = match moved.or_else(|| self.lent_let(stmt, &block.stmts[index + 1..])) {
+                Some(text) => text,
+                None => self.stmt(stmt, tail),
+            };
             out.push_str(&indentation(self.indent));
             out.push_str(&text);
             out.push('\n');
         }
+        self.borrowed_elements.truncate(lent_before);
         self.indent -= 1;
         out.push_str(&indentation(self.indent));
         out.push('}');
         self.scopes.pop();
         out
+    }
+
+    /// A fn body's tail `x.to_bytes()` or `x.to_text()` on a variable the fn
+    /// owns (not a borrowed parameter or a capture): nothing reads `x`
+    /// after the tail, so its buffer becomes the result instead of being
+    /// copied (`String::from_utf8` falls back to the lossy copy only for
+    /// bytes that are not UTF-8).
+    fn final_conversion(&mut self, expr: &Expr) -> Option<String> {
+        let ExprKind::Method { receiver, args, .. } = &expr.kind else {
+            return None;
+        };
+        let ExprKind::Name(id) = &receiver.kind else {
+            return None;
+        };
+        if !args.is_empty()
+            || !self.is_local(&id.name)
+            || self.is_borrowed(&id.name)
+            || self.is_captured(&id.name)
+        {
+            return None;
+        }
+        let name = self.local_name(&id.name);
+        match self.callee(expr) {
+            Some(Callee::Builtin(Builtin::TextToBytes)) => Some(format!("{name}.into_bytes()")),
+            Some(Callee::Builtin(Builtin::BytesToText)) => Some(format!(
+                "String::from_utf8({name}).unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned())"
+            )),
+            _ => None,
+        }
+    }
+
+    /// `let b = t.to_bytes()` as `let b: &[u8] = t.as_bytes();` when `t`
+    /// is a `Text` place and `rest`, the statements after it in its block,
+    /// read `b` only as a slice (`docs/slice.md` 20.3.7), neither change
+    /// the variable of `t` nor bind `b` again: `b` is then read like a
+    /// borrowed parameter, and the text is not copied.
+    fn lent_let(&mut self, stmt: &Stmt, rest: &[Stmt]) -> Option<String> {
+        let StmtKind::Let {
+            name,
+            ty: None,
+            value,
+            mutable: false,
+        } = &stmt.kind
+        else {
+            return None;
+        };
+        let text = self.text_bytes_place(value)?;
+        let types = self.types?;
+        let rebinds = rest.iter().any(|s| match &s.kind {
+            StmtKind::Let { name: other, .. } => other.name == name.name,
+            StmtKind::LetPattern { pattern, .. } => pattern_binds(pattern, &name.name),
+            _ => false,
+        });
+        let root = place_root(text)?;
+        let changed = ownership::changed_in_stmts(rest, Some(types)).contains(root);
+        if rebinds || changed || !types.reads_as_slice(rest, &name.name) {
+            return None;
+        }
+        let text = self.receiver(text);
+        self.bind(&name.name);
+        let scope = self.scopes.len() - 1;
+        self.borrowed_elements.push((scope, name.name.clone()));
+        Some(format!(
+            "let {}: &[u8] = {text}.as_bytes();",
+            ident(&name.name)
+        ))
     }
 
     /// One statement; `tail` is set for the last statement of a
@@ -3021,6 +3292,28 @@ impl<'a> Generator<'a> {
                 let mutability = if *mutable { "mut " } else { "" };
                 format!("let {mutability}{}{ty} = {value};", ident(&name.name))
             }
+            StmtKind::Assign { target, value } if self.appended(target, value).is_some() => {
+                let rest = self.appended(target, value).expect("an append");
+                let mut later = BTreeSet::new();
+                let mut modified = vec![BTreeSet::new(); rest.len()];
+                for (index, part) in rest.iter().enumerate().rev() {
+                    modified[index] = later.clone();
+                    later.extend(ownership::changed_in(part, self.types));
+                }
+                let mut template = String::new();
+                let mut texts = Vec::new();
+                for (part, modified) in rest.into_iter().zip(&modified) {
+                    self.format_part(part, modified, &mut template, &mut texts);
+                }
+                let place = ident(&target.base.name);
+                if texts.is_empty() {
+                    return format!("{place}.push_str(\"{template}\");");
+                }
+                format!(
+                    "{{ use ::std::fmt::Write as _; let _ = write!({place}, \"{template}\", {}); }}",
+                    texts.join(", ")
+                )
+            }
             StmtKind::Assign { target, value } => {
                 let mut place = ident(&target.base.name);
                 for field in &target.fields {
@@ -3044,7 +3337,10 @@ impl<'a> Generator<'a> {
             }
             StmtKind::Loop { body } => format!("loop {}", self.block(body, false)),
             StmtKind::For { name, iter, body } if self.borrowed_for(&name.name, iter, body) => {
-                let iter = self.bare(iter);
+                let iter = match self.is_place(iter) {
+                    true => self.bare(iter),
+                    false => self.checked_slice_ref(iter).expect("a borrowed slice"),
+                };
                 let scope = self.scopes.len();
                 self.scopes.push(vec![name.name.clone()]);
                 self.borrowed_elements.push((scope, name.name.clone()));
@@ -3052,6 +3348,18 @@ impl<'a> Generator<'a> {
                 self.borrowed_elements.pop();
                 self.scopes.pop();
                 format!("for {} in ({iter}).iter() {body}", ident(&name.name))
+            }
+            StmtKind::For { name, iter, body }
+                if let Some(text) = self.text_bytes_place(iter)
+                    && place_root(text).is_none_or(|root| {
+                        !ownership::changed_in_block(body, self.types).contains(root)
+                    }) =>
+            {
+                let text = self.receiver(text);
+                self.scopes.push(vec![name.name.clone()]);
+                let body = self.block(body, false);
+                self.scopes.pop();
+                format!("for {} in {text}.bytes() {body}", ident(&name.name))
             }
             StmtKind::For { name, iter, body } => {
                 let iter = self.value(iter);
@@ -3319,21 +3627,8 @@ impl<'a> Generator<'a> {
                 let text = self.value(operand);
                 format!("{symbol}{}", wrap(operand, text))
             }
-            ExprKind::Binary { op, left, right } if self.is_text_add(expr, *op) => {
-                let mut parts = vec![&**right];
-                let mut head = &**left;
-                while let ExprKind::Binary {
-                    op: BinaryOp::Add,
-                    left,
-                    right,
-                } = &head.kind
-                    && self.is_text_add(head, BinaryOp::Add)
-                {
-                    parts.push(right);
-                    head = left;
-                }
-                parts.push(head);
-                parts.reverse();
+            ExprKind::Binary { op, .. } if self.is_text_add(expr, *op) => {
+                let parts = self.text_parts(expr);
                 if parts.len() > CHAIN_LIMIT {
                     let rights: Vec<(BinaryOp, &Expr, &Expr)> =
                         parts[1..].iter().map(|p| (BinaryOp::Add, *p, *p)).collect();
@@ -3374,7 +3669,14 @@ impl<'a> Generator<'a> {
                 if let Some(chunked) = self.chunked_spine(expr) {
                     return chunked;
                 }
-                let (left_text, right_text) = if is_comparison(*op) {
+                let text_eq = matches!(op, BinaryOp::Eq | BinaryOp::Ne)
+                    && (self.text_literal(left).is_some() || self.text_literal(right).is_some());
+                let (left_text, right_text) = if text_eq {
+                    (
+                        self.compared_text(left, Some(right)),
+                        self.compared_text(right, None),
+                    )
+                } else if is_comparison(*op) {
                     (self.compared(left, Some(right)), self.compared(right, None))
                 } else {
                     (self.operand(left), self.operand(right))
@@ -3400,6 +3702,64 @@ impl<'a> Generator<'a> {
             None | Some(Ty::Int | Ty::Byte | Ty::Bool | Ty::Unit) => "",
             Some(_) => ".clone()",
         }
+    }
+
+    /// `x = x + a + b` on a local `Text` variable `x` that `a` and `b` do not
+    /// name: the parts after `x`, appended to `x` where it is instead of
+    /// copying it into a new text. `None` for any other assignment.
+    fn appended<'e>(
+        &self,
+        target: &ignite_syntax::ast::Place,
+        value: &'e Expr,
+    ) -> Option<Vec<&'e Expr>> {
+        if !target.fields.is_empty()
+            || !self.is_local(&target.base.name)
+            || self.is_borrowed(&target.base.name)
+            || self.is_captured(&target.base.name)
+        {
+            return None;
+        }
+        let ExprKind::Binary { op, .. } = &value.kind else {
+            return None;
+        };
+        if !self.is_text_add(value, *op) {
+            return None;
+        }
+        let parts = self.text_parts(value);
+        let (first, rest) = parts.split_first()?;
+        let name = target.base.name.as_str();
+        let is_target = matches!(&first.kind, ExprKind::Name(id) if id.name == name);
+        if !is_target
+            || rest.len() > CHAIN_LIMIT
+            || rest.iter().any(|part| ownership::mentions(part, name))
+        {
+            return None;
+        }
+        Some(rest.to_vec())
+    }
+
+    /// The operands of the `Text` `+` chain `expr`, left to right, with
+    /// every operand that is itself a `Text` `+` (an interpolation on the
+    /// right, `a + "{b}c"`) flattened into the chain: concatenation is
+    /// associative and the order of evaluation is unchanged, so one
+    /// `format!` builds the text instead of one per nested chain.
+    fn text_parts<'e>(&self, expr: &'e Expr) -> Vec<&'e Expr> {
+        let mut parts = Vec::new();
+        let mut stack = vec![expr];
+        while let Some(e) = stack.pop() {
+            match &e.kind {
+                ExprKind::Binary {
+                    op: BinaryOp::Add,
+                    left,
+                    right,
+                } if self.is_text_add(e, BinaryOp::Add) => {
+                    stack.push(right);
+                    stack.push(left);
+                }
+                _ => parts.push(e),
+            }
+        }
+        parts
     }
 
     /// Whether `expr` (with operator `op`) is `+` on `Text`.
@@ -3742,13 +4102,7 @@ impl<'a> Generator<'a> {
             let texts = self.ref_args(callee, receiver.into_iter().chain(args));
             return format!("{target}({})", texts.join(", "));
         };
-        let borrow = |this: &Self, param: usize| {
-            if this.consumes(callee, param) {
-                ""
-            } else {
-                "&"
-            }
-        };
+        let borrow = |this: &Self, param: usize| this.pass_prefix(callee, param);
         let mut lets = String::new();
         let mut texts = Vec::new();
         if let Some(receiver) = receiver {
@@ -3900,19 +4254,37 @@ impl<'a> Generator<'a> {
     /// is borrowed, changes the list; anything else as
     /// [`operand`](Self::operand) gives it.
     fn compared(&mut self, expr: &Expr, later: Option<&Expr>) -> String {
-        if self.field_of_element(expr) && !self.element_clone(expr).is_empty() {
-            let mut changed = BTreeSet::new();
-            if let Some(later) = later {
-                changed.extend(ownership::changed_in(later, self.types));
-            }
-            if self
+        let mut changed = BTreeSet::new();
+        if let Some(later) = later {
+            changed.extend(ownership::changed_in(later, self.types));
+        }
+        if self.field_of_element(expr)
+            && !self.element_clone(expr).is_empty()
+            && self
                 .element_root(expr)
                 .is_none_or(|root| !changed.contains(root))
-            {
-                return self.element_field(expr);
-            }
+        {
+            return self.element_field(expr);
+        }
+        if !self.element_clone(expr).is_empty()
+            && let Some((list, index, site)) = self.borrowed_at(expr)
+            && place_root(list).is_none_or(|root| !changed.contains(root))
+            && ownership::changed_in(index, self.types).is_empty()
+        {
+            return format!("(*{})", self.checked_at_call(list, index, site));
         }
         self.operand(expr)
+    }
+
+    /// An operand of `==` or `!=` on `Text`: a literal is compared as a
+    /// `&str`, which `String` compares with, so it is not allocated.
+    fn compared_text(&mut self, expr: &Expr, later: Option<&Expr>) -> String {
+        if self.type_of(expr) == Some(&Ty::Text)
+            && let Some(text) = self.text_literal(expr)
+        {
+            return format!("\"{}\"", escape_str(text));
+        }
+        self.compared(expr, later)
     }
 
     fn call(&mut self, expr: &Expr, callee: &Expr, args: &[Expr]) -> String {
@@ -4005,8 +4377,8 @@ impl<'a> Generator<'a> {
         };
         let mut names = Vec::new();
         for (param, index) in order.into_iter().enumerate() {
-            let borrow = if by_ref && !self.consumes(callee, param) {
-                "&"
+            let borrow = if by_ref {
+                self.pass_prefix(callee, param)
             } else {
                 ""
             };
@@ -4160,9 +4532,12 @@ impl<'a> Generator<'a> {
             return None;
         }
         let site = self.types.and_then(|t| t.failure_site(expr))?;
-        let list = self
-            .checked_slice_ref(receiver)
-            .unwrap_or_else(|| self.ref_arg(receiver));
+        let list = match self.text_bytes_place(receiver) {
+            Some(text) => format!("{}.as_bytes()", self.receiver(text)),
+            None => self
+                .checked_slice_ref(receiver)
+                .unwrap_or_else(|| self.ref_arg(receiver)),
+        };
         let a = self.args(args);
         Some(format!(
             "::ignite_io::checked::slice_ref({list}, {}, {}, {})",
@@ -4324,7 +4699,10 @@ impl<'a> Generator<'a> {
             Some(Callee::Builtin(Builtin::MapGet)) => {
                 let r = self.receiver(receiver);
                 let a = self.args(args);
-                return format!("{r}.get({}).cloned()", borrow(&args[0], a[0].clone()));
+                return format!(
+                    "{r}.get({}).cloned()",
+                    self.borrow_arg(&args[0], a[0].clone())
+                );
             }
             Some(Callee::Builtin(Builtin::MapPut)) => {
                 let r = self.receiver(receiver);
@@ -4334,7 +4712,7 @@ impl<'a> Generator<'a> {
             Some(Callee::Builtin(Builtin::MapRemove)) => {
                 let r = self.receiver(receiver);
                 let a = self.args(args);
-                let call = format!("{r}.remove({})", borrow(&args[0], a[0].clone()));
+                let call = format!("{r}.remove({})", self.borrow_arg(&args[0], a[0].clone()));
                 return match self.type_of(expr) {
                     Some(Ty::Unit) => format!("{{ {call}; }}"),
                     _ => call,
@@ -4343,7 +4721,10 @@ impl<'a> Generator<'a> {
             Some(Callee::Builtin(Builtin::MapContains)) => {
                 let r = self.receiver(receiver);
                 let a = self.args(args);
-                return format!("{r}.contains_key({})", borrow(&args[0], a[0].clone()));
+                return format!(
+                    "{r}.contains_key({})",
+                    self.borrow_arg(&args[0], a[0].clone())
+                );
             }
             Some(Callee::Builtin(Builtin::MapKeys)) => {
                 let r = self.receiver(receiver);
@@ -4424,12 +4805,32 @@ impl<'a> Generator<'a> {
         let r = self.receiver(receiver);
         if matches!(self.callee(expr), Some(Callee::Builtin(Builtin::ListMap)))
             && let [arg] = args
-            && let Some(f) = self.passed_closure(arg)
         {
-            return format!("{r}.iter().cloned().map({f}).collect::<Vec<_>>()");
+            if let Some(f) = self.lent_closure(arg) {
+                return format!("{r}.iter().map({f}).collect::<Vec<_>>()");
+            }
+            if let ExprKind::Name(id) = &arg.kind
+                && !self.is_local(&id.name)
+                && let Some(callee @ Callee::Fn(_)) = self.callee(arg).cloned()
+                && !self.consumes(Some(&callee), 0)
+                && !self.lends_fn(Some(&callee), 0)
+            {
+                let target = format!("{}{}", self.name(id), self.turbofish(arg));
+                return format!("{r}.iter().map(|__a0| {target}(__a0)).collect::<Vec<_>>()");
+            }
+            if let Some(f) = self.passed_closure(arg) {
+                return format!("{r}.iter().cloned().map({f}).collect::<Vec<_>>()");
+            }
         }
         let a = self.args(args);
-        let arg = |i: usize, a: &[String]| borrow(&args[i], a[i].clone());
+        let literals: Vec<Option<String>> = args
+            .iter()
+            .map(|arg| self.text_literal(arg).map(escape_str))
+            .collect();
+        let arg = |i: usize, a: &[String]| match &literals[i] {
+            Some(text) => format!("\"{text}\""),
+            None => borrow(&args[i], a[i].clone()),
+        };
         match (name.name.as_str(), a.len()) {
             ("map", 1) => format!(
                 "{r}.iter().cloned().map(&*{}).collect::<Vec<_>>()",
@@ -5544,7 +5945,7 @@ impl<'a> Generator<'a> {
     /// `|p1, ..| body` (`docs/slice.md` section 13.3): each capture cloned
     /// at creation, the closure in an `Arc` cast to the fn value type.
     fn closure(&mut self, expr: &Expr, closure: &ignite_syntax::ast::Closure) -> String {
-        self.closure_with(expr, closure, true)
+        self.closure_with(expr, closure, true, false)
     }
 
     /// `s.update(id, f)` or `s.upsert(id, f)`: a closure literal `f` passed
@@ -5604,7 +6005,24 @@ impl<'a> Generator<'a> {
     fn passed_closure(&mut self, arg: &Expr) -> Option<String> {
         match &arg.kind {
             ExprKind::Closure(closure) if self.types.is_some() => {
-                Some(self.closure_with(arg, closure, false))
+                Some(self.closure_with(arg, closure, false, false))
+            }
+            _ => None,
+        }
+    }
+
+    /// [`Generator::passed_closure`] of `List.map`'s closure when it does
+    /// not consume its parameter (`TypedProgram::closure_consumed`): the
+    /// parameter is a reference to the element, read like a borrowed
+    /// parameter, so the list is mapped over `iter()` without a copy of
+    /// each element.
+    fn lent_closure(&mut self, arg: &Expr) -> Option<String> {
+        let types = self.types?;
+        match &arg.kind {
+            ExprKind::Closure(closure)
+                if closure.params.len() == 1 && !types.closure_consumed(arg, 0) =>
+            {
+                Some(self.closure_with(arg, closure, false, true))
             }
             _ => None,
         }
@@ -5612,12 +6030,14 @@ impl<'a> Generator<'a> {
 
     /// [`Generator::closure`] when `stored`, else
     /// [`Generator::passed_closure`]: not `move`, captures read through the
-    /// enclosing fn's bindings, borrowed ones still borrowed.
+    /// enclosing fn's bindings, borrowed ones still borrowed. With `lend`
+    /// each parameter is a reference, read like a borrowed parameter.
     fn closure_with(
         &mut self,
         expr: &Expr,
         closure: &ignite_syntax::ast::Closure,
         stored: bool,
+        lend: bool,
     ) -> String {
         let info = self.types.and_then(|t| t.closure(expr));
         let mut lets = String::new();
@@ -5641,9 +6061,10 @@ impl<'a> Generator<'a> {
                 } else {
                     ""
                 };
+                let lent = if lend { "&" } else { "" };
                 let ty = match (info, &p.ty) {
-                    (Some(info), _) => format!(": {}", self.rust_ty(&info.params[i].1)),
-                    (None, Some(ty)) => format!(": {}", self.annotation(ty)),
+                    (Some(info), _) => format!(": {lent}{}", self.rust_ty(&info.params[i].1)),
+                    (None, Some(ty)) => format!(": {lent}{}", self.annotation(ty)),
                     (None, None) => String::new(),
                 };
                 format!("{mutability}{}{ty}", ident(&p.name.name))
@@ -5661,6 +6082,11 @@ impl<'a> Generator<'a> {
             (self.borrowed.clone(), self.borrowed_elements.clone())
         };
         let base = self.closure_base.replace(self.scopes.len());
+        if lend {
+            let scope = self.scopes.len();
+            self.borrowed_elements
+                .extend(closure.params.iter().map(|p| (scope, p.name.name.clone())));
+        }
         self.scopes
             .push(closure.params.iter().map(|p| p.name.name.clone()).collect());
         let body = match &closure.body.kind {
