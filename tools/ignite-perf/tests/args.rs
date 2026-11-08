@@ -29,7 +29,8 @@ fn the_subcommands_are_those_of_the_python_tools() {
             "all",
             "summarize",
             "verify-llvm-readiness",
-            "quality"
+            "quality",
+            "quality-remote"
         ]
     );
 }
