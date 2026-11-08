@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-08T06:30:00Z",
+  "actor": "human:timo",
+  "artifact": "story:toolchain-image",
+  "kind": "story",
+  "revision": 9,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task image-check VERSION=0.13.0; anonymous docker manifest inspect of ghcr.io/ignite-lang/ignite-toolchain@sha256:a10666bafee65400dbff08f223800b219916c7eeba3c7a7f2d537a8d9ec13621",
+    "reference": "https://github.com/ignite-lang/ignite-lang/pull/105"
+  }
+}

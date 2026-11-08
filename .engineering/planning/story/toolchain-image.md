@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:toolchain-image
 kind: story
-status: active
+status: implemented
 title: Publish a digest-pinned toolchain image per release
 scope:
 - confidence: inferred
@@ -13,10 +13,11 @@ scope:
   path: dist/toolchain/Dockerfile
 - confidence: inferred
   path: site/book/src/guide/install.md
-revision: 9
+revision: 10
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-07T23:43:09Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-07T23:43:09Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-08T00:48:47Z", actor: "human:timo", revision: 10, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: toolchain-image
 
