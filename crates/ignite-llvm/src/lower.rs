@@ -196,6 +196,10 @@ struct Region {
     kept: Option<String>,
     /// Each carried variable with the slot of its scratch copy.
     carried: Vec<(Local, String)>,
+    /// Where the loop's code begins in the function's body
+    /// ([`Func::body_len`]): its back-edge releases nothing when that code
+    /// cannot allocate ([`crate::region::allocates`]).
+    start: usize,
 }
 
 /// How a `for` binds its element: a single name, or a pattern destructured
@@ -285,7 +289,18 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         let mut incoming = Vec::new();
         for (i, (_, ty)) in params.iter().enumerate() {
             if is_aggregate(ty) {
-                list.push(format!("ptr %p{i}"));
+                // A parameter the fn does not consume is never changed
+                // through its pointer, and no caller lends it memory that
+                // anything else changes while the call runs: a borrowed
+                // argument is a place no other argument of the call
+                // mentions or modifies (`docs/slice.md` 20.3.2), every
+                // other one a fresh copy or a moved place.
+                let facts = if m.env.reads_only(symbol, i) {
+                    "noalias readonly "
+                } else {
+                    ""
+                };
+                list.push(format!("ptr {facts}%p{i}"));
             } else if let Some(t) = scalar_type(ty) {
                 list.push(format!("{t} %p{i}"));
             }
@@ -1345,15 +1360,20 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             mark,
             kept,
             carried,
+            start: self.f.body_len(),
         })
     }
 
-    /// A loop's back-edge to `head`. Without carried variables, release the
-    /// region. With them, when a release is due (`ignite.arena_due`):
-    /// copy them into the scratch arena, release, copy them back, clear the
-    /// scratch arena and record what was kept.
+    /// A loop's back-edge to `head`. When the loop's code cannot allocate,
+    /// nothing: the mark taken at the entry is dead and folds away. Without
+    /// carried variables, release the region. With them, when a release is
+    /// due (`ignite.arena_due`): copy them into the scratch arena, release,
+    /// copy them back, clear the scratch arena and record what was kept.
     fn region_back_edge(&mut self, region: Option<&Region>, head: &str) {
-        let Some(region) = region else {
+        let Some(region) = region.filter(|region| {
+            let m = &*self.m;
+            crate::region::allocates(self.f.body_since(region.start), |callee| m.quiet(callee))
+        }) else {
             self.f.br(head);
             return;
         };
@@ -2715,8 +2735,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     /// module without them declares nothing new.
     fn runtime(&mut self, name: &str, params: usize) -> String {
         let symbol = format!("ignite_rt_{name}");
-        self.m
-            .declare(&symbol, "void", &vec!["ptr".to_string(); params]);
+        self.m.declare_failure(&symbol, &vec!["ptr"; params]);
         global(&symbol)
     }
 
@@ -3425,17 +3444,9 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         a: &str,
         b: &str,
     ) {
-        self.m.declare(
+        self.m.declare_failure(
             "ignite_rt_fail_arith",
-            "void",
-            &[
-                "ptr".into(),
-                "ptr".into(),
-                "i64".into(),
-                "i64".into(),
-                "i64".into(),
-                "i64".into(),
-            ],
+            &["ptr", "ptr", "i64", "i64", "i64", "i64"],
         );
         let (bad, good) = (self.f.label(), self.f.label());
         self.f.cond_br(cond, &bad, &good);
@@ -3454,11 +3465,8 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     /// Fail the negation of `node` when `cond` holds, with `value` (an `i64`)
     /// in the detail.
     fn fail_neg_if(&mut self, cond: &str, node: &Expr, value: &str) {
-        self.m.declare(
-            "ignite_rt_fail_neg",
-            "void",
-            &["ptr".into(), "i64".into(), "i64".into(), "i64".into()],
-        );
+        self.m
+            .declare_failure("ignite_rt_fail_neg", &["ptr", "i64", "i64", "i64"]);
         let (bad, good) = (self.f.label(), self.f.label());
         self.f.cond_br(cond, &bad, &good);
         self.f.place(&bad);
@@ -3473,17 +3481,8 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     /// Fail an index of `node` when `cond` holds: `index` out of range for a
     /// list of length `len`.
     fn fail_index_if(&mut self, cond: &str, node: &Expr, index: &str, len: &str) {
-        self.m.declare(
-            "ignite_rt_fail_index",
-            "void",
-            &[
-                "ptr".into(),
-                "i64".into(),
-                "i64".into(),
-                "i64".into(),
-                "i64".into(),
-            ],
-        );
+        self.m
+            .declare_failure("ignite_rt_fail_index", &["ptr", "i64", "i64", "i64", "i64"]);
         let (bad, good) = (self.f.label(), self.f.label());
         self.f.cond_br(cond, &bad, &good);
         self.f.place(&bad);
@@ -3498,17 +3497,9 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     /// Fail a slice of `node` when `cond` holds: `from..to` out of range for
     /// a list of length `len`.
     fn fail_slice_if(&mut self, cond: &str, node: &Expr, from: &str, to: &str, len: &str) {
-        self.m.declare(
+        self.m.declare_failure(
             "ignite_rt_fail_slice",
-            "void",
-            &[
-                "ptr".into(),
-                "i64".into(),
-                "i64".into(),
-                "i64".into(),
-                "i64".into(),
-                "i64".into(),
-            ],
+            &["ptr", "i64", "i64", "i64", "i64", "i64"],
         );
         let (bad, good) = (self.f.label(), self.f.label());
         self.f.cond_br(cond, &bad, &good);
@@ -3536,11 +3527,8 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     /// Fail a destructuring that did not match at `offset` (no arm matched);
     /// the caller terminates the block.
     fn fail_match_at(&mut self, offset: usize) {
-        self.m.declare(
-            "ignite_rt_fail_match",
-            "void",
-            &["ptr".into(), "i64".into(), "i64".into()],
-        );
+        self.m
+            .declare_failure("ignite_rt_fail_match", &["ptr", "i64", "i64"]);
         let (file, line, col) = self.position_parts(offset);
         self.f.ins(format!(
             "call void @ignite_rt_fail_match(ptr {file}, i64 {line}, i64 {col})"

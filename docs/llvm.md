@@ -218,7 +218,12 @@ takes or returns Ignite values):
   4). A call through a fn pointer passes copies, or the moved place, which is correct for
   both kinds of parameter, except where the callee is known to only read the parameter
   (section 3.1). A borrowed parameter reads the caller's memory, which stays
-  valid for the whole call: no callee releases below its own loops' marks.
+  valid for the whole call: no callee releases below its own loops' marks. A borrowed
+  parameter of a defined function is `ptr noalias readonly`: the callee never writes through
+  it, and nothing else writes the memory it points to while the call runs (a borrowed
+  argument is a place no other argument of the call mentions or modifies, `docs/slice.md`
+  20.3.2; every other argument is a fresh copy or a moved place), so LLVM keeps its loads
+  out of loops. An owned parameter carries neither attribute.
 - An aggregate result is written to a pointer passed as the first argument (plain `ptr`, no LLVM `sret` attribute).
 - Symbol names: `"<module>.<name>"` (`"std.protocol.telnet.decode"`), roles
   `"<module>.<Protocol>.<role>"`, constants `"<module>.<NAME>"` and field defaults
@@ -350,7 +355,9 @@ position, even with no buffer.
   `alwaysinline` function of every IR module). It bumps the task's bump state
   (`ignite_rt_arena_state`, section 5) when the request fits in the current chunk. Otherwise
   it calls `ignite_rt_alloc(size, align)`. Growing a list allocates a new buffer and copies;
-  the old one stays in the arena until a release.
+  the old one stays in the arena until a release. `@ignite.reserve` is the inline capacity
+  check (`alwaysinline`); the growth is the out-of-line `@ignite.grow` (`noinline cold`), so
+  a `push` in a loop costs a compare on the common path.
 - An arena is a stack of 64 KiB chunks with a bump pointer in the last one. The runtime
   gives a request over 16 KiB its own block; the inline path puts any request that fits
   into the current chunk. Every block is allocated zeroed. In a debug build of the runtime
@@ -383,6 +390,14 @@ position, even with no buffer.
     of a list has capacity = length, so its next growth alone allocates twice what was
     kept, and with a factor of 2 that one doubling would make the next release due, copying
     the whole list at every growth step past 64 KiB.
+  - none at all when the code the loop emitted, from its head to the back-edge, calls nothing
+    that can allocate (`region::allocates`): only intrinsics, `@ignite.arena_mark`,
+    `@ignite.arena_due`, `ignite_rt_arena_state`, the failure entries, `ignite_rt_exit`,
+    `ignite_rt_process_exit`, `text_eq`, `text_starts_with`, and functions of the same module
+    defined earlier whose bodies call only these or themselves. Nothing lies above the mark at
+    the back-edge, so there is nothing to release; the mark taken at the entry is dead and
+    folds away. A nested loop that allocates puts its allocating calls into the outer loop's
+    code, so the outer loop keeps its region.
 
   `break`, `return` and `?` leave a loop without a release; the enclosing loop's release
   covers what it allocated. Releasing is sound because values never share buffers (value
@@ -500,7 +515,8 @@ position, even with no buffer.
   call adapter; unreachable`), which passes the operation, the site's `<file>`, `<line>`
   and `<col>` (`TypedProgram::failure_site`) and the operands to one of
   `ignite_rt_fail_arith`, `fail_neg`, `fail_index`, `fail_slice`, `fail_match`,
-  `assert_failed` or `try_failed` (section 5). The adapter builds the report with
+  `assert_failed` or `try_failed` (section 5), each declared `cold noreturn` (as is
+  `ignite_rt_fail`), so LLVM lays the block out off the hot path. The adapter builds the report with
   `ignite-io`'s report fns, so both targets print byte-identical text:
   `<operation> failed at <file>:<line>:<col>: <detail>`, the details being `<left> <op>
   <right>` in base units (`+`, `-`, `*`, `/`, `%`), `-(<value>)` (unary `-`), `index <i>

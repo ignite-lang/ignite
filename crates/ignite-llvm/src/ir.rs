@@ -26,7 +26,7 @@ pub const RUNTIME: &[&str] = &[
     "declare ptr @ignite_rt_arena_state() nounwind willreturn speculatable memory(none)",
     "declare i32 @ignite_rt_args_port(ptr, ptr, ptr)",
     "declare void @ignite_rt_exit(i32) noreturn",
-    "declare void @ignite_rt_fail(ptr) noreturn",
+    "declare void @ignite_rt_fail(ptr) cold noreturn",
     "declare void @ignite_rt_log(ptr)",
     "declare i32 @ignite_rt_tcp_bind(ptr, i64, ptr, ptr)",
     "declare i32 @ignite_rt_tcp_accept(i64, ptr, ptr)",
@@ -240,6 +240,9 @@ pub struct Module<'e> {
     /// `!N` of the debug nodes of dropped constants, left out of the
     /// output.
     dropped_nodes: BTreeSet<usize>,
+    /// The functions defined so far whose bodies call nothing that can
+    /// allocate in the arena (`docs/llvm.md` section 4, loop regions).
+    quiet: BTreeSet<String>,
 }
 
 /// The target an IR module is pinned to (`docs/llvm.md` section 1): its
@@ -329,7 +332,14 @@ impl<'e> Module<'e> {
             consts: BTreeSet::new(),
             const_roots: BTreeSet::new(),
             dropped_nodes: BTreeSet::new(),
+            quiet: BTreeSet::new(),
         }
+    }
+
+    /// Whether the function `symbol` of this module, already defined, can
+    /// allocate nothing in the arena ([`crate::region::allocates`]).
+    pub fn quiet(&self, symbol: &str) -> bool {
+        self.quiet.contains(symbol)
     }
 
     /// Emit only the functions reachable from `roots` (`docs/llvm.md`
@@ -616,6 +626,11 @@ impl<'e> Module<'e> {
     /// Add a function definition. `symbol` is recorded so it is not also
     /// declared.
     pub fn define(&mut self, symbol: &str, text: String) {
+        if !crate::region::allocates(&text, |callee| {
+            callee == symbol || self.quiet.contains(callee)
+        }) {
+            self.quiet.insert(symbol.to_string());
+        }
         self.defined.insert(symbol.to_string());
         self.functions.push(text);
     }
@@ -638,6 +653,19 @@ impl<'e> Module<'e> {
         self.declared
             .entry(symbol.to_string())
             .or_insert_with(|| format!("declare {ret} {}({})", global(symbol), params.join(", ")));
+    }
+
+    /// Declare the runtime failure entry `symbol` (it reports and ends the
+    /// task) `cold noreturn`, so the branch to it is laid out off the hot
+    /// path; once per module.
+    pub fn declare_failure(&mut self, symbol: &str, params: &[&str]) {
+        self.declared.entry(symbol.to_string()).or_insert_with(|| {
+            format!(
+                "declare void {}({}) cold noreturn",
+                global(symbol),
+                params.join(", ")
+            )
+        });
     }
 
     /// Declare `symbol` with the full declaration `text` (for a declaration
@@ -958,6 +986,17 @@ impl Func {
         };
         self.made.push((size, align, reg.clone()));
         reg
+    }
+
+    /// The length of the body emitted so far, for [`Func::body_since`].
+    pub fn body_len(&self) -> usize {
+        self.body.len()
+    }
+
+    /// The instructions and labels emitted since [`Func::body_len`] was
+    /// `at`.
+    pub fn body_since(&self, at: usize) -> &str {
+        &self.body[at..]
     }
 
     /// The number of allocas handed out so far, for [`Func::reuse_allocas`].
