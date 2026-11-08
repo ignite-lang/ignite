@@ -23,13 +23,15 @@
 //! is handed over and the worker's reactor is woken when it sleeps.
 //! Scheduling is cooperative: a task runs until it waits.
 //!
-//! Placement: a spawn goes to a worker without tasks (the calling one
-//! first), else to a new worker while there are fewer than the limit,
-//! else to the worker with the fewest tasks. A task never moves to another
+//! Placement (`choose`): a spawn from a task stays on its worker while
+//! that worker is at most one task busier than the least loaded one;
+//! otherwise a spawn goes to a worker without tasks, else to a new worker
+//! while there are fewer than the limit, else to the worker with the
+//! fewest tasks. A task never moves to another
 //! worker (no stealing in R1), so the thread-local state a task keeps
 //! across a park stays on its thread; per-task thread-locals of another
 //! crate (the LLVM runtime's arena, failure handlers and owned handles)
-//! are exchanged at every switch through [`TaskLocals`].
+//! are exchanged whenever a different task resumes, through [`TaskLocals`].
 //!
 //! Stack overflow: a task's guard page is recognised by the `SIGSEGV`
 //! handler installed with the first worker (on an alternate signal stack
@@ -444,10 +446,28 @@ pub(crate) fn spawn(job: Job) -> io::Result<()> {
     }
 }
 
-/// The worker a spawn goes to; `None`: start a new one.
+/// The worker a spawn goes to; `None`: start a new one. A spawn from a
+/// task stays on its worker, with no hand-over, while that worker has at
+/// most one task more than the least loaded worker (a worker not yet
+/// started counts as one with none): a task and the tasks it spawns to
+/// serve the same connection then wake each other without a thread
+/// switch, and a task that spawns many (an accept loop on a worker)
+/// still spreads them. Otherwise, and from a thread that is no worker,
+/// an idle worker, else a new one up to [`worker_limit`], else the least
+/// loaded.
 fn choose(workers: &[Arc<Shared>], here: *const Shared) -> Option<Arc<Shared>> {
     let load = |shared: &Arc<Shared>| shared.tasks.load(Ordering::SeqCst);
     let elsewhere = |shared: &Arc<Shared>| Arc::as_ptr(shared) != here;
+    if let Some(local) = workers.iter().find(|shared| !elsewhere(shared)) {
+        let least = if workers.len() < worker_limit() {
+            0
+        } else {
+            workers.iter().map(load).min().unwrap_or(0)
+        };
+        if load(local) <= least + 1 {
+            return Some(Arc::clone(local));
+        }
+    }
     if let Some(idle) = workers
         .iter()
         .filter(|shared| load(shared) == 0)
@@ -1027,7 +1047,9 @@ impl Readiness {
 /// [`Readiness::wait`] of the only task of its worker, with nothing else
 /// runnable or handed over: the task waits for the descriptor on the
 /// worker's thread with [`EpollReactor::poll_one`], as a blocked thread
-/// would, instead of switching to the worker's loop. The worker counts as
+/// would, instead of switching to the worker's loop. One `poll` of the
+/// descriptor and the worker's eventfd measured cheaper per reply than the
+/// worker's `epoll_wait` called from the task. The worker counts as
 /// sleeping meanwhile, so a hand-over ([`Shared::notify`]) ends the wait
 /// and the task then parks as usual. `None` when the worker has other work.
 fn wait_alone(

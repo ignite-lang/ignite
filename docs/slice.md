@@ -902,13 +902,18 @@ pub fn set_task_locals(make: fn() -> Box<dyn TaskLocals>);   // each new task ge
 - `readiness`: a task is a stackful coroutine with its own `TASK_STACK` stack (`mmap`, one
   guard page below it) on a **worker**, an OS thread named `worker` that runs its tasks until
   each waits and then waits in `epoll_wait` for a descriptor, a timer or a wake. A worker
-  starts when a task needs one, up to `worker_limit()`; `spawn` places a task on an idle
-  worker (the calling one first), else on a new worker, else on the one with the fewest tasks.
-  A task stays on its worker (no stealing, no migration). A worker without a task waits up to
+  starts when a task needs one, up to `worker_limit()`. `spawn` from a task places the new
+  task on the caller's worker while that worker has at most one task more than the least
+  loaded worker (a worker not yet started counts as one with none). Otherwise, and from a
+  thread that is no worker, it places the task on an idle worker, else on a new worker, else
+  on the one with the fewest tasks. A task stays on its worker (no stealing, no migration). A worker without a task waits up to
   `LINGER` for one, then ends, so an idle server runs no worker. A wait of a task (a read, a
   write that finds the socket buffer full, `accept`, a channel, a pipe, a timer, a child,
-  standard input) parks the task and lets its worker run another; sockets are non-blocking
-  and registered edge-triggered with the worker's epoll on their first wait. A worker creates
+  standard input) parks the task and lets its worker run another. Sockets are non-blocking
+  (an accepted one from a single `accept4` with `SOCK_NONBLOCK`) and registered edge-triggered
+  with the worker's epoll on their first wait. A read that left the socket empty (it read
+  less than it asked for, or nothing) makes the next read of the stream wait for readiness
+  before its first `recv`. A read that filled its buffer lets the next one try at once. A worker creates
   its epoll and eventfd when a task first waits for a descriptor, so tasks that wait only for
   each other cost no descriptor; a worker that cannot create them (the process is out of
   descriptors) looks at the descriptor every 10 ms instead, until it can. A worker runs at

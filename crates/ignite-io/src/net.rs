@@ -31,7 +31,7 @@ use std::cell::RefCell;
 use std::io::{ErrorKind, Read, Write};
 use std::net::Shutdown;
 use std::os::fd::{AsFd, AsRawFd};
-use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, RwLock, RwLockReadGuard, TryLockError, Weak};
 use std::time::{Duration, Instant};
 
@@ -168,6 +168,9 @@ pub struct TcpStream {
     inner: Arc<Stream>,
 }
 
+/// [`Stream::emptied`] when the last read did not empty the socket.
+const NOT_EMPTIED: u64 = u64::MAX;
+
 #[derive(Debug)]
 struct Stream {
     /// Before `socket`: dropped, so deregistered from the workers'
@@ -181,6 +184,13 @@ struct Stream {
     /// Otherwise it is non-blocking and every wait goes through
     /// `readiness`.
     blocking: bool,
+    /// The readiness mark taken before the last read when that read
+    /// emptied the socket, else [`NOT_EMPTIED`]: the next read waits for
+    /// readiness against it before its first `recv`, since a `recv` right
+    /// away would find nothing (a request-reply peer has not answered
+    /// yet). A read that filled its buffer leaves it unset, so the next
+    /// read tries at once. Only with `blocking` false.
+    emptied: AtomicU64,
     /// The idle timeout in milliseconds; 0 is none (`crate::idle`).
     idle: AtomicI64,
     /// A send of the buffer failed; the error waits in `Out::failed`.
@@ -438,6 +448,58 @@ impl Drop for Stream {
     }
 }
 
+/// One `accept4` on `listener`: the connection, non-blocking unless the IO
+/// mode is `threads` (one system call instead of `accept` and a
+/// `FIONBIO`), close-on-exec, and the peer the call reported.
+fn accept_socket(
+    listener: &std::net::TcpListener,
+) -> std::io::Result<(std::net::TcpStream, Option<std::net::SocketAddr>)> {
+    use nix::libc;
+    use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
+    use std::os::fd::{FromRawFd, OwnedFd};
+    let mut flags = libc::SOCK_CLOEXEC;
+    if crate::sched::readiness() {
+        flags |= libc::SOCK_NONBLOCK;
+    }
+    // SAFETY: `storage` is zeroed (a valid `sockaddr_storage`) and `length`
+    // holds its size, so `accept4` writes within it; a descriptor it
+    // returns is new and owned by nothing else, so `OwnedFd` takes it; the
+    // casts read `storage` as the address type its `ss_family` names, both
+    // smaller than `sockaddr_storage` and fully written by `accept4` then.
+    unsafe {
+        let mut storage: libc::sockaddr_storage = std::mem::zeroed();
+        let mut length = std::mem::size_of::<libc::sockaddr_storage>() as libc::socklen_t;
+        let descriptor = libc::accept4(
+            listener.as_raw_fd(),
+            (&raw mut storage).cast(),
+            &raw mut length,
+            flags,
+        );
+        if descriptor < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        let socket = std::net::TcpStream::from(OwnedFd::from_raw_fd(descriptor));
+        let peer = match i32::from(storage.ss_family) {
+            libc::AF_INET => {
+                let v4 = &*(&raw const storage).cast::<libc::sockaddr_in>();
+                Some(SocketAddr::from((
+                    Ipv4Addr::from(u32::from_be(v4.sin_addr.s_addr)),
+                    u16::from_be(v4.sin_port),
+                )))
+            }
+            libc::AF_INET6 => {
+                let v6 = &*(&raw const storage).cast::<libc::sockaddr_in6>();
+                Some(SocketAddr::from((
+                    Ipv6Addr::from(v6.sin6_addr.s6_addr),
+                    u16::from_be(v6.sin6_port),
+                )))
+            }
+            _ => None,
+        };
+        Ok((socket, peer))
+    }
+}
+
 impl TcpListener {
     /// Bind `address:port`. Port 0 picks a free port.
     pub fn bind(address: String, port: i64) -> Result<TcpListener, IoError> {
@@ -507,8 +569,8 @@ impl TcpListener {
         let mut failing = false;
         loop {
             let mark = self.slot.readiness.mark(Interest::READ);
-            match listener.accept() {
-                Ok((socket, _peer)) => return Ok(TcpStream::from_socket_kept(socket, kept)),
+            match accept_socket(listener) {
+                Ok((socket, peer)) => return Ok(TcpStream::from_socket_kept(socket, peer, kept)),
                 Err(e) if e.kind() == ErrorKind::Interrupted => continue,
                 Err(e) if e.kind() == ErrorKind::WouldBlock => {
                     if !kept && crate::drain::draining() {
@@ -540,28 +602,24 @@ impl TcpListener {
 
 impl TcpStream {
     fn from_socket(socket: std::net::TcpStream) -> TcpStream {
-        Self::from_socket_kept(socket, false)
-    }
-
-    /// A stream; `kept` when a listener kept through the drain accepted it.
-    fn from_socket_kept(socket: std::net::TcpStream, kept: bool) -> TcpStream {
-        let _ = socket.set_nodelay(true);
         let blocking = !crate::sched::readiness();
         let _ = socket.set_nonblocking(!blocking);
-        let on: nix::libc::c_int = 1;
-        // SAFETY: the descriptor belongs to `socket`, and `on` outlives the
-        // call with the size given.
-        unsafe {
-            nix::libc::setsockopt(
-                socket.as_raw_fd(),
-                nix::libc::SOL_SOCKET,
-                nix::libc::SO_OOBINLINE,
-                (&raw const on).cast(),
-                std::mem::size_of::<nix::libc::c_int>() as nix::libc::socklen_t,
-            )
-        };
-        let peer = socket
-            .peer_addr()
+        let peer = socket.peer_addr().ok();
+        Self::from_socket_kept(socket, peer, false)
+    }
+
+    /// A stream over `socket`, already non-blocking unless the IO mode is
+    /// `threads`, with the peer the operating system reported; `kept` when
+    /// a listener kept through the drain accepted it.
+    fn from_socket_kept(
+        socket: std::net::TcpStream,
+        peer: Option<std::net::SocketAddr>,
+        kept: bool,
+    ) -> TcpStream {
+        let _ = socket.set_nodelay(true);
+        let blocking = !crate::sched::readiness();
+        let _ = nix::sys::socket::setsockopt(&socket, nix::sys::socket::sockopt::OobInline, &true);
+        let peer = peer
             .map(|peer| (peer.ip().to_canonical().to_string(), i64::from(peer.port())))
             .unwrap_or_default();
         TcpStream {
@@ -571,6 +629,7 @@ impl TcpStream {
                 reading: Lock::new(()),
                 writing: Lock::new(Out::default()),
                 blocking,
+                emptied: AtomicU64::new(NOT_EMPTIED),
                 idle: AtomicI64::new(0),
                 failed: AtomicBool::new(false),
                 closed: AtomicBool::new(false),
@@ -636,9 +695,37 @@ impl TcpStream {
         // the lock (`docs/slice.md` 26.2).
         let ended = |timed_out: bool| self.inner.timed_out.store(timed_out, Ordering::Release);
         let socket = &self.inner.socket;
-        let mut receive = |buffer: &mut [u8]| (&*socket).read(buffer);
+        // Whether the last `recv` of this read left the socket empty: it
+        // read less than it asked for (but not the end of the stream), or
+        // found nothing.
+        let emptied = std::cell::Cell::new(false);
+        let mut receive = |buffer: &mut [u8]| {
+            let received = (&*socket).read(buffer);
+            emptied.set(match &received {
+                Ok(n) => *n > 0 && *n < buffer.len(),
+                Err(e) => e.kind() == ErrorKind::WouldBlock,
+            });
+            received
+        };
         let mut deadline: Option<Option<Instant>> = None;
+        // The read before this one emptied the socket: wait for readiness
+        // first, against the mark taken before that read, instead of a
+        // `recv` that would find nothing (`Stream::emptied`).
+        let mut wait_first = if self.inner.blocking {
+            None
+        } else {
+            match self.inner.emptied.swap(NOT_EMPTIED, Ordering::Relaxed) {
+                NOT_EMPTIED => None,
+                mark => Some(mark),
+            }
+        };
         loop {
+            if let Some(mark) = wait_first.take()
+                && let Some(ended_early) = self.wait_readable(mark, &mut deadline)
+            {
+                ended(ended_early.is_ok());
+                return ended_early.map(|()| None);
+            }
             let mark = self.inner.readiness.mark(Interest::READ);
             let attempted = if self.inner.blocking && self.inner.kept {
                 crate::task::idle_on_kept(|| attempt(&mut receive))
@@ -647,6 +734,9 @@ impl TcpStream {
             };
             match attempted {
                 Ok(value) => {
+                    if !self.inner.blocking && emptied.get() {
+                        self.inner.emptied.store(mark, Ordering::Relaxed);
+                    }
                     ended(false);
                     return Ok(Some(value));
                 }
@@ -659,27 +749,9 @@ impl TcpStream {
                     return Ok(None);
                 }
                 Err(e) if e.kind() == ErrorKind::WouldBlock => {
-                    let until = *deadline.get_or_insert_with(|| self.idle_deadline());
-                    let wait = || {
-                        self.inner
-                            .readiness
-                            .wait(socket.as_fd(), Interest::READ, mark, until)
-                    };
-                    let waited = if self.inner.kept {
-                        crate::task::idle_on_kept(wait)
-                    } else {
-                        wait()
-                    };
-                    match waited {
-                        Ok(DescriptorWait::Deadline) => {
-                            ended(true);
-                            return Ok(None);
-                        }
-                        Ok(_) => {}
-                        Err(e) => {
-                            ended(false);
-                            return Err(e.into());
-                        }
+                    if let Some(ended_early) = self.wait_readable(mark, &mut deadline) {
+                        ended(ended_early.is_ok());
+                        return ended_early.map(|()| None);
                     }
                 }
                 Err(e) => {
@@ -687,6 +759,33 @@ impl TcpStream {
                     return Err(e.into());
                 }
             }
+        }
+    }
+
+    /// The wait of [`TcpStream::read_with`] for the socket to become
+    /// readable after `mark`. `None`: attempt the read. `Some(Ok(()))`:
+    /// the idle timeout passed. `Some(Err(_))`: the wait failed.
+    fn wait_readable(
+        &self,
+        mark: u64,
+        deadline: &mut Option<Option<Instant>>,
+    ) -> Option<Result<(), IoError>> {
+        let until = *deadline.get_or_insert_with(|| self.idle_deadline());
+        let socket = &self.inner.socket;
+        let wait = || {
+            self.inner
+                .readiness
+                .wait(socket.as_fd(), Interest::READ, mark, until)
+        };
+        let waited = if self.inner.kept {
+            crate::task::idle_on_kept(wait)
+        } else {
+            wait()
+        };
+        match waited {
+            Ok(DescriptorWait::Deadline) => Some(Ok(())),
+            Ok(_) => None,
+            Err(e) => Some(Err(e.into())),
         }
     }
 
@@ -933,6 +1032,34 @@ mod tests {
                 "{errno}"
             );
         }
+    }
+
+    /// An accepted socket comes from one `accept4`: non-blocking exactly
+    /// in the IO mode `readiness`, close-on-exec, and with the peer the
+    /// call reported, the connecting socket's own address.
+    #[test]
+    fn an_accepted_socket_has_its_mode_close_on_exec_and_its_peer() {
+        use nix::fcntl::{FcntlArg, FdFlag, OFlag, fcntl};
+        let listener = super::TcpListener::bind("127.0.0.1".to_string(), 0).unwrap();
+        let client =
+            std::net::TcpStream::connect(("127.0.0.1", listener.local_port() as u16)).unwrap();
+        let stream = listener.accept().unwrap();
+        let socket = stream.socket();
+        let status = OFlag::from_bits_truncate(fcntl(socket, FcntlArg::F_GETFL).unwrap());
+        assert_eq!(
+            status.contains(OFlag::O_NONBLOCK),
+            crate::sched::readiness()
+        );
+        let descriptor = FdFlag::from_bits_truncate(fcntl(socket, FcntlArg::F_GETFD).unwrap());
+        assert!(descriptor.contains(FdFlag::FD_CLOEXEC));
+        let local = client.local_addr().unwrap();
+        assert_eq!(
+            stream.peer(),
+            (local.ip().to_string(), i64::from(local.port()))
+        );
+        assert!(
+            nix::sys::socket::getsockopt(socket, nix::sys::socket::sockopt::OobInline).unwrap()
+        );
     }
 
     /// `Slot::release` (the drain, 16.13): a pending `accept` is woken

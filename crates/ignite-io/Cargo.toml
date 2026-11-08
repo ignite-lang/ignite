@@ -8,7 +8,7 @@ autotests = false
 
 [dependencies]
 corosensei = "0.3.4"
-nix = { workspace = true, features = ["signal", "dir", "poll", "resource", "event", "feature"] }
+nix = { workspace = true, features = ["signal", "dir", "poll", "resource", "event", "feature", "socket"] }
 
 [features]
 runner = []

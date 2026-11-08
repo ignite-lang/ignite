@@ -307,6 +307,118 @@ fn child_overflow() {
     panic!("the overflow did not end the process");
 }
 
+/// A task spawned by a task runs on its worker, with no hand-over to
+/// another thread, while that worker is not busier than the others by
+/// more than one task; a task that spawns many still spreads them over
+/// the workers.
+#[test]
+fn a_task_spawned_by_a_task_stays_on_its_worker_until_it_is_busier() {
+    passed(&child(
+        "scheduler::child_placement",
+        &[("IGNITE_WORKERS", "4")],
+    ));
+}
+
+#[test]
+fn child_placement() {
+    if !in_child() {
+        return;
+    }
+    let (report, reports) = mpsc::channel();
+    spawn(move || {
+        let parent = std::thread::current().id();
+        let (tell, told) = Channel::bounded::<bool>(1);
+        spawn(move || {
+            tell.send(std::thread::current().id() == parent);
+        });
+        let paired = told.receive();
+        let (each, all) = Channel::bounded::<String>(8);
+        for _ in 0..8 {
+            let each = each.clone();
+            spawn(move || {
+                ignite_io::clock::sleep(200_000_000);
+                each.send(format!("{:?}", std::thread::current().id()));
+            });
+        }
+        drop(each);
+        let mut threads: Vec<String> = (0..8).filter_map(|_| all.receive()).collect();
+        threads.sort();
+        threads.dedup();
+        report.send((paired, threads.len())).unwrap();
+    });
+    let (paired, spread) = reports.recv_timeout(LIMIT).expect("the parent reported");
+    assert_eq!(
+        paired,
+        Some(true),
+        "the spawned task ran on its parent's worker"
+    );
+    assert!(spread > 1, "8 sleeping tasks ran on {spread} worker(s)");
+    wait_for_tasks();
+}
+
+/// A read after a read that emptied the socket waits for readiness first
+/// (`Stream::emptied`): it still returns data that arrived before it
+/// began, data that arrives while it waits, and the rest of a read that
+/// filled its buffer; with the task alone on its worker and with another
+/// task parked there.
+#[test]
+fn reads_after_an_emptying_read_return_every_byte() {
+    passed(&child(
+        "scheduler::child_emptying_reads",
+        &[("IGNITE_WORKERS", "1")],
+    ));
+}
+
+#[test]
+fn child_emptying_reads() {
+    use std::io::Write;
+    if !in_child() {
+        return;
+    }
+    for company in [false, true] {
+        let (stream, mut peer) = pair();
+        let (go, gone) = Channel::bounded::<bool>(1);
+        let (read, got) = mpsc::channel();
+        let (stay, stayed) = Channel::bounded::<bool>(1);
+        if company {
+            spawn(move || {
+                stayed.receive();
+            });
+        }
+        spawn(move || {
+            while gone.receive() == Some(true) {
+                let _ = read.send(stream.read(64).unwrap());
+            }
+        });
+        let next = |expected: &[u8]| {
+            go.send(true);
+            assert_eq!(
+                got.recv_timeout(LIMIT).expect("the read returned"),
+                Input::Data(expected.to_vec())
+            );
+        };
+        peer.write_all(b"one").unwrap();
+        next(b"one");
+        peer.write_all(b"two").unwrap();
+        std::thread::sleep(Duration::from_millis(50));
+        next(b"two");
+        let late = peer.try_clone().unwrap();
+        let writer = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(100));
+            (&late).write_all(b"three").unwrap();
+        });
+        next(b"three");
+        writer.join().unwrap();
+        peer.write_all(&[b'x'; 67]).unwrap();
+        std::thread::sleep(Duration::from_millis(50));
+        next(&[b'x'; 64]);
+        next(b"xxx");
+        go.send(false);
+        stay.send(true);
+    }
+    wait_for_tasks();
+}
+
 /// The epoll loop is reached only through the reactor interface: no
 /// source file of the substrate but `reactor.rs` names epoll's calls.
 #[test]
