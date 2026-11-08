@@ -1534,10 +1534,12 @@ module-level names skips `Decl::Test`.
 - `assert a == b` and `assert a != b`, with the comparison at the top of the condition: both
   sides have one type `T` (E040 otherwise), typed like the operands of `==`. `T` may be any
   type with structural equality, not only the `==` types of section 6: `Int`, `Byte`, `Bool`,
-  `Text`, `Unit`, `Input`, and `List`, `Option`, `Result`, tuples, records and enums (generic
-  ones too) built only of such types. A `T` holding a fn, `TcpStream`, `TcpListener`,
-  `IoError`, `Store` or a type parameter is E045. Outside an assert `==` is unchanged (E045 on
-  a record). `assert (a == b) && c` is an ordinary `Bool` condition.
+  `Text`, `Unit`, `Input`, `IoError`, and `List`, `Option`, `Result`, tuples, records and enums
+  (generic ones too) built only of such types. Two `IoError`s are equal when their messages are
+  (the exit code is not compared), on both targets and in the evaluator, so `assert port("x")
+  == Err(IoError.new("bad port"))` checks. A `T` holding a fn, `TcpStream`, `TcpListener`,
+  `Store` or a type parameter is E045. Outside an assert `==` is unchanged (section 13.5: E045
+  on any type holding an `IoError`). `assert (a == b) && c` is an ordinary `Bool` condition.
 - `?` anywhere in a test body takes any `Result<T, E>` or `Option<T>` (E040 for another type)
   and has type `T`. An `Err` or `None` fails the test; it does not return. `?` in fns is
   unchanged.

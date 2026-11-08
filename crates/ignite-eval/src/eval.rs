@@ -2052,7 +2052,7 @@ impl<'p> Evaluator<'p> {
                 self.tick()?;
                 let l = self.expr(cx, left)?;
                 let r = self.expr(cx, right)?;
-                let equal = l == r;
+                let equal = l.assert_equal(&r);
                 let holds = if *op == BinaryOp::Eq { equal } else { !equal };
                 if holds {
                     (true, None)

@@ -309,6 +309,33 @@ fn e117_failures_carry_the_target_report() {
     assert_eq!(value, Value::ok(Value::Int(12)));
 }
 
+/// `==` and `!=` on `IoError` inside an `assert` compare messages in the
+/// evaluator as on both targets (`fixtures/tests/ioerror_eq.ignite`,
+/// case-study gap G18, `docs/slice.md` 12.3 and 12.5).
+#[test]
+fn ioerror_equality_inside_assert() {
+    let file = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tests/ioerror_eq.ignite");
+    let loaded = ignite::load(&file, None).unwrap_or_else(|e| panic!("{e}"));
+    let modules = loaded.modules();
+    let mut evaluator = Evaluator::new(&modules, Fuel::default());
+    assert_eq!(
+        call(&mut evaluator, "ioerror_eq", "bad_port", Vec::new()),
+        Ok(Value::Int(1))
+    );
+    assert_eq!(
+        call(&mut evaluator, "ioerror_eq", "nested", Vec::new()),
+        Ok(Value::Int(2))
+    );
+    let report = failed(call(&mut evaluator, "ioerror_eq", "differs", Vec::new()));
+    assert_eq!(
+        report,
+        format!(
+            "assert failed at {}:44:3: port(\"x\") == Err(IoError.new(\"other\"))\n  left: Err(IoError(\"bad port\"))\n  right: Err(IoError(\"other\"))",
+            file.display()
+        )
+    );
+}
+
 #[test]
 fn e118_closures_are_unencodable() {
     let loaded = ignite::load(&fixture("e118_unencodable_value.ignite"), None)

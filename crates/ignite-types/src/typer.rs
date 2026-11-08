@@ -1632,7 +1632,7 @@ impl<'a> Typer<'a> {
                     "E045",
                     cond.span,
                     format!(
-                        "operator `{op}` is not defined for `{operand}`, not even in an `assert`: it holds a function, handle, store or `IoError`"
+                        "operator `{op}` is not defined for `{operand}`, not even in an `assert`: it holds a function, handle, store or type parameter"
                     ),
                 );
                 return;
@@ -1661,20 +1661,23 @@ impl<'a> Typer<'a> {
         if let Some(result) = self.equatable_cache.get(ty) {
             return *result;
         }
-        let result = self.equatable(ty, &mut Vec::new());
+        let result = self.equatable(ty, &mut Vec::new(), true);
         self.equatable_cache.insert(ty.clone(), result);
         result
     }
 
-    /// Whether values of `ty` can be compared with structural equality in
-    /// an `assert`: no fn, handle or store anywhere inside. `seen` guards
+    /// Whether values of `ty` can be compared with structural equality: no
+    /// fn, handle, store or type parameter anywhere inside, and no `IoError`
+    /// unless `in_assert` (`docs/slice.md` 12.3, 13.5). `seen` guards
     /// against records and enums that hold themselves through `List`.
-    fn equatable(&self, ty: &Ty, seen: &mut Vec<Ty>) -> bool {
+    fn equatable(&self, ty: &Ty, seen: &mut Vec<Ty>, in_assert: bool) -> bool {
         match ty {
             Ty::Int | Ty::Bool | Ty::Byte | Ty::Unit | Ty::Text | Ty::Input | Ty::Never => true,
-            Ty::List(t) | Ty::Option(t) => self.equatable(t, seen),
-            Ty::Result(ok, err) => self.equatable(ok, seen) && self.equatable(err, seen),
-            Ty::Tuple(items) => items.iter().all(|t| self.equatable(t, seen)),
+            Ty::List(t) | Ty::Option(t) => self.equatable(t, seen, in_assert),
+            Ty::Result(ok, err) => {
+                self.equatable(ok, seen, in_assert) && self.equatable(err, seen, in_assert)
+            }
+            Ty::Tuple(items) => items.iter().all(|t| self.equatable(t, seen, in_assert)),
             Ty::Record(q) | Ty::GenericRecord(q, _) => {
                 if seen.contains(ty) {
                     return true;
@@ -1688,7 +1691,7 @@ impl<'a> Typer<'a> {
                 let fields = self.record_fields(q).unwrap_or_default();
                 fields
                     .iter()
-                    .all(|(_, t)| self.equatable(&t.substitute(&params, &args), seen))
+                    .all(|(_, t)| self.equatable(&t.substitute(&params, &args), seen, in_assert))
             }
             Ty::Enum(_) | Ty::GenericEnum(..) => {
                 if seen.contains(ty) {
@@ -1698,17 +1701,20 @@ impl<'a> Typer<'a> {
                 let variants = self.variants(ty).map(|(_, v)| v).unwrap_or_default();
                 variants
                     .iter()
-                    .all(|(_, payload)| payload.iter().all(|t| self.equatable(t, seen)))
+                    .all(|(_, payload)| payload.iter().all(|t| self.equatable(t, seen, in_assert)))
             }
             Ty::Quantity(_) | Ty::Ref(_) | Ty::Signal(_) | Ty::SystemRef | Ty::Protocol => true,
-            Ty::Map(k, v) => self.equatable(k, seen) && self.equatable(v, seen),
+            // By its message, only in an assert (12.3); E045 for `==` elsewhere.
+            Ty::IoError => in_assert,
+            Ty::Map(k, v) => {
+                self.equatable(k, seen, in_assert) && self.equatable(v, seen, in_assert)
+            }
             Ty::Fn(..)
             | Ty::EffectFn(..)
             | Ty::TcpListener
             | Ty::Capability(_)
             | Ty::TcpStream
             | Ty::PipeStream
-            | Ty::IoError
             | Ty::Store(_)
             | Ty::Param(_) => false,
         }
@@ -3991,7 +3997,7 @@ impl<'a> Typer<'a> {
             return Some(result(operand));
         }
         let defined = match op {
-            BinaryOp::Eq | BinaryOp::Ne => self.equatable(&operand, &mut Vec::new()),
+            BinaryOp::Eq | BinaryOp::Ne => self.equatable(&operand, &mut Vec::new(), false),
             BinaryOp::Add => matches!(
                 operand,
                 Ty::Int | Ty::Byte | Ty::Text | Ty::List(_) | Ty::Never
