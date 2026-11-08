@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:quality-timing-host
 kind: story
-status: active
+status: implemented
 title: Timing metrics on a single-tenant EC2 metal host
 relations:
 - depends_on: story:quality-ratchet
@@ -17,10 +17,11 @@ scope:
   path: quality/
 - confidence: inferred
   path: tools/ignite-perf/src
-revision: 11
+revision: 12
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-07T21:02:47Z", actor: "human:timo", revision: 3}
 - {from: "proposed", to: "active", at: "2026-11-07T21:02:47Z", actor: "human:timo", revision: 4}
+- {from: "active", to: "implemented", at: "2026-11-08T18:44:32Z", actor: "human:timo", revision: 12, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: quality-timing-host
 

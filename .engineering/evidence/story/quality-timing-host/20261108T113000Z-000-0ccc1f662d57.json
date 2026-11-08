@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-08T11:30:00Z",
+  "actor": "human:timo",
+  "artifact": "story:quality-timing-host",
+  "kind": "story",
+  "revision": 11,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on 95ba4a89a (PR 124): 1549 cargo passed, 0 failed, 24 ignored; first dedicated-host run at v0.15.0 (PR 126)",
+    "reference": "https://github.com/ignite-lang/ignite/pull/124"
+  }
+}
