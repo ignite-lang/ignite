@@ -517,6 +517,11 @@ without waiting for a person.
   its records).
 - EC2 runs (`task quality-remote`: timing and native benchmarks) happen only when a release is
   about to be cut (Timo, 2026-11-08); merges run the local gate only.
+- Benchmarks and load tests run only on that dedicated EC2 host, never on the shared
+  workstation (Timo, 2026-11-08): no `ignite-load` runs, no repeated timing or `perf stat`
+  batches, no A/B passes locally. A change records its cost as "not measured locally" and the
+  next release's `task quality-remote` run measures it; the gate's own tests are not
+  benchmarks.
 - Announce: send the release's tag, URL and notes to the `brain` session (Claude session named
   `brain`, `SendMessage`), asking it to forward the announcement to AI autodev. Send the path of
   a ready file, not the text: Slack mrkdwn (`<url|label>` links), every line at most 200
