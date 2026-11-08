@@ -12,6 +12,7 @@ mod apply_recovery;
 mod apply_transition;
 mod apply_way_out;
 mod build_cache;
+mod channels;
 mod check_json;
 mod clauses;
 mod cli;

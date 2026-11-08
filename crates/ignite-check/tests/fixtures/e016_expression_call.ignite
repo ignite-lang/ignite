@@ -1,4 +1,4 @@
-type Sender {
+type Writer {
   send: fn(c: PipeStream) -> Int requires [c.write]
 }
 
@@ -6,7 +6,7 @@ fn via_index(conn: PipeStream, hs: List<fn(c: PipeStream) -> Int requires [c.wri
   return hs[0](conn)
 }
 
-fn via_field(conn: PipeStream, h: Sender) -> Int requires [conn.read] {
+fn via_field(conn: PipeStream, h: Writer) -> Int requires [conn.read] {
   return (h.send)(conn)
 }
 
@@ -14,10 +14,10 @@ fn ambient(fs: List<fn() -> Int requires [stdout.write]>) -> Int requires [stdin
   return fs[0]()
 }
 
-fn inferred(conn: PipeStream, h: Sender) -> Int {
+fn inferred(conn: PipeStream, h: Writer) -> Int {
   return (h.send)(conn)
 }
 
-fn caller(conn: PipeStream, h: Sender) -> Int requires [conn.read] {
+fn caller(conn: PipeStream, h: Writer) -> Int requires [conn.read] {
   return inferred(conn, h)
 }

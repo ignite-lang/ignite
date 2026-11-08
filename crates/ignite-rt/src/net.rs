@@ -138,6 +138,10 @@ pub(crate) enum Handle {
     CommandLine(CommandLine),
     /// The environment variables (`crate::process`, 21.20).
     Environment(Environment),
+    /// The sending end of a channel (`crate::channel`, 27).
+    Sender(crate::channel::RtSender),
+    /// The receiving end of a channel (`crate::channel`, 27).
+    Receiver(ignite_io::Receiver<crate::store::HeapValue>),
 }
 
 /// The capability `handle` names, picked by `pick`; another handle is
@@ -265,6 +269,11 @@ pub(crate) fn register(handle: Handle) -> i64 {
     entry.handle = Some(handle);
     entry.owners = 1;
     encode(index, entry.generation)
+}
+
+/// [`lookup`], for the channel entries (`crate::channel`).
+pub(crate) fn lookup_handle(handle: i64) -> Result<Handle, IoError> {
+    lookup(handle)
 }
 
 /// The handle's entry: `Err` with the reason when it was released or never

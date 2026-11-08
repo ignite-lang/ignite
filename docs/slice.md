@@ -9156,7 +9156,7 @@ constructor:
 | `kind` | further keys |
 |---|---|
 | `Int`, `Bool`, `Byte`, `Unit`, `Text`, `Never`, `TcpListener`, `TcpStream`, `PipeStream`, `IoError`, `Input`, `SystemRef`, `Protocol` | none |
-| `List`, `Option`, `Result`, `Map`, `Store`, `Tuple`, `Ref`, `Signal` | `args`: the type arguments (`Bytes` is `List` of `Byte`; `Ref` without a kind has none) |
+| `List`, `Option`, `Result`, `Map`, `Store`, `Sender`, `Receiver` (27), `Tuple`, `Ref`, `Signal` | `args`: the type arguments (`Bytes` is `List` of `Byte`; `Ref` without a kind has none) |
 | `Record`, `Enum` | `module`, `name` (the declaring module; `""` for a builtin), `args` (empty unless generic) |
 | `Fn` | `params`, `ret`, `requires` (`null` for a pure fn type, else the effect names), `paramNames` with `requires` |
 | `Param` | `name`: a type parameter |
@@ -9533,3 +9533,107 @@ positive`. `connect(address, port)` keeps waiting for the kernel's retries.
   `tcp::timed_out_tells_an_idle_timeout_from_a_close`, `tcp::connect_within_bounds_the_wait`;
   `ignite-rt` `abi::peer_timed_out_and_connect_within`; `ignite-types`
   `builtins::tests::substrate_methods_name_net_for_peer`.
+
+## 27 Channels: a waitable signal between tasks
+
+**Status: implemented in the channels and timers story.**
+
+Source: the case study's G3. A long-poll, a heartbeat, a ping interval and a drain window each
+wait for "a message or a deadline". Before this section the only waitable thing with a
+deadline was a socket read (`set_idle_timeout`), so the service held a loopback socket pair as
+a bell for every waiter: two descriptors per waiter and a write to wake it. A bounded channel
+is that signal without a descriptor.
+
+| Ignite | type | effect | builtin |
+|---|---|---|---|
+| `Channel.bounded(capacity)` | `(Int) -> (Sender<T>, Receiver<T>)` | none; E010 in a constant or a field default | `ChannelBounded` |
+| `tx.send(value)` | `(T) -> Bool` | `tx.send` | `SenderSend` |
+| `tx.try_send(value)` | `(T) -> Bool` | `tx.send` | `SenderTrySend` |
+| `tx.close()` | `Unit` | `tx.send` | `SenderClose` |
+| `rx.receive()` | `Option<T>` | `rx.receive` | `ReceiverReceive` |
+| `rx.receive_within(timeout)` | `(Duration) -> Option<T>` | `rx.receive` | `ReceiverReceiveWithin` |
+| `rx.closed()` | `Bool` | `rx.receive` | `ReceiverClosed` |
+| `rx.close()` | `Unit` | `rx.receive` | `ReceiverClose` |
+
+`Sender` and `Receiver` are builtin types of one argument (`ignite_check::BUILTIN_TYPES`),
+so a program can no longer declare a type of either name (E004). The method names are
+`ignite_check::CHANNEL_METHODS`, not `BUILTIN_METHODS`: on any other receiver `send`,
+`close` and the others stay a user fn's names. The module `std.sync` (base layer,
+`docs/layering.md`) declares nothing; it holds the API's comment and its inline tests.
+
+### 27.1 Behaviour
+
+- `Channel.bounded(n)` holds at most `n` values. A capacity below 1 fails the task with
+  `Channel.bounded: the capacity must be at least 1, found <n>`.
+- `send` waits while the channel is full and returns true once the value is queued; it
+  returns false, and drops the value, when the channel is closed or closes while it waits.
+  `try_send` never waits: false when full or closed.
+- `receive` waits for a value. `receive_within(timeout)` waits at most `timeout`, then returns
+  `None`; a `timeout` of zero or less only looks. A value already queued is returned even when
+  the deadline has passed.
+- `close` on either end closes the channel, and so does the last handle of all senders or of
+  all receivers going away (the end of its scope, the end of the task it was handed to). A
+  closed channel ends every waiter: each waiting `send` returns false, each waiting `receive`
+  returns the values sent before the close, in order, then `None`. `closed()` holds once the
+  channel is closed, queued values or not.
+- A task flushes what it wrote (section 7) before it waits on a channel, as before
+  `Clock.sleep` (21.20), and not when the operation does not wait.
+- Waiters block on a condition variable inside the process: no descriptor, no thread and no
+  socket per channel or per waiter.
+
+### 27.2 Element type
+
+`T` comes from the context, as for `Store.new()` (12.3) and `Map.empty()`: an expected type
+(`let ends: (Sender<Int>, Receiver<Int>) = Channel.bounded(4)`, a parameter, a return type)
+or, for a `let (tx, rx) = Channel.bounded(n)` without one, the first later use that fixes it
+(`tx.send(1)`, `rx.receive() == Some("x")`, an argument of type `Sender<Text>`). An element
+nothing fixes is E042 (`cannot infer the element type of `Channel.bounded(..)``); a
+`Channel.bounded` where a type other than a pair of ends is expected is E040. `Sender<T>` and
+`Receiver<T>` have no `==` (E045, as every handle), and `debug()` writes `<Sender>`
+and `<Receiver>`.
+
+### 27.3 Ownership and moves
+
+- Both ends are handles (invariant 3): a copy of a binding shares the end. As a `spawn`
+  argument at its last use the end moves into the task (20.3.1); before its last use the task
+  gets a share and the binding keeps its own. The pattern bindings of
+  `let (tx, rx) = Channel.bounded(n)` are fresh values the block owns, so they move at their
+  last use like the ends of `Pipe.pair()`.
+- The value argument of `send` and `try_send` is a move position, like the element of
+  `Store.put`: a value dead after the call goes into the channel without a copy; a value read
+  later is copied. The receiver gets its own value either way; nothing is shared between tasks.
+- LLVM target: a block owns an end its `let` created and releases it when the block is left,
+  as a stream (`own.rs`); an end sent as a value on another channel is left unowned (never
+  released, never closed early).
+
+### 27.4 Lowering
+
+| layer | form |
+|---|---|
+| `ignite-io` | `channel.rs`: `Channel::bounded<T>(i64) -> (Sender<T>, Receiver<T>)`, one `Mutex<State>` and two `Condvar`s (`not_empty`, `not_full`) per channel; each end counts its handles, and the drop of an end's last handle closes the channel |
+| Rust target | `::ignite_io::Channel::bounded(n)`, `tx.send(v)`, `rx.receive_within(t)`, …; types `::ignite_io::Sender<T>`, `::ignite_io::Receiver<T>` |
+| LLVM runtime | `channel.rs`: `void ignite_rt_channel_bounded(i64 n, ptr to_heap, ptr from_heap, ptr free, i64 size, i64 align, i64* sender, i64* receiver)`, `i8 ignite_rt_channel_send(i64, ptr)`, `i8 ignite_rt_channel_try_send(i64, ptr)`, `void ignite_rt_channel_close(i64)` (either end), `i8 ignite_rt_channel_receive(i64, ptr out)`, `i8 ignite_rt_channel_receive_within(i64, i64 ns, ptr out)`, `i8 ignite_rt_channel_closed(i64)`; each end is a handle-table entry (`Handle::Sender`, `Handle::Receiver`), released by `ignite_rt_tcp_release` |
+| LLVM target | an end is an `i64` handle; a value crosses as a heap copy made, read and freed by the element's `Store` glue (`to_heap`, `from_heap`, `free_heap`); `receive` fills an `Option<T>` through `option_from` |
+| evaluator | no value at compile time, as every substrate builtin |
+
+`CODEGEN_REVISION` is `ignite-codegen/0.1.0-42`.
+
+### 27.5 Tests
+
+- `std/sync.ignite`: eight inline tests on both targets (`task test-ignite`): order and
+  `try_send` on a full channel, `receive_within` at its deadline, a send from another task
+  waking a receiver, `send` waiting while full, close ending every waiter (a blocked sender
+  refused, blocked receivers ended), queued values after a close, the last sender's task ending
+  closing the channel, a sent value independent of the sender's later changes.
+- `channels::{rust,llvm}::g3_long_poll_heartbeat_without_bells`
+  (`crates/ignite/tests/channels.rs`, `fixtures/channels/g3.ignite`): a long-poll held to its
+  200 ms deadline, one woken by a message after 50 ms, a heartbeat that ticks until its stop
+  channel is closed; no socket.
+- `channels::{rust,llvm}::a_thousand_waiters_hold_no_extra_descriptor`: 1,000 tasks wait on one
+  channel and are woken by one sender; the process's `/proc/<pid>/fd` count while they wait
+  equals the count before they were spawned, and the sum of the received values is 500,500.
+- `ignite-io` `channel::*` (nine unit tests, among them 1,000 waiting threads woken by one
+  sender); `ignite-rt` `channel::tests::values_are_copied_and_freed_and_the_last_release_closes`;
+  `ignite-check` fixture `e010_channel_in_const` (E010, E016); `ignite-types` fixture
+  `e042_channel_element` (E042, E040), `moves::channel_ends_move_into_tasks_and_send_moves_its_value`,
+  `builtin_tables`.

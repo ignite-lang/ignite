@@ -2,7 +2,7 @@ type Handler {
   run: fn(Int) -> Int
 }
 
-type Sender {
+type Writer {
   send: fn(c: PipeStream) -> Int requires [c.write]
 }
 
@@ -28,7 +28,7 @@ fn pure_calls() -> Int {
 fn effectful_calls(
   conn: PipeStream,
   hs: List<fn(c: PipeStream) -> Int requires [c.write]>,
-  h: Sender
+  h: Writer
 ) -> Int requires [conn.write] {
   let a: Int = hs[0](conn)
   let b: Int = (h.send)(conn)

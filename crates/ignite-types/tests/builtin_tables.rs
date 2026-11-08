@@ -54,6 +54,11 @@ fn cases() -> Vec<(Ty, Type)> {
         (Ty::Ref(None), t("Ref")),
         (Ty::Ref(Some(boxed(Ty::Int))), named("Ref", vec![t("Int")])),
         (Ty::Signal(boxed(Ty::Int)), named("Signal", vec![t("Int")])),
+        (Ty::Sender(boxed(Ty::Int)), named("Sender", vec![t("Int")])),
+        (
+            Ty::Receiver(boxed(Ty::Int)),
+            named("Receiver", vec![t("Int")]),
+        ),
         (Ty::Record(QualName::new("probe", "Point")), t("Point")),
     ];
     for kind in Capability::ALL {
@@ -70,6 +75,7 @@ fn cases() -> Vec<(Ty, Type)> {
 fn the_checker_table_matches_the_type_checker() {
     let mut names: BTreeSet<&str> = ignite_check::BUILTIN_METHODS.iter().copied().collect();
     names.extend(ignite_check::CAPABILITY_METHODS.iter().map(|(_, m, _)| *m));
+    names.extend(ignite_check::CHANNEL_METHODS.iter().map(|(_, m, _)| *m));
     let mut wrong = Vec::new();
     for (ty, declared) in cases() {
         for name in &names {
@@ -80,6 +86,7 @@ fn the_checker_table_matches_the_type_checker() {
                 ignite_check::CAPABILITY_METHODS
                     .iter()
                     .any(|(owner, m, _)| *owner == declared.name.name && m == name)
+                    || ignite_check::channel_effect(&declared.name.name, name).is_some()
             };
             if typer != checker {
                 wrong.push(format!(
@@ -159,6 +166,11 @@ const TYPE_CHECKER_METHOD_NAMES: &[&str] = &[
     "random_bytes",
     "value",
     "arguments",
+    "send",
+    "try_send",
+    "receive",
+    "receive_within",
+    "closed",
 ];
 
 /// `the_checker_table_matches_the_type_checker` iterates only the names the
@@ -177,6 +189,9 @@ fn every_type_checker_builtin_name_is_known_to_the_checker() {
         assert!(resolved, "`{name}` resolves on no receiver of `cases()`");
         let known = ignite_check::BUILTIN_METHODS.contains(name)
             || ignite_check::CAPABILITY_METHODS
+                .iter()
+                .any(|(_, m, _)| m == name)
+            || ignite_check::CHANNEL_METHODS
                 .iter()
                 .any(|(_, m, _)| m == name);
         if !known {

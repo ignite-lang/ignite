@@ -1,0 +1,131 @@
+package g3
+
+// The case study's G3 without bells (`docs/slice.md` 27): the waits the
+// service needs, each on a bounded channel with a deadline instead of a
+// loopback socket pair. Each executable logs its lines on stderr.
+//   longpoll  a long-poll held to its deadline, one woken by a message,
+//             a heartbeat that ticks until its stop channel is closed
+//   waiters   1,000 waiters on one channel, woken by one sender; it waits
+//             for a line on stdin before it spawns them and again before
+//             it sends, so the test can count the process's descriptors
+
+fn publish_after(messages: Sender<Text>, delay: Duration) -> Result<Unit, IoError> {
+  Clock.sleep(delay)
+  messages.send("message")
+  Ok(())
+}
+
+fn heartbeat(stop: Receiver<Unit>, beats: Sender<Int>) -> Result<Unit, IoError> {
+  var count = 0
+  loop {
+    match stop.receive_within(30 ms) {
+      Some(_) => break
+      None => {
+        if stop.closed() {
+          break
+        }
+        count = count + 1
+        beats.send(count)
+      }
+    }
+  }
+  beats.close()
+  Ok(())
+}
+
+type LongPoll {
+  executable: Text
+}
+
+fn LongPoll.main(self: LongPoll) -> Result<Unit, IoError> {
+  let (idle, held) = Channel.bounded(1)
+  let started = Clock.monotonic()
+  let none: Option<Text> = held.receive_within(200 ms)
+  log("deadline {(Clock.monotonic() - started).to_ms()} {none.debug()}")
+  let (messages, inbox) = Channel.bounded(1)
+  let woken = Clock.monotonic()
+  spawn publish_after(messages, 50 ms)
+  match inbox.receive_within(5 seconds) {
+    Some(message) => log("woken {(Clock.monotonic() - woken).to_ms()} {message}")
+    None => log("not woken")
+  }
+  let (stop, stopped) = Channel.bounded(1)
+  let (beat, beats) = Channel.bounded(16)
+  spawn heartbeat(stopped, beat)
+  var last = 0
+  while last < 3 {
+    match beats.receive_within(5 seconds) {
+      Some(count) => { last = count }
+      None => { last = 100 }
+    }
+  }
+  stop.close()
+  loop {
+    match beats.receive_within(5 seconds) {
+      Some(count) => { last = count }
+      None => break
+    }
+  }
+  log("heartbeat {if last >= 3 && last < 100 { "stopped" } else { "failed" }}")
+  idle.close()
+  Ok(())
+}
+
+fn wait_once(values: Receiver<Int>, ready: Sender<Unit>, done: Sender<Int>) -> Result<Unit, IoError> {
+  ready.send(())
+  match values.receive_within(60 seconds) {
+    Some(value) => done.send(value)
+    None => done.send(0)
+  }
+  Ok(())
+}
+
+type Waiters {
+  executable: Text
+}
+
+fn Waiters.main(self: Waiters) -> Result<Unit, IoError> {
+  let count = 1000
+  log("start")
+  Stdin.read(1)?
+  let (values, waiting) = Channel.bounded(count)
+  let (ready, readies) = Channel.bounded(count)
+  let (done, dones) = Channel.bounded(count)
+  var i = 0
+  while i < count {
+    spawn wait_once(waiting, ready, done)
+    i = i + 1
+  }
+  var blocked = 0
+  while blocked < count {
+    match readies.receive_within(60 seconds) {
+      Some(_) => { blocked = blocked + 1 }
+      None => { blocked = count + 1 }
+    }
+  }
+  log("waiting {blocked}")
+  Stdin.read(1)?
+  var n = 1
+  while n <= count {
+    values.send(n)
+    n = n + 1
+  }
+  var woken = 0
+  var sum = 0
+  while woken < count {
+    match dones.receive_within(60 seconds) {
+      Some(value) => {
+        woken = woken + 1
+        sum = sum + value
+      }
+      None => { woken = count + 1 }
+    }
+  }
+  log("woken {woken} sum {sum}")
+  Ok(())
+}
+
+system G3 {
+  component longpoll: LongPoll { executable = "longpoll" }
+  component waiters: Waiters { executable = "waiters" }
+}

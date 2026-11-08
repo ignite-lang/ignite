@@ -1588,6 +1588,8 @@ fn rust_type_in(ty: &Type, params: &BTreeSet<String>) -> String {
             format!("::ignite_io::{}", ty.name.name)
         }
         "Store" => generic("::ignite_io::Store"),
+        "Sender" => generic("::ignite_io::Sender"),
+        "Receiver" => generic("::ignite_io::Receiver"),
         "Map" => generic("::std::collections::BTreeMap"),
         "Duration" | "ByteSize" | "Ratio" => "i64".to_string(),
         "Ref" | "Signal" | "SystemRef" | "Protocol" => "String".to_string(),
@@ -2342,6 +2344,8 @@ impl<'a> Generator<'a> {
             Ty::Input => "::ignite_io::Input".to_string(),
             Ty::Param(name) => ident(name),
             Ty::Store(item) => format!("::ignite_io::Store<{}>", self.rust_ty(item)),
+            Ty::Sender(item) => format!("::ignite_io::Sender<{}>", self.rust_ty(item)),
+            Ty::Receiver(item) => format!("::ignite_io::Receiver<{}>", self.rust_ty(item)),
         }
     }
 
@@ -4087,6 +4091,9 @@ impl<'a> Generator<'a> {
             ("List", "empty", []) => "Vec::new()".to_string(),
             ("Map", "empty", []) => "::std::collections::BTreeMap::new()".to_string(),
             ("Store", "new", []) => "::ignite_io::Store::new()".to_string(),
+            ("Channel", "bounded", [capacity]) => {
+                format!("::ignite_io::Channel::bounded({capacity})")
+            }
             ("Pipe", "pair", []) => "::ignite_io::Pipe::pair()".to_string(),
             ("Directory", "temporary", []) => "::ignite_io::Directory::temporary()".to_string(),
             ("Launcher", "new", []) => "::ignite_io::Launcher::new()".to_string(),
@@ -4400,6 +4407,19 @@ impl<'a> Generator<'a> {
                 if let Some(bytes) = self.checked_slice_ref(receiver) {
                     return format!("String::from_utf8_lossy({bytes}).into_owned()");
                 }
+            }
+            Some(Callee::Builtin(
+                Builtin::SenderSend
+                | Builtin::SenderTrySend
+                | Builtin::SenderClose
+                | Builtin::ReceiverReceive
+                | Builtin::ReceiverReceiveWithin
+                | Builtin::ReceiverClosed
+                | Builtin::ReceiverClose,
+            )) => {
+                let r = self.receiver(receiver);
+                let a = self.args(args);
+                return format!("{r}.{}({})", ident(&name.name), a.join(", "));
             }
             Some(Callee::Builtin(Builtin::TcpStreamPeer)) => {
                 let endpoint = self.enum_name(&ignite_types::endpoint_name());
@@ -5171,6 +5191,8 @@ impl<'a> Generator<'a> {
             Ty::PipeStream => fixed("<PipeStream>"),
             Ty::TcpListener => fixed("<TcpListener>"),
             Ty::Store(_) => fixed("<Store>"),
+            Ty::Sender(_) => fixed("<Sender>"),
+            Ty::Receiver(_) => fixed("<Receiver>"),
             Ty::Capability(kind) => fixed(&format!("<{}>", kind.name())),
             Ty::Param(name) => fixed(&format!("<{name}>")),
             _ => format!("{}({v}, {out});", self.glue_fn(Glue::Debug, ty)),

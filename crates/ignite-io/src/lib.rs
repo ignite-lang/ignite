@@ -1084,6 +1084,9 @@ pub use fs::Directory;
 // `docs/slice.md` 21.20: the capability `Environment`.
 pub mod environment;
 pub use environment::Environment;
+// `docs/slice.md` 27: bounded channels between tasks.
+pub mod channel;
+pub use channel::{Channel, Receiver, Sender};
 
 static EXIT_HOOKS: std::sync::Mutex<Vec<fn()>> = std::sync::Mutex::new(Vec::new());
 

@@ -341,6 +341,8 @@ impl TypeEnv {
             | Ty::TcpListener
             | Ty::TcpStream
             | Ty::PipeStream
+            | Ty::Sender(_)
+            | Ty::Receiver(_)
             | Ty::Store(_)
             | Ty::Capability(_) => Layout::scalar(8),
             Ty::Fn(..) | Ty::EffectFn(..) => Layout { size: 16, align: 8 },
@@ -577,6 +579,8 @@ pub fn scalar_type(ty: &Ty) -> Option<&'static str> {
         | Ty::TcpListener
         | Ty::TcpStream
         | Ty::PipeStream
+        | Ty::Sender(_)
+        | Ty::Receiver(_)
         | Ty::Capability(_) => Some("i64"),
         Ty::Bool => Some("i1"),
         Ty::Byte => Some("i8"),
@@ -621,6 +625,8 @@ pub fn mangle(ty: &Ty) -> String {
             format!("fn({})->{}", list(params), mangle(ret))
         }
         Ty::Store(t) => format!("Store<{}>", mangle(t)),
+        Ty::Sender(t) => format!("Sender<{}>", mangle(t)),
+        Ty::Receiver(t) => format!("Receiver<{}>", mangle(t)),
         Ty::GenericRecord(name, args) | Ty::GenericEnum(name, args) => {
             format!("{}.{}<{}>", name.module, name.name, list(args))
         }

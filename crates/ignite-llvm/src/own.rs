@@ -6,14 +6,15 @@
 //!
 //! The block owns a binding when the `let` creates the stream
 //! (`listener.accept()?`, `TcpStream.connect(..)?`, `let (a, b) =
-//! Pipe.pair()`) and no later statement of the block lets it escape. A
-//! mention keeps the stream inside the block when it is the receiver of a
-//! builtin stream method other than `copy`, an argument of `spawn` (the
-//! task registers an owner of its own), or a plain argument of a call
-//! whose result cannot hold a stream ([`may_hold_stream`]). Any other
-//! mention (a result, a field, an element, a capture, an assignment, a
-//! `copy()`) leaves the binding unowned, as before: never released, an
-//! extra open descriptor and never an early close. Only mentions that
+//! Pipe.pair()`, `let (tx, rx) = Channel.bounded(n)`) and no later statement
+//! of the block lets it escape. A mention keeps the stream inside the block
+//! when it is the receiver of a builtin stream method other than `copy`, an
+//! argument of `spawn` (the task registers an owner of its own), or a
+//! plain argument of a call whose result cannot hold a stream
+//! ([`may_hold_stream`]). Any other mention (a result, a field, an element,
+//! a capture, an assignment, a `copy()`, a value sent on a channel) leaves
+//! the binding unowned, as before: never released, an extra open
+//! descriptor and never an early close. Only mentions that
 //! denote the binding count: a later `let` of the name ends its scope, and
 //! a `for`, `match` arm or closure that binds the name hides it in its body
 //! ([`referred`]).
@@ -43,7 +44,7 @@ pub fn owned(stmts: &[Stmt], index: usize, types: &TypedProgram) -> Vec<String> 
         StmtKind::LetPattern { pattern, value, .. }
             if matches!(
                 types.callee(value),
-                Some(Callee::Builtin(Builtin::PipePair))
+                Some(Callee::Builtin(Builtin::PipePair | Builtin::ChannelBounded))
             ) =>
         {
             match &pattern.kind {
@@ -320,6 +321,13 @@ fn keeps_receiver(builtin: Builtin) -> bool {
             | StreamUrgentPending
             | TcpStreamPeer
             | TcpStreamTimedOut
+            | SenderSend
+            | SenderTrySend
+            | SenderClose
+            | ReceiverReceive
+            | ReceiverReceiveWithin
+            | ReceiverClosed
+            | ReceiverClose
             | Debug
     )
 }

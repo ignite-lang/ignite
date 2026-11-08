@@ -132,6 +132,8 @@ pub const BUILTIN_TYPES: &[&str] = &[
     "Setting",
     "CommandLine",
     "Environment",
+    "Sender",
+    "Receiver",
 ];
 
 /// Static builtin calls written `Type.name(...)`.
@@ -165,6 +167,7 @@ pub const BUILTIN_STATICS: &[(&str, &str)] = &[
     ("Clock", "now"),
     ("Process", "flush"),
     ("TcpStream", "connect_within"),
+    ("Channel", "bounded"),
 ];
 
 /// Owners of [`BUILTIN_STATICS`] that are records of the standard library,
@@ -312,6 +315,7 @@ const BUILTIN_STATIC_ARITIES: &[(&str, &str, usize)] = &[
     ("Clock", "now", 0),
     ("Process", "flush", 0),
     ("TcpStream", "connect_within", 3),
+    ("Channel", "bounded", 1),
 ];
 
 /// Builtin statics that are effectful substrate operations.
@@ -329,6 +333,7 @@ const EFFECTFUL_STATICS: &[(&str, &str)] = &[
     ("Clock", "sleep"),
     ("Clock", "now"),
     ("TcpStream", "connect_within"),
+    ("Channel", "bounded"),
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -421,6 +426,29 @@ pub const CAPABILITY_METHODS: &[(&str, &str, Option<&str>)] = &[
     ("CommandLine", "arguments", Some("argument")),
     ("Environment", "get", Some("variable")),
 ];
+
+/// Every method of a channel end (`docs/slice.md` 27): its type, its name
+/// and the operation of its effect on the receiver's roots. Checked by the
+/// receiver's declared type, as capability methods are, so user fns named
+/// `send` or `receive` stay free.
+pub const CHANNEL_METHODS: &[(&str, &str, &str)] = &[
+    ("Sender", "send", "send"),
+    ("Sender", "try_send", "send"),
+    ("Sender", "close", "send"),
+    ("Receiver", "receive", "receive"),
+    ("Receiver", "receive_within", "receive"),
+    ("Receiver", "closed", "receive"),
+    ("Receiver", "close", "receive"),
+];
+
+/// The operation a method of a channel end needs on its receiver
+/// ([`CHANNEL_METHODS`]); `None` for a name that is no method of the type.
+pub fn channel_effect(ty: &str, method: &str) -> Option<&'static str> {
+    CHANNEL_METHODS
+        .iter()
+        .find(|(t, m, _)| *t == ty && *m == method)
+        .map(|(_, _, op)| *op)
+}
 
 /// The capability types of `docs/slice.md` 21.3: handles a system declares
 /// as resources (all but `ChildProcess`) and passes in values.
@@ -770,7 +798,7 @@ fn static_arity(ty: &str, name: &str) -> Option<usize> {
 /// The number of type arguments a builtin type takes.
 fn type_arity(name: &str) -> usize {
     match name {
-        "List" | "Option" | "Store" | "Signal" | "Module" => 1,
+        "List" | "Option" | "Store" | "Signal" | "Module" | "Sender" | "Receiver" => 1,
         "Result" | "Map" => 2,
         _ => 0,
     }
@@ -2098,6 +2126,34 @@ impl Checker {
         }
     }
 
+    /// Give the names a tuple pattern binds the element types of `ty`, the
+    /// declared type of the value it destructures, so the methods called on
+    /// them are checked by type: `let (tx, rx) = Channel.bounded(4)`
+    /// (`docs/slice.md` 27).
+    fn type_tuple_bindings(&mut self, pattern: &Pattern, ty: &Type) {
+        let PatternKind::Tuple(items) = &pattern.kind else {
+            return;
+        };
+        if !ty.is_tuple() || ty.args.len() != items.len() {
+            return;
+        }
+        for (item, element) in items.iter().zip(&ty.args) {
+            match &item.kind {
+                PatternKind::Binding(name) => {
+                    if let Some(local) = self
+                        .scopes
+                        .last_mut()
+                        .and_then(|scope| scope.get_mut(&name.name))
+                    {
+                        local.ty = Some(element.clone());
+                    }
+                }
+                PatternKind::Tuple(_) => self.type_tuple_bindings(item, element),
+                _ => {}
+            }
+        }
+    }
+
     fn lookup(&self, name: &str) -> Option<Binding> {
         self.local(name).map(|local| local.binding)
     }
@@ -2268,7 +2324,7 @@ impl Checker {
             }
             "TcpStream" | "PipeStream" | "TcpListener" | "Store" | "Stdin" | "Stdout"
             | "Stderr" | "Directory" | "Launcher" | "ChildProcess" | "Entropy" | "Setting"
-            | "CommandLine" | "Environment" => {
+            | "CommandLine" | "Environment" | "Sender" | "Receiver" => {
                 return true;
             }
             "List" | "Option" | "Result" | "Tuple" => {
@@ -2449,6 +2505,9 @@ impl Checker {
                 let binding = if *mutable { Binding::Var } else { Binding::Let };
                 let roots = self.roots(value);
                 self.pattern(pattern, &roots, binding);
+                if let Some(ty) = self.static_type(value) {
+                    self.type_tuple_bindings(pattern, &ty);
+                }
             }
             StmtKind::Let {
                 name,
@@ -2804,6 +2863,20 @@ impl Checker {
             }
         }
         let receiver_ty = self.static_type(receiver);
+        if let Some(op) = self.channel_op(receiver_ty.as_ref(), &name.name) {
+            let needed = self
+                .roots(receiver)
+                .into_iter()
+                .map(|root| format!("{root}.{op}"))
+                .collect();
+            let what = match &receiver.kind {
+                ExprKind::Name(r) => format!("{}.{}", r.name, name.name),
+                _ => name.name.clone(),
+            };
+            self.effectful_op(needed, expr.span, &what);
+            self.symbols.effect_sites.insert(expr.span);
+            return;
+        }
         if let Some(op) = self.capability_op(receiver_ty.as_ref(), &name.name) {
             let needed = match op {
                 Some(op) => self
@@ -3302,8 +3375,23 @@ impl Checker {
             | ("Setting", "of")
             | ("CommandLine", "of")
             | ("Environment", "of") => Some(named(owner, Vec::new())),
+            ("Channel", "bounded") => Some(named(
+                "Tuple",
+                vec![named("Sender", Vec::new()), named("Receiver", Vec::new())],
+            )),
             _ => None,
         }
+    }
+
+    /// The effect of a method of a channel end (`docs/slice.md` 27) called
+    /// on a receiver of declared type `receiver`, as [`channel_effect`].
+    fn channel_op(&self, receiver: Option<&Type>, method: &str) -> Option<&'static str> {
+        let ty = receiver?;
+        let name = ty.name.name.as_str();
+        if self.type_params.contains(name) {
+            return None;
+        }
+        channel_effect(name, method)
     }
 
     /// The effect of a capability method (`docs/slice.md` 21.3) called on a
@@ -3732,9 +3820,10 @@ impl Checker {
                         .to_string(),
                 );
             }
-            if self
-                .constructor_type(&ty.name, &name.name, name.span)
-                .is_some()
+            if ty.name != "Channel"
+                && self
+                    .constructor_type(&ty.name, &name.name, name.span)
+                    .is_some()
                 && !self.in_test
             {
                 self.error(
@@ -4205,6 +4294,7 @@ pub fn builtin_applies(ty: &Type, method: &str) -> bool {
     if CAPABILITY_METHODS
         .iter()
         .any(|(owner, m, _)| *owner == name && *m == method)
+        || channel_effect(name, method).is_some()
     {
         return true;
     }

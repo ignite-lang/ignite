@@ -39,7 +39,7 @@ pub type UpsertThunk = extern "C" fn(*const u8, *const u8) -> *mut u8;
 
 /// The glue and layout of one element type.
 #[derive(Clone, Copy)]
-struct Glue {
+pub(crate) struct Glue {
     to_heap: ToHeap,
     from_heap: FromHeap,
     free: FreeHeap,
@@ -48,7 +48,7 @@ struct Glue {
 }
 
 /// One stored value: a heap copy owned by this value.
-struct HeapValue {
+pub(crate) struct HeapValue {
     ptr: *mut u8,
     glue: Glue,
 }
@@ -81,9 +81,37 @@ impl Drop for HeapValue {
     }
 }
 
+impl Glue {
+    /// The glue a generated program passes for one element type; a null
+    /// pointer is a panic the calling entry contains (`crate::contain`).
+    pub(crate) fn new(
+        to_heap: Option<ToHeap>,
+        from_heap: Option<FromHeap>,
+        free: Option<FreeHeap>,
+        size: i64,
+        align: i64,
+    ) -> Glue {
+        Glue {
+            to_heap: to_heap.expect("a null copy_to_heap"),
+            from_heap: from_heap.expect("a null copy_from_heap"),
+            free: free.expect("a null free_heap"),
+            size: usize::try_from(size).unwrap_or(0),
+            align: usize::try_from(align).unwrap_or(1).max(1),
+        }
+    }
+}
+
 impl HeapValue {
+    /// A heap copy of the section-3 value at `value`.
+    pub(crate) fn copy_in(value: *const u8, glue: Glue) -> HeapValue {
+        HeapValue {
+            ptr: (glue.to_heap)(value),
+            glue,
+        }
+    }
+
     /// Copy the value into the section-3 memory at `out`.
-    fn copy_out(&self, out: *mut u8) {
+    pub(crate) fn copy_out(&self, out: *mut u8) {
         if !out.is_null() {
             (self.glue.from_heap)(out, self.ptr);
         }

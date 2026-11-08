@@ -210,6 +210,12 @@ pub enum Ty {
     /// `Environment`
     /// (`docs/slice.md` 21.3): a handle like `TcpListener`, passed in values.
     Capability(Capability),
+    /// `Sender<T>`, the sending end of a channel (`docs/slice.md` 27): a
+    /// handle like `PipeStream`.
+    Sender(Box<Ty>),
+    /// `Receiver<T>`, the receiving end of a channel (`docs/slice.md` 27):
+    /// a handle like `PipeStream`.
+    Receiver(Box<Ty>),
 }
 
 /// The capability handle types of `docs/slice.md` 21.3 to 21.7.
@@ -484,6 +490,8 @@ impl Ty {
             Ty::List(t) => Ty::List(boxed(t)),
             Ty::Option(t) => Ty::Option(boxed(t)),
             Ty::Store(t) => Ty::Store(boxed(t)),
+            Ty::Sender(t) => Ty::Sender(boxed(t)),
+            Ty::Receiver(t) => Ty::Receiver(boxed(t)),
             Ty::Result(ok, err) => Ty::Result(boxed(ok), boxed(err)),
             Ty::Fn(ps, ret) => Ty::Fn(ps.iter().map(map).collect(), boxed(ret)),
             Ty::EffectFn(ps, ret, effects) => {
@@ -506,7 +514,12 @@ impl Ty {
         let any = |ts: &[Ty]| ts.iter().any(|t| t.has_param(f));
         match self {
             Ty::Param(name) => f(name),
-            Ty::List(t) | Ty::Option(t) | Ty::Store(t) | Ty::Signal(t) => t.has_param(f),
+            Ty::List(t)
+            | Ty::Option(t)
+            | Ty::Store(t)
+            | Ty::Signal(t)
+            | Ty::Sender(t)
+            | Ty::Receiver(t) => t.has_param(f),
             Ty::Ref(Some(t)) => t.has_param(f),
             Ty::Map(k, v) => k.has_param(f) || v.has_param(f),
             Ty::Result(ok, err) => ok.has_param(f) || err.has_param(f),
@@ -566,6 +579,8 @@ impl fmt::Display for Ty {
                 write!(f, "{}<{args}>", name.name)
             }
             Ty::Store(item) => write!(f, "Store<{item}>"),
+            Ty::Sender(item) => write!(f, "Sender<{item}>"),
+            Ty::Receiver(item) => write!(f, "Receiver<{item}>"),
             Ty::Map(k, v) => write!(f, "Map<{k}, {v}>"),
             Ty::Quantity(kind) => write!(f, "{}", kind.name()),
             Ty::Ref(Some(k)) => write!(f, "Ref<{k}>"),
@@ -827,6 +842,25 @@ pub enum Builtin {
     /// Result<TcpStream, IoError>`: `connect` bounded by `timeout`; effect
     /// `net.connect` (26.3).
     TcpStreamConnectWithin,
+    /// `Channel.bounded(capacity) -> (Sender<T>, Receiver<T>)`, `T` from the
+    /// call's type (`docs/slice.md` 27).
+    ChannelBounded,
+    /// `s.send(value) -> Bool` on a `Sender<T>`: waits while full; effect
+    /// `<root>.send`.
+    SenderSend,
+    /// `s.try_send(value) -> Bool` on a `Sender<T>`: never waits.
+    SenderTrySend,
+    /// `s.close()` on a `Sender<T>`.
+    SenderClose,
+    /// `r.receive() -> Option<T>` on a `Receiver<T>`: waits; effect
+    /// `<root>.receive`.
+    ReceiverReceive,
+    /// `r.receive_within(timeout) -> Option<T>` on a `Receiver<T>`.
+    ReceiverReceiveWithin,
+    /// `r.closed() -> Bool` on a `Receiver<T>`.
+    ReceiverClosed,
+    /// `r.close()` on a `Receiver<T>`.
+    ReceiverClose,
 }
 
 /// What a `Call` or `Method` expression calls.
@@ -1838,6 +1872,8 @@ pub fn equality(ty: &Ty, modules: &TypedModules) -> Option<Equality> {
             | Ty::PipeStream
             | Ty::IoError
             | Ty::Store(_)
+            | Ty::Sender(_)
+            | Ty::Receiver(_)
             | Ty::Param(_)
             | Ty::Never => false,
         }

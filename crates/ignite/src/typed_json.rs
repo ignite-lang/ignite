@@ -158,6 +158,14 @@ pub fn ty(t: &Ty) -> Json {
             put("args", list(std::slice::from_ref(item)));
             "Store"
         }
+        Ty::Sender(item) => {
+            put("args", list(std::slice::from_ref(item)));
+            "Sender"
+        }
+        Ty::Receiver(item) => {
+            put("args", list(std::slice::from_ref(item)));
+            "Receiver"
+        }
         Ty::Map(k, v) => {
             put("args", Json::Array(vec![ty(k), ty(v)]));
             "Map"
