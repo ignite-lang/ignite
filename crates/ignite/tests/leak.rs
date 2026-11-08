@@ -287,3 +287,21 @@ fn g30_reproducer_stays_flat_in_every_mode() {
         assert_eq!(failed, 0, "a target failed; its panic is above");
     });
 }
+
+/// Adversary cases (`fixtures/leak/attack.ignite`): a handle the LLVM
+/// lowering releases is still usable wherever it is reachable (an alias or
+/// a record field of an end handed to a task, a stored end read back, an
+/// end sent through a channel), and a server's broadcast over stored
+/// senders and a look at one through a temporary keep the census flat.
+#[test]
+fn reachable_handles_stay_usable_and_stored_reads_are_released() {
+    on_both_targets(|target| {
+        let run = ignite_test(target, "attack.ignite", "", None);
+        assert_eq!(run.status, 0, "{target}:\n{}", run.output);
+        assert!(
+            run.output.contains("6 passed; 0 failed"),
+            "{target}:\n{}",
+            run.output
+        );
+    });
+}
