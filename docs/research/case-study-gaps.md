@@ -286,6 +286,45 @@
 - Story: `story:tls-client` (wave 8).
 - Blocks: yes, for an https backend.
 
+
+## G26 A compiler built from a commit reports the release version
+
+- Version: ignite main `d02a39b2`. Target: n/a.
+- Kind: missing-feature/tooling.
+- What happens: `ignite --version` prints `0.13.0` with no commit, so a build from source cannot be told apart from the release.
+- Story: `story:version-names-commit`.
+- Blocks: no.
+
+## G27 A static build from source needs the musl target and the network
+
+- Version: ignite main `d02a39b2`. Target: both, `--static`.
+- Kind: missing-feature/tooling.
+- What happens: a compiler built from source needs `rustup target add x86_64-unknown-linux-musl` and cargo network access at the first `--static` build; the release binary does not (`docs/slice.md` 23).
+- Story: `story:static-build-from-source`.
+- Blocks: no.
+
+## G28 `Http.serve` cannot host a WebSocket or long-poll server
+
+- Version: ignite main `d02a39b2`. Target: both.
+- Kind: missing-feature.
+- What the service needs: the peer address for an IP allow list, a takeover of the connection for an upgrade, a request held until a message or a deadline, and its own answer to a too-large body (a 403 naming the caller, or its own 413 with keep-alive and the body discarded).
+- What Ignite does: the `HttpApp` handler (`fn(state, request) -> Response requires [state.*]`) never sees the connection, cannot wait (a hold is E017), and std answers a too-large body with its own 413 before the application runs.
+- Workaround: the service keeps its hand-written HTTP server; the server role of G19 does not cover this.
+- Story: `story:http-app-connection`; `story:std-websocket` builds its upgrade on it.
+- Blocks: no (with the workaround).
+
+## G29 `std.json` `get` returns the first of duplicated object keys
+
+- Version: ignite main `d02a39b2`. Target: both.
+- Kind: interoperability.
+- What happens: for `{"channel":"/a","channel":"/meta/handshake"}`, `get` returns `/a`; ECMAScript's `JSON.parse` keeps the last member, so a server interoperating with JavaScript clients must use `/meta/handshake`. RFC 8259 section 4 leaves the choice open.
+- Story: `story:json-duplicate-keys` (last member wins, documented, plus an accessor for every member).
+- Blocks: no.
+
+## G20 (correction)
+
+- The service used `std.json` already; only JavaScript-compatible truthiness and number formatting sit on top of it.
+
 ## G13 (update) Missing flush hit in the stop path
 
 - `close()` sends only its own stream (`crates/ignite-io/src/net.rs:438`). A write made just before `main` returns is never sent while draining, because `ignite_rt_exit` waits for tasks without flushing first.
