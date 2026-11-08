@@ -15,29 +15,49 @@ milliseconds (slice §12.7), and a leak of a few hundred bytes per operation nev
 shows in production, as a server that grows.
 
 The motivating case is G30 of the case study, a WebSocket push service
-(`docs/research/case-study-gaps.md`): a closed channel's memory is never freed. A spawned task
-running
+(`docs/research/case-study-gaps.md`): a closed channel's memory is never freed. The service, one
+channel per waiting request, grew from 1 MB to 88 MB over 200,000 requests on v0.15.0 and works
+around it by reusing closed channels.
 
-```ignite
-let (r, b) = Channel.bounded(1)
-r.close()
-b.receive_within(0 ms)
-```
+### 1.1 The cause
 
-grows the resident size by about 370 B per task: 200,000 tasks take the process from 14 MB to
-88 MB, as the case study reported it on v0.15.0. The service works around it with a list of
-reusable channels.
+The three lines first reported (`let (r, b) = Channel.bounded(1); r.close();
+b.receive_within(0 ms)`) do not leak: both ends stay plain bindings of the block that created
+them, and `own.rs` releases them when the block is left. The case study's reproducer (2026-11-08,
+v0.15.0, LLVM target, `--static --release`) finds the cause: a channel end's handle-table entry
+is released only while the end stays in a plain `let (tx, rx) = Channel.bounded(n)` binding.
+`own.rs` makes the block the owner only while every later mention is a builtin method's
+receiver, a `spawn` argument or a plain call argument; any other mention "leaves the binding
+unowned, as before: never released". The entry holds a clone of the `ignite-io` end, so the
+channel stays allocated too. `close()` closes the channel but releases no handle.
 
-These three lines alone do not reproduce it on `main` (2026-11-08): 200,000 tasks one after
-another and at once, and 200,000 loop iterations, peak at 2.0 to 6.5 MB on both targets, in dev,
-`--release` and `--static`, the same as a control without the channel. A reproducer that leaks
-is requested from the case study (`story:channel-release-on-close`), which finds and fixes the
-cause.
+| form | the ends | peak RSS at 0 / 50k / 100k / 200k iterations (MB) |
+|---|---|---|
+| control, `local` | `let (tx, rx) = Channel.bounded(1)`, used only through methods | 8.3 / 8.3 / 8.3 / 8.3 |
+| `alias` | as `local`, then `let r: Receiver<Int> = rx`, used through `r` | 8.4 / 26 / 52 / 104 |
+| `typed` | `let ends: (Sender<Int>, Receiver<Int>) = Channel.bounded(1)` | 8.4 / 34 / 68 / 137 |
+| `field` | as `local`, the receiver kept in a record field `Waiter { id = 1, wake = rx }` | 8.4 / 26 / 52 / 104 |
+| `server` | the sender put in a `Store<Sender<Int>>`, the receiver returned in a record, the sender taken out again (`let tx: Sender<Int> = found`) and closed | 8.2 / 22 / 43 / 87 |
 
-Fixing G30 removes one leak. This design makes the next one fail a test. Its acceptance has two
-first cases (section 7): the case study's G30 reproducer, once it arrives, fails under the
-guard before the fix and passes after it; and a seeded leak, a runtime object deliberately
-never released, proves the guard red before any real reproducer exists.
+About 490 B per iteration for one unowned end, 660 B for two. Spawned or inline makes no
+difference. The Rust target drops the ends by Rust ownership and does not leak. G30 and G32
+interact: `alias` is the annotation E042 asks for when no use fixes the element type, so the
+workaround for G32 triggers G30.
+
+### 1.2 The leak class
+
+G30 is one instance of a class: **an owned runtime handle moved into a place the ownership
+lowering does not track** (a second binding, an annotated tuple, a record field, a result, a
+`Store`, a channel). Every such place is "never released" by `own.rs`'s current rule; the
+handle's slot, its `ignite-io` object and everything that object holds stay until the process
+exits. The class covers every handle kind, not only channel ends: a stream, a pipe end, a
+listener or a child handle in the same places leaks the same way.
+
+Fixing G30 (`story:channel-release-on-close`) removes the forms above. This design makes the
+next one fail a test. Its first failing cases (section 7) are the reproducer's `alias` and
+`field` forms as soak tests inside `ignite test`, red on `main` on the LLVM target by the live
+handle count, and a seeded leak of every compared kind, which proves the guard red
+independently of any real bug.
 
 ## 2 Where runtime state lives
 
@@ -102,34 +122,52 @@ Two kinds of evidence, with different false positives:
 | (a) | leak check in `ignite test`: per test, counts per kind before the body and after it and its tasks end | an object kept after its owner is gone (G30 if a channel or an end stays live), on every test without writing anything | tests that leave a server task running on purpose; resident kinds; nothing from pools, since pools are not counted | one counter read before and after each test; a wait only while tasks are still live | both: the counters are in `ignite-io`, the runner is `ignite-io`'s (slice §12.7); LLVM-only kinds from `ignite-rt` |
 | (b) | per-kind live counters exposed through `std.runtime`, for tests and as a server's metrics | everything (a) and (c) read; in production, the growth a test did not foresee | none by itself: it reports, it does not judge | a relaxed atomic increment per object created and dropped; for bytes, a counting allocator (inferred small, per-thread counters, measured by the next release) | both; the evaluator has no value, as every substrate builtin |
 | (c) | soak in a test: run a fn N times, after a warm-up the counts must be equal and bytes within a slack | per-operation leaks that hold no counted object (bytes), and growth (a) cannot see because the body's own values are still live | first-use caches, absorbed by the warm-up; pools, bounded by their caps; resident kinds | N runs of the body inside the test; G30 at 1,000 runs is milliseconds, not a load test | both |
-| (d) | compile-time ownership of resources: a dropped end releases its state | an end the compiler can prove unowned | none, but it cannot see runtime retention: a slot kept by the table, a value kept in a store, a leak inside `ignite-io` or `ignite-rt`. G30's lines own both ends by the rules already in `own.rs` and slice §30.3 | linear resource types: new checks and diagnostics in every resource API, and a rewrite of the moves analysis (slice §20.3) | both, but a leak in the substrate is invisible to it |
+| (d) | compile-time ownership of resources: a handle moved anywhere stays owned and is released with its owner | the class of 1.2 at its source, for every handle kind | none, but it cannot see retention inside `ignite-io` or `ignite-rt` (a slot list, a cache) | see below: release needs drop glue for values that hold handles, a backend change, not a language rule | LLVM only: the Rust target already drops by Rust ownership |
 
 Verdict:
 
 - (b) is the base the others read; without counters there is nothing to compare.
-- (c) is the guard for G30: whatever the cause, it either holds a counted object or bytes, and a
-  soak sees both.
+- (c) is the guard for G30: the `alias` and `field` forms keep a filled handle slot and a
+  channel per run, which a soak counts exactly (`handles`, `channels`) in a few thousand runs;
+  a leak that holds no counted object still shows in bytes.
 - (a) makes every existing and future test a leak test, with no code in the test. It sees only
   counts, which is what keeps it free of false positives from caches.
-- (d) is not part of the guard. The ownership rules exist (`own.rs`, slice §30.3); what is
-  missing is evidence that the runtime keeps them. One known gap is by design: an end carried
-  inside a value or sent on a channel is left unowned on LLVM ("never released", `own.rs`).
-  The census makes that visible, and a fix for it is a story of its own once a test shows it
-  (Q8).
+- (d), weighed against `own.rs`'s current rule. The rule is syntactic and local: a block owns a
+  handle its `let` created while every later mention is a method receiver, a `spawn` argument
+  or a plain argument of a call whose result cannot hold a handle; at any other mention it gives
+  up, and the handle is never released. It gives up because an LLVM value has no destructor: a
+  record or a list lives in an arena region that is freed without visiting its contents, so a
+  handle inside it has nobody to release it. Two consequences:
+  - Linear resource types in the language would not help: G30's forms are correct programs,
+    and rejecting them would be the wrong answer. The fix is in the backend: drop glue for
+    values whose type can hold a handle (as the `Store` glue's `free_heap` already does for heap
+    copies), run where the region or the binding that holds them ends, so ownership moves with
+    the value (`story:channel-release-on-close` for channel ends, the other handle kinds after
+    it).
+  - The give-ups are known at compile time. A cheap static guard is a list: `own.rs` records
+    every place it left a handle unowned, `ignite emit --unowned` prints them, and a test over
+    `std/` and `examples/` holds the list to a checked-in baseline that may only shrink. A new
+    give-up then fails the gate before any program runs (`story:unowned-handle-ratchet`, after
+    the fix, Q12).
 
 ## 5 The recommendation
 
-Three stories, in this order:
+Four stories, in this order:
 
 1. **Census and soak** (`story:leak-census`): per-kind live counters in `ignite-io` and
    `ignite-rt`, heap bytes counted on both targets, `std.runtime` with `Runtime.census()`,
-   `Runtime.settle(..)` and `soak(..)`. Its first failing cases are a seeded leak per compared
-   kind and, once the case study supplies it, G30's reproducer as a soak.
-2. **Leak check in `ignite test`** (`story:leak-check-tests`): on by default for every test, on
-   counts only; a test opts out with `Runtime.leaves_running(reason)`; every test of `std/` and
-   `examples/` passes it or opts out with a reason.
-3. **Runtime metrics** (`story:runtime-metrics`): the census as metric lines a server exports;
+   `Runtime.settle(..)` and `soak(..)`. Its first failing cases are G30's `alias` and `field`
+   forms as soak tests, red on `main` on LLVM, and a seeded leak per compared kind. It lands with
+   `story:channel-release-on-close` in one wave, the guard first, so the fix turns those tests
+   green.
+2. **Runtime metrics** (`story:runtime-metrics`): the census as metric lines a server exports;
    the todo example exports them.
+3. **Leak check in `ignite test`** (`story:leak-check-tests`): on by default for every test, on
+   counts only; a test opts out with `Runtime.leaves_running(reason)`; every test of `std/` and
+   `examples/` passes it or opts out with a reason. After 2 (both edit `std/runtime.ignite`) and
+   after the fix (both edit `crates/ignite-llvm/src/lower.rs`).
+4. **Unowned-handle ratchet** (`story:unowned-handle-ratchet`): the static half of (d), after
+   the fix.
 
 ### 5.1 The census
 
@@ -248,49 +286,74 @@ come from `ignite-io`, except `handles` and `heap_copies`, which only the LLVM r
 
 ## 6 Target form
 
-### 6.1 A soak test (G30)
+### 6.1 A soak test (G30, the guard's first failing case)
 
-In `std/sync.ignite`, beside the channel tests. The body below is the reported three lines; it
-is replaced by the case study's reproducer when that arrives (section 1):
+In `std/sync.ignite`, beside the channel tests: the reproducer's `alias` and `field` forms
+(section 1.1), each run inline 2,000 times. Spawned or inline leaks the same, and inline needs no
+settle:
 
 ```ignite
-test fn poll_closed() -> Result<Unit, IoError> {
-  let (r, b) = Channel.bounded(1)
-  r.close()
-  b.receive_within(0 ms)
-  Ok(())
+type Waiter {
+  id: Int
+  wake: Receiver<Int>
 }
 
-test fn spawn_poll_closed(run: Int) -> Unit {
-  spawn poll_closed()
+fn alias_end(run: Int) -> Unit {
+  let (tx, rx) = Channel.bounded(1)
+  let r: Receiver<Int> = rx
+  let rung = tx.try_send(run)
+  tx.close()
+  let got = r.receive_within(0 ms)
 }
 
-test "a closed channel is freed (G30)" {
-  assert soak(1000, spawn_poll_closed).growth == []
+fn field_end(run: Int) -> Unit {
+  let (tx, rx) = Channel.bounded(1)
+  let w = Waiter { id = run, wake = rx }
+  let rung = tx.try_send(run)
+  tx.close()
+  let got = w.wake.receive_within(0 ms)
+}
+
+test "a channel end bound a second time is released (G30)" {
+  assert soak(2000, alias_end).growth == []
+}
+
+test "a channel end kept in a record field is released (G30)" {
+  assert soak(2000, field_end).growth == []
 }
 ```
 
-Before the fix, on a target that leaks (illustrative numbers):
+On `main` before the fix, LLVM target (the counts follow from one unowned receiver per run; the
+bytes are illustrative):
 
 ```
-running 1 test
-test std.sync/a closed channel is freed (G30) ... FAILED
+running 2 tests
+test std.sync/a channel end bound a second time is released (G30) ... FAILED
+test std.sync/a channel end kept in a record field is released (G30) ... FAILED
 
 failures:
 
----- std.sync/a closed channel is freed (G30) stderr ----
-assertion failed: soak(1000, spawn_poll_closed).growth == []
-  left: [Growth { kind: "channels", before: 100, after: 1000 }, Growth { kind: "handles", before: 200, after: 2000 }, Growth { kind: "heap_bytes", before: 61440, after: 394440 }]
+---- std.sync/a channel end bound a second time is released (G30) stderr ----
+assertion failed: soak(2000, alias_end).growth == []
+  left: [Growth { kind: "channels", before: 200, after: 2000 }, Growth { kind: "handles", before: 200, after: 2000 }, Growth { kind: "heap_bytes", before: 98304, after: 980304 }]
   right: []
-  at std/sync.ignite:142:3
+  at std/sync.ignite:160:3
+
+---- std.sync/a channel end kept in a record field is released (G30) stderr ----
+assertion failed: soak(2000, field_end).growth == []
+  left: [Growth { kind: "channels", before: 200, after: 2000 }, Growth { kind: "handles", before: 200, after: 2000 }, Growth { kind: "heap_bytes", before: 98304, after: 980304 }]
+  right: []
+  at std/sync.ignite:164:3
 
 failures:
-    std.sync/a closed channel is freed (G30)
+    std.sync/a channel end bound a second time is released (G30)
+    std.sync/a channel end kept in a record field is released (G30)
 
-test result: FAILED. 0 passed; 1 failed; 8 filtered out; finished in 0.31s
+test result: FAILED. 0 passed; 2 failed; 8 filtered out; finished in 0.05s
 ```
 
-When the leak holds no counted object, only `heap_bytes` (or `arena_bytes`) appears.
+The Rust target passes both before the fix. `typed` and `server` are the fix story's further
+tests. When a leak holds no counted object, only `heap_bytes` (or `arena_bytes`) appears.
 
 ### 6.2 Any test, checked with no code
 
@@ -336,21 +399,20 @@ fn runtime(request: Request) -> Response =
 
 ## 7 Acceptance of the guard
 
-- Seeded leaks, red before any real reproducer: debug builds of `ignite-io` and `ignite-rt`
+- G30, the first failing case: the two soak tests of 6.1 fail on `main` (before
+  `story:channel-release-on-close`) on the LLVM target, each naming `handles` and `channels`, and
+  pass on the Rust target. `story:leak-census` records that red run; it lands in one wave with
+  the fix, the guard first, and the fix turns both green on both targets (the fix story's
+  acceptance). Inside `ignite test`, 2,000 iterations, by the live handle count, not RSS.
+- Seeded leaks, red independently of any real bug: debug builds of `ignite-io` and `ignite-rt`
   read `IGNITE_DEBUG_LEAK=<kind>` (precedent: `IGNITE_DEBUG_HOST_FAULT`,
-  `crates/ignite/src/run/process.rs`) and then skip one release per object of that kind:
-  `channel` forgets a channel's `Shared` (both targets), `handle` registers an end and never
-  releases its slot (LLVM), `heap_copy` never frees a received value's heap copy (LLVM),
-  `bytes` leaks 370 B per closed channel and holds no counted object (both targets). A fixture
-  under `crates/ignite/tests/fixtures/leak/` with one soak test and one plain test passes
-  without the variable and fails with each value, naming that kind (`bytes`: `heap_bytes`), on
-  both targets where the kind exists. This is the guard's first failing case.
-- G30: the case study's reproducer (requested, see `story:channel-release-on-close`) as the soak
-  of 6.1 fails under the guard before the fix, naming the kind that grew, and passes on both
-  targets with it. The two stories land in one wave, the guard first; the wave's record shows
-  both runs. If the reproducer turns out to need concurrency the soak does not give (a burst
-  that only raises the handle table's high-water mark, section 2), the record says so and the
-  case is Q11's, not a missed leak.
+  `crates/ignite/src/run/process.rs`) and then skip one release per object of that kind, for
+  every compared kind: `task`, `channel`, `listener`, `stream`, `pipe`, `child`, `directory`,
+  `capability` (both targets), `handle`, `heap_copy`, `arena` (a task's arena block kept at its
+  end; LLVM), and `bytes` (370 B per closed channel holding no counted object, both targets). A
+  fixture under `crates/ignite/tests/fixtures/leak/` with one soak test per kind and one plain
+  test passes without the variable and fails with each value, naming that kind (`bytes`:
+  `heap_bytes`, `arena`: `arena_bytes`), on each target where the kind exists.
 - `task test-ignite` runs every test of `std/` and `examples/` under the leak check on both
   targets; each test that opts out names a reason, and their count is a count row in
   `quality/baseline.json` (lower is better).
@@ -364,9 +426,10 @@ Filed in the planning store under `epic:leak-guard`.
 
 | order | story | outcome | depends on |
 |---|---|---|---|
-| 1 | `leak-census` | per-kind counters and heap bytes on both targets, `std.runtime` (`census`, `settle`, `soak`); seeded leaks red, then G30's reproducer red before the fix | none; `channel-release-on-close` depends on it |
-| 2 | `leak-check-tests` | `ignite test` fails a test that leaves a counted object behind; std and examples pass or opt out with a reason | 1 |
-| 3 | `runtime-metrics` | `lines(census, prefix)` and the todo example's `GET /runtime` | 1 |
+| 1 | `leak-census` | per-kind counters and heap bytes on both targets, `std.runtime` (`census`, `settle`, `soak`); G30's `alias` and `field` soaks red on `main`, seeded leaks red | none; `channel-release-on-close` depends on it |
+| 2 | `runtime-metrics` | `lines(census, prefix)` and the todo example's `GET /runtime` | 1 |
+| 3 | `leak-check-tests` | `ignite test` fails a test that leaves a counted object behind; std and examples pass or opt out with a reason | 1, 2, `channel-release-on-close` |
+| 4 | `unowned-handle-ratchet` | `own.rs`'s give-ups listed by `ignite emit --unowned`; a test holds the list of `std/` and `examples/` to a baseline that may only shrink | `channel-release-on-close` |
 
 ## 9 Open questions
 
@@ -379,7 +442,8 @@ Filed in the planning store under `epic:leak-guard`.
 | Q5 | Report where a leaked object was created? | not in story 1 or 2; a later `--leak-sites` could record the source position per object in test builds |
 | Q6 | Soak warm-up and slack | warm-up `max(10, runs / 10)`, slack 64 KiB on bytes, counts exact |
 | Q7 | Stores never freed on LLVM | resident kind: reported, not compared; `Store.new()` per run in a soak is a known LLVM difference, not a guard failure |
-| Q8 | Ends carried in values or sent on a channel are unowned on LLVM by design (`own.rs`) | the census will show them; story 2's sweep files a fix story if a std or example test hits it |
+| Q8 | Handles other than channel ends in the places of 1.2 (a stream or pipe end in a record, a `Store`, a second binding) leak the same way on LLVM | the fix for channel ends introduces drop glue for every handle kind where the cost is the same; otherwise `leak-check-tests`'s sweep and the ratchet of Q12 file each remaining kind as its own story |
 | Q9 | Compare resident size anywhere? | no, report only; the fix story's end-to-end RSS test stays the check of the whole process |
 | Q10 | Zero-argument closures for `soak` | `fn(Int) -> Unit` with the run index, which needs none; revisit when closures without parameters exist |
 | Q11 | Handle-table segments keep the high-water mark of open handles for the process's life, and `waited` keeps 16 B per waited child | no leak for the guard: reported as `handle_slots` and `pooled_bytes`, not compared; a story to free empty trailing segments is filed only when a server's metrics (5.4) show a burst's memory kept and it matters; `waited` stays by design and a soak over child waits is expected to grow by it |
+| Q12 | A static guard for the class of 1.2: a diagnostic, or a list? | a list, not a diagnostic: the forms are correct programs. `ignite emit --unowned` prints each place `own.rs` leaves a handle unowned (file, line, binding, why); a test holds `std/` and `examples/` to a checked-in baseline that may only shrink (`story:unowned-handle-ratchet`) |
