@@ -31,10 +31,11 @@ dependencies between the waves are in
 | **v0.12.0** | streamed and binary HTTP responses and effectful fn values in `map`: `std.protocol.http` sends chunked and binary response bodies, a reason phrase for every RFC 9110 status, and no body or `Content-Length` for 304, 1xx and a 2xx to CONNECT; `List.map` takes a local or parameter holding an effectful fn, and an untyped one is E042; `Bytes` set by index, `to_lower` and `to_upper` in place; associated fn names in generated Rust never collide ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.12.0)) |
 | **v0.13.0** | spawn handovers in branches and Rust names that shadow nothing: on the LLVM target a stream end passed to `spawn` at its last use inside `if`/`else` branches or `match` arms moves into the task; on the Rust target `spawn` evaluates its arguments in source order, and a program may name things after Rust primitives, crate roots or the generator's own locals; the website's pages are checked for layout and accessibility on every merge, the FAQ is in the landing page's header and text is at least 14 px ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.13.0)) |
 | **v0.14.0** | builtins a real service needs, a clean exit after a drain and a quality ratchet: environment variables (`Environment`), `Clock.sleep`, the wall clock `Clock.now()` and `Process.flush()`; `TcpStream.peer`, `timed_out` and `connect_within`; `Process.exit` during a drain exits with its code at once; user functions named like builtins and record literals as method receivers check; the chunked HTTP decoder copies no chunk, and `Store` reads no longer wait on an update; quality metrics with a bar that every release must hold (`task quality`), a differential runner over both targets and the evaluator; a toolchain image for every release ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.14.0)) |
+| **v0.15.0** | bitwise operators, channels and throughput near plain Rust: bitwise operators; channels and timers in `std.sync`; a drain that keeps the listeners open; a higher open-files limit; `IoError` compared in `assert`; the `std.data` value model and its bridge to `std.json`; `List.with_capacity` and `Bytes.with_capacity`; faster generated code and runtime on both targets, so the todo and terminal examples answer at 0.93 to 1.07 times the replies per second of plain Rust; ThinLTO release builds on the LLVM target, and `spawn` no longer waits for the task to start; timing and benchmarks against plain Rust and Go on a dedicated host before each release ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.15.0)) |
 
 ## What's next
 
-The work after v0.14.0 comes in waves of a few stories each. A wave is merged when every story
+The work after v0.15.0 comes in waves of a few stories each. A wave is merged when every story
 in it passes the gate, and a release follows every third wave. The order below is the current
 plan, not a promise of dates. The plan itself is
 [`.engineering/waves/plan-2026-11-07.md`](https://github.com/ignite-lang/ignite/blob/main/.engineering/waves/plan-2026-11-07.md).
@@ -43,7 +44,7 @@ plan, not a promise of dates. The plan itself is
 
 | wave | content | state |
 |---|---|---|
-| 7 | bitwise operators; channels and timers; a drain that keeps the listeners open; a higher open-files limit; `IoError` compared in `assert`; the `std.data` value model and its bridge to `std.json` ([data formats](planned/data.md)) | in progress |
+| native parity | Ignite programs within 1.1× of plain Rust: an IO scheduler that waits on readiness instead of running one thread per connection, fixed-width integers for codecs | in progress |
 
 ### Planned
 

@@ -536,7 +536,8 @@
           "value": 7405864
         },
         "rust/todod/release": {
-          "value": 961880
+          "decision": "Accepted for v0.15.0 (coordinator, 2026-11-08): the Rust-target todo release binary grew 3.2 % over v0.14.0 (980,136 B) with wave 7 (std.data, channels, bitwise operators) and the native-parity rounds (text search builtins, the lent index_of, capacity hints), which add std code the todo example reaches; the growth is not attributed to one PR. Binary size is not one of the native-parity targets on the Rust target; revisited with the mid-level IR.",
+          "value": 1011216
         }
       },
       "direction": "lower",
