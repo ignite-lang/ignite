@@ -180,6 +180,45 @@ impl Value {
         }
     }
 
+    /// The structural equality of `assert a == b` (`docs/slice.md` 12.3,
+    /// 12.5): `==` on every part except an `IoError`, which compares its
+    /// message only, as both targets do.
+    pub fn assert_equal(&self, other: &Value) -> bool {
+        let all = |a: &[Value], b: &[Value]| {
+            a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.assert_equal(y))
+        };
+        match (self, other) {
+            (Value::IoError { message: a, .. }, Value::IoError { message: b, .. }) => a == b,
+            (Value::List(a), Value::List(b)) | (Value::Tuple(a), Value::Tuple(b)) => all(a, b),
+            (Value::Record { name: n, fields: a }, Value::Record { name: m, fields: b }) => {
+                n == m
+                    && a.len() == b.len()
+                    && a.iter()
+                        .zip(b)
+                        .all(|((f, x), (g, y))| f == g && x.assert_equal(y))
+            }
+            (
+                Value::Enum {
+                    name: n,
+                    variant: v,
+                    fields: a,
+                },
+                Value::Enum {
+                    name: m,
+                    variant: w,
+                    fields: b,
+                },
+            ) => n == m && v == w && all(a, b),
+            (Value::Map(a), Value::Map(b)) => {
+                a.len() == b.len()
+                    && a.iter()
+                        .zip(b)
+                        .all(|((k, x), (l, y))| k.assert_equal(l) && x.assert_equal(y))
+            }
+            _ => self == other,
+        }
+    }
+
     /// Whether the model can encode the value (`docs/slice.md` section
     /// 15.4): `Err` names the first part it cannot (a closure, an
     /// `IoError`), for E118.
@@ -555,6 +594,8 @@ fn decode(json: &Json, ty: &Ty, types: &TypedProgram, path: &str) -> Result<Valu
         | Ty::PipeStream
         | Ty::IoError
         | Ty::Store(_)
+        | Ty::Sender(_)
+        | Ty::Receiver(_)
         | Ty::Never
         | Ty::Param(_) => Err(fail(format!("a value of type `{ty}` cannot be decoded"))),
     }

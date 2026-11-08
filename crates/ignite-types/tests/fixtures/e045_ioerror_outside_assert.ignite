@@ -1,0 +1,14 @@
+fn same(a: IoError, b: IoError) -> Bool = a == b
+
+fn same_result(a: Result<Int, IoError>) -> Bool = a == Err(IoError.new("bad port"))
+
+test "IoError equality only inside an assert" {
+  let e = IoError.new("bad port")
+  assert e == IoError.new("bad port")
+  assert [Some((1, e))] != []
+  if e == e {
+    return
+  }
+  let differ = Some(e) != None
+  assert differ
+}

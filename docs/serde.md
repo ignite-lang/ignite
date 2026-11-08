@@ -1,6 +1,6 @@
 # Data formats: one value model, derived codecs, JSON, YAML and TOML
 
-**Status:** future design, not a slice contract. Nothing here is implemented.
+**Status:** future design, not a slice contract. Step 1 of section 8 (`std.data` and the JSON bridge) is implemented, `docs/slice.md` 27; the rest is not.
 **Date:** 8 November 2026
 **Scope:** turning Ignite values into JSON, YAML and TOML text and back, without a hand-written
 encoder and decoder per type. Called "serde" after the Rust crate; the mechanism differs (section 3).

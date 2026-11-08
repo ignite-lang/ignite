@@ -289,11 +289,12 @@ The operations on quantity types are in [Types: quantities](types.md#quantities)
 | `=>` | match arms |
 | `->` | return types |
 | `?` | error propagation |
-| `\|` | or-patterns, closure parameters `\|x\| x + 1` |
+| `\|` | or-patterns, closure parameters `\|x\| x + 1`; bitwise or |
 | `\|\|` | logical or; a closure without parameters `\|\| 0` |
 | `+ - * / %` | arithmetic; `+` also joins `Text` |
 | `== != < > <= >=` | comparison |
 | `&& \|\| !` | logic |
+| `& ^ ~` | bitwise and, exclusive or, not on `Int`; `<<` and `>>` are two touching `<` or `>` |
 
 The precedence of the operators is in the [grammar](grammar.md#operator-precedence).
 

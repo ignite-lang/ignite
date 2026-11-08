@@ -956,6 +956,7 @@ impl<'e> Encoder<'e> {
                 let tag = match op {
                     UnaryOp::Not => "not",
                     UnaryOp::Neg => "neg",
+                    UnaryOp::BitNot => "bitnot",
                 };
                 self.wrapped(tag, operand);
             }

@@ -1548,6 +1548,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 let x = self.scalar(&v);
                 match op {
                     UnaryOp::Not => Val::Scalar(self.f.val(format!("xor i1 {x}, true"))),
+                    UnaryOp::BitNot => Val::Scalar(self.f.val(format!("xor i64 {x}, -1"))),
                     UnaryOp::Neg => {
                         let t = scalar_type(&self.ty(operand)).unwrap_or("i64");
                         if t == "i64" && !matches!(operand.kind, ExprKind::Int(_)) {
@@ -3221,6 +3222,9 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         let t = scalar_type(&ty).unwrap_or("i64");
         let (a, b) = (self.scalar(&l), self.scalar(&r));
         let signed = ty != Ty::Byte;
+        if op.is_bitwise() {
+            return Val::Scalar(self.bitwise(op, &a, &b));
+        }
         let instr = match op {
             BinaryOp::Eq => "icmp eq",
             BinaryOp::Ne => "icmp ne",
@@ -3273,7 +3277,13 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                     (_, false) => "urem",
                 }
             }
-            BinaryOp::And | BinaryOp::Or => unreachable!("handled above"),
+            BinaryOp::And
+            | BinaryOp::Or
+            | BinaryOp::BitAnd
+            | BinaryOp::BitOr
+            | BinaryOp::BitXor
+            | BinaryOp::Shl
+            | BinaryOp::Shr => unreachable!("handled above"),
         };
         Val::Scalar(self.f.val(format!("{instr} {t} {a}, {b}")))
     }
@@ -3309,6 +3319,30 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         let lenp = self.gep(&p, 8);
         self.f.ins(format!("store i64 {next}, ptr {lenp}, align 8"));
         out
+    }
+
+    /// `a op b` on `i64` for a bitwise `op` (`docs/slice.md` 29.2). LLVM's
+    /// `shl` and `ashr` are poison for an amount outside `0..64`, so `<<`
+    /// selects 0 for one (the unselected poison does not propagate) and
+    /// `>>` shifts by at most 63, the sign fill; an amount is compared
+    /// unsigned, so a negative one counts as too large.
+    fn bitwise(&mut self, op: BinaryOp, a: &str, b: &str) -> String {
+        match op {
+            BinaryOp::BitAnd => self.f.val(format!("and i64 {a}, {b}")),
+            BinaryOp::BitOr => self.f.val(format!("or i64 {a}, {b}")),
+            BinaryOp::BitXor => self.f.val(format!("xor i64 {a}, {b}")),
+            BinaryOp::Shl => {
+                let fits = self.f.val(format!("icmp ult i64 {b}, 64"));
+                let shifted = self.f.val(format!("shl i64 {a}, {b}"));
+                self.f
+                    .val(format!("select i1 {fits}, i64 {shifted}, i64 0"))
+            }
+            _ => {
+                let fits = self.f.val(format!("icmp ult i64 {b}, 64"));
+                let amount = self.f.val(format!("select i1 {fits}, i64 {b}, i64 63"));
+                self.f.val(format!("ashr i64 {a}, {amount}"))
+            }
+        }
     }
 
     /// `a op b` for `+`, `-` and `*` through `llvm.*.with.overflow`: an
@@ -4210,6 +4244,119 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         }
     }
 
+    /// A channel builtin (`docs/slice.md` 30): each end is an `i64` handle
+    /// of the runtime's table, a value crosses as a heap copy made and
+    /// freed by the element's `Store` glue.
+    fn channel(&mut self, e: &Expr, b: Builtin, receiver: Option<&Expr>, args: &[Expr]) -> Val {
+        use Builtin::*;
+        let ptr = || "ptr".to_string();
+        let i64 = || "i64".to_string();
+        let element = match receiver.filter(|_| b != ChannelBounded) {
+            None => match self.ty(e) {
+                Ty::Tuple(ends) => match ends.first() {
+                    Some(Ty::Sender(t)) => (**t).clone(),
+                    other => panic!("`Channel.bounded` of ends {other:?}"),
+                },
+                other => panic!("`Channel.bounded` of type {other:?}"),
+            },
+            Some(r) => match self.ty(r) {
+                Ty::Sender(t) | Ty::Receiver(t) => *t,
+                other => panic!("channel method on {other:?}"),
+            },
+        };
+        if b == ChannelBounded {
+            self.m.declare(
+                "ignite_rt_channel_bounded",
+                "void",
+                &[i64(), ptr(), ptr(), ptr(), i64(), i64(), ptr(), ptr()],
+            );
+            let capacity = self.scalar_arg(&args[0]);
+            let to = self.m.glue_of(Glue::ToHeap, &element);
+            let from = self.m.glue_of(Glue::FromHeap, &element);
+            let free = self.m.glue_of(Glue::FreeHeap, &element);
+            let layout = self.layout(&element);
+            let ends = [
+                Ty::Sender(Box::new(element.clone())),
+                Ty::Receiver(Box::new(element.clone())),
+            ];
+            let (offsets, _) = self.env.tuple_layout(&ends);
+            let pair = self.temp(&Ty::Tuple(ends.to_vec()));
+            let first = self.gep(&pair, offsets[0]);
+            let second = self.gep(&pair, offsets[1]);
+            self.f.ins(format!(
+                "call void @ignite_rt_channel_bounded(i64 {capacity}, ptr {to}, ptr {from}, ptr {free}, i64 {}, i64 {}, ptr {first}, ptr {second})",
+                layout.size,
+                layout.align.max(1)
+            ));
+            return Val::Ptr(pair, true);
+        }
+        let r = self.expr(receiver.expect("a channel method has a receiver"), true);
+        if r == Val::Never {
+            return Val::Never;
+        }
+        let handle = self.scalar(&r);
+        match b {
+            SenderSend | SenderTrySend => {
+                let name = if b == SenderSend {
+                    "ignite_rt_channel_send"
+                } else {
+                    "ignite_rt_channel_try_send"
+                };
+                self.m.declare(name, "i8", &[i64(), ptr()]);
+                let v = self.expr(&args[0], true);
+                if v == Val::Never {
+                    return Val::Never;
+                }
+                let have = self.ty(&args[0]);
+                let v = self.coerce(&element, &have, v);
+                let value = match v {
+                    Val::Ptr(p, _) => p,
+                    other => {
+                        let t = self.temp(&element);
+                        self.store_value(&element, &t, other);
+                        t
+                    }
+                };
+                let sent = self
+                    .f
+                    .val(format!("call i8 @{name}(i64 {handle}, ptr {value})"));
+                Val::Scalar(self.f.val(format!("icmp ne i8 {sent}, 0")))
+            }
+            SenderClose | ReceiverClose => {
+                self.m.declare("ignite_rt_channel_close", "void", &[i64()]);
+                self.f
+                    .ins(format!("call void @ignite_rt_channel_close(i64 {handle})"));
+                Val::Unit
+            }
+            ReceiverReceive => {
+                self.m
+                    .declare("ignite_rt_channel_receive", "i8", &[i64(), ptr()]);
+                self.option_from("channel_receive", &element, |payload| {
+                    format!("i64 {handle}, ptr {payload}")
+                })
+            }
+            ReceiverReceiveWithin => {
+                self.m.declare(
+                    "ignite_rt_channel_receive_within",
+                    "i8",
+                    &[i64(), i64(), ptr()],
+                );
+                let duration = self.scalar_arg(&args[0]);
+                self.option_from("channel_receive_within", &element, |payload| {
+                    format!("i64 {handle}, i64 {duration}, ptr {payload}")
+                })
+            }
+            ReceiverClosed => {
+                self.m.declare("ignite_rt_channel_closed", "i8", &[i64()]);
+                let closed = self
+                    .f
+                    .val(format!("call i8 @ignite_rt_channel_closed(i64 {handle})"));
+                Val::Scalar(self.f.val(format!("icmp ne i8 {closed}, 0")))
+            }
+            other => unreachable!("`{other:?}` is no channel builtin"),
+        }
+    }
+
     fn builtin(&mut self, e: &Expr, b: Builtin, receiver: Option<&Expr>, args: &[Expr]) -> Val {
         use Builtin::*;
         let recv = |this: &mut Self| -> Val {
@@ -4493,6 +4640,14 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             | CommandLineArguments
             | EnvironmentOf
             | EnvironmentGet => self.capability(b, receiver, args),
+            ChannelBounded
+            | SenderSend
+            | SenderTrySend
+            | SenderClose
+            | ReceiverReceive
+            | ReceiverReceiveWithin
+            | ReceiverClosed
+            | ReceiverClose => self.channel(e, b, receiver, args),
             ClockSleep => {
                 self.m
                     .declare("ignite_rt_clock_sleep", "void", &["i64".to_string()]);
@@ -4504,6 +4659,10 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             ClockNow => {
                 self.m.declare("ignite_rt_clock_now", "i64", &[]);
                 Val::Scalar(self.f.val("call i64 @ignite_rt_clock_now()"))
+            }
+            ProcessOpenFilesLimit => {
+                self.m.declare("ignite_rt_open_files_limit", "i64", &[]);
+                Val::Scalar(self.f.val("call i64 @ignite_rt_open_files_limit()"))
             }
             ProcessFlush => {
                 self.m.declare("ignite_rt_flush", "void", &[]);
@@ -5420,10 +5579,13 @@ fn instance_linkage(
 }
 
 /// Whether `ty` is a stream handle that a task owns when it is moved to
-/// it: a `TcpStream` or a `PipeStream` end (`ignite_rt_tcp_own` and
+/// it: a `TcpStream`, a `PipeStream` end or a channel end (`ignite_rt_tcp_own` and
 /// `ignite_rt_tcp_release` take any handle, `docs/slice.md` 18.9).
 fn is_stream(ty: &Ty) -> bool {
-    matches!(ty, Ty::TcpStream | Ty::PipeStream)
+    matches!(
+        ty,
+        Ty::TcpStream | Ty::PipeStream | Ty::Sender(_) | Ty::Receiver(_)
+    )
 }
 
 /// `sig` with `params` replaced by `args`.

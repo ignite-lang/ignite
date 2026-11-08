@@ -1,0 +1,4 @@
+e045_ioerror_outside_assert.ignite:1:43: error[E045]: operator `==` is not defined for `IoError`: it holds a function, handle, store, `IoError` or type parameter
+e045_ioerror_outside_assert.ignite:3:51: error[E045]: operator `==` is not defined for `Result<Int, IoError>`: it holds a function, handle, store, `IoError` or type parameter
+e045_ioerror_outside_assert.ignite:9:6: error[E045]: operator `==` is not defined for `IoError`: it holds a function, handle, store, `IoError` or type parameter
+e045_ioerror_outside_assert.ignite:12:16: error[E045]: operator `!=` is not defined for `Option<IoError>`: it holds a function, handle, store, `IoError` or type parameter

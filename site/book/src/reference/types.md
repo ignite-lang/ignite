@@ -574,7 +574,7 @@ declarations. They are listed here for completeness; their operations are in the
 | `PipeStream` | one end of an in-process pipe from `Pipe.pair()` (tests only); the same methods as `TcpStream` plus `received_batches()` |
 | `Input` | the result of a read: `Data(Bytes)` or `Eof` |
 | `Store<T>` | shared in-memory storage keyed by `Int`: `next_id()`, `get(id)`, `put(id, v)`, `remove(id)`, `values()`, `update(id, f)`, `upsert(id, f)`; a `resource`, or `Store.new()` in tests |
-| `Stdin`, `Stdout`, `Stderr`, `Process`, `Clock`, `Pipe` | static owners only: `Stdin.read(n)`, `Stdout.write_all(b)`, `Stderr.write_all(b)`, `Process.exit(code)`, `Process.flush()`, `Clock.monotonic()`, `Clock.now()`, `Clock.sleep(d)`, `Pipe.pair()` |
+| `Stdin`, `Stdout`, `Stderr`, `Process`, `Clock`, `Pipe` | static owners only: `Stdin.read(n)`, `Stdout.write_all(b)`, `Stderr.write_all(b)`, `Process.exit(code)`, `Process.flush()`, `Process.open_files_limit()`, `Clock.monotonic()`, `Clock.now()`, `Clock.sleep(d)`, `Pipe.pair()` |
 | `Ref<K>`, `Ref` | a reference to a member of a system, `System.member`; `Ref` is the kind-erased form |
 | `Signal<T>` | an output field of a component kind |
 | `SystemRef`, `Protocol` | a system or protocol named as a value |

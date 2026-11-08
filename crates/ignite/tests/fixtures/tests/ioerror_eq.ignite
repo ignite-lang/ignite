@@ -1,0 +1,58 @@
+package ioerror_eq
+
+type Failure {
+  step: Text,
+  error: IoError
+}
+
+enum Outcome {
+  Done(Int),
+  Failed(IoError)
+}
+
+fn port(text: Text) -> Result<Int, IoError> {
+  match Int.parse(text) {
+    Some(n) => Ok(n),
+    None => Err(IoError.new("bad port"))
+  }
+}
+
+fn bad_port() -> Int {
+  assert port("x") == Err(IoError.new("bad port"))
+  assert port("80") == Ok(80)
+  assert port("x") != Err(IoError.new("other"))
+  assert IoError.new("bad port") == IoError.new("bad port").with_exit_code(3)
+  1
+}
+
+fn nested() -> Int {
+  assert [IoError.new("a"), IoError.new("b")] == [IoError.new("a"), IoError.new("b")]
+  assert [IoError.new("a")] != [IoError.new("b")]
+  assert Some(IoError.new("a")) == Some(IoError.new("a"))
+  assert Some(IoError.new("a")) != None
+  assert (1, IoError.new("a")) == (1, IoError.new("a"))
+  assert (1, IoError.new("a")) != (1, IoError.new("b"))
+  assert Failure { step = "bind", error = IoError.new("a") } == Failure { step = "bind", error = IoError.new("a") }
+  assert Failure { step = "bind", error = IoError.new("a") } != Failure { step = "bind", error = IoError.new("b") }
+  assert Outcome.Failed(IoError.new("a")) == Outcome.Failed(IoError.new("a"))
+  assert Outcome.Failed(IoError.new("a")) != Outcome.Failed(IoError.new("b"))
+  assert Outcome.Failed(IoError.new("a")) != Outcome.Done(1)
+  2
+}
+
+fn differs() -> Int {
+  assert port("x") == Err(IoError.new("other"))
+  3
+}
+
+test "an IoError result compares by its message" {
+  assert bad_port() == 1
+}
+
+test "IoError inside lists, options, tuples, records and enums" {
+  assert nested() == 2
+}
+
+test "a different message fails with both values" {
+  assert differs() == 3
+}

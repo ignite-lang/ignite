@@ -680,11 +680,31 @@ fn executable_main_in<'e>(
             }
             _ => declared,
         };
+        let kept = resource
+            .properties
+            .iter()
+            .find(|p| p.name.name == "keep_through_drain")
+            .map(|p| {
+                let value = l.expr(&p.value, true);
+                let flag = l.scalar(&value);
+                l.f.val(format!("zext i1 {flag} to i64"))
+            });
         let address = l.ptr(&address);
         let handle = l.temp(&Ty::Int);
-        let status = l.f.val(format!(
-            "call i32 @ignite_rt_tcp_bind(ptr {address}, i64 {port}, ptr {handle}, ptr {err})"
-        ));
+        let status = match kept {
+            Some(kept) => {
+                l.m.declare_raw(
+                    "ignite_rt_tcp_bind_kept",
+                    "declare i32 @ignite_rt_tcp_bind_kept(ptr, i64, i64, ptr, ptr)",
+                );
+                l.f.val(format!(
+                    "call i32 @ignite_rt_tcp_bind_kept(ptr {address}, i64 {port}, i64 {kept}, ptr {handle}, ptr {err})"
+                ))
+            }
+            None => l.f.val(format!(
+                "call i32 @ignite_rt_tcp_bind(ptr {address}, i64 {port}, ptr {handle}, ptr {err})"
+            )),
+        };
         fail_unless_ok(&mut l, &status, &err, 1);
         let bound = l.f.val(format!("load i64, ptr {handle}, align 8"));
         let local_port =

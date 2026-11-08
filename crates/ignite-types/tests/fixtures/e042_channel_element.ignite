@@ -1,0 +1,19 @@
+fn unknown() -> Bool {
+  let (tx, rx) = Channel.bounded(1)
+  rx.closed()
+}
+
+fn inferred() -> Bool {
+  let (tx, rx) = Channel.bounded(1)
+  tx.try_send("ready")
+}
+
+fn annotated() -> Option<Int> {
+  let ends: (Sender<Int>, Receiver<Int>) = Channel.bounded(4)
+  ends.1.receive()
+}
+
+fn mismatch() -> Int {
+  let n: Int = Channel.bounded(1)
+  n
+}

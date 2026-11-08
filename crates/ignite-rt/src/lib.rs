@@ -46,11 +46,11 @@ pub use fail::{
 };
 pub use net::{
     ignite_rt_own_mark, ignite_rt_own_release, ignite_rt_tcp_accept, ignite_rt_tcp_bind,
-    ignite_rt_tcp_close, ignite_rt_tcp_connect, ignite_rt_tcp_connect_within,
-    ignite_rt_tcp_local_port, ignite_rt_tcp_own, ignite_rt_tcp_peer, ignite_rt_tcp_read,
-    ignite_rt_tcp_release, ignite_rt_tcp_retain, ignite_rt_tcp_set_idle_timeout,
-    ignite_rt_tcp_timed_out, ignite_rt_tcp_urgent_pending, ignite_rt_tcp_write_all,
-    ignite_rt_tcp_write_urgent,
+    ignite_rt_tcp_bind_kept, ignite_rt_tcp_close, ignite_rt_tcp_connect,
+    ignite_rt_tcp_connect_within, ignite_rt_tcp_local_port, ignite_rt_tcp_own, ignite_rt_tcp_peer,
+    ignite_rt_tcp_read, ignite_rt_tcp_release, ignite_rt_tcp_retain,
+    ignite_rt_tcp_set_idle_timeout, ignite_rt_tcp_timed_out, ignite_rt_tcp_urgent_pending,
+    ignite_rt_tcp_write_all, ignite_rt_tcp_write_urgent,
 };
 pub use process::{
     ignite_rt_args_port, ignite_rt_endpoint_of, ignite_rt_exit, ignite_rt_fail, ignite_rt_init,
@@ -270,6 +270,15 @@ impl IgniteList {
         }
     }
 }
+
+// `docs/slice.md` 30: the channel entries, after the tests for the same
+// reason.
+mod channel;
+pub use channel::{
+    ignite_rt_channel_bounded, ignite_rt_channel_close, ignite_rt_channel_closed,
+    ignite_rt_channel_receive, ignite_rt_channel_receive_within, ignite_rt_channel_send,
+    ignite_rt_channel_try_send,
+};
 
 // Panic containment at the C ABI (`crate::contain`), after the tests for
 // the same reason.

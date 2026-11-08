@@ -1588,6 +1588,8 @@ fn rust_type_in(ty: &Type, params: &BTreeSet<String>) -> String {
             format!("::ignite_io::{}", ty.name.name)
         }
         "Store" => generic("::ignite_io::Store"),
+        "Sender" => generic("::ignite_io::Sender"),
+        "Receiver" => generic("::ignite_io::Receiver"),
         "Map" => generic("::std::collections::BTreeMap"),
         "Duration" | "ByteSize" | "Ratio" => "i64".to_string(),
         "Ref" | "Signal" | "SystemRef" | "Protocol" => "String".to_string(),
@@ -2342,6 +2344,8 @@ impl<'a> Generator<'a> {
             Ty::Input => "::ignite_io::Input".to_string(),
             Ty::Param(name) => ident(name),
             Ty::Store(item) => format!("::ignite_io::Store<{}>", self.rust_ty(item)),
+            Ty::Sender(item) => format!("::ignite_io::Sender<{}>", self.rust_ty(item)),
+            Ty::Receiver(item) => format!("::ignite_io::Receiver<{}>", self.rust_ty(item)),
         }
     }
 
@@ -3313,7 +3317,7 @@ impl<'a> Generator<'a> {
             }
             ExprKind::Unary { op, operand } => {
                 let symbol = match op {
-                    UnaryOp::Not => "!",
+                    UnaryOp::Not | UnaryOp::BitNot => "!",
                     UnaryOp::Neg => "-",
                 };
                 let text = self.value(operand);
@@ -3369,6 +3373,20 @@ impl<'a> Generator<'a> {
             } if matches!(self.type_of(expr), Some(Ty::List(_))) => {
                 let (l, r) = (self.operand(left), self.operand(right));
                 format!("[&({l})[..], &({r})[..]].concat()")
+            }
+            ExprKind::Binary {
+                op: op @ (BinaryOp::Shl | BinaryOp::Shr),
+                left,
+                right,
+            } => {
+                // `docs/slice.md` 29.2: an amount outside `0..64` gives 0
+                // for `<<` and the sign fill for `>>` (63 places).
+                let (l, r) = (self.operand(left), self.operand(right));
+                if *op == BinaryOp::Shl {
+                    format!("i64::checked_shl({l}, u64::min(({r}) as u64, 64) as u32).unwrap_or(0)")
+                } else {
+                    format!("i64::wrapping_shr({l}, u64::min(({r}) as u64, 63) as u32)")
+                }
             }
             ExprKind::Binary { op, left, right } => {
                 if let Some(chunked) = self.chunked_spine(expr) {
@@ -4087,6 +4105,9 @@ impl<'a> Generator<'a> {
             ("List", "empty", []) => "Vec::new()".to_string(),
             ("Map", "empty", []) => "::std::collections::BTreeMap::new()".to_string(),
             ("Store", "new", []) => "::ignite_io::Store::new()".to_string(),
+            ("Channel", "bounded", [capacity]) => {
+                format!("::ignite_io::Channel::bounded({capacity})")
+            }
             ("Pipe", "pair", []) => "::ignite_io::Pipe::pair()".to_string(),
             ("Directory", "temporary", []) => "::ignite_io::Directory::temporary()".to_string(),
             ("Launcher", "new", []) => "::ignite_io::Launcher::new()".to_string(),
@@ -4103,6 +4124,7 @@ impl<'a> Generator<'a> {
             ("Clock", "sleep", [duration]) => format!("::ignite_io::clock::sleep({duration})"),
             ("Clock", "now", []) => "::ignite_io::clock::now()".to_string(),
             ("Process", "flush", []) => "::ignite_io::flush()".to_string(),
+            ("Process", "open_files_limit", []) => "::ignite_io::open_files_limit()".to_string(),
             ("Int", "to_text", [value]) => {
                 format!("{}.to_string()", wrap(&args[0], value.clone()))
             }
@@ -4400,6 +4422,19 @@ impl<'a> Generator<'a> {
                 if let Some(bytes) = self.checked_slice_ref(receiver) {
                     return format!("String::from_utf8_lossy({bytes}).into_owned()");
                 }
+            }
+            Some(Callee::Builtin(
+                Builtin::SenderSend
+                | Builtin::SenderTrySend
+                | Builtin::SenderClose
+                | Builtin::ReceiverReceive
+                | Builtin::ReceiverReceiveWithin
+                | Builtin::ReceiverClosed
+                | Builtin::ReceiverClose,
+            )) => {
+                let r = self.receiver(receiver);
+                let a = self.args(args);
+                return format!("{r}.{}({})", ident(&name.name), a.join(", "));
             }
             Some(Callee::Builtin(Builtin::TcpStreamPeer)) => {
                 let endpoint = self.enum_name(&ignite_types::endpoint_name());
@@ -5132,7 +5167,8 @@ impl<'a> Generator<'a> {
     }
 
     /// A Rust `bool` expression: whether the values behind the references
-    /// `a` and `b` of type `ty` are equal (`docs/slice.md` section 13.5).
+    /// `a` and `b` of type `ty` are equal (`docs/slice.md` section 13.5); an
+    /// `IoError` (only inside an `assert`, 12.3) by its message.
     fn eq_test(&mut self, ty: &Ty, a: &str, b: &str) -> String {
         match ty {
             Ty::Int | Ty::Byte | Ty::Bool | Ty::Quantity(_) => format!("(*{a} == *{b})"),
@@ -5140,6 +5176,7 @@ impl<'a> Generator<'a> {
             Ty::Text | Ty::Ref(_) | Ty::Signal(_) | Ty::SystemRef | Ty::Protocol => {
                 format!("({a} == {b})")
             }
+            Ty::IoError => format!("(({a}).message == ({b}).message)"),
             _ => format!("{}({a}, {b})", self.glue_fn(Glue::Eq, ty)),
         }
     }
@@ -5171,6 +5208,8 @@ impl<'a> Generator<'a> {
             Ty::PipeStream => fixed("<PipeStream>"),
             Ty::TcpListener => fixed("<TcpListener>"),
             Ty::Store(_) => fixed("<Store>"),
+            Ty::Sender(_) => fixed("<Sender>"),
+            Ty::Receiver(_) => fixed("<Receiver>"),
             Ty::Capability(kind) => fixed(&format!("<{}>", kind.name())),
             Ty::Param(name) => fixed(&format!("<{name}>")),
             _ => format!("{}({v}, {out});", self.glue_fn(Glue::Debug, ty)),
@@ -5992,6 +6031,8 @@ fn is_comparison(op: BinaryOp) -> bool {
 struct Listener {
     address: String,
     port: i64,
+    /// `keep_through_drain = true` (`docs/slice.md` 16.13).
+    kept: bool,
 }
 
 /// The resources of one system.
@@ -6187,17 +6228,26 @@ fn lower_resource(resource: &ResourceDecl, diagnostics: &mut Vec<Diagnostic>) ->
     }
     let mut address = None;
     let mut port = None;
+    let mut kept = false;
     let mut valid = true;
     for property in &resource.properties {
         match (property.name.name.as_str(), &property.value.kind) {
             ("address", ExprKind::Str(text)) if address.is_none() => address = Some(text.clone()),
             ("port", ExprKind::Int(value)) if port.is_none() => port = Some(*value),
-            ("address" | "port" | "exposure" | "backlog", _)
+            ("address" | "port" | "exposure" | "backlog" | "keep_through_drain", _)
                 if is_duplicate(&resource.properties, property) =>
             {
                 diagnostics.push(e020(
                     property.name.span,
                     format!("duplicate property `{}`", property.name.name),
+                ));
+                valid = false;
+            }
+            ("keep_through_drain", ExprKind::Bool(value)) => kept = *value,
+            ("keep_through_drain", _) => {
+                diagnostics.push(e020(
+                    property.value.span,
+                    "property `keep_through_drain` must be `true` or `false`",
                 ));
                 valid = false;
             }
@@ -6250,7 +6300,11 @@ fn lower_resource(resource: &ResourceDecl, diagnostics: &mut Vec<Diagnostic>) ->
         }
     }
     match (valid, address, port) {
-        (true, Some(address), Some(port)) => Some(Listener { address, port }),
+        (true, Some(address), Some(port)) => Some(Listener {
+            address,
+            port,
+            kept,
+        }),
         _ => None,
     }
 }
@@ -6416,8 +6470,9 @@ fn executable_main(
         } else {
             listener.port.to_string()
         };
+        let bind = if listener.kept { "bind_kept" } else { "bind" };
         w.line(&format!(
-            "let {variable} = ::ignite_io::TcpListener::bind(String::from(\"{address}\"), {port})?;"
+            "let {variable} = ::ignite_io::TcpListener::{bind}(String::from(\"{address}\"), {port})?;"
         ));
         w.line(&format!(
             "::ignite_io::log(&format!(\"listening on {address_format}:{{}}\", {variable}.local_port()));"

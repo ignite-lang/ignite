@@ -455,6 +455,34 @@ fn builtin_named_fns_and_record_literal_receivers_run_on_both_targets() {
     });
 }
 
+/// `==` and `!=` on `IoError` inside an `assert` compare messages, on both
+/// targets (`fixtures/tests/ioerror_eq.ignite`, case-study gap G18,
+/// `docs/slice.md` 12.3): a `Result<Int, IoError>` against the expected
+/// error, `IoError` inside lists, options, tuples, records and enums, and a
+/// different message fails with both values in the report.
+#[test]
+fn ioerror_equality_inside_assert_on_both_targets() {
+    let file = fixture("ioerror_eq.ignite");
+    on_both_targets(|target| {
+        let run = ignite_test(Chain::Groups, target, &[&file]);
+        assert_eq!(run.status, 1, "{target}: {}\n{}", run.stdout, run.stderr);
+        assert!(
+            run.stdout
+                .contains("test result: FAILED. 2 passed; 1 failed;"),
+            "{target}: {}",
+            run.stdout
+        );
+        let report = format!(
+            "---- ioerror_eq/a different message fails with both values stderr ----\nerror: assert failed at {file}:44:3: port(\"x\") == Err(IoError.new(\"other\"))\n  left: Err(IoError(\"bad port\"))\n  right: Err(IoError(\"other\"))\n"
+        );
+        assert!(
+            run.stdout.contains(&report),
+            "{target}: no\n{report}\nin\n{}",
+            run.stdout
+        );
+    });
+}
+
 /// `Store.values` while tasks update two ids of one shard, on both targets
 /// (`fixtures/tests/store_load.ignite`, story `store-adversary-findings`):
 /// every list holds every id, no value goes back, no list waits 500 ms

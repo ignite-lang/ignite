@@ -1,0 +1,11 @@
+fn ok(a: Int, b: Int) -> Int = (a & b) | (a ^ b) | (a << 3) | (b >> 2) | ~a
+
+fn f(flag: Bool, byte: Byte, n: Int) -> Int {
+  let a = flag & 1
+  let b = byte | 1
+  let c = n ^ "x"
+  let d = "s" << n
+  let e = ~flag
+  let g: Byte = n & n
+  return n
+}

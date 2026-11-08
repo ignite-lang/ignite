@@ -178,7 +178,7 @@ fn a_later_read_keeps_the_copy() {
         r#"
 fn later_read() -> Int {
   let s = fresh()
-  let n = consume(s)
+  let n = s.count
   n + s.count
 }
 
@@ -663,7 +663,7 @@ fn closure_body() -> Int {
 
 fn capture_reads() -> Int {
   let s = fresh()
-  let n = consume(s)
+  let n = s.count
   let f = |x: Int| s.count + x
   n + f(1)
 }
@@ -1047,4 +1047,40 @@ fn held() -> Result<Unit, IoError> requires [stdout.write] {
 "#,
     );
     assert_eq!(t.marked_in("held"), none());
+}
+
+/// `docs/slice.md` 30.3: the ends of a channel are handles, moved into a
+/// spawned task at their last use and shared before it; the value `send`
+/// and `try_send` take is a move position, so a value dead after the call
+/// goes into the channel without a copy.
+#[test]
+fn channel_ends_move_into_tasks_and_send_moves_its_value() {
+    let t = with_prelude(
+        r#"
+fn serve(rx: Receiver<State>) -> Result<Unit, IoError> {
+  let got = rx.receive()
+  Ok(())
+}
+
+fn handed() -> Result<Unit, IoError> {
+  let (tx, rx) = Channel.bounded(1)
+  spawn serve(rx)
+  let s = fresh()
+  tx.send(s)
+  Ok(())
+}
+
+fn kept() -> Result<Unit, IoError> {
+  let (tx, rx) = Channel.bounded(1)
+  spawn serve(rx)
+  let s = fresh()
+  let sent = tx.try_send(s)
+  let n = s.count
+  rx.close()
+  Ok(())
+}
+"#,
+    );
+    assert_eq!(t.marked_in("handed"), vec!["rx", "s"]);
+    assert_eq!(t.marked_in("kept"), none());
 }

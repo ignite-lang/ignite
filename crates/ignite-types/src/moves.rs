@@ -241,6 +241,8 @@ fn aggregate(ty: &Ty) -> bool {
             | Ty::TcpStream
             | Ty::PipeStream
             | Ty::Store(_)
+            | Ty::Sender(_)
+            | Ty::Receiver(_)
             | Ty::Capability(_)
             | Ty::Fn(..)
             | Ty::EffectFn(..)
@@ -254,7 +256,13 @@ fn aggregate(ty: &Ty) -> bool {
 fn handle(ty: &Ty) -> bool {
     matches!(
         ty,
-        Ty::TcpListener | Ty::TcpStream | Ty::PipeStream | Ty::Store(_) | Ty::Capability(_)
+        Ty::TcpListener
+            | Ty::TcpStream
+            | Ty::PipeStream
+            | Ty::Store(_)
+            | Ty::Sender(_)
+            | Ty::Receiver(_)
+            | Ty::Capability(_)
     )
 }
 
@@ -378,7 +386,8 @@ impl<'a> Resolver<'a> {
         match &receiver.kind {
             ExprKind::Name(owner) => {
                 !self.out.refs.contains_key(&key(receiver))
-                    && crate::builtins::static_fn(&owner.name, name).is_some()
+                    && (crate::builtins::static_fn(&owner.name, name).is_some()
+                        || (owner.name == "Channel" && name == "bounded"))
             }
             _ => false,
         }
@@ -1536,7 +1545,8 @@ impl<'a> Walk<'a> {
 
     /// How argument `j` of `call` is passed: a move position when the
     /// callee consumes its parameter, for a call through a fn value or a
-    /// constructor, and for the element of `push` and `put`. `offset` is
+    /// constructor, and for the element of `push` and `put` and the value of
+    /// `send` and `try_send` (`docs/slice.md` 30). `offset` is
     /// 1 for a UFCS call, whose receiver is parameter 0.
     fn argument(
         &self,
@@ -1562,6 +1572,8 @@ impl<'a> Walk<'a> {
                     | (Builtin::ListSet, 1)
                     | (Builtin::MapPut, 1)
                     | (Builtin::StorePut, 1)
+                    | (Builtin::SenderSend, 0)
+                    | (Builtin::SenderTrySend, 0)
             ),
             None => false,
         };

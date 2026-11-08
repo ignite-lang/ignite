@@ -165,6 +165,8 @@ fn unify(pattern: &Ty, found: &Ty, binds: &mut BTreeMap<String, Ty>) {
         (Ty::List(a), Ty::List(b))
         | (Ty::Option(a), Ty::Option(b))
         | (Ty::Store(a), Ty::Store(b))
+        | (Ty::Sender(a), Ty::Sender(b))
+        | (Ty::Receiver(a), Ty::Receiver(b))
         | (Ty::Signal(a), Ty::Signal(b))
         | (Ty::Ref(Some(a)), Ty::Ref(Some(b))) => unify(a, b, binds),
         (Ty::Result(a1, a2), Ty::Result(b1, b2)) | (Ty::Map(a1, a2), Ty::Map(b1, b2)) => {
@@ -223,12 +225,14 @@ fn needs_expected(expr: &Expr, ambiguous: &dyn Fn(&str) -> bool) -> bool {
                 || matches!(&callee.kind, ExprKind::Field { receiver, name } if is(receiver, "List") && name.name == "empty")
                 || matches!(&callee.kind, ExprKind::Field { receiver, name } if is(receiver, "Map") && name.name == "empty")
                 || matches!(&callee.kind, ExprKind::Field { receiver, name } if is(receiver, "Store") && name.name == "new")
+                || matches!(&callee.kind, ExprKind::Field { receiver, name } if is(receiver, "Channel") && name.name == "bounded")
                 || matches!(&callee.kind, ExprKind::Name(id) if id.name == "module")
         }
         ExprKind::Method { receiver, name, .. } => {
             is(receiver, "List") && name.name == "empty"
                 || is(receiver, "Map") && name.name == "empty"
                 || is(receiver, "Store") && name.name == "new"
+                || is(receiver, "Channel") && name.name == "bounded"
         }
         ExprKind::Brace { .. } => true,
         ExprKind::Block(block) => block_needs_expected(block, ambiguous),
@@ -273,6 +277,8 @@ fn substitute(ty: &Ty, params: &[String], args: &[Ty]) -> Ty {
             effects.clone(),
         ),
         Ty::Store(t) => Ty::Store(sub(t)),
+        Ty::Sender(t) => Ty::Sender(sub(t)),
+        Ty::Receiver(t) => Ty::Receiver(sub(t)),
         Ty::Signal(t) => Ty::Signal(sub(t)),
         Ty::Ref(Some(t)) => Ty::Ref(Some(sub(t))),
         Ty::Map(k, v) => Ty::Map(sub(k), sub(v)),
@@ -1169,7 +1175,7 @@ impl<'a> Typer<'a> {
         };
         let arity = match (&alias, name) {
             (Some(alias), _) => alias.params.len(),
-            (None, "List" | "Option" | "Store" | "Signal" | "Module") => 1,
+            (None, "List" | "Option" | "Store" | "Signal" | "Module" | "Sender" | "Receiver") => 1,
             (None, "Result" | "Map") => 2,
             (None, "Ref") => usize::from(!ty.args.is_empty()),
             _ => declared.as_ref().map_or(0, |q| self.generics_of(q).len()),
@@ -1216,6 +1222,8 @@ impl<'a> Typer<'a> {
             "List" => Ty::List(arg(0)),
             "Option" => Ty::Option(arg(0)),
             "Store" => Ty::Store(arg(0)),
+            "Sender" => Ty::Sender(arg(0)),
+            "Receiver" => Ty::Receiver(arg(0)),
             "Result" => {
                 let ok = arg(0);
                 Ty::Result(ok, arg(1))
@@ -1632,7 +1640,7 @@ impl<'a> Typer<'a> {
                     "E045",
                     cond.span,
                     format!(
-                        "operator `{op}` is not defined for `{operand}`, not even in an `assert`: it holds a function, handle, store or `IoError`"
+                        "operator `{op}` is not defined for `{operand}`, not even in an `assert`: it holds a function, handle, store or type parameter"
                     ),
                 );
                 return;
@@ -1661,20 +1669,23 @@ impl<'a> Typer<'a> {
         if let Some(result) = self.equatable_cache.get(ty) {
             return *result;
         }
-        let result = self.equatable(ty, &mut Vec::new());
+        let result = self.equatable(ty, &mut Vec::new(), true);
         self.equatable_cache.insert(ty.clone(), result);
         result
     }
 
-    /// Whether values of `ty` can be compared with structural equality in
-    /// an `assert`: no fn, handle or store anywhere inside. `seen` guards
+    /// Whether values of `ty` can be compared with structural equality: no
+    /// fn, handle, store or type parameter anywhere inside, and no `IoError`
+    /// unless `in_assert` (`docs/slice.md` 12.3, 13.5). `seen` guards
     /// against records and enums that hold themselves through `List`.
-    fn equatable(&self, ty: &Ty, seen: &mut Vec<Ty>) -> bool {
+    fn equatable(&self, ty: &Ty, seen: &mut Vec<Ty>, in_assert: bool) -> bool {
         match ty {
             Ty::Int | Ty::Bool | Ty::Byte | Ty::Unit | Ty::Text | Ty::Input | Ty::Never => true,
-            Ty::List(t) | Ty::Option(t) => self.equatable(t, seen),
-            Ty::Result(ok, err) => self.equatable(ok, seen) && self.equatable(err, seen),
-            Ty::Tuple(items) => items.iter().all(|t| self.equatable(t, seen)),
+            Ty::List(t) | Ty::Option(t) => self.equatable(t, seen, in_assert),
+            Ty::Result(ok, err) => {
+                self.equatable(ok, seen, in_assert) && self.equatable(err, seen, in_assert)
+            }
+            Ty::Tuple(items) => items.iter().all(|t| self.equatable(t, seen, in_assert)),
             Ty::Record(q) | Ty::GenericRecord(q, _) => {
                 if seen.contains(ty) {
                     return true;
@@ -1688,7 +1699,7 @@ impl<'a> Typer<'a> {
                 let fields = self.record_fields(q).unwrap_or_default();
                 fields
                     .iter()
-                    .all(|(_, t)| self.equatable(&t.substitute(&params, &args), seen))
+                    .all(|(_, t)| self.equatable(&t.substitute(&params, &args), seen, in_assert))
             }
             Ty::Enum(_) | Ty::GenericEnum(..) => {
                 if seen.contains(ty) {
@@ -1698,18 +1709,23 @@ impl<'a> Typer<'a> {
                 let variants = self.variants(ty).map(|(_, v)| v).unwrap_or_default();
                 variants
                     .iter()
-                    .all(|(_, payload)| payload.iter().all(|t| self.equatable(t, seen)))
+                    .all(|(_, payload)| payload.iter().all(|t| self.equatable(t, seen, in_assert)))
             }
             Ty::Quantity(_) | Ty::Ref(_) | Ty::Signal(_) | Ty::SystemRef | Ty::Protocol => true,
-            Ty::Map(k, v) => self.equatable(k, seen) && self.equatable(v, seen),
+            // By its message, only in an assert (12.3); E045 for `==` elsewhere.
+            Ty::IoError => in_assert,
+            Ty::Map(k, v) => {
+                self.equatable(k, seen, in_assert) && self.equatable(v, seen, in_assert)
+            }
             Ty::Fn(..)
             | Ty::EffectFn(..)
             | Ty::TcpListener
             | Ty::Capability(_)
             | Ty::TcpStream
             | Ty::PipeStream
-            | Ty::IoError
             | Ty::Store(_)
+            | Ty::Sender(_)
+            | Ty::Receiver(_)
             | Ty::Param(_) => false,
         }
     }
@@ -1831,7 +1847,21 @@ impl<'a> Typer<'a> {
     fn stmt(&mut self, stmt: &Stmt) -> Option<Ty> {
         match &stmt.kind {
             StmtKind::LetPattern { pattern, value, .. } => {
-                let ty = self.synth(value);
+                let ty = match self.let_hints.get(&pattern.span).cloned() {
+                    Some(hint) => {
+                        self.check(value, &hint);
+                        Some(hint)
+                    }
+                    None => {
+                        let ty = self.synth(value);
+                        if let (Some(holes), Some(ty)) = (&mut self.holes, &ty)
+                            && ty.has_param(&is_hole)
+                        {
+                            holes.lets.push((pattern.span, ty.clone()));
+                        }
+                        ty
+                    }
+                };
                 self.pattern(pattern, ty.as_ref());
                 Some(if ty == Some(Ty::Never) {
                     Ty::Never
@@ -2915,6 +2945,55 @@ impl<'a> Typer<'a> {
                 }
             };
         }
+        if owner == "Channel" && name.name == "bounded" {
+            self.callees
+                .insert(key(expr), Callee::Builtin(crate::Builtin::ChannelBounded));
+            self.arguments(expr.span, &what, &[Ty::Int], args);
+            let ends = |item: Ty| {
+                Ty::Tuple(vec![
+                    Ty::Sender(Box::new(item.clone())),
+                    Ty::Receiver(Box::new(item)),
+                ])
+            };
+            let ty = match expected {
+                Some(Ty::Tuple(items)) => match items.as_slice() {
+                    [Ty::Sender(a), Ty::Receiver(b)] if a == b => Some(ends((**a).clone())),
+                    _ => None,
+                },
+                Some(_) => None,
+                None => match self.hole() {
+                    Some(hole) => return Some(ends(hole)),
+                    None => {
+                        self.error(
+                            "E042",
+                            expr.span,
+                            "cannot infer the element type of `Channel.bounded(..)`; add a type annotation or send a value"
+                                .to_string(),
+                        );
+                        return None;
+                    }
+                },
+            };
+            return match ty {
+                Some(ty) => {
+                    if let Some(callee) = callee {
+                        self.record(callee, Some(fn_ty(vec![Ty::Int], ty.clone())));
+                    }
+                    Some(ty)
+                }
+                None => {
+                    let other = expected.map(Ty::to_string).unwrap_or_default();
+                    self.error(
+                        "E040",
+                        expr.span,
+                        format!(
+                            "type mismatch: expected `{other}`, found a channel `(Sender<T>, Receiver<T>)`"
+                        ),
+                    );
+                    None
+                }
+            };
+        }
         if owner == "Map" && name.name == "empty" {
             self.callees
                 .insert(key(expr), Callee::Builtin(crate::Builtin::MapEmpty));
@@ -3303,7 +3382,7 @@ impl<'a> Typer<'a> {
             _ => None,
         };
         if let Some(sig) = bounded.or_else(|| builtins::method(&receiver_ty, &name.name)) {
-            if matches!(receiver_ty, Ty::Store(_)) {
+            if matches!(receiver_ty, Ty::Store(_) | Ty::Sender(_) | Ty::Receiver(_)) {
                 self.effect_site(expr, &name.name);
             }
             if let Ty::Capability(kind) = receiver_ty {
@@ -3782,6 +3861,10 @@ impl<'a> Typer<'a> {
                 self.check(operand, &Ty::Bool);
                 Some(Ty::Bool)
             }
+            UnaryOp::BitNot => {
+                self.check(operand, &Ty::Int);
+                Some(Ty::Int)
+            }
             UnaryOp::Neg => {
                 if let ExprKind::Int(value) = operand.kind
                     && expected == Some(&Ty::Byte)
@@ -3830,6 +3913,7 @@ impl<'a> Typer<'a> {
         let hint_for = |op: BinaryOp, expected: Option<Ty>| -> Option<Ty> {
             match op {
                 BinaryOp::And | BinaryOp::Or => Some(Ty::Bool),
+                op if op.is_bitwise() => Some(Ty::Int),
                 BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem => {
                     expected.filter(|t| matches!(t, Ty::Int | Ty::Byte))
                 }
@@ -3882,6 +3966,15 @@ impl<'a> Typer<'a> {
             }
             self.check(right, &Ty::Bool);
             return Some(Ty::Bool);
+        }
+        if op.is_bitwise() {
+            if let Some(found) = &left_ty
+                && !compatible(found, &Ty::Int)
+            {
+                self.mismatch(left.span, &Ty::Int, found);
+            }
+            self.check(right, &Ty::Int);
+            return Some(Ty::Int);
         }
         let arithmetic = matches!(
             op,
@@ -3941,6 +4034,11 @@ impl<'a> Typer<'a> {
             self.check(right, &Ty::Bool);
             return Some(Ty::Bool);
         }
+        if op.is_bitwise() {
+            self.check(left, &Ty::Int);
+            self.check(right, &Ty::Int);
+            return Some(Ty::Int);
+        }
         let arithmetic = matches!(
             op,
             BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Rem
@@ -3991,7 +4089,7 @@ impl<'a> Typer<'a> {
             return Some(result(operand));
         }
         let defined = match op {
-            BinaryOp::Eq | BinaryOp::Ne => self.equatable(&operand, &mut Vec::new()),
+            BinaryOp::Eq | BinaryOp::Ne => self.equatable(&operand, &mut Vec::new(), false),
             BinaryOp::Add => matches!(
                 operand,
                 Ty::Int | Ty::Byte | Ty::Text | Ty::List(_) | Ty::Never

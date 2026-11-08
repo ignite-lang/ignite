@@ -78,6 +78,7 @@ fn builtin_effect(builtin: Builtin) -> Option<(Effect, &'static str)> {
         EnvironmentOf => (Effect::Ambient("environment.new"), "Environment.of"),
         ClockSleep => (Effect::Ambient("clock.sleep"), "Clock.sleep"),
         ClockNow => (Effect::Ambient("clock.read"), "Clock.now"),
+        ProcessOpenFilesLimit => (Effect::Ambient("process.limit"), "Process.open_files_limit"),
         DirectoryReadFile => (Effect::Receiver("read"), "read_file"),
         DirectoryReadDirectory => (Effect::Receiver("read"), "read_directory"),
         DirectoryAbsolutePath => (Effect::Receiver("read"), "absolute_path"),
@@ -95,6 +96,14 @@ fn builtin_effect(builtin: Builtin) -> Option<(Effect, &'static str)> {
         EnvironmentGet => (Effect::Receiver("variable"), "get"),
         TcpStreamTimedOut => (Effect::Receiver("read"), "timed_out"),
         TcpStreamConnectWithin => (Effect::Ambient("net.connect"), "TcpStream.connect_within"),
+        ChannelBounded => (Effect::Ambient("channel.new"), "Channel.bounded"),
+        SenderSend => (Effect::Receiver("send"), "send"),
+        SenderTrySend => (Effect::Receiver("send"), "try_send"),
+        SenderClose => (Effect::Receiver("send"), "close"),
+        ReceiverReceive => (Effect::Receiver("receive"), "receive"),
+        ReceiverReceiveWithin => (Effect::Receiver("receive"), "receive_within"),
+        ReceiverClosed => (Effect::Receiver("receive"), "closed"),
+        ReceiverClose => (Effect::Receiver("receive"), "close"),
         _ => return None,
     })
 }

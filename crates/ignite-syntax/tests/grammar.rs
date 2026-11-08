@@ -181,6 +181,7 @@ fn show(expr: &Expr) -> String {
             let op = match op {
                 UnaryOp::Not => "!",
                 UnaryOp::Neg => "neg",
+                UnaryOp::BitNot => "~",
             };
             format!("({op} {})", show(operand))
         }
@@ -349,6 +350,62 @@ fn precedence_full_ladder() {
 #[test]
 fn precedence_unary_operators() {
     assert_eq!(expr("!a && -b"), "(&& (! a) (neg b))");
+}
+
+/// `docs/slice.md` 29.1: shifts bind looser than `+`, then `&`, `^`, `|`,
+/// all tighter than the comparisons, as in Rust.
+#[test]
+fn precedence_bitwise_ladder() {
+    assert_eq!(
+        expr("a == b | c ^ d & e << f + g"),
+        "(== a (| b (^ c (& d (<< e (+ f g))))))"
+    );
+    assert_eq!(expr("a >> b - c"), "(>> a (- b c))");
+    assert_eq!(expr("a & b == c"), "(== (& a b) c)");
+    assert_eq!(expr("a | b < c"), "(< (| a b) c)");
+}
+
+#[test]
+fn bitwise_operators_are_left_associative() {
+    assert_eq!(expr("a << b >> c"), "(>> (<< a b) c)");
+    assert_eq!(expr("a | b | c"), "(| (| a b) c)");
+    assert_eq!(expr("a ^ b ^ c"), "(^ (^ a b) c)");
+    assert_eq!(expr("a & b & c"), "(& (& a b) c)");
+}
+
+#[test]
+fn bitwise_not_is_a_prefix_operator() {
+    assert_eq!(expr("~a.b & ~-c"), "(& (~ (. a b)) (~ (neg c)))");
+}
+
+/// `>>` and `<<` are two touching `>` or `<`; with a space between them
+/// they are no shift.
+#[test]
+fn shifts_need_touching_angles() {
+    assert_eq!(expr("a>>b"), "(>> a b)");
+    assert_eq!(expr("a<<b"), "(<< a b)");
+    assert_eq!(errors("fn f() {\na > > b\n}"), ["E001@2:5"]);
+    assert_eq!(expr("a >> b >= c"), "(>= (>> a b) c)");
+    assert_eq!(
+        shown("let x: List<List<Int>> = y >> 1"),
+        ["(let x: List<List<Int>> (>> y 1))"]
+    );
+}
+
+/// A closure and an or-pattern still read `|` as before.
+#[test]
+fn pipe_stays_a_closure_and_a_pattern_separator() {
+    assert_eq!(expr("f(|x| x | 1)"), "(call f (closure [x] (| x 1)))");
+    assert_eq!(
+        expr("match a {\n  1 | 2 => b | c\n}"),
+        "(match a ((| 1 2) => (| b c)))"
+    );
+}
+
+#[test]
+fn newline_after_a_bitwise_operator_continues() {
+    assert_eq!(shown("let x = a |\n  b ^\n  c"), ["(let x (| a (^ b c)))"]);
+    assert_eq!(shown("let y = a <<\n  b"), ["(let y (<< a b))"]);
 }
 
 #[test]

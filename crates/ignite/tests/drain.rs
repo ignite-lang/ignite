@@ -544,6 +544,88 @@ fn adversary_process_exit_during_the_drain_with_a_stalled_writer() {
     });
 }
 
+/// The next `listening on 127.0.0.1:<port>` line of `server`; its port.
+fn next_listening_port(server: &mut Server) -> u16 {
+    let listening = wait_line(&server.stderr, "listening on", &mut server.skipped, |l| {
+        l.starts_with("listening on 127.0.0.1:")
+    });
+    listening["listening on 127.0.0.1:".len()..]
+        .parse()
+        .unwrap_or_else(|e| panic!("{listening}: {e}"))
+}
+
+/// Connect to `port` and read the kept listener's greeting `internal`.
+fn greeted_by_internal(target: &str, port: u16, when: &str) -> TcpStream {
+    let mut stream = TcpStream::connect(("127.0.0.1", port))
+        .unwrap_or_else(|e| panic!("{target}: connect to internal {when}: {e}"));
+    stream
+        .set_read_timeout(Some(TIMEOUT))
+        .expect("read timeout");
+    let mut greeting = [0u8; 9];
+    stream
+        .read_exact(&mut greeting)
+        .unwrap_or_else(|e| panic!("{target}: read internal's greeting {when}: {e}"));
+    assert_eq!(text(&greeting), "internal\n", "{target}: {when}");
+    stream
+}
+
+/// Story `drain-keeps-listeners` (the case study's G6): after SIGTERM the
+/// listener declared `keep_through_drain = true` still accepts and answers
+/// and is never released, while the ingress listener is released and its
+/// pending `accept` fails with "draining". The process still exits 0 once
+/// the one ingress connection is done, although a task waits in the kept
+/// listener's `accept` and another in an idle read of a kept connection.
+#[test]
+fn a_kept_listener_accepts_through_the_drain_and_the_others_are_released() {
+    on_both_targets(|target| {
+        let binary = build_fixture("drain_keep", "drainkeep", target);
+        let mut server = Server::start(&binary);
+        let ingress = server.port;
+        let internal = next_listening_port(&mut server);
+        let held = TcpStream::connect(("127.0.0.1", ingress)).expect("connect ingress");
+        wait_line(&server.stderr, "waiting", &mut server.skipped, |l| {
+            l == "waiting"
+        });
+        let _idle_kept = greeted_by_internal(target, internal, "before the drain");
+        signal(server.pid(), Signal::SIGTERM);
+        server.wait_released();
+        let draining = "ingress accept: draining";
+        if !server.skipped.iter().any(|l| l == draining) {
+            wait_line(&server.stderr, draining, &mut server.skipped, |l| {
+                l == draining
+            });
+        }
+        let refused = TcpStream::connect(("127.0.0.1", ingress));
+        assert!(
+            refused.is_err(),
+            "{target}: a connect to ingress after `released` succeeded"
+        );
+        for round in 0..3 {
+            greeted_by_internal(target, internal, &format!("in the drain, round {round}"));
+        }
+        let early = server.child.try_wait().expect("wait");
+        assert!(
+            early.is_none(),
+            "{target}: exited with the ingress connection open: {early:?}"
+        );
+        held.shutdown(std::net::Shutdown::Write)
+            .expect("end the ingress connection");
+        let status = wait_exit(&mut server.child, "the drained server");
+        assert_eq!(status.code(), Some(0), "{target}: {status:?}");
+        server.skipped.extend(server.stderr.iter());
+        let kept = format!("released 127.0.0.1:{internal}");
+        let released: Vec<&String> = server
+            .skipped
+            .iter()
+            .filter(|l| l.starts_with("released "))
+            .collect();
+        assert!(
+            !released.iter().any(|l| **l == kept),
+            "{target}: the kept listener was released: {released:?}"
+        );
+    });
+}
+
 /// Runs of a `flood_*` fixture per target.
 const FLOOD_RUNS: usize = 30;
 

@@ -154,10 +154,14 @@ expr       := or
 or         := and ('||' and)*
 and        := equality ('&&' equality)*
 equality   := compare (('==' | '!=') compare)?
-compare    := additive (('<' | '>' | '<=' | '>=') additive)?
+compare    := bitor (('<' | '>' | '<=' | '>=') bitor)?
+bitor      := bitxor ('|' bitxor)*                  section 29
+bitxor     := bitand ('^' bitand)*
+bitand     := shift ('&' shift)*
+shift      := additive (('<<' | '>>') additive)*    `<<`, `>>`: two touching `<` or `>`
 additive   := multiplicative (('+' | '-') multiplicative)*
 multiplicative := unary (('*' | '/' | '%') unary)*
-unary      := ('!' | '-') unary | 'await' unary | 'spawn' unary | postfix
+unary      := ('!' | '-' | '~') unary | 'await' unary | 'spawn' unary | postfix
 postfix    := primary ( '(' args ')' | '.' ident ('(' args ')')? | '[' expr ']' | '?' )*
 args       := (expr (',' expr)*)?
 primary    := INT | STRING | BYTE | BYTES | 'true' | 'false'
@@ -1534,10 +1538,12 @@ module-level names skips `Decl::Test`.
 - `assert a == b` and `assert a != b`, with the comparison at the top of the condition: both
   sides have one type `T` (E040 otherwise), typed like the operands of `==`. `T` may be any
   type with structural equality, not only the `==` types of section 6: `Int`, `Byte`, `Bool`,
-  `Text`, `Unit`, `Input`, and `List`, `Option`, `Result`, tuples, records and enums (generic
-  ones too) built only of such types. A `T` holding a fn, `TcpStream`, `TcpListener`,
-  `IoError`, `Store` or a type parameter is E045. Outside an assert `==` is unchanged (E045 on
-  a record). `assert (a == b) && c` is an ordinary `Bool` condition.
+  `Text`, `Unit`, `Input`, `IoError`, and `List`, `Option`, `Result`, tuples, records and enums
+  (generic ones too) built only of such types. Two `IoError`s are equal when their messages are
+  (the exit code is not compared), on both targets and in the evaluator, so `assert port("x")
+  == Err(IoError.new("bad port"))` checks. A `T` holding a fn, `TcpStream`, `TcpListener`,
+  `Store` or a type parameter is E045. Outside an assert `==` is unchanged (section 13.5: E045
+  on any type holding an `IoError`). `assert (a == b) && c` is an ordinary `Bool` condition.
 - `?` anywhere in a test body takes any `Result<T, E>` or `Option<T>` (E040 for another type)
   and has type `T`. An `Err` or `None` fails the test; it does not return. `?` in fns is
   unchanged.
@@ -3666,6 +3672,20 @@ The drain on SIGTERM:
   skipped, and what a socket still has no room for is lost. When `K.main` returns, `Ok` or
   `Err`, both targets send `main`'s writes without that bound, as before.
 - A second SIGTERM exits at once.
+- A listener kept through the drain (story `drain-keeps-listeners`, the case study's G6): a
+  `TcpListener` resource with the optional fifth property `keep_through_drain: Bool` (no
+  default; the model shows it only where it is given) set to `true`. The drain does not
+  release it and prints no `released` line for it; its `accept` keeps accepting until the
+  process exits. Every other listener is released as above. The Rust target needs the value
+  as a literal (E020 otherwise, as for `address` and `port`); the generated main binds it with `ignite_io::TcpListener::bind_kept`, on the LLVM target through the runtime
+  entry `ignite_rt_tcp_bind_kept(address, port, kept, out, err)`, declared only in a main that
+  binds a listener with the property, so other programs' IR is unchanged.
+- The wait for live tasks after `K.main` returns does not wait for a task that is blocked in
+  `accept` on a kept listener or in a read of a stream a kept listener accepted: the process
+  exits 0 once every other task has ended, so a kept admin or internal listener never holds
+  up the drain's end. A task that is serving a kept connection (not blocked in its read) is
+  waited for as any other. `main` itself is no task: `main` blocked in a kept `accept` never
+  returns, as before.
 - As landed (P2): a SIGTERM's in-flight guard ends at `released`; a SIGTERM to a program
   without a listener (`tn`) drains too: it waits for `main`, and a second SIGTERM ends it.
 - Outside `ignite run`, the wait for live tasks has no bound. Only the driver's deadline
@@ -9188,7 +9208,7 @@ constructor:
 | `kind` | further keys |
 |---|---|
 | `Int`, `Bool`, `Byte`, `Unit`, `Text`, `Never`, `TcpListener`, `TcpStream`, `PipeStream`, `IoError`, `Input`, `SystemRef`, `Protocol` | none |
-| `List`, `Option`, `Result`, `Map`, `Store`, `Tuple`, `Ref`, `Signal` | `args`: the type arguments (`Bytes` is `List` of `Byte`; `Ref` without a kind has none) |
+| `List`, `Option`, `Result`, `Map`, `Store`, `Sender`, `Receiver` (30), `Tuple`, `Ref`, `Signal` | `args`: the type arguments (`Bytes` is `List` of `Byte`; `Ref` without a kind has none) |
 | `Record`, `Enum` | `module`, `name` (the declaring module; `""` for a builtin), `args` (empty unless generic) |
 | `Fn` | `params`, `ret`, `requires` (`null` for a pure fn type, else the effect names), `paramNames` with `requires` |
 | `Param` | `name`: a type parameter |
@@ -9248,7 +9268,7 @@ signal, system or protocol value (14.4), `reference` (its text). By `kind`:
 | `tupleField` | `receiver`, `index` |
 | `index` | `receiver`, `index` |
 | `try`, `spawn`, `await` | `operand` |
-| `unary` | `op` (`!` or `-`), `operand` |
+| `unary` | `op` (`!`, `-` or `~`), `operand` |
 | `binary` | `op` (the operator's symbol), `left`, `right` |
 | `match` | `scrutinee`, `arms` (`{pattern, body, span}`) |
 | `if` | `cond`, `then` (a block), `else` (an expression index or `null`) |
@@ -9565,3 +9585,378 @@ positive`. `connect(address, port)` keeps waiting for the kernel's retries.
   `tcp::timed_out_tells_an_idle_timeout_from_a_close`, `tcp::connect_within_bounds_the_wait`;
   `ignite-rt` `abi::peer_timed_out_and_connect_within`; `ignite-types`
   `builtins::tests::substrate_methods_name_net_for_peer`.
+
+## 27 The data value model (`std.data`) and the JSON bridge
+
+**Status: implemented in `story:data-value-model`.**
+
+Source: `docs/serde.md` sections 4, 5.1, 5.2 and 6, step 1 of its section 8. Std only: no
+compiler, backend, runtime or evaluator change, so `CODEGEN_REVISION` stays. `std.data` is the
+tree every data format reads into and writes from; the codecs, YAML, TOML and the derived
+`codec<T>()` of the design are later steps.
+
+### 27.1 `std.data`
+
+| item | definition |
+|---|---|
+| `enum Value` | `Null`, `Bool(Bool)`, `Int(Int)`, `Decimal(Text)` (any number `Int` cannot hold, its exact text), `Text(Text)`, `Bytes(Bytes)`, `Moment(Text)` (RFC 3339 text), `List(List<Value>)`, `Map(List<(Text, Value)>)` (members in document order) |
+| `enum Case` | `Same`, `Camel`, `Pascal`, `Kebab`, `ScreamingSnake` |
+| `enum Tagging` | `External`, `Internal(Text)` |
+| `enum Unknown` | `Ignore`, `Deny` |
+| `type DataLimits` | `depth: Int = 64`, `size: ByteSize = 16 MiB`, `entries: Int = 1000000` (items or members of one list or map) |
+| `type Shape` | `keys: Case = Same`, `variants: Case = Same`, `tagging: Tagging = External`, `unknown: Unknown = Ignore`, `renames: List<(Text, Text)> = []`, `limits: DataLimits = DataLimits {}`; `Shape.default()` is `Shape {}` |
+| `type DecodeError` | `path`, `expected`, `found`, all `Text`; `describe(error)` (UFCS `error.describe()`) is `<path>: expected <expected>, found <found>` |
+| `type FormatError` | `message: Text`, `line`, `column`, `offset: Int`: the first bad byte of a read, `line` and `column` 1-based, `column` in characters, `offset` in bytes (the positions of 1.1); a write gives 0 for all three |
+| `format_error(text, message, offset)` | the `FormatError` at byte `offset` of `text`, line and column counted |
+| `base64(bytes)` | RFC 4648 section 4 with `=` padding: the text of `Value.Bytes` in a format without bytes |
+
+`describe` is a fn, not a `DecodeError.describe` hook: a hook of 16.16 is not callable as a
+method. `Value`'s variants share names with `Json`'s (`Null`, `Bool`, `Decimal`), so a module
+that imports both writes `Value.Null` or `Json.Null` where the expected type does not decide
+(E005, section 4).
+
+### 27.2 The bridge in `std.json`
+
+| fn | meaning |
+|---|---|
+| `to_data(json) -> Value` | `Number` is `Int`, `Str` is `Text`, `Array` is `List`, `Object` is `Map`; `Null`, `Bool`, `Decimal` as they are |
+| `of_data(value) -> Json` | the inverse; `Bytes` becomes `Str` of its `base64`, `Moment` `Str` of its text. `of_data(to_data(j)) == j` for every `j` |
+| `read(text) -> Result<Value, FormatError>` | `read_with(text, DataLimits {})` |
+| `read_with(text, limits)` | the one value of `text` as `parse` reads it, then `to_data`; refused: more than `limits.size` bytes (`document larger than <n> bytes` at offset `n`), nesting deeper than `limits.depth` (`nested deeper than <n>` at the bracket), more than `limits.entries` items or members in one array or object (`more than <n> entries` at the first one too many), a member name twice in one object (``duplicate member `<name>` `` at its opening quote) |
+| `write(value) -> Result<Text, FormatError>` | `encode(of_data(value))`; refused: a `Decimal` whose text is no JSON number token (``decimal `<text>` is not a JSON number``, checked by `decimal`) |
+| `write_pretty(value)` | as `write`, one item or member per line, two spaces per level, `"name": value`, `[]` and `{}` for empty ones |
+
+`parse` and `encode` keep their behaviour: `parse` keeps a repeated member name and bounds only
+the depth (64), as before. Both go through one parser, `parse_bounded(text, Bounds)`.
+A text read back from a written `Bytes` or `Moment` is `Text`: JSON has neither, and the codec
+of a later step decodes the text into the field's type.
+
+### 27.3 Layering
+
+`std.data` is in the base layer and imports nothing; `std.json` imports it
+(`docs/layering.md`, `layering::` in `crates/ignite-check/tests/layering.rs`).
+
+### 27.4 Not covered
+
+`Codec<T>` and its combinators, `Shape`'s effect on names and tags, `Unknown.Deny` and
+`renames` (`story:data-codec-combinators`); YAML and TOML (`story:data-yaml`,
+`story:data-toml`); `codec<T>()` (`story:data-derived-codec`). `DataLimits.entries` and the
+refused duplicate member follow `docs/serde.md` goal 5 and section 4.
+
+### 27.5 Tests
+
+- `std/data.ignite`: the default `Shape`, `describe`, `base64` against RFC 4648's vectors,
+  `format_error`'s line and column (`task test-ignite`, both targets).
+- `std/json.ignite`: `of_data(to_data(j)) == j` for every `Json` variant, nested; `Bytes` as
+  base64 and `Moment` as text; `read` of every kind; line, column and offset of a format error;
+  the duplicate member; one test each for `depth`, `size` and `entries`; `write`,
+  `write_pretty` and their round trip through `read`; the refused decimal.
+- `data_json::read_and_write_agree_across_the_evaluator_and_both_targets`
+  (`crates/ignite/tests/data_json.rs`, `fixtures/data_json.ignite`): ten documents, eight that
+  read and two that give a format error, read and written in the evaluator and by the program
+  built for each target; the debug texts of the values, the compact and indented texts and the
+  round trips agree.
+
+## 28 The open-files limit
+
+**Status: implemented in the open-files-limit story.**
+
+Source: the case study's G10 (`docs/research/case-study-gaps.md`). A server accepts as many
+connections as it has descriptors. A container's default soft limit for `RLIMIT_NOFILE` (often
+1,024) caps the connections far under its hard limit, and the reference implementation raises
+the soft limit at start. An Ignite program had no way to.
+
+### 28.1 The raise at start
+
+Every compiled program raises its open-files soft limit to the hard limit before `K.main`
+runs, on both targets, without code:
+
+- Rust target: `ignite_io::run`, first, before it arms the drain (16.13).
+- LLVM target: `ignite_rt_init`, the first call of every generated `main`, after storing the
+  arguments and before arming the drain. The test runner's `main` calls it too.
+- Both call `ignite_io::raise_open_files_limit`, which runs once per process.
+- When the hard limit is unlimited, the target is the kernel's ceiling
+  `/proc/sys/fs/nr_open`, because `setrlimit` refuses an unlimited `RLIMIT_NOFILE`.
+- The hard limit is never changed. A soft limit already at the target is left alone.
+- A failure (of `getrlimit` or of `setrlimit`) is ignored. It is reported once on stderr, as
+  `warning: open-files limit stays at <soft>: <the operating system's message>`, only when
+  the soft limit stays under 4,096 (`ignite_io::OPEN_FILES_REPORT_BELOW`). A failure above that
+  prints nothing, so a working server's stderr stays as it was.
+
+Decisions:
+
+- A raise at start, not a static G10's reproducer guessed (`Process.set_open_files_limit(n)`).
+  The hard limit is the operator's bound; a program that wanted less than it would not run out
+  of descriptors, so no program needs to choose. No new authority is granted either: any
+  process may raise its soft limit up to its hard limit.
+- Before `main` and before any task, so the limit holds for every descriptor the program opens
+  and for the children it starts. A child inherits the raised soft limit (21.5); a program it
+  launches can lower its own.
+- `ignite run` and `ignite apply` start members unchanged; the raise is the member's own.
+
+### 28.2 `Process.open_files_limit()`
+
+| Ignite | type | effect | builtin |
+|---|---|---|---|
+| `Process.open_files_limit()` | `() -> Int` | `process.limit` | `ProcessOpenFilesLimit` |
+
+The current soft limit; an unlimited one, or one past `Int`, is the largest `Int`; one the
+operating system cannot report is 0. It never fails.
+
+- The effect is ambient under the existing head `process` (`AMBIENT_HEADS`), as `process.exit`
+  and `process.args` are: it reads the process's state, and a value read at compile time would
+  be the compiler's. The evaluator gives it no value, as every effectful builtin.
+- An `HttpApp` handler cannot call it (E017), as with `Clock.now`.
+
+Layers:
+
+| layer | |
+|---|---|
+| `ignite-io` | `limits`: `raise_open_files_limit`, `open_files_limit`, `OPEN_FILES_REPORT_BELOW`; `nix` feature `resource` (no new dependency) |
+| `ignite-rt` | `i64 ignite_rt_open_files_limit()`; `ignite_rt_init` raises |
+| `ignite-check` | rows of `BUILTIN_STATICS`, `BUILTIN_STATIC_ARITIES`, `EFFECTFUL_STATICS`, `static_effect` |
+| `ignite-types` | `Builtin::ProcessOpenFilesLimit`, effect `process.limit` |
+| Rust target | `::ignite_io::open_files_limit()` |
+| LLVM target | `call i64 @ignite_rt_open_files_limit()` |
+
+`CODEGEN_REVISION` is `ignite-codegen/0.1.0-43` (wave 7, one bump for its four generation changes).
+
+### 28.3 Tests
+
+- `open_files_limit::{rust,llvm}::the_soft_limit_is_raised_to_the_hard_limit_at_start`
+  (`crates/ignite/tests/open_files_limit.rs`, `fixtures/open_files_limit/limits.ignite`):
+  the built program is started under `prlimit --nofile=256:65536`; its `/proc/<pid>/limits`
+  shows soft and hard 65536, it logs `open files 65536` from `Process.open_files_limit()`, and
+  its stderr holds nothing else.
+- `open_files_limit::open_files_limit_is_callable_in_tests_on_both_targets`: the fixture's
+  inline test on both targets.
+- The inline test "the open-files soft limit is a positive count" in `std/process.ignite`.
+- `ignite-io` `limits::tests::a_failure_is_reported_only_under_4096` and
+  `the_raise_reaches_the_hard_limit`; `ignite-rt`
+  `process::tests::open_files_limit_reads_the_soft_limit`.
+- `ignite-check` fixture `e016_open_files_limit`.
+
+## 29 Bitwise operators on `Int`
+
+**Status: implemented on `story:bitwise-operators`.**
+
+Sources: the case study's G7 (SHA-1, base64 and WebSocket masking written bit by bit with `/`
+and `%`); `docs/friction.md` row 66, removed by this section.
+
+### 29.1 Syntax and precedence
+
+Five binary operators and one prefix operator, all on `Int`:
+
+| operator | meaning | AST |
+|---|---|---|
+| `a & b` | and | `BinaryOp::BitAnd` |
+| `a \| b` | or | `BinaryOp::BitOr` |
+| `a ^ b` | exclusive or | `BinaryOp::BitXor` |
+| `a << n` | shift left | `BinaryOp::Shl` |
+| `a >> n` | arithmetic shift right | `BinaryOp::Shr` |
+| `~a` | not (every bit flipped, `-a - 1`) | `UnaryOp::BitNot` |
+
+The lexer has three new tokens, `&` (`Amp`), `^` (`Caret`) and `~` (`Tilde`); `|` stays `Pipe`
+and `&&`, `||` are unchanged. `<<` and `>>` are no tokens: the parser reads two `<` or two `>`
+whose spans touch (`Parser::shift_op`), so `List<List<Int>>` still closes two type argument
+lists and `a > > b` is E001. The levels of section 3, from tight to loose: prefix (`!`, `-`,
+`~`), `* / %`, `+ -`, `<< >>`, `&`, `^`, `|`, the comparisons, `==` `!=`, `&&`, `||`. This is
+Rust's order: `a & b == c` is `(a & b) == c`, `1 << n + 1` is `1 << (n + 1)`. The new levels are
+left-associative. A `|` in operator position is bitwise or; a `|` that starts an operand still
+starts a closure, and between patterns it still separates alternatives:
+`match x { 1 | 2 => a | b }`. Line breaks after the new operators are skipped as after any
+binary operator. The book's grammar page (`site/book/src/reference/grammar.md`) has the table
+and an `ignite` block that runs these rules.
+
+### 29.2 Types and the shift rule
+
+Both operands and the result are `Int`; any other operand type, `Byte` included, is E040
+(`expected Int`), from `Typer::binary` and `Typer::binary_rest` checking each operand against
+`Int`, and `~` checks its operand the same way. None of them fails: no failure site is recorded
+and no backend emits a check. `&`, `|`, `^` and `~` act on the 64-bit two's complement.
+
+A shift amount outside `0..64` is defined, compared as unsigned so a negative amount counts as
+too large:
+
+| | amount `n` in `0..64` | any other `n` (negative, 64 or more) |
+|---|---|---|
+| `a << n` | `a` shifted left, bits shifted out dropped (no overflow failure) | 0 |
+| `a >> n` | `a` shifted right, copies of the sign bit shifted in | 0 for `a >= 0`, -1 for `a < 0` (the shift by 63) |
+
+There is no logical shift right; `(a >> n) & mask` gives one for a known width.
+
+### 29.3 Lowering
+
+| layer | lowering |
+|---|---|
+| evaluator | `eval::bitwise`: `&`, `\|`, `^` on `i64`; `<<` by `n` when `n` is in `0..64`, else 0; `>>` by `n` when in `0..64`, else by 63; `~` is `!n` |
+| Rust target | `a & b`, `a \| b`, `a ^ b`, `!a`; `i64::checked_shl(a, u64::min((n) as u64, 64) as u32).unwrap_or(0)` and `i64::wrapping_shr(a, u64::min((n) as u64, 63) as u32)` |
+| LLVM target | `and`, `or`, `xor` on `i64`, `xor i64 a, -1` for `~`; `<<` as `shl` and a `select` of 0 when `icmp ult n, 64` fails (the unselected poison of an oversized `shl` does not propagate); `>>` as `ashr` by `select(icmp ult n, 64; n; 63)` |
+| typed JSON (24) | `binary` with `op` the symbol (`&`, `\|`, `^`, `<<`, `>>`); `unary` with `op` `~` |
+| apply identity | the canonical form tags `~` as `bitnot`; binary operators by their symbol, as before |
+
+`apply::plan::CODEGEN_REVISION` is bumped: both backends generate code for the new operators.
+
+### 29.4 Agreement across the evaluator and both targets
+
+`bitwise::operators_agree_across_the_evaluator_and_both_targets`
+(`crates/ignite/tests/bitwise.rs`) writes a program from random operands (xorshift, a fixed
+seed, `IGNITE_BITWISE_SEED` to change it): per binary operator 36 edge pairs (0, 1, -1,
+`i64::MIN`, `i64::MAX`, `0x5555…`; for the shifts the amounts 0, 1, 31, 32, 63, 64, 65, 100, -1,
+-64, `i64::MIN`, `i64::MAX` against the same six left operands, 72 pairs) and 48 random pairs
+whose shift amounts are mostly in `0..64` with some negative and some of 64 or more; `~` over the
+edges and 48 random values; one fn that mixes the levels without parentheses. The operands are
+list literals read in a loop, so no compiler folds them. The evaluator, a Rust-target build and
+an LLVM-target build must each print the values Rust's `i64` gives under 29.2, fn by fn.
+
+### 29.5 SHA-1 and base64, timed against hand-written Rust
+
+`crates/ignite/tests/fixtures/bitwise/codecs.ignite` holds SHA-1 (RFC 3174) and base64 with
+padding (RFC 4648 section 4) written with the operators, `wrapping_add` (25.2) for the
+32-bit sums and `Bytes` read by index and built by `push`. Its four inline tests are RFC 3174's
+tests 1 to 4 (test 3 is a million `a`; plus the empty message) and the seven vectors of RFC 4648
+section 10; `bitwise::sha1_and_base64_vectors_on_both_targets` runs them with `ignite test` on
+both targets. Reading a byte by index and `push` lower to an inline load or store behind a
+bounds check on both targets (no call), so the story's "byte get/set cheaply" needs no new
+builtin.
+
+The file's executable `codecs` builds 1 MiB (`byte i = (31 i + 7) mod 256`) and runs 16 rounds
+of SHA-1 and base64 over it, changing the first byte each round; it prints the last digest and
+the total base64 length. `fixtures/bitwise/codecs.rs` is the same program in hand-written Rust
+(`u32`, `rotate_left`, `chunks_exact`), built with `rustc -O`; the two print the same lines.
+`bitwise::codecs_within_3x_of_hand_written_rust` (`#[ignore]`: it builds a release runtime and
+times programs) builds `codecs` with `--release` on both targets, the LLVM one against
+`ignite-rt` built `--release`, runs the three executables 9 times interleaved and requires each
+target's median within 3 times the hand-written Rust's.
+
+Recorded 2026-11-08, 20 cores shared with other sessions, base `419c69861` plus this story:
+
+| executable | median of 9 | ratio | 1-minute load |
+|---|---|---|---|
+| hand-written Rust, `rustc -O` | 164.9 ms | 1 | 56 |
+| `codecs`, Rust target, `--release` | 258.3 ms | 1.57 | 56 |
+| `codecs`, LLVM target, `--release`, release runtime | 484.2 ms | 2.94 | 56 |
+
+- The LLVM target holds with little margin. Its profile (`perf record`, same binary): `sha1`
+  64 %, `base64` 20 %, kernel 10 % (page faults of the 1 MiB copies). The hot loops reload a
+  list's data pointer from the stack at each `w[t]` and keep spilled locals in memory where the
+  Rust target's build keeps them in registers; that is the LLVM backend's code quality, not
+  the operators, and is not changed here. An earlier run with the test binary's debug runtime
+  and `+` instead of `wrapping_add` in the SHA-1 sums gave 4.66 at load 69: the checked `+`
+  costs an overflow branch per term, and the debug runtime's `ub_checks` showed in the profile.
+- The Ignite code uses `wrapping_add` where the hand-written Rust uses `wrapping_add`; with `+`
+  each sum is checked, as 25.2 keeps it.
+
+### 29.6 Tests
+
+- `ignite-syntax` `grammar::precedence_bitwise_ladder`, `bitwise_operators_are_left_associative`,
+  `bitwise_not_is_a_prefix_operator`, `shifts_need_touching_angles`,
+  `pipe_stays_a_closure_and_a_pattern_separator`, `newline_after_a_bitwise_operator_continues`.
+- `ignite-types` fixture `e040_bitwise_operand.ignite`: a `Bool`, a `Byte` and a `Text` operand
+  and a `Bool` under `~` are E040; an `Int` result where `Byte` is expected is E040.
+- `crates/ignite/tests/bitwise.rs`: 29.4 and 29.5 above.
+- `site/book/src/reference/grammar.md`'s `precedence` block (checked by `site::`).
+
+## 30 Channels: a waitable signal between tasks
+
+**Status: implemented in the channels and timers story.**
+
+Source: the case study's G3. A long-poll, a heartbeat, a ping interval and a drain window each
+wait for "a message or a deadline". Before this section the only waitable thing with a
+deadline was a socket read (`set_idle_timeout`), so the service held a loopback socket pair as
+a bell for every waiter: two descriptors per waiter and a write to wake it. A bounded channel
+is that signal without a descriptor.
+
+| Ignite | type | effect | builtin |
+|---|---|---|---|
+| `Channel.bounded(capacity)` | `(Int) -> (Sender<T>, Receiver<T>)` | none; E010 in a constant or a field default | `ChannelBounded` |
+| `tx.send(value)` | `(T) -> Bool` | `tx.send` | `SenderSend` |
+| `tx.try_send(value)` | `(T) -> Bool` | `tx.send` | `SenderTrySend` |
+| `tx.close()` | `Unit` | `tx.send` | `SenderClose` |
+| `rx.receive()` | `Option<T>` | `rx.receive` | `ReceiverReceive` |
+| `rx.receive_within(timeout)` | `(Duration) -> Option<T>` | `rx.receive` | `ReceiverReceiveWithin` |
+| `rx.closed()` | `Bool` | `rx.receive` | `ReceiverClosed` |
+| `rx.close()` | `Unit` | `rx.receive` | `ReceiverClose` |
+
+`Sender` and `Receiver` are builtin types of one argument (`ignite_check::BUILTIN_TYPES`),
+so a program can no longer declare a type of either name (E004). The method names are
+`ignite_check::CHANNEL_METHODS`, not `BUILTIN_METHODS`: on any other receiver `send`,
+`close` and the others stay a user fn's names. The module `std.sync` (base layer,
+`docs/layering.md`) declares nothing; it holds the API's comment and its inline tests.
+
+### 30.1 Behaviour
+
+- `Channel.bounded(n)` holds at most `n` values. A capacity below 1 fails the task with
+  `Channel.bounded: the capacity must be at least 1, found <n>`.
+- `send` waits while the channel is full and returns true once the value is queued; it
+  returns false, and drops the value, when the channel is closed or closes while it waits.
+  `try_send` never waits: false when full or closed.
+- `receive` waits for a value. `receive_within(timeout)` waits at most `timeout`, then returns
+  `None`; a `timeout` of zero or less only looks. A value already queued is returned even when
+  the deadline has passed.
+- `close` on either end closes the channel, and so does the last handle of all senders or of
+  all receivers going away (the end of its scope, the end of the task it was handed to). A
+  closed channel ends every waiter: each waiting `send` returns false, each waiting `receive`
+  returns the values sent before the close, in order, then `None`. `closed()` holds once the
+  channel is closed, queued values or not.
+- A task flushes what it wrote (section 7) before it waits on a channel, as before
+  `Clock.sleep` (21.20), and not when the operation does not wait.
+- Waiters block on a condition variable inside the process: no descriptor, no thread and no
+  socket per channel or per waiter.
+
+### 30.2 Element type
+
+`T` comes from the context, as for `Store.new()` (12.3) and `Map.empty()`: an expected type
+(`let ends: (Sender<Int>, Receiver<Int>) = Channel.bounded(4)`, a parameter, a return type)
+or, for a `let (tx, rx) = Channel.bounded(n)` without one, the first later use that fixes it
+(`tx.send(1)`, `rx.receive() == Some("x")`, an argument of type `Sender<Text>`). An element
+nothing fixes is E042 (`cannot infer the element type of `Channel.bounded(..)``); a
+`Channel.bounded` where a type other than a pair of ends is expected is E040. `Sender<T>` and
+`Receiver<T>` have no `==` (E045, as every handle), and `debug()` writes `<Sender>`
+and `<Receiver>`.
+
+### 30.3 Ownership and moves
+
+- Both ends are handles (invariant 3): a copy of a binding shares the end. As a `spawn`
+  argument at its last use the end moves into the task (20.3.1); before its last use the task
+  gets a share and the binding keeps its own. The pattern bindings of
+  `let (tx, rx) = Channel.bounded(n)` are fresh values the block owns, so they move at their
+  last use like the ends of `Pipe.pair()`.
+- The value argument of `send` and `try_send` is a move position, like the element of
+  `Store.put`: a value dead after the call goes into the channel without a copy; a value read
+  later is copied. The receiver gets its own value either way; nothing is shared between tasks.
+- LLVM target: a block owns an end its `let` created and releases it when the block is left,
+  as a stream (`own.rs`); an end sent as a value on another channel is left unowned (never
+  released, never closed early).
+
+### 30.4 Lowering
+
+| layer | form |
+|---|---|
+| `ignite-io` | `channel.rs`: `Channel::bounded<T>(i64) -> (Sender<T>, Receiver<T>)`, one `Mutex<State>` and two `Condvar`s (`not_empty`, `not_full`) per channel; each end counts its handles, and the drop of an end's last handle closes the channel |
+| Rust target | `::ignite_io::Channel::bounded(n)`, `tx.send(v)`, `rx.receive_within(t)`, …; types `::ignite_io::Sender<T>`, `::ignite_io::Receiver<T>` |
+| LLVM runtime | `channel.rs`: `void ignite_rt_channel_bounded(i64 n, ptr to_heap, ptr from_heap, ptr free, i64 size, i64 align, i64* sender, i64* receiver)`, `i8 ignite_rt_channel_send(i64, ptr)`, `i8 ignite_rt_channel_try_send(i64, ptr)`, `void ignite_rt_channel_close(i64)` (either end), `i8 ignite_rt_channel_receive(i64, ptr out)`, `i8 ignite_rt_channel_receive_within(i64, i64 ns, ptr out)`, `i8 ignite_rt_channel_closed(i64)`; each end is a handle-table entry (`Handle::Sender`, `Handle::Receiver`), released by `ignite_rt_tcp_release` |
+| LLVM target | an end is an `i64` handle; a value crosses as a heap copy made, read and freed by the element's `Store` glue (`to_heap`, `from_heap`, `free_heap`); `receive` fills an `Option<T>` through `option_from` |
+| evaluator | no value at compile time, as every substrate builtin |
+
+`CODEGEN_REVISION` is `ignite-codegen/0.1.0-43` (wave 7, one bump for its four generation changes).
+
+### 30.5 Tests
+
+- `std/sync.ignite`: eight inline tests on both targets (`task test-ignite`): order and
+  `try_send` on a full channel, `receive_within` at its deadline, a send from another task
+  waking a receiver, `send` waiting while full, close ending every waiter (a blocked sender
+  refused, blocked receivers ended), queued values after a close, the last sender's task ending
+  closing the channel, a sent value independent of the sender's later changes.
+- `channels::{rust,llvm}::g3_long_poll_heartbeat_without_bells`
+  (`crates/ignite/tests/channels.rs`, `fixtures/channels/g3.ignite`): a long-poll held to its
+  200 ms deadline, one woken by a message after 50 ms, a heartbeat that ticks until its stop
+  channel is closed; no socket.
+- `channels::{rust,llvm}::a_thousand_waiters_hold_no_extra_descriptor`: 1,000 tasks wait on one
+  channel and are woken by one sender; the process's `/proc/<pid>/fd` count while they wait
+  equals the count before they were spawned, and the sum of the received values is 500,500.
+- `ignite-io` `channel::*` (nine unit tests, among them 1,000 waiting threads woken by one
+  sender); `ignite-rt` `channel::tests::values_are_copied_and_freed_and_the_last_release_closes`;
+  `ignite-check` fixture `e010_channel_in_const` (E010, E016); `ignite-types` fixture
+  `e042_channel_element` (E042, E040), `moves::channel_ends_move_into_tasks_and_send_moves_its_value`,
+  `builtin_tables`.

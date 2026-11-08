@@ -13,6 +13,12 @@
 //! process at once with the signal's default action, so the parent sees a
 //! process killed by SIGTERM, not a clean exit.
 //!
+//! A listener bound with [`crate::TcpListener::bind_kept`] (a resource
+//! with `keep_through_drain = true`; story `drain-keeps-listeners`) is
+//! never registered here: it is not released, accepts until the process
+//! exits, and a task blocked in its `accept` or in a read of a stream it
+//! accepted does not hold up the wait for live tasks.
+//!
 //! Outside `ignite run` the wait for live tasks has no bound: a session
 //! that never ends keeps the process alive, and nothing in the substrate
 //! ends it. Only the driver's deadline bounds the drain
@@ -41,7 +47,7 @@ pub fn draining() -> bool {
     MODE.load(Ordering::SeqCst)
 }
 
-/// A listener bound; the drain releases it. The registry holds a weak
+/// A listener bound, not kept; the drain releases it. The registry holds a weak
 /// reference: a listener dropped by the program is simply gone.
 pub(crate) fn register(slot: &Arc<Slot>) {
     let mut listeners = lock(&LISTENERS);

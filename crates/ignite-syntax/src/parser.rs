@@ -1972,7 +1972,7 @@ impl<'t> Parser<'t> {
 
     fn compare(&mut self) -> PResult<Expr> {
         let start = self.start();
-        let left = self.additive()?;
+        let left = self.bit_or()?;
         if self.compare_op().is_none() {
             return Ok(left);
         }
@@ -1987,7 +1987,7 @@ impl<'t> Parser<'t> {
             self.bump();
         }
         self.skip_newlines();
-        let right = self.additive()?;
+        let right = self.bit_or()?;
         let expr = binary(op, left, right, self.span_from(start), self.node());
         if let Some((second, _)) = self.compare_op() {
             let span = self.peek_token().span;
@@ -2003,6 +2003,63 @@ impl<'t> Parser<'t> {
             return Err(Fail);
         }
         Ok(expr)
+    }
+
+    // The bitwise levels of `docs/slice.md` 29.1, Rust's order: `|`
+    // looser than `^` looser than `&` looser than the shifts, all tighter
+    // than the comparisons, so `a & b == c` is `(a & b) == c`.
+
+    fn bit_or(&mut self) -> PResult<Expr> {
+        self.binary_left(Self::bit_xor, |k| {
+            (*k == TokenKind::Pipe).then_some(BinaryOp::BitOr)
+        })
+    }
+
+    fn bit_xor(&mut self) -> PResult<Expr> {
+        self.binary_left(Self::bit_and, |k| {
+            (*k == TokenKind::Caret).then_some(BinaryOp::BitXor)
+        })
+    }
+
+    fn bit_and(&mut self) -> PResult<Expr> {
+        self.binary_left(Self::shift, |k| {
+            (*k == TokenKind::Amp).then_some(BinaryOp::BitAnd)
+        })
+    }
+
+    /// `<<` and `>>` are two `<` or `>` tokens that touch: the lexer
+    /// keeps `>` single so that `List<List<Int>>` closes two type argument
+    /// lists, and a `>` touching `=` is `>=` ([`Parser::compare_op`]).
+    fn shift_op(&self) -> Option<BinaryOp> {
+        let i = self.peek_index();
+        let op = match &self.tokens[i].kind {
+            TokenKind::Lt => BinaryOp::Shl,
+            TokenKind::Gt => BinaryOp::Shr,
+            _ => return None,
+        };
+        let next = &self.tokens[i + 1];
+        (next.kind == self.tokens[i].kind && next.span.start == self.tokens[i].span.end)
+            .then_some(op)
+    }
+
+    fn shift(&mut self) -> PResult<Expr> {
+        let start = self.start();
+        let left = self.additive()?;
+        if self.shift_op().is_none() {
+            return Ok(left);
+        }
+        self.shift_rest(start, left)
+    }
+
+    fn shift_rest(&mut self, start: usize, mut left: Expr) -> PResult<Expr> {
+        while let Some(op) = self.shift_op() {
+            self.bump();
+            self.bump();
+            self.skip_newlines();
+            let right = self.additive()?;
+            left = binary(op, left, right, self.span_from(start), self.node());
+        }
+        Ok(left)
     }
 
     fn additive(&mut self) -> PResult<Expr> {
@@ -2022,7 +2079,7 @@ impl<'t> Parser<'t> {
         })
     }
 
-    // unary := ('!' | '-') unary | 'await' unary | 'spawn' unary | postfix
+    // unary := ('!' | '-' | '~') unary | 'await' unary | 'spawn' unary | postfix
 
     fn unary(&mut self) -> PResult<Expr> {
         let start = self.start();
@@ -2033,6 +2090,10 @@ impl<'t> Parser<'t> {
             },
             TokenKind::Minus => |operand| ExprKind::Unary {
                 op: UnaryOp::Neg,
+                operand,
+            },
+            TokenKind::Tilde => |operand| ExprKind::Unary {
+                op: UnaryOp::BitNot,
                 operand,
             },
             TokenKind::KwAwait => {
@@ -2863,6 +2924,7 @@ fn starts_operand(kind: &TokenKind) -> bool {
             | TokenKind::LBrace
             | TokenKind::Minus
             | TokenKind::Bang
+            | TokenKind::Tilde
             | TokenKind::Pipe
             | TokenKind::OrOr
             | TokenKind::KwTrue
