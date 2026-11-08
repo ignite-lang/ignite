@@ -54,7 +54,7 @@ assembly local: Deployment {
 - `assembly local` binds every member to a place: the listener to a local socket, the server
   (with the console inside it) to a native process, the probe to a scheduled probe host.
 
-[Contracts, signals and policies](../design/contracts.md) explains the vocabulary.
+[Contracts, policies and control](../design/contracts.md) explains the vocabulary.
 
 ## ignite plan
 
@@ -167,7 +167,7 @@ with four lines on stdin: `status`, `advance 30 seconds`, `status`, `stop`.
 
 ```sh
 ignite run examples/terminal/terminal.design.ignite \
-  --clock manual --port Terminal.ingress=0 --runtime target/debug/libignite_rt.a
+  --clock manual --port Terminal.ingress=0
 ```
 
 Every journal record is one line on stderr. Shortened, the first probe attempt and its

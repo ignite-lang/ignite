@@ -1,10 +1,12 @@
 # Grammar
 
-This page gives the whole grammar of Ignite as the v0.3.0 parser accepts it, then the rules
+This page gives the grammar of Ignite as the parser accepts it, then the rules
 for line breaks and the operator precedence. Tokens are described in
 [Lexical structure](lexical.md). What the declarations mean is in [Types](types.md),
 [Effects](effects.md), [Modules and imports](modules.md) and
-[Tests and assertions](tests.md).
+[Tests and assertions](tests.md). The conformance clauses of a protocol and a test
+(`conforms`, `scope`, `satisfies`, `verifies`, `unsupported`, `not_applicable`) are not on
+this page yet.
 
 ## Notation
 

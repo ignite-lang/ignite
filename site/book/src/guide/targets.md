@@ -109,11 +109,11 @@ are in
 
 ## Build times, as measured
 
-The repository records program build times at every step. At the v0.3.0 close,
-building `todod` from a fresh output and target directory took about 3.1 s (Rust, dev)
-and 4.2 s (Rust, release), and 0.29 s (LLVM, dev) and 0.73 s (LLVM, release), over three
-measured pairs. The method and every run are in
-[`AGENTS.md`](https://github.com/ignite-lang/ignite/blob/main/AGENTS.md) (the section "in-process streams") and
+Before every release the quality metrics time a dev build of the todo example from a fresh
+output directory on a dedicated timing host. At release v0.15.0 it took
+1.30 s on the LLVM target and 4.12 s on the Rust target. The current values and their history
+are on the [Quality](../quality.md) page (row 6.2, and its table of the dedicated host); earlier
+measurements are in
 [`docs/performance/`](https://github.com/ignite-lang/ignite/tree/main/docs/performance).
 Whether one target produces faster or smaller programs is, by the design, a question for
 benchmarks, not an assumption.

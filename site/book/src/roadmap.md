@@ -22,7 +22,7 @@ dependencies between the waves are in
 | **v0.3.0** | in-process streams: `Pipe.pair()`, the `ByteStream` bound `<S: ByteStream>`, the Telnet and HTTP roles generic over the stream with `SessionLimits` and `HttpLimits`, protocol tests without a network on both targets |
 | **v0.4.0** | protocols that state which RFC requirements they meet: `std.rfc` and catalogues of RFC 854, 855, 1143, 9112 and 9110; the clauses `conforms`, `scope`, `satisfies`, `verifies`, `unsupported` and `not_applicable` with E090 to E092; `ignite conformance`, `ignite rfc import` and `ignite rfc check`; the claims of `Telnet` (RFC 855 met, RFC 854 with four gaps) and `Http` (gaps listed, nothing claimed) ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.4.0)) |
 | **v0.5.0** | the language gaps of wave A on both targets: values move at their last use, calls of fn-typed expressions, rest patterns in list patterns with E076; store `upsert`, borrowed store reads and performance work on both targets ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.5.0)) |
-| **v0.6.0** | processes, files, settings and random bytes for programs: `std.fs` with the `Directory` resource, `std.process`, one `--flag` per `Setting` with E142, `std.random`; `HttpServer` runs under `ignite run` and `ignite apply`; LLVM is the default `--target`, and an installed `ignite` carries its runtime ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.6.0)) |
+| **v0.6.0** | processes, files, settings and random bytes for programs: `std.fs` with the `Directory` resource, `std.process`, one `--flag` per `Setting` with E142, random bytes (`Entropy`); `HttpServer` runs under `ignite run` and `ignite apply`; LLVM is the default `--target`, and an installed `ignite` carries its runtime ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.6.0)) |
 | **v0.7.0** | one service operated (slice 18): the todo service on the LLVM target keeps its data in a `Directory` across a kill and an `ignite apply` rollout, an HTTP probe kind with a typed outcome and an `Availability` contract over it, a hosted `Store`, host journal integrity checks, fault rows for lost acknowledgement, stale plans and corrupt journals, and `ignite recover`; also `CommandLine`, the language server example `ignite-lsp` written in Ignite, and fixes to rollouts, LLVM stream ownership and runtime panics ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.7.0)) |
 | **v0.8.0** | static executables and the typed program as JSON: `ignite build --static` links against musl on both targets; `ignite emit --typed-json` prints the typed program in the format `ignite-typed/0.1`; `<`, `<=`, `>` and `>=` on `Text`, `Int.wrapping_add`, `wrapping_sub` and `wrapping_mul`, `Stderr`, list element assignment `xs[i] = v` and `List + List`; sibling modules that import each other, with their tests run by `ignite test`; fewer copies in the LLVM lowering ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.8.0)) |
 | **v0.9.0** | checked arithmetic and Telnet to RFC 854: `Int.checked_add`, `checked_sub` and `checked_mul` return `Option<Int>`; `std.protocol.telnet` claims RFC 854 with GA, the Synch and a partial-line key; pattern bindings, `for` elements and consumed closure parameters move at their last use; fewer clones in generated Rust; the language server moved to its own repository, [ignite-lsp](https://github.com/ignite-lang/ignite-lsp) ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.9.0)) |
@@ -45,16 +45,16 @@ plan, not a promise of dates. The plan itself is
 | wave | content | state |
 |---|---|---|
 | native parity | Ignite programs within 1.1× of plain Rust: an IO scheduler that waits on readiness instead of running one thread per connection, fixed-width integers for codecs | in progress |
+| 8 | no leaks in a long-running server: channels and every LLVM-target handle released on close, channel ends inferred; a drain that keeps bound listeners; SHA-1, SHA-256 and base64 in std; `std.json` reads the last of a repeated member; `ignite --version` names the commit of a source build | accepted |
 
 ### Planned
 
 | wave | content | state |
 |---|---|---|
-| 8 | protocol clients: WebSocket (RFC 6455), RESP3 with Sentinel, NATS ([protocols and clients](planned/clients.md)); `Codec<T>` and its combinators ([data formats](planned/data.md)); `ignite fmt` with a format check | planned |
-| 9 | YAML 1.2.2, the safe subset ([data formats](planned/data.md)); benchmarks of Ignite programs against the same programs in plain Rust and Go | planned |
-| 10 | one mid-level IR that both targets lower from, checked by a differential runner | planned |
-| 11 | `Store` keyed by text | planned |
-| 12 | the largest compiler files split | planned |
+| 9 | protocol clients: WebSocket (RFC 6455), RESP3 with Sentinel, NATS, a TLS client and an HTTP client role ([protocols and clients](planned/clients.md)); `Codec<T>` and its combinators ([data formats](planned/data.md)); a static build from source with no setup and no network | planned |
+| 10 | one mid-level IR that both targets lower from; beside it, blocking work off the readiness scheduler's workers, its memory, and runtime metrics | planned |
+| 11 | fixed-size lists; YAML 1.2.2, the safe subset ([data formats](planned/data.md)); `ignite fmt` | planned |
+| 12 | `Store` keyed by text, the largest compiler files split, then the web framework x.web | planned |
 
 ## Designs <span class="badge design">design</span>
 
@@ -64,11 +64,11 @@ Each has a design document or a row in the plan. None of it is implemented.
 | wave | content | source |
 |---|---|---|
 | C actors P1 to P3 | typed actors: `Address`, `ReplyTo`, `Outbox`, an `Actor` kind, mailboxes, `std/actor`, `std/table`, `Topic`, `Sink`, `Supervisor`; the todo example on an actor | [`docs/actors.md`](https://github.com/ignite-lang/ignite/blob/main/docs/actors.md) |
-| D async | tokio inside the substrate, Rust-target futures, LLVM-target coroutines, `Task.yield_now` | [`PLAN.md`](https://github.com/ignite-lang/ignite/blob/main/PLAN.md), [`docs/vision.md`](https://github.com/ignite-lang/ignite/blob/main/docs/vision.md) |
+| D async | replaced by the readiness scheduler being built (stackful tasks on epoll workers inside the substrate, no change to code generation); stackless lowering per target stays a later option | [`docs/readiness-io.md`](https://github.com/ignite-lang/ignite/blob/main/docs/readiness-io.md) |
 | E WebAssembly P0 to P4 | machine scalars, `Buffer`, `--target wasm`, a runtime written in Ignite, `ignite run --watch`, hot reload with `migrate` | [`docs/wasm.md`](https://github.com/ignite-lang/ignite/blob/main/docs/wasm.md) |
 | G protocols P3 to P5 | ABNF grammars, user `interface` and `impl`, TLS and Unix transports | [`docs/protocols.md`](https://github.com/ignite-lang/ignite/blob/main/docs/protocols.md) |
 | x.web | a web framework shipped with Ignite under `x.*`: the web app declared in the system, routes, JSON, OpenAPI, live pages, caching and contracts derived; identity as a type, declared policies, outgoing calls as dependencies, views and Markdown pages, and the language extensions they need ([page](planned/web.md)) | [`docs/web.md`](https://github.com/ignite-lang/ignite/blob/main/docs/web.md) |
-| data formats | one value model in `std.data`, codecs the compiler derives, JSON, YAML and TOML ([page](planned/data.md)); the first steps are waves 7 to 9 above | [`docs/serde.md`](https://github.com/ignite-lang/ignite/blob/main/docs/serde.md) |
+| data formats | one value model in `std.data`, codecs the compiler derives, JSON, YAML and TOML ([page](planned/data.md)); the value model and its bridge to `std.json` are released in v0.15.0, codecs and YAML are waves 9 and 11 above | [`docs/serde.md`](https://github.com/ignite-lang/ignite/blob/main/docs/serde.md) |
 | fault injection and simulation | faults at the IO seam, named fault points, a simulated world driven by one seed, generated fault schedules with shrinking ([page](planned/simulation.md)); a draft for decision | [`docs/fault-injection.md`](https://github.com/ignite-lang/ignite/blob/main/docs/fault-injection.md) |
 | H self-hosting M5 to M7 | packages and manifests, the frontend in Ignite, an emitter in Ignite, a bootstrap chain | [`docs/design.md`](https://github.com/ignite-lang/ignite/blob/main/docs/design.md) section 12 |
 

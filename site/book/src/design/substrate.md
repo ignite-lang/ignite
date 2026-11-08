@@ -29,9 +29,13 @@ Two rules keep it small and shared:
 - **A target differs only in how it suspends a task, not in how it does IO.** Neither target
   has IO code of its own.
 
-Today the substrate is blocking: `std::net`, one OS thread per task, no event loop. An async
-substrate (tokio inside `ignite-io`, Rust futures and LLVM coroutines running on it) is
-planned and not built; see the [roadmap](../roadmap.md).
+In release v0.15.0 the substrate is blocking: `std::net`, one OS thread per task, no event
+loop. Being built: a readiness scheduler inside `ignite-io` that runs spawned tasks as
+stackful tasks on a few worker threads, one epoll loop each, with no change to either
+target's code generation
+([`docs/readiness-io.md`](https://github.com/ignite-lang/ignite/blob/main/docs/readiness-io.md),
+[roadmap](../roadmap.md)). It replaces the earlier plan of tokio, Rust futures and LLVM
+coroutines.
 
 ## The Rust target
 
@@ -126,7 +130,8 @@ selects the Rust target. Both targets stay, and every feature lands on both. The
   fixture, until D2 says otherwise."
 
 The measured reason is in the [targets guide](../guide/targets.md#build-times-as-measured):
-`todod` builds in about 0.29 s on LLVM against 3.1 s on Rust.
+`todod` builds in 1.30 s on LLVM against 4.12 s on Rust (dev, release v0.15.0, the dedicated
+timing host).
 
 ## Where the code lives
 

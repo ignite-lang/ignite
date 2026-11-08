@@ -46,7 +46,7 @@ from [`std.console`](../reference/std/console.md).
 ## Generic over the stream
 
 `<S: ByteStream>` bounds a type parameter of a function or role by the one interface the
-compiler knows. A value of type `S` then has four methods:
+compiler knows. A value of type `S` then has six methods:
 
 | method | signature | effect on its root |
 |---|---|---|
@@ -54,6 +54,8 @@ compiler knows. A value of type `S` then has four methods:
 | `write_all` | `(stream: S, data: Bytes) -> IoResult<Unit>` | `write` |
 | `close` | `(stream: S) -> IoResult<Unit>` | `write` |
 | `set_idle_timeout` | `(stream: S, ms: Int) -> IoResult<Unit>` | `write` |
+| `write_urgent` | `(stream: S, data: Bytes) -> IoResult<Unit>` | `write` |
+| `urgent_pending` | `(stream: S) -> IoResult<Bool>` | `read` |
 
 `TcpStream`, `PipeStream` and a type parameter bounded by `ByteStream` implement it; nothing
 else does. Passing another type is E096. `ByteStream` in a type position (a parameter, a
@@ -197,6 +199,6 @@ the full rule.
 
 User `interface` and `impl` declarations, ABNF grammars, and TLS and Unix-socket transports
 are a design, not implemented ([roadmap](../roadmap.md)). RFC catalogues and conformance
-claims are released in v0.4.0.
+claims (`std.rfc`, `conforms`, `ignite conformance`) are built and released.
 
 Next: [Components](components.md).

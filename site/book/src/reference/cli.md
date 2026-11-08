@@ -17,7 +17,7 @@ Options:   -h, --help     Print help
 
 | option | commands | meaning |
 |---|---|---|
-| `--std DIR` | all that read a program | root of the standard library (default: the `std/` of the source tree `ignite` was built from) |
+| `--std DIR` | all that read a program | root of the standard library (default: `PREFIX/share/ignite/std` for a driver at `PREFIX/bin/ignite` when it exists, else the `std/` of the source tree `ignite` was built from) |
 | `--assembly NAME` | `plan`, `explain`, `run`, `replay` | the assembly to select (default: the program's only one) |
 | `--fuel N` | `plan`, `explain`, `run`, `replay` | `plan`, `explain`: fuel per property expression; `run`, `replay`: fuel per reducer step only, the plan inside them keeps the default; default 1,000,000 units |
 | `--target llvm\|rust` | `build`, `test`, `run`, `plan --for-apply`, `conformance` | native target, default `llvm`; `test` also takes `all` |

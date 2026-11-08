@@ -85,9 +85,7 @@ test "keywords work as field names" {
 }
 ```
 
-A known gap of v0.3.0: `ignite check` also accepts a field named after a Rust keyword, such
-as `type` or `match`, and the LLVM target builds it, but the Rust target's generated code
-does not compile. Avoid such field names until the Rust target escapes them.
+A field named `type` or `match` builds on both targets. A keyword is still no parameter name:
 
 ```ignite,fails=E001
 fn twice(test: Int) -> Int = test * 2

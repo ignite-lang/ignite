@@ -88,28 +88,22 @@ Build and run it:
 
 ```sh
 ignite build hello.ignite
-target/ignite/hello/target/debug/hello
+target/ignite/hello/bin/hello
 ```
 
-Shortened, the output of both commands:
+The output of both commands:
 
 ```text
-note: building the generated Rust project in target/ignite/hello; compiler messages refer to generated code
-    Updating crates.io index
-   Compiling ignite-io v0.3.0 (…/crates/ignite-io)
-   Compiling hello v0.0.0 (…/target/ignite/hello)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.90s
-built target/ignite/hello/target/debug/hello
+built target/ignite/hello/bin/hello
 Hello, Ignite!
 ```
 
-The lines between `note:` and `built` are cargo's. A build into a fresh output directory
-resolves the substrate's dependencies from crates.io, so it needs network access.
-
-`ignite build` writes a generated Rust project into `--out` (default `target/ignite/<package>`),
-runs cargo on it and prints one `built <path>` line per executable. The generated Rust is an
-artifact: never edit it. With `--target llvm` the same program is compiled through LLVM
-instead; see [Building for Rust and LLVM](targets.md).
+`ignite build` compiles the program on the default target, LLVM: it writes LLVM IR into
+`--out` (default `target/ignite/<package>`, the IR under `llvm/`), has clang compile and link
+it against the runtime archive the `ignite` binary carries, and prints one `built <path>`
+line per executable. It needs clang and no network. With `--target rust` the same program is
+generated as a Rust project and built by cargo instead; see
+[Building for Rust and LLVM](targets.md).
 
 ## What to read next
 

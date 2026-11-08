@@ -47,9 +47,9 @@ ignite test examples/terminal/commands.ignite
 Arguments ending in `.ignite` are files; at most one other argument is the filter. All named
 files share one test executable per target: one compile and one link. The tests of the named
 files run first, then those of their sibling modules; a standard library module the files
-load is built with its tests dropped. The default target is LLVM, which
-links the runtime archive with the test runner ([Both targets](#both-targets) shows how to
-build it); `--target rust` builds with cargo instead.
+load is built with its tests dropped. The default target is LLVM, which links the runtime
+archive with the test runner that the `ignite` binary carries; `--target rust` builds with
+cargo instead.
 
 | flag | meaning |
 |---|---|
@@ -114,12 +114,11 @@ task test-ignite FILTER=json
 
 `task test-ignite` builds the compiler and the LLVM runtime with the test runner
 (`cargo build -p ignite-rt --features runner`), then runs every file of `std/` and
-`examples/` with `--target=all`. By hand, the default target needs that runtime, and
-`--target rust` needs none:
+`examples/` with `--target=all`. By hand, no step comes first: `ignite`
+carries the runtime archive, and `--target rust` needs none:
 
 ```sh
-cargo build -p ignite-rt --features runner --target-dir target/ignite-test/rt
-ignite test std/json.ignite --runtime target/ignite-test/rt/debug/libignite_rt.a
+ignite test std/json.ignite
 ignite test std/json.ignite --target rust
 ```
 

@@ -47,7 +47,7 @@ check`, `ignite test`, `ignite build`, `ignite plan`, `ignite explain`, `ignite 
 | E120 to E124, E129 | run-time rules checked ahead of time | `check`, `plan`, `explain`, `run`, `replay` |
 | E125 to E128 | running and replaying | `run`, `replay` |
 
-Exit status when a program has an error, measured with the v0.3.0 CLI:
+Exit status when a program has an error:
 
 | command | exit status |
 |---|---|

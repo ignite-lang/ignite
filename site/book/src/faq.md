@@ -29,8 +29,8 @@ platforms are not covered by this book.
 
 Start with the default, LLVM. Both targets compile the same checked program, call the same
 IO substrate and must behave the same, down to the text of an error; every feature lands on
-both. The LLVM target builds without cargo and needs clang and the runtime archive;
-`--target rust` builds with cargo instead. See
+both. The LLVM target builds without cargo and needs clang and the runtime archive,
+which `ignite` carries; `--target rust` builds with cargo instead. See
 [Building for Rust and LLVM](guide/targets.md).
 
 ## Is the generated Rust meant to be edited?
@@ -57,7 +57,7 @@ default of `Availability` and `ThresholdCompliance` and the only rule of `SLA`, 
 no executed probe attempt, or with fewer than `minimum_completeness` of the expected ones, has
 the standing `InsufficientEvidence`, not `Compliant`: zero traffic does not prove compliance.
 A contract that declares `missing_data = "counts_as_good"` or `"counts_as_bad"` fills the
-missing attempts instead. See [Contracts, signals and policies](design/contracts.md).
+missing attempts instead. See [Contracts, policies and control](design/contracts.md).
 
 ## Can a crash in one connection take the server down?
 
