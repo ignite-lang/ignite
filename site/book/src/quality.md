@@ -16,9 +16,9 @@ Targets: `rust` is the Rust target, `llvm` the LLVM target, `eval` the compile-t
 `all` a value that does not differ by target. The first of these metrics, one result across the
 three, is checked on every merge by running one corpus of programs on all three.
 
-Timing rows (build, check and restart times, sizes) are measured on a shared workstation for now
-(`host: local`): they are recorded and shown, but not compared or gated until a dedicated host
-measures them.
+Timing rows (build, check and restart times) are measured on a single-tenant EC2 host made for the
+run (`ec2:<type>`, its trend against the run before on that host type); until such a run exists
+they show the shared workstation's values (`host: local`), recorded but not comparable.
 
 Current values: run `bar` on 2026-11-07, commit `9a775116`.
 

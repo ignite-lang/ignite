@@ -1271,7 +1271,7 @@ pub struct Record {
     pub value: i64,
     /// Where the run was measured: `local` for this workstation (a timed
     /// row then carries its 1-minute `load`), `ec2:<type>` for the
-    /// dedicated timing host of story:quality-timing-host.
+    /// dedicated timing host (`ignite-perf quality-remote`).
     pub host: String,
     pub load: Option<String>,
 }
@@ -1339,9 +1339,17 @@ pub fn read_history() -> Vec<Record> {
 /// values by `(metric, target)`.
 type Runs = Vec<((String, String, String), BTreeMap<(String, String), i64>)>;
 
+/// Whether `host` is the dedicated timing host (`ec2:<type>`), whose runs
+/// `ignite-perf quality-remote` writes: timing rows only, kept apart from the
+/// local runs.
+fn dedicated(host: &str) -> bool {
+    host.starts_with("ec2:")
+}
+
+/// The local runs of `history`; the dedicated host's are in [`host_runs`].
 fn runs(history: &[Record]) -> Runs {
     let mut out: Runs = Vec::new();
-    for record in history {
+    for record in history.iter().filter(|r| !dedicated(&r.host)) {
         let key = (
             record.run.clone(),
             record.commit.clone(),
@@ -1358,11 +1366,39 @@ fn runs(history: &[Record]) -> Runs {
     out
 }
 
+/// The runs of the dedicated host in order, each `(run, commit, date, host)`
+/// with its values by `(metric, target)`.
+type HostRuns = Vec<(
+    (String, String, String, String),
+    BTreeMap<(String, String), i64>,
+)>;
+
+fn host_runs(history: &[Record]) -> HostRuns {
+    let mut out: HostRuns = Vec::new();
+    for record in history.iter().filter(|r| dedicated(&r.host)) {
+        let key = (
+            record.run.clone(),
+            record.commit.clone(),
+            record.date.clone(),
+            record.host.clone(),
+        );
+        if out.last().map(|(k, _)| k) != Some(&key) {
+            out.push((key, BTreeMap::new()));
+        }
+        out.last_mut()
+            .unwrap()
+            .1
+            .insert((record.metric.clone(), record.target.clone()), record.value);
+    }
+    out
+}
+
 /// The timing rows: measured by `ignite-perf quality` in ms (the sizes it
-/// measures, 3.2, are deterministic and held as any count). Until the
-/// dedicated timing host of story:quality-timing-host exists, these rows are
-/// recorded with `host: local` and gate nothing: no merge, no release. The
-/// list is fixed here, not read from the baseline's labels, so a relabelled
+/// measures, 3.2, are deterministic and held as any count). Recorded by
+/// `task quality` with `host: local`, they gate nothing; measured on the
+/// dedicated host by `ignite-perf quality-remote` (`host: ec2:<type>`), a
+/// release run refuses a row worse than its BASE, the last release, in the
+/// same run (`tools/ignite-perf/src/remote.rs`). The list is fixed here, not read from the baseline's labels, so a relabelled
 /// metric is not exempted (`the_baseline_is_well_formed` holds the labels to
 /// it, `check` refuses a relabel against `main`).
 const TIMING: [&str; 3] = ["5.3", "6.1", "6.2"];
@@ -1401,7 +1437,7 @@ fn change(metric: &Metric, from: i64, to: i64) -> String {
 /// of every value against the row before.
 pub fn render_trend(baseline: &Baseline, history: &[Record]) -> String {
     let mut out = String::from(
-        "# Quality trend\n\nGenerated from `quality/history.jsonl` by `task quality` (`quality::record`); do not edit.\nOne row per release and the first assessment (`bar`); the changes are against the row before\n(`docs/quality.md`). Timing rows (source `perf`) measured on `host: local`, the shared\nworkstation, are not comparable between runs: they are left out of `worse`, `better` and\n`changes` and counted under `timing` (story:quality-timing-host brings a dedicated host).\n\n| run | commit | date | worse | better | timing | changes |\n|---|---|---|---|---|---|---|\n",
+        "# Quality trend\n\nGenerated from `quality/history.jsonl` by `task quality` (`quality::record`); do not edit.\nOne row per release and the first assessment (`bar`); the changes are against the row before\n(`docs/quality.md`). Timing rows (source `perf`) measured on `host: local`, the shared\nworkstation, are not comparable between runs: they are left out of `worse`, `better` and\n`changes` and counted under `timing`; the\ndedicated host's runs have their own table below the main one.\n\n| run | commit | date | worse | better | timing | changes |\n|---|---|---|---|---|---|---|\n",
     );
     let mut previous: Option<BTreeMap<(String, String), i64>> = None;
     for ((run, commit, date), values) in runs(history) {
@@ -1450,6 +1486,65 @@ pub fn render_trend(baseline: &Baseline, history: &[Record]) -> String {
             &commit[..commit.len().min(8)]
         ));
         previous = Some(values);
+    }
+    let hosts = host_runs(history);
+    if !hosts.is_empty() {
+        out.push_str(
+            "\n## Timing on the dedicated host\n\nRuns of `ignite-perf quality-remote` (`task quality-remote`): the timing rows only, measured on a\nsingle-tenant EC2 host made for the run, HEAD's median over interleaved passes; the changes are\nagainst the run before on a host of the same type.\n\n| run | commit | date | host | values | changes |\n|---|---|---|---|---|---|\n",
+        );
+        for (index, ((run, commit, date, host), values)) in hosts.iter().enumerate() {
+            let shown_values: Vec<String> = values
+                .iter()
+                .map(|((id, target), value)| {
+                    let unit = baseline.metrics.get(id).map_or("", |m| m.unit.as_str());
+                    format!("{id} {target} {}", shown(*value, unit))
+                })
+                .collect();
+            let before = hosts[..index]
+                .iter()
+                .rev()
+                .find(|((_, _, _, h), _)| h == host)
+                .map(|(_, v)| v);
+            let changes = match before {
+                None => "first on this host".to_string(),
+                Some(before) => {
+                    let mut changes = Vec::new();
+                    for ((id, target), value) in values {
+                        let (Some(metric), Some(old)) = (
+                            baseline.metrics.get(id),
+                            before.get(&(id.clone(), target.clone())),
+                        ) else {
+                            continue;
+                        };
+                        if old == value {
+                            continue;
+                        }
+                        let verdict = if metric.direction.worse(*old, *value, metric.tolerance) {
+                            " worse"
+                        } else if metric.direction.better(*old, *value, Tolerance::Count(0)) {
+                            " better"
+                        } else {
+                            ""
+                        };
+                        changes.push(format!(
+                            "{id} {target} {}→{}{verdict}",
+                            shown(*old, &metric.unit),
+                            shown(*value, &metric.unit)
+                        ));
+                    }
+                    if changes.is_empty() {
+                        "none".to_string()
+                    } else {
+                        changes.join("; ")
+                    }
+                }
+            };
+            out.push_str(&format!(
+                "| {run} | {} | {date} | {host} | {} | {changes} |\n",
+                &commit[..commit.len().min(8)],
+                shown_values.join("; ")
+            ));
+        }
     }
     out
 }
@@ -1538,10 +1633,11 @@ the bars are in `quality/baseline.json` and every measured value in `quality/his
 Targets: `rust` is the Rust target, `llvm` the LLVM target, `eval` the compile-time evaluator,\n\
 `all` a value that does not differ by target. The first of these metrics, one result across the\n\
 three, is checked on every merge by running one corpus of programs on all three.\n\n\
-Timing rows (build, check and restart times, sizes) are measured on a shared workstation for now\n\
-(`host: local`): they are recorded and shown, but not compared or gated until a dedicated host\n\
-measures them.\n\n",
+Timing rows (build, check and restart times) are measured on a single-tenant EC2 host made for the\n\
+run (`ec2:<type>`, its trend against the run before on that host type); until such a run exists\n\
+they show the shared workstation's values (`host: local`), recorded but not comparable.\n\n",
     );
+    let hosts = host_runs(history);
     out.push_str(&format!("Current values: run {current_run}.\n"));
     for (index, area) in baseline.areas.iter().enumerate() {
         out.push_str(&format!(
@@ -1565,7 +1661,31 @@ measures them.\n\n",
             }
             for (target, bar) in &m.bars {
                 let key = (id.clone(), target.clone());
-                let now = current.get(&key);
+                let mut now = current.get(&key);
+                let on_host = hosts.iter().rposition(|(_, v)| v.contains_key(&key));
+                if let Some(at) = on_host.filter(|_| is_timing(id)) {
+                    let ((_, _, _, host), values) = &hosts[at];
+                    now = values.get(&key);
+                    let before = hosts[..at]
+                        .iter()
+                        .rev()
+                        .find(|((_, _, _, h), v)| h == host && v.contains_key(&key))
+                        .and_then(|(_, v)| v.get(&key));
+                    let trend = match (before, now) {
+                        (Some(before), Some(now)) => {
+                            format!("{host}, {}", change(m, *before, *now))
+                        }
+                        _ => host.clone(),
+                    };
+                    out.push_str(&format!(
+                        "| {id} | {} | {} | {target} | {} | {} | {trend} |\n",
+                        m.name,
+                        m.kind,
+                        shown(bar.value, &m.unit),
+                        now.map_or(String::new(), |v| shown(*v, &m.unit))
+                    ));
+                    continue;
+                }
                 let trend = match (now, reference.as_ref().and_then(|r| r.get(&key))) {
                     _ if is_timing(id) => "local, not comparable".to_string(),
                     (Some(now), Some(then)) => change(m, *then, *now),
@@ -1622,8 +1742,8 @@ fn civil_date(secs: u64) -> String {
 }
 
 /// Every refusal of a release: a count value worse than at the last release
-/// (or the bar) beyond its metric's tolerance. Timing rows are left out until
-/// they are measured on the dedicated host (story:quality-timing-host).
+/// (or the bar) beyond its metric's tolerance. Timing rows are left out here:
+/// `ignite-perf quality-remote` refuses them against BASE on the dedicated host.
 pub fn release_refusals(baseline: &Baseline, history: &[Record], values: &[Value]) -> Vec<String> {
     let Some((_, last)) = runs(history)
         .into_iter()
@@ -2078,6 +2198,79 @@ fn a_release_worse_than_the_last_is_refused() {
         page.contains("| llvm | 900 ms | 2000 ms | local, not comparable |"),
         "{page}"
     );
+}
+
+/// Runs on the dedicated timing host (`host: ec2:<type>`, written by
+/// `ignite-perf quality-remote`) get a timing table of their own in the
+/// trend and give the page its timing values; the local runs keep the main
+/// table, the count values and the release refusals.
+#[test]
+fn a_dedicated_host_run_has_its_own_timing_trend() {
+    let mut timing = metric(Direction::Lower, Tolerance::Percent(10), &[("llvm", 900)]);
+    timing.source = Some("perf".to_string());
+    timing.unit = "ms".to_string();
+    let baseline = baseline_of(&[
+        (
+            "4.3",
+            metric(Direction::Higher, Tolerance::Count(0), &[("rust", 309)]),
+        ),
+        ("6.2", timing),
+    ]);
+    let record = |run: &str, commit: &str, metric: &str, value: i64, host: &str| Record {
+        commit: commit.to_string(),
+        date: "2026-11-08".to_string(),
+        run: run.to_string(),
+        metric: metric.to_string(),
+        target: if metric == "4.3" { "rust" } else { "llvm" }.to_string(),
+        value,
+        host: host.to_string(),
+        load: (metric == "6.2").then(|| "0.10".to_string()),
+    };
+    let ec2 = "ec2:c7i.metal-24xl";
+    let history = vec![
+        record("bar", "c", "4.3", 309, "local"),
+        record("bar", "c", "6.2", 900, "local"),
+        record("run", "d", "6.2", 410, ec2),
+        record("run", "e", "6.2", 380, ec2),
+    ];
+    let trend = render_trend(&baseline, &history);
+    assert!(
+        trend.contains(
+            "| bar | c | 2026-11-08 | 0 | 0 | 1 local, not comparable | 2 values, the bar |"
+        ),
+        "{trend}"
+    );
+    assert!(trend.contains("## Timing on the dedicated host"), "{trend}");
+    assert!(
+        trend.contains(&format!(
+            "| run | d | 2026-11-08 | {ec2} | 6.2 llvm 410 ms | first on this host |"
+        )),
+        "{trend}"
+    );
+    assert!(
+        trend.contains(&format!(
+            "| run | e | 2026-11-08 | {ec2} | 6.2 llvm 380 ms | 6.2 llvm 410 ms→380 ms better |"
+        )),
+        "{trend}"
+    );
+    let page = render_site_page(&baseline, &history);
+    assert!(page.contains("| rust | 309 | 309 |"), "{page}");
+    assert!(
+        page.contains(&format!("| llvm | 900 ms | 380 ms | {ec2}, −30 better |")),
+        "{page}"
+    );
+    let value = Value {
+        metric: "4.3".to_string(),
+        target: "rust".to_string(),
+        value: 309,
+        load: None,
+    };
+    assert!(release_refusals(&baseline, &history, &[value]).is_empty());
+    let parsed = Record::parse(
+        r#"{"base":"b","base_value":400,"commit":"e","date":"2026-11-08","host":"ec2:c7i.metal-24xl","load":"0.10","machine":{"cpu":"x","smt":"off"},"metric":"6.2","run":"run","target":"llvm","value":380}"#,
+    )
+    .unwrap();
+    assert_eq!(parsed, history[3]);
 }
 
 #[test]
