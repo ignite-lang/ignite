@@ -90,7 +90,7 @@ protocol Telnet conforms [RFC854, RFC855] {
             state = next
             out.append(printed)
             match event {
-              Answer(answer) => stream.write_all(answer)?
+              Answer(verb, option) => stream.write_all(answer(verb, option))?
               SubnegotiationTooLong => {
                 Stdout.write_all(out)?
                 Stdin.set_raw(false)?
@@ -222,7 +222,7 @@ fn await_prompt(stream: TcpStream, expected_prompt: Text) -> IoResult<Text> {
           match event {
             Literal(c) => text.push(c)
             EndOfLine => text.push(b'\n')
-            Answer(answer) => stream.write_all(answer)?
+            Answer(verb, option) => stream.write_all(answer(verb, option))?
             SubnegotiationTooLong => return Err(IoError.new("subnegotiation longer than {MAXIMUM_SUBNEGOTIATION} bytes"))
             _ => {}
           }
@@ -403,12 +403,15 @@ enum Decoder {
   SubnegotiationInterpret(Int)
 }
 
-// What one byte means to the session.
+// What one byte means to the session. `Answer(verb, option)` is the reply
+// IAC verb option (`answer`); it carries two bytes rather than the reply's
+// bytes, so an event, and the tuple `decode` returns for every byte, holds
+// no list.
 enum Event {
   Nothing,
   Literal(Byte),
   EndOfLine,
-  Answer(Bytes),
+  Answer(Byte, Byte),
   AreYouThere,
   Interrupt,
   SubnegotiationTooLong,
@@ -441,8 +444,8 @@ fn decode_within(state: Decoder, b: Byte, maximum: Int) -> (Decoder, Event) sati
   (Interpret, IP) => (Ground, Interrupt)
   (Interpret, DM) => (Ground, DataMark)
   (Interpret, _) => (Ground, Nothing)
-  (Negotiation(DO), _) => (Ground, Answer([IAC, WONT, b]))
-  (Negotiation(WILL), _) => (Ground, Answer([IAC, DONT, b]))
+  (Negotiation(DO), _) => (Ground, Answer(WONT, b))
+  (Negotiation(WILL), _) => (Ground, Answer(DONT, b))
   (Negotiation(_), _) => (Ground, Nothing)
   (Subnegotiation(count), _) => if count + 1 > maximum {
     (Ground, SubnegotiationTooLong)
@@ -454,6 +457,9 @@ fn decode_within(state: Decoder, b: Byte, maximum: Int) -> (Decoder, Event) sati
   (SubnegotiationInterpret(_), SE) => (Ground, Nothing)
   (SubnegotiationInterpret(count), _) => (Subnegotiation(count), Nothing)
 }
+
+// The bytes of the event `Answer(verb, option)`: IAC verb option.
+fn answer(verb: Byte, option: Byte) -> Bytes = [IAC, verb, option]
 
 // `bytes` decoded from `state`: the state after them and their events,
 // `Nothing` left out.
@@ -576,14 +582,16 @@ test "IAC IAC is the data byte 255" verifies [RFC854.RP14_1] {
 }
 
 test "DO is answered WONT and WILL is answered DONT" verifies [RFC854.RP2_2, RFC854.RP2_5, RFC855.RP2_3, RFC855.RP2_4] {
-  assert events([IAC, DO, 1]) == [Answer([IAC, WONT, 1])]
-  assert events([IAC, WILL, 3]) == [Answer([IAC, DONT, 3])]
+  assert events([IAC, DO, 1]) == [Answer(WONT, 1)]
+  assert events([IAC, WILL, 3]) == [Answer(DONT, 3)]
   assert events([IAC, DONT, 1]) == []
   assert events([IAC, WONT, 1]) == []
-  assert events([IAC, DO, IAC, b'x']) == [Answer([IAC, WONT, IAC]), Literal(b'x')]
-  assert events([IAC, WILL, b'\r', b'x']) == [Answer([IAC, DONT, b'\r']), Literal(b'x')]
+  assert events([IAC, DO, IAC, b'x']) == [Answer(WONT, IAC), Literal(b'x')]
+  assert events([IAC, WILL, b'\r', b'x']) == [Answer(DONT, b'\r'), Literal(b'x')]
   // RFC 855: the refused option's parameters are skipped up to IAC SE.
-  assert events([IAC, WILL, 24, IAC, SB, 24, 1, IAC, SE, b'a']) == [Answer([IAC, DONT, 24]), Literal(b'a')]
+  assert events([IAC, WILL, 24, IAC, SB, 24, 1, IAC, SE, b'a']) == [Answer(DONT, 24), Literal(b'a')]
+  assert answer(WONT, 1) == [IAC, WONT, 1]
+  assert answer(DONT, IAC) == [IAC, DONT, IAC]
 }
 
 test "a negotiation split across reads is answered once complete" {
@@ -592,7 +600,7 @@ test "a negotiation split across reads is answered once complete" {
   let (after_do, nothing) = feed(after_iac, [DO])
   assert after_do == Negotiation(DO)
   assert nothing == []
-  assert feed(after_do, [24, b'b']) == (Ground, [Answer([IAC, WONT, 24]), Literal(b'b')])
+  assert feed(after_do, [24, b'b']) == (Ground, [Answer(WONT, 24), Literal(b'b')])
 }
 
 test "AYT and IP are reported and other commands ignored" verifies [RFC854.RP7_1, RFC854.RP7_2] {
@@ -613,7 +621,7 @@ test "a subnegotiation is skipped up to IAC SE" verifies [RFC855.RP2_3, RFC855.R
   assert feed(state, [IAC]) == (SubnegotiationInterpret(3), [])
   assert feed(SubnegotiationInterpret(3), [SE, b'b']) == (Ground, [Literal(b'b')])
   // RFC 855: after a subnegotiation the option is still refused by WON'T.
-  assert events([IAC, SB, 24, 1, IAC, SE, IAC, DO, 24, b'a']) == [Answer([IAC, WONT, 24]), Literal(b'a')]
+  assert events([IAC, SB, 24, 1, IAC, SE, IAC, DO, 24, b'a']) == [Answer(WONT, 24), Literal(b'a')]
 }
 
 test "a subnegotiation is limited to 1024 bytes including the IAC of IAC SE" {
@@ -646,8 +654,13 @@ fn render(reply: Reply) -> Bytes satisfies [RFC854.RP11_3, RFC854.RP11_4, RFC854
 }
 
 // Standard input as NVT data: LF becomes CR LF, a CR before LF is dropped,
-// any other CR becomes CR NUL, and the data byte 255 is doubled.
+// any other CR becomes CR NUL, and the data byte 255 is doubled. Bytes
+// with none of the three are returned as they are, not copied byte by
+// byte: a reply line or a prompt usually holds none.
 fn encode_input(bytes: Bytes) -> Bytes satisfies [RFC854.RP11_3, RFC854.RP11_4, RFC854.RP14_1] {
+  if is_plain_nvt(bytes) {
+    return bytes
+  }
   var out = Bytes.empty()
   var i = 0
   while i < bytes.len() {
@@ -663,6 +676,27 @@ fn encode_input(bytes: Bytes) -> Bytes satisfies [RFC854.RP11_3, RFC854.RP11_4, 
     }
   }
   out
+}
+
+// Whether `bytes` holds no CR, LF or IAC, so it is NVT data as it is.
+fn is_plain_nvt(bytes: Bytes) -> Bool {
+  for b in bytes {
+    if b == b'\n' || b == b'\r' || b == IAC {
+      return false
+    }
+  }
+  true
+}
+
+test "bytes without CR, LF or IAC are NVT data as they are" verifies [RFC854.RP11_3, RFC854.RP14_1] {
+  assert is_plain_nvt(b"echo hello")
+  assert is_plain_nvt(Bytes.empty())
+  assert !is_plain_nvt(b"a\nb")
+  assert !is_plain_nvt(b"a\rb")
+  assert !is_plain_nvt([b'a', IAC])
+  assert encode_input(b"terminal> ") == b"terminal> "
+  assert encode_input("é".to_bytes()) == "é".to_bytes()
+  assert encode_input([b'a', 7, 9]) == [b'a', 7, 9]
 }
 
 test "render ends each reply line with CR LF" verifies [RFC854.RP11_3, RFC854.RP11_4] {
@@ -916,16 +950,16 @@ fn prompted(prompt: Text) -> Bytes {
 }
 
 // Answer one input line: the reply and, unless the console closed the
-// session, the next prompt and IAC GA, in one write. Ok(false) when the
-// console closed the session.
-fn answer_line<S: ByteStream>(stream: S, application: Console, line: Bytes) -> IoResult<Bool> satisfies [
+// session, `prompt` (the next prompt and IAC GA, `prompted`), in one
+// write. Ok(false) when the console closed the session.
+fn answer_line<S: ByteStream>(stream: S, application: Console, prompt: Bytes, line: Bytes) -> IoResult<Bool> satisfies [
   RFC854.RP5_4, RFC854.RP11_3
 ] {
   let reply = application.respond(line.to_text())
   var out = render(reply)
   match reply.action {
     Continue => {
-      out.append(prompted(application.prompt))
+      out.append(prompt)
       stream.write_all(out)?
       Ok(true)
     }
@@ -946,7 +980,8 @@ fn session<S: ByteStream>(stream: S, limits: SessionLimits, application: Console
   RFC854.RP2_6, RFC854.RP5_4, RFC854.RP7_2, RFC854.RP11_3, RFC854.RP12_4
 ] {
   let maximum = limits.maximum_subnegotiation.to_int()
-  stream.write_all(prompted(application.prompt))?
+  let prompt = prompted(application.prompt)
+  stream.write_all(prompt)?
   var state = Ground
   var line = Bytes.empty()
   var discarding = false
@@ -959,6 +994,18 @@ fn session<S: ByteStream>(stream: S, limits: SessionLimits, application: Console
           line.clear()
         }
         for b in bytes {
+          // A data byte between commands and line ends, most of a line, is
+          // `decode_within`'s (Ground, Literal(b)), taken without the call.
+          if state == Ground && b != IAC && b != b'\r' && b != b'\n' {
+            if !discarding {
+              line.push(b)
+              if line.len() > application.maximum_line {
+                write_text(stream, "line too long\r\n")?
+                return Ok(())
+              }
+            }
+            continue
+          }
           let (next, event) = decode_within(state, b, maximum)
           state = next
           match event {
@@ -971,7 +1018,7 @@ fn session<S: ByteStream>(stream: S, limits: SessionLimits, application: Console
               }
             }
             EndOfLine => if !discarding {
-              if !answer_line(stream, application, line)? {
+              if !answer_line(stream, application, prompt, line)? {
                 return Ok(())
               }
               line.clear()
@@ -979,11 +1026,11 @@ fn session<S: ByteStream>(stream: S, limits: SessionLimits, application: Console
             DataMark => {
               discarding = false
             }
-            Answer(answer) => stream.write_all(answer)?
+            Answer(verb, option) => stream.write_all(answer(verb, option))?
             AreYouThere => {
-              var answer = b"[yes]\r\n"
-              answer.append([IAC, GA])
-              stream.write_all(answer)?
+              var reply = b"[yes]\r\n"
+              reply.append([IAC, GA])
+              stream.write_all(reply)?
             }
             Interrupt | SubnegotiationTooLong => return Ok(())
           }
