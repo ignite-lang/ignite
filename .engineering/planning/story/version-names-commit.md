@@ -4,7 +4,32 @@ id: story:version-names-commit
 kind: story
 status: active
 title: ignite --version names the commit of a source build
-revision: 3
+scope:
+- confidence: inferred
+  path: .gitattributes
+- confidence: cited
+  path: Taskfile.yml
+- confidence: cited
+  path: crates/ignite/build.rs
+- confidence: inferred
+  path: crates/ignite/src/apply/plan.rs
+- confidence: cited
+  path: crates/ignite/src/main.rs
+- confidence: inferred
+  path: crates/ignite/src/typed_json.rs
+- confidence: cited
+  path: crates/ignite/tests/cli.rs
+- confidence: inferred
+  path: crates/ignite/tests/image.rs
+- confidence: cited
+  path: dist/toolchain/Dockerfile
+- confidence: inferred
+  path: docs/research/case-study-gaps.md
+- confidence: inferred
+  path: site/book/src/guide/install.md
+- confidence: inferred
+  path: site/book/src/reference/cli.md
+revision: 15
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T03:32:55Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-08T21:40:02Z", actor: "human:timo", revision: 3}

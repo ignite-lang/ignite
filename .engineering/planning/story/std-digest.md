@@ -7,7 +7,32 @@ title: SHA-1, SHA-256 and base64 in std
 relations:
 - depends_on: story:bitwise-operators
 - depends_on: story:u32-words
-revision: 3
+scope:
+- confidence: inferred
+  path: AGENTS.md
+- confidence: cited
+  path: crates/ignite-check/tests/layering.rs
+- confidence: inferred
+  path: crates/ignite/tests/bitwise.rs
+- confidence: inferred
+  path: crates/ignite/tests/fixtures/bitwise/codecs.ignite
+- confidence: inferred
+  path: crates/ignite/tests/fixtures/bitwise/codecs.rs
+- confidence: cited
+  path: docs/layering.md
+- confidence: inferred
+  path: docs/research/case-study-gaps.md
+- confidence: inferred
+  path: docs/slice.md
+- confidence: cited
+  path: std/data.ignite
+- confidence: cited
+  path: std/digest.ignite
+- confidence: inferred
+  path: std/encoding.ignite
+- confidence: cited
+  path: std/json.ignite
+revision: 15
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T03:04:57Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-08T21:40:02Z", actor: "human:timo", revision: 3}
