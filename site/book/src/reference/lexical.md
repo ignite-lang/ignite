@@ -1,7 +1,7 @@
 # Lexical structure
 
-This page describes how Ignite source text is split into tokens: comments, names,
-literals, keywords and punctuation. The [grammar](grammar.md) builds on these tokens.
+Ignite source text is split into tokens: comments, names, literals, keywords and
+punctuation. The [grammar](grammar.md) builds on these tokens.
 
 ## Source text
 
@@ -14,7 +14,7 @@ literals, keywords and punctuation. The [grammar](grammar.md) builds on these to
 
 ## Comments
 
-A comment starts with `//` and runs to the end of the line. There are no block comments.
+A comment starts with `//` and runs to the end of the line. Ignite has no block comments.
 
 ```ignite
 // The number of retries before giving up.
@@ -23,7 +23,7 @@ const RETRIES: Int = 3 // a trailing comment
 fn retries() -> Int = RETRIES
 ```
 
-`/* ... */` is not a comment; the `/` is read as division and the file fails with E001.
+`/* ... */` is not a comment. The `/` is read as division and the file fails with E001.
 
 ## Identifiers
 
@@ -36,7 +36,7 @@ An identifier is an ASCII letter or `_`, followed by ASCII letters, digits and `
 | fns, parameters, fields, locals | `lower_snake` | `first_word`, `maximum_line` |
 | constants | `UPPER_SNAKE` | `MAXIMUM_LINE` |
 
-The parser does not enforce case, with two exceptions that make case meaningful:
+The parser does not enforce case, with two exceptions:
 
 - `Name { ... }` is a record literal only when `Name` starts with an uppercase letter.
 - In a pattern, a name without arguments that names a constant in scope is a constant
@@ -67,9 +67,9 @@ types.
 
 A keyword may still appear where only a name can stand:
 
-- as a segment of a `package` or `import` path (`std.protocol.telnet`);
-- as a record field name, in a declaration or a literal (`protocol = TelnetProfile { .. }`);
-- after a `.`, as a field or method name;
+- as a segment of a `package` or `import` path (`std.protocol.telnet`)
+- as a record field name, in a declaration or a literal (`protocol = TelnetProfile { .. }`)
+- after a `.`, as a field or method name
 - as a segment of an effect in `requires` (`app.*`).
 
 ```ignite
@@ -85,9 +85,7 @@ test "keywords work as field names" {
 }
 ```
 
-A known gap of v0.3.0: `ignite check` also accepts a field named after a Rust keyword, such
-as `type` or `match`, and the LLVM target builds it, but the Rust target's generated code
-does not compile. Avoid such field names until the Rust target escapes them.
+A field named `type` or `match` builds on both targets. A keyword is still no parameter name:
 
 ```ignite,fails=E001
 fn twice(test: Int) -> Int = test * 2
@@ -97,9 +95,9 @@ fn twice(test: Int) -> Int = test * 2
 
 - Decimal digits, with optional `_` separators: `0`, `42`, `1_000_000`.
 - Hexadecimal after `0x`: `0xFF`, `0x7f_ff`.
-- There are no suffixes and no octal or binary forms.
+- No suffixes, no octal or binary forms.
 - An integer literal has type `Int`, a signed 64-bit integer. Where a `Byte` is expected,
-  the same literal is a `Byte` (0 to 255; anything else is E044).
+  the same literal is a `Byte` from 0 to 255, else E044.
 - The largest literal is `9223372036854775807`. The literal `9223372036854775808` is
   allowed only directly after a prefix `-`, so that `-9223372036854775808`, the smallest
   `Int`, can be written. Anything larger is E001.
@@ -116,7 +114,7 @@ test "integer literals" {
 }
 ```
 
-There are no floating-point numbers. A decimal literal such as `99.9` exists only directly
+Ignite has no floating-point numbers. A decimal literal such as `99.9` exists only directly
 before a unit or `%` (see [quantity literals](#quantity-and-percentage-literals)). Written
 alone, `1.5` is read as the integer `1` followed by `.5`, a tuple field access, and fails.
 
@@ -193,8 +191,8 @@ test "interpolation" {
 A raw string has no escapes and no interpolation, and keeps line breaks.
 
 - `r"..."` runs to the next `"`.
-- `r#"..."#` runs to the next `"#`; use as many `#` as needed, so the text can hold `"`.
-- `br"..."` is a raw [byte string](#byte-literals-and-byte-strings); it holds ASCII only.
+- `r#"..."#` runs to the next `"#`. Use as many `#` as needed, so the text can hold `"`.
+- `br"..."` is a raw [byte string](#byte-literals-and-byte-strings). It holds ASCII only.
 
 ```ignite
 const PATTERN: Text = r"C:\temp\{name}"
@@ -214,7 +212,7 @@ test "raw strings" {
 - `b'c'` is the byte value of one ASCII character or escape. It is an integer literal: a
   `Byte` where a `Byte` is expected, an `Int` otherwise. `b'a'` is `97`.
 - `b"..."` is a byte string of type `Bytes`, the same as `Bytes.of([..])` with each byte.
-  It holds ASCII characters and escapes only; write other bytes as `\xNN`.
+  It holds ASCII characters and escapes only. Write other bytes as `\xNN`.
 - Escapes in both: `\n \r \t \v \f \0 \\ \' \"` and `\xNN` with `NN` from `00` to `FF`.
   `\'` is an escape here and not in text strings. `\u{..}` is not allowed.
 
@@ -247,9 +245,9 @@ a variable name.
 - The number is an integer literal or a decimal literal with at most 4 decimals:
   `200 ms`, `1.5 seconds`, `16 KiB`, `99.9%`.
 - `%` is the percent unit when it touches the number and no operand follows it. `10 % 3`,
-  `10%3` and `n%2` are remainders; `50%` and `99.9%` are ratios.
+  `10%3` and `n%2` are remainders. `50%` and `99.9%` are ratios.
 - The pair binds tighter than any operator: `2 seconds + 500 ms` adds two durations.
-- A unit applies to a literal only. `n ms` with a variable `n` is E001; write `1 ms * n`.
+- A unit applies to a literal only. `n ms` with a variable `n` is E001. Write `1 ms * n`.
 - A literal that is not a whole number of base units (`1.5 ns`), does not fit in an `Int`,
   or has more than 4 decimals is E107.
 
@@ -299,5 +297,5 @@ The operations on quantity types are in [Types: quantities](types.md#quantities)
 The precedence of the operators is in the [grammar](grammar.md#operator-precedence).
 
 A lexer error ends the token stream at that point. The parser still reports the syntax errors
-before it, so one run can show several errors. All lexical errors use code E001; see
+before it, so one run can show several errors. All lexical errors use code E001. See
 [Diagnostics](diagnostics.md).

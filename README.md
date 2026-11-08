@@ -74,8 +74,8 @@ test "slice takes byte offsets" {
 - **Built for many agents compiling at once.** Ignite started as a replacement for Rust, whose
   compile times bring a machine to a halt when several coding agents build at the same time, and
   caches did not fix that. An Ignite program is one file compiled in one pass: the todo HTTP
-  service builds in 0.286 s on the LLVM target against 3.125 s through cargo on the Rust target
-  (dev; release 0.733 s against 4.177 s; `AGENTS.md`, slice 14).
+  service builds in 1.30 s on the LLVM target against 4.12 s through cargo on the Rust target
+  (dev, release v0.15.0, on the dedicated timing host; [`quality/trend.md`](quality/trend.md)).
 - **Specified, then checked.** Ignite is meant as a native realization target for
   [ESS](https://github.com/beyond10x/ess), which turns intent into typed, machine-checkable
   specifications with conformance suites. ESS stays language-independent; ESS-generated

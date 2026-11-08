@@ -1,9 +1,10 @@
 # Data formats: JSON, YAML and TOML from one value model <span class="badge design">design</span>
 
 Planned: turning Ignite values into JSON, YAML and TOML text and back, with no encoder and
-decoder written by hand for each type. Nothing on this page is implemented. The code below is
-the planned form and does not compile today. The design, with its measurements and the
-rejected alternatives, is
+decoder written by hand for each type. Released in v0.15.0: the value model `std.data` and its
+bridge to `std.json` (`read`, `write`, `to_data`, `of_data`). The codecs, YAML, TOML and the
+derivation are not built; the code below is the planned form and does not compile today.
+The design, with its measurements and the rejected alternatives, is
 [`docs/serde.md`](https://github.com/ignite-lang/ignite/blob/main/docs/serde.md).
 
 ## Read YAML, write JSON
@@ -53,16 +54,16 @@ last and removes the hand-written codec.
   refused, per call rather than per type.
 - **Safe YAML.** YAML 1.2.2 under the core schema. Anchors, aliases, custom tags, complex keys
   and the `<<` merge key are refused with an error that names the line.
-- **JSON as it is.** `std.json` already exists. It gains `read` and `write` over `Value`, and
-  numbers that do not fit `Int` keep their exact text.
+- **JSON as it is.** `std.json` has `read` and `write` over `Value` since v0.15.0, and numbers
+  that do not fit `Int` keep their exact text.
 
 ## Plan
 
 | step | content | state |
 |---|---|---|
-| value model | `std.data`'s `Value`, `Shape`, errors and limits; the bridge to `std.json` | in progress (wave 7) |
-| codecs | `Codec<T>` and its combinators, in `std` only | planned (wave 8) |
-| YAML | `std.yaml`, the safe subset | planned (wave 9) |
+| value model | `std.data`'s `Value`, `Shape`, errors and limits; the bridge to `std.json` | released in v0.15.0 |
+| codecs | `Codec<T>` and its combinators, in `std` only | planned (wave 9) |
+| YAML | `std.yaml`, the safe subset | planned (wave 11) |
 | derivation, TOML | `codec<T>()` written by the compiler; `std.toml` | designed |
 
 The [roadmap](../roadmap.md) shows where these steps sit among the others.

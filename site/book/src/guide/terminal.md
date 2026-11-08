@@ -113,8 +113,7 @@ lines of at most `maximum_line` bytes, calls `respond` and renders the reply. `R
 From the clone:
 
 ```sh
-cargo build -p ignite-rt --features runner
-ignite build examples/terminal/terminal.ignite --runtime target/debug/libignite_rt.a
+ignite build examples/terminal/terminal.ignite
 ```
 
 ```text
@@ -189,11 +188,11 @@ test "the terminal transcript over a pipe" {
 }
 ```
 
-Run the example's tests on the default target with the same runtime archive (`--target all`
-adds the Rust target; [Testing](testing.md#both-targets) has the details):
+Run the example's tests on the default target (`--target all` adds the Rust target;
+[Testing](testing.md#both-targets) has the details):
 
 ```sh
-ignite test examples/terminal/commands.ignite --runtime target/debug/libignite_rt.a
+ignite test examples/terminal/commands.ignite
 ```
 
 ## With the Rust target

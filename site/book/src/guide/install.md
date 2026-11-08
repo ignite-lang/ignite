@@ -73,9 +73,9 @@ tracked source of the compiler's crates (not `std/` or docs) was modified; only 
 of a release tag, such as the release archive, prints the bare version (`ignite 0.15.0`).
 
 `ignite --help` lists the commands: `check`, `emit`, `build`, `test`, `plan`, `host`,
-`apply`, `inspect`, `explain`, `run` and `replay`. The
-[command-line reference](../reference/cli.md) covers each one. Every page of this book
-writes the command as plain `ignite`.
+`apply`, `inspect`, `recover`, `explain`, `run`, `replay`, `rfc` and `conformance`. The
+[command-line reference](../reference/cli.md) covers each one but `recover`, `rfc` and
+`conformance`. Every page of this book writes the command as plain `ignite`.
 
 **Keep the clone.** The installed `ignite` reads the standard library (`std/`) and the IO
 substrate crate (`crates/ignite-io`) from the clone it was installed from, so it works from

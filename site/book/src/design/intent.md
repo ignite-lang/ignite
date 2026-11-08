@@ -61,8 +61,10 @@ system Shop {
 value of its declared type. [Components](components.md) explains kinds in full.
 
 Resource kinds are still compiler-known: `TcpListener` (with `exposure` and `backlog`
-defaults) and `Store<T>`. Component, contract, policy and assembly kinds are any record type,
-from the standard library or from the program.
+defaults), `Store<T>`, `Directory` ([`std.fs`](../reference/std/fs.md)) and the capabilities
+of `std.process` (`Launcher`, `Entropy`, `Setting`, `CommandLine`, `Environment`). Component,
+contract, policy and assembly kinds are any record type, from the standard library or from the
+program.
 
 ## Values and types
 

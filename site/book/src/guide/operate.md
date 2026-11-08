@@ -54,7 +54,7 @@ assembly local: Deployment {
 - `assembly local` binds every member to a place: the listener to a local socket, the server
   (with the console inside it) to a native process, the probe to a scheduled probe host.
 
-[Contracts, signals and policies](../design/contracts.md) explains the vocabulary.
+[Contracts, policies and control](../design/contracts.md) explains the vocabulary.
 
 ## ignite plan
 
@@ -74,7 +74,7 @@ observations  policies  resources  sourceMap  systemId
 ```
 
 `formatVersion` is `ignite-model/0.1`. `edges` is the dependency graph the compiler derived
-from the declaration; for the design file it holds, among others:
+from the declaration. For the design file it holds, among others:
 
 ```text
 {"from":"Terminal.promptProbe","kind":"references","to":"Terminal.server"}
@@ -167,7 +167,7 @@ with four lines on stdin: `status`, `advance 30 seconds`, `status`, `stop`.
 
 ```sh
 ignite run examples/terminal/terminal.design.ignite \
-  --clock manual --port Terminal.ingress=0 --runtime target/debug/libignite_rt.a
+  --clock manual --port Terminal.ingress=0
 ```
 
 Every journal record is one line on stderr. Shortened, the first probe attempt and its
@@ -211,10 +211,10 @@ build it.
 How the run works:
 
 - Each event is written to the journal, then stepped through pure reducers from
-  [`std.control`](../reference/std/control.md); each effect a reducer returns is written to
-  the journal, then carried out. Reducers never do IO; the driver's adapters never decide.
-- `Restart` is the supervisor's policy: an exit nobody asked for is a failure, retried with
-  the declared backoff until `maximum_attempts` within `interval`, then the machine gives up.
+  [`std.control`](../reference/std/control.md). Each effect a reducer returns is written to
+  the journal, then carried out. Reducers never do IO. The driver's adapters never decide.
+- `Restart` is the supervisor's policy. An exit nobody asked for is a failure, retried with
+  the declared backoff until `maximum_attempts` within `interval`. Then the machine gives up.
 - `rollout Terminal.server` on stdin builds the next generation and replaces the server
   under `DrainRollout`: the old process closes its listener and drains, the new one binds.
   The model declares the disruption (connections refused between listener close and

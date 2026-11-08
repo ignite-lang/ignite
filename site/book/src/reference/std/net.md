@@ -2,13 +2,13 @@
 
 The network part of the substrate: TCP listeners and streams, in-process pipes for tests, the
 `ByteStream` interface that both kinds of stream implement, and the `Endpoint` record. Except
-for `Endpoint`, these names are builtins implemented in the substrate (the Rust crate
-`ignite-io`), the same code on every target. They are visible in every module without an
+for `Endpoint`, these names are builtins implemented in the substrate, the Rust crate
+`ignite-io`, with the same code on every target. They are visible in every module without an
 import.
 
 - Layer: base (substrate).
 - Source: [`std/net.ignite`](https://github.com/ignite-lang/ignite/blob/main/std/net.ignite)
-  declares only `Endpoint`; the builtins are specified in
+  declares only `Endpoint`. The builtins are specified in
   [`docs/slice.md`](https://github.com/ignite-lang/ignite/blob/main/docs/slice.md) sections 7,
   14.4, 16.9 and 18.3 to 18.4.
 - Import: none needed. `import std.net.{TcpStream, ByteStream, Pipe, PipeStream}` is accepted
@@ -17,7 +17,7 @@ import.
 
 The substrate has more builtins: `Stdin`, `Stdout`, `Input`, `IoError`, `Process`, `Clock`
 and `log`. The std modules import `IoError` from `std.io`, the second substrate module, which
-has no file; an import from either substrate module only checks that the name is a builtin.
+has no file. An import from either substrate module only checks that the name is a builtin.
 `Input` is described here because every stream read returns it.
 
 ## Effects
@@ -67,11 +67,12 @@ resource ingress: TcpListener {
 
 `address` and `port` are required. `exposure` defaults to `Loopback` and `backlog` to 128.
 A fifth property, `keep_through_drain = true`, keeps the listener open through the SIGTERM
-drain: it is not released and accepts until the process exits, so an admin or internal port
-keeps answering while the others drain, and a task waiting on it does not hold up the exit.
-A listener whose address or port the program reads at run time, from its environment or
-configuration, is kept the same way when it is bound with `TcpListener.bind_kept`; one bound
+drain. It is not released and accepts until the process exits. An admin or internal port
+then keeps answering while the others drain, and a task waiting on it does not hold up the
+exit. A listener whose address or port the program reads at run time, from its environment or
+configuration, is kept the same way when it is bound with `TcpListener.bind_kept`. One bound
 with `TcpListener.bind` is released.
+
 The generated `main` binds every listener a component uses before it calls the component's
 `main`, with the `--port` override and the `listening on` log line.
 
@@ -110,13 +111,18 @@ A stream is a handle: copies share one connection. A read and a write on the sam
 not wait for each other, so one task can read while another writes.
 
 **Urgent data.** Urgent data stays in the stream at its place. A read stops before the urgent
-byte, and the next read starts with it; `urgent_pending()` is true from its arrival until then.
+byte, and the next read starts with it. `urgent_pending()` is true from its arrival until then.
 So after a read that finds `urgent_pending()` true, every byte that read returned came before
 the urgent byte. Telnet's Synch is built on this (`std.protocol.telnet`).
 
-**Writes are batched.** `write_all` only appends to a send buffer. The buffer is sent before
-the writing task waits for anything (any read, `accept`, `connect`), on `close`, when the task
-ends, and when it reaches 64 KiB. A task therefore sends everything it wrote before it waits,
+**Writes are batched.** `write_all` only appends to a send buffer. The buffer is sent:
+
+- before the writing task waits for anything: any read, `accept`, `connect`
+- on `close`
+- when the task ends
+- when it reaches 64 KiB
+
+A task therefore sends everything it wrote before it waits,
 and a server that answers a batch of pipelined requests sends the answers in one system call.
 A failed send is reported by the stream's next `read`, `write_all` or `close`.
 
@@ -145,11 +151,11 @@ fn urgent_pending<S: ByteStream>(stream: S) -> Result<Bool, IoError>
 
 - `TcpStream`, `PipeStream` and a type parameter bounded by `ByteStream` implement it.
   Nothing else does.
-- Inside the function a value of type `S` has these six methods and `copy`; any other method
+- Inside the function a value of type `S` has these six methods and `copy`. Any other method
   is E041.
 - Calling the function with a type that does not implement `ByteStream` is E096.
-- `ByteStream` as a type (a parameter, a field, a return type) is E099, and so is a bound
-  that names anything else.
+- `ByteStream` as the type of a parameter, a field or a return value is E099, and so is a
+  bound that names anything else.
 - The effects are those of `TcpStream`: `requires [stream.read, stream.write]`.
 
 ## Pipe and PipeStream
@@ -168,22 +174,22 @@ has the six `ByteStream` methods and `received_batches`.
   buffer reaches 64 KiB or the end's last handle is dropped.
 - **Delivery** moves the whole buffer to the peer's queue in one step and counts one batch. An
   empty buffer delivers nothing and is not counted. `received_batches()` is the number of
-  deliveries into this end since `Pipe.pair()`; reads do not change it. A test can therefore
+  deliveries into this end since `Pipe.pair()`. Reads do not change it. A test can therefore
   check that a server answered pipelined requests in one batch.
 - **The queue is bounded** at 16 MiB of unread bytes. A delivery that would pass it fails as a
   whole with the error `pipe queue full`, kept on the writing end. A delivery never blocks.
 - **Reading** first delivers the reading task's own writes, then returns up to `maximum`
-  bytes (clamped to 1 byte to 1 MiB). It blocks while the queue is empty and the peer is open,
+  bytes, with `maximum` clamped to 1 byte to 1 MiB. It blocks while the queue is empty and the peer is open,
   and returns `Eof` when the queue is empty and the peer has closed, or when the idle timeout
   expires.
-- **Closing** delivers the buffer, then closes the end's write half; the peer reads the queue,
+- **Closing** delivers the buffer, then closes the end's write half. The peer reads the queue,
   then `Eof`. A `write_all` after `close` is the error `write to a closed stream`. A second
   `close` is not an error.
 - **A peer that is gone**: when every handle of one end is dropped, the other end's next
   `read`, `write_all` or `close` returns `pipe peer is gone`.
-- `set_idle_timeout(ms)` sets the read timeout of the end; 0 or less removes it.
+- `set_idle_timeout(ms)` sets the read timeout of the end. 0 or less removes it.
 - **Urgent data** works as on a `TcpStream`: `write_urgent(b)` delivers the buffer and `b` as
-  one batch, the last byte of `b` the peer's urgent byte; the peer's reads stop before it, and
+  one batch, the last byte of `b` the peer's urgent byte. The peer's reads stop before it, and
   its `urgent_pending()` is true until a read returns it.
 
 A pipe test closes every end whose `Eof` it expects, explicitly: when an end is dropped

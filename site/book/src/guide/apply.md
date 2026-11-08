@@ -12,7 +12,7 @@ host keeps the work and the record.
 | `ignite apply --state DIR PLAN` | submits the plan and waits until it completes |
 | `ignite inspect --state DIR` | reads the host's status, or its last durable status when no host runs |
 
-What local apply is not, in v0.3.0: there is no automatic daemon (`apply` never starts a
+What local apply is not: there is no automatic daemon (`apply` never starts a
 host), no cloud provider, no portable bundle, no in-place update and no stateful migration.
 A change replaces the owned executable, using the drain protocol of `DrainRollout`.
 
@@ -37,8 +37,7 @@ In a second terminal, save a plan and apply it:
 
 ```sh
 ignite plan examples/terminal/terminal.design.ignite --assembly local \
-  --for-apply --state .ignite/terminal --out terminal.apply.json \
-  --runtime target/debug/libignite_rt.a
+  --for-apply --state .ignite/terminal --out terminal.apply.json
 ignite apply terminal.apply.json --state .ignite/terminal
 ```
 

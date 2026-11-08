@@ -57,15 +57,14 @@ That is the whole program. It serves:
 | an OpenAPI 3.1 document | the route table, printed at check time |
 | request ids, an access log, compression | defaults of the `Web` kind |
 
-## Why only Ignite can do this
+## What effect tracking gives
 
 Ignite tracks effects. A function that reads a store says so in its type, and a handler can
-only reach what it is given: no clock, no global, no file it was not handed. That has
-consequences no other web framework can rely on.
+only reach what it is given: no clock, no global, no file it was not handed.
 
 - **Live pages without subscriptions.** The compiler knows that `board` reads `todos`. After
   any write to `todos`, from any route, the server renders `board` again and sends it to every
-  open page. There is no subscribe and no broadcast to write, and none to forget.
+  open page. There is no subscribe and no broadcast to write.
 - **Caching that is correct by construction.** The answer to a GET depends only on the request
   and the stores it reads, so each store's version is the ETag.
 - **The app is a system member.** `ignite plan` shows the routes, the services they call and
@@ -137,7 +136,7 @@ needs a valid token. Without one the answer is 401, without the role 403. The sa
 sessions, API keys and OpenID Connect sign-in, and `ignite explain` lists which routes are
 public.
 
-## Policies, not middleware
+## Policies
 
 There is no middleware chain to put in order:
 
@@ -199,7 +198,7 @@ real one.
 ## How many tokens
 
 Counted with the `cl100k_base` tokenizer, imports included, comments and indentation not. The
-other programs are written from their documentation's idioms; all are in the design document.
+other programs are written from their documentation's idioms. All are in the design document.
 
 | task | FastAPI | Hono | Axum | Go | `x.web` |
 |---|---|---|---|---|---|
@@ -208,7 +207,7 @@ other programs are written from their documentation's idioms; all are in the des
 | request id, log, CORS, rate limit, timeout, compression, error format | 351 | 231 | 316 | 259 | 40 |
 | a third-party JSON call with timeout, retries and circuit breaker, without its test | 205 | 238 | 349 | 324 | 88 |
 
-The live page: the whole Ignite program above, API included, is 150 tokens; the Phoenix
+The live page: the whole Ignite program above, API included, is 150 tokens. The Phoenix
 LiveView module for the same page alone is 214. The view itself is 48 tokens, against 77 in
 JSX and HEEx. The prose page is 116 tokens as Markdown, against 197 in JSX. The durable todo
 example of this repository, with its health probe and contract, goes from 1,883 tokens to 179.
@@ -222,4 +221,4 @@ filled by type, modules derived from another service's routes, and files embedde
 time. A first version ships on today's language with hand-built routes, and each extension
 shortens it. The order and the open questions are in
 [`docs/web.md`](https://github.com/ignite-lang/ignite/blob/main/docs/web.md) sections 5, 8 and
-10; the [roadmap](../roadmap.md) lists it with the other designs.
+10. The [roadmap](../roadmap.md) lists it with the other designs.
