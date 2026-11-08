@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:channel-release-on-close
 kind: story
-status: proposed
+status: active
 title: A closed channel's memory is freed
 summary: 'Case study G30: a task''s closed channel is reported to leak about 370 B'
 relations:
@@ -31,9 +31,10 @@ scope:
   path: docs/slice.md
 - confidence: inferred
   path: std/sync.ignite
-revision: 7
+revision: 8
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T15:00:48Z", actor: "human:timo", revision: 3}
+- {from: "proposed", to: "active", at: "2026-11-08T21:40:02Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"review_outcome":3}}}
 ---
 # Story: channel-release-on-close
 

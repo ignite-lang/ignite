@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:leak-check-tests
 kind: story
-status: proposed
+status: active
 title: ignite test fails a test that leaves a runtime object behind
 summary: Default-on per-test leak check on object counts, opt-out with Runtime.leaves_running
 relations:
@@ -37,9 +37,10 @@ scope:
   path: quality/baseline.json
 - confidence: inferred
   path: std/runtime.ignite
-revision: 6
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T15:04:31Z", actor: "human:timo", revision: 3}
+- {from: "proposed", to: "active", at: "2026-11-08T21:40:02Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"review_outcome":3}}}
 ---
 # Story: leak-check-tests
 

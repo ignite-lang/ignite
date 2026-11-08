@@ -2,14 +2,15 @@
 format: aep.planning-md/3
 id: story:std-digest
 kind: story
-status: proposed
+status: active
 title: SHA-1, SHA-256 and base64 in std
 relations:
 - depends_on: story:bitwise-operators
 - depends_on: story:u32-words
-revision: 2
+revision: 3
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T03:04:57Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-11-08T21:40:02Z", actor: "human:timo", revision: 3}
 ---
 # Story: std-digest
 

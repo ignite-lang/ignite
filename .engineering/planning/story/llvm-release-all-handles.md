@@ -2,13 +2,14 @@
 format: aep.planning-md/3
 id: story:llvm-release-all-handles
 kind: story
-status: proposed
+status: active
 title: LLVM releases listener, directory and capability handles
 relations:
 - decomposes: epic:leak-guard
-revision: 2
+revision: 3
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T17:01:38Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-11-08T21:40:02Z", actor: "human:timo", revision: 3}
 ---
 # Story: llvm-release-all-handles
 

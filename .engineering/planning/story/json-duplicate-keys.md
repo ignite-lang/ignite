@@ -2,11 +2,12 @@
 format: aep.planning-md/3
 id: story:json-duplicate-keys
 kind: story
-status: proposed
+status: active
 title: std.json get returns the last duplicated member
-revision: 2
+revision: 3
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T03:32:56Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-11-08T21:40:02Z", actor: "human:timo", revision: 3}
 ---
 # Story: json-duplicate-keys
 
