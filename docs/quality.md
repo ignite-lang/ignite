@@ -132,7 +132,7 @@ metric, the target, the value before and after, and the run of `task quality` th
 | 3.3 | throughput and p99 latency of terminald and todod | ratchet | higher | `ignite-load matrix` (`task bench-throughput`) | unmeasured: no load baseline yet (out of scope of story:quality-ratchet) |  |
 | 3.4 | peak RSS, leaked handles and threads after a load run | gate | lower | `llvm_memory::` and `terminal::idle_terminald_runs_one_thread` (every merge) | unmeasured: no number: the named tests gate it in task gate |  |
 | 3.5 | runtime entries that can unwind a panic across `extern "C"` | gate | lower | `quality::static_metrics_hold_the_bar`, the rule of `contain::tests::every_entry_is_guarded`: `extern "C"` entries of `ignite-rt` not run through `crate::entry` | llvm 0 |  |
-| 3.6 | `unsafe` sites in the substrate a target links | ratchet | lower | `quality::static_metrics_hold_the_bar`: `unsafe` blocks, fns, impls and extern blocks; rust counts `ignite-io`, llvm `ignite-io` and `ignite-rt` | llvm 76, rust 9 |  |
+| 3.6 | `unsafe` sites in the substrate a target links | ratchet | lower | `quality::static_metrics_hold_the_bar`: `unsafe` blocks, fns, impls and extern blocks; rust counts `ignite-io`, llvm `ignite-io` and `ignite-rt` | llvm 75, rust 9 |  |
 
 ### 4 Standard library and protocols
 

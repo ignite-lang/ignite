@@ -1101,7 +1101,7 @@ fn goldens_without_a_revision(root: &Path) -> i64 {
 
 /// 3.5: `extern "C"` entries of `ignite-rt` whose body is not run through
 /// `crate::entry` (the rule of `contain::tests::every_entry_is_guarded`,
-/// `ignite_rt_init` excepted).
+/// `ignite_rt::UNGUARDED_ENTRIES` excepted, each with its exact body).
 fn unguarded_entries(root: &Path) -> i64 {
     let mut files = Vec::new();
     files_under(&root.join("crates/ignite-rt/src"), "rs", &mut files);
@@ -1110,8 +1110,18 @@ fn unguarded_entries(root: &Path) -> i64 {
         for (at, _) in text.match_indices("\npub extern \"C\" fn ") {
             let rest = &text[at + 1..];
             let body = &rest[..rest.find("\n}\n").unwrap_or(rest.len())];
+            let name = rest["pub extern \"C\" fn ".len()..]
+                .split(['(', '<'])
+                .next()
+                .unwrap_or("");
             let guarded = body.contains("crate::entry(") || body.contains("crate::entry_never(");
-            if !guarded && !body.starts_with("pub extern \"C\" fn ignite_rt_init(") {
+            let excepted = ignite_rt::UNGUARDED_ENTRIES.iter().any(|(entry, whole)| {
+                *entry == name
+                    && whole.is_none_or(|whole| {
+                        body.split_once("{\n").map(|(_, inside)| inside.trim()) == Some(whole)
+                    })
+            });
+            if !guarded && !excepted {
                 unguarded += 1;
             }
         }

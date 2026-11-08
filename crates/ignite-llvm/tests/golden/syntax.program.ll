@@ -180,8 +180,8 @@ entry:
   %pos = call i64 @ignite.arena_mark()
   %above = sub i64 %pos, %mark
   %four = shl i64 %kept, 2
-  %big = icmp sgt i64 %four, 65536
-  %limit = select i1 %big, i64 %four, i64 65536
+  %big = icmp sgt i64 %four, 16384
+  %limit = select i1 %big, i64 %four, i64 16384
   %due = icmp sgt i64 %above, %limit
   ret i1 %due
 }

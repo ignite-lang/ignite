@@ -71,7 +71,7 @@ Current values: run `bar` on 2026-11-07, commit `9a775116`.
 | 3.3 | throughput and p99 latency of terminald and todod | ratchet | | unmeasured: no load baseline yet (out of scope of story:quality-ratchet) | | |
 | 3.4 | peak RSS, leaked handles and threads after a load run | gate | | unmeasured: no number: the named tests gate it in task gate | | |
 | 3.5 | runtime entries that can unwind a panic across `extern "C"` | gate | llvm | 0 | 0 |  |
-| 3.6 | `unsafe` sites in the substrate a target links | ratchet | llvm | 76 | 73 |  |
+| 3.6 | `unsafe` sites in the substrate a target links | ratchet | llvm | 75 | 73 |  |
 | 3.6 | `unsafe` sites in the substrate a target links | ratchet | rust | 9 | 7 |  |
 
 ## 4 Standard library and protocols

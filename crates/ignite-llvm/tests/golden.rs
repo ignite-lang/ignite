@@ -151,6 +151,25 @@ fn syntax_program() {
     compiles("syntax_main", &generated.mains[0].ir);
 }
 
+/// The inline `@ignite.arena_due` of every module releases at the
+/// runtime's threshold, `ignite_rt_arena_due`'s (`ignite_rt::ARENA_DUE`).
+#[test]
+fn the_inline_release_threshold_is_the_runtimes() {
+    let due = ignite_rt::ARENA_DUE;
+    let generated = lower("small");
+    for (name, ir) in [
+        ("program", &generated.program),
+        ("main", &generated.mains[0].ir),
+    ] {
+        for line in [
+            format!("%big = icmp sgt i64 %four, {due}\n"),
+            format!("%limit = select i1 %big, i64 %four, i64 {due}\n"),
+        ] {
+            assert!(ir.contains(&line), "{name} has no {line}");
+        }
+    }
+}
+
 /// `docs/llvm.md` section 4: a loop that modifies `out` copies it across a
 /// due release; a loop that modifies only scalars releases at every
 /// back-edge.

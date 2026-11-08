@@ -93,9 +93,9 @@ type HttpLimits {
   drain_timeout: Duration = 1 second
 }
 
-// Framing facts, not limits: the size of one read and the longest
-// `Content-Length` value.
-const READ_SIZE: Int = 65536
+// Framing facts, not limits: the size of one read (16 KiB, read in place in
+// the task's arena on the LLVM target) and the longest `Content-Length` value.
+const READ_SIZE: Int = 16384
 const MAXIMUM_LENGTH_DIGITS: Int = 18
 
 // Claims (`docs/slice.md` 19.7, D4): RFC 9112 sections 2 to 9 and the
@@ -2305,16 +2305,19 @@ test "one chunk of the whole body limit is decoded holding at most one read besi
 // input holding READ_SIZE - 1 consumed bytes; a chunk-size line and a chunk
 // that one read delivered whole but for its LF; the CRLF check then appends
 // one more read. 19.22: "input of less than three reads and the chunk-size line".
+// The chunk is one read less 16 bytes: 0x3FF0 of a 16 KiB read.
 test "adversary: a chunk read whole but for its LF keeps less than three reads of input and the line" {
   let limits = HttpLimits {}
   let (client, server) = connected()?
-  let line = "FFF0\r\n"
-  let data = (repeat("p", READ_SIZE - 1) + line + repeat("a", 65520) + "\r").to_bytes()
+  let size = READ_SIZE - 16
+  assert size == 16368
+  let line = "3FF0\r\n"
+  let data = (repeat("p", READ_SIZE - 1) + line + repeat("a", size) + "\r").to_bytes()
   client.write_all(("\n0\r\n\r\n" + repeat("x", READ_SIZE - 6)).to_bytes())?
   _ = client.close()
-  match read_chunk_data(server, limits, data, READ_SIZE - 1 + line.len(), 65520, Bytes.empty())? {
+  match read_chunk_data(server, limits, data, READ_SIZE - 1 + line.len(), size, Bytes.empty())? {
     DataRead(body, input, _) => {
-      assert body.len() == 65520
+      assert body.len() == size
       assert input.len() < 3 * READ_SIZE + line.len(), "the decoder holds {input.len()} bytes of input besides the body"
     }
     _ => {

@@ -571,7 +571,7 @@
       "bars": {
         "llvm": {
           "decision": "wave 5 integration (2026-11-08): the substrate entries of wave 6 (story process-builtins: environment, sleep, clocks, flush; story net-builtins: peer address, timed-out reads, connect timeout) add unsafe sites in ignite-io and ignite-rt",
-          "value": 76
+          "value": 75
         },
         "rust": {
           "decision": "wave 5 integration (2026-11-08): the substrate entries of wave 6 (story process-builtins: environment, sleep, clocks, flush; story net-builtins: peer address, timed-out reads, connect timeout) add unsafe sites in ignite-io and ignite-rt",

@@ -116,7 +116,21 @@ static HOOK: Once = Once::new();
 /// <col>: <message>` for a panic that is not a [`Failure`]. Outside one
 /// (a thread the substrate did not start) a [`Failure`] logs its report
 /// and any other panic goes to the hook that was installed before.
-pub(crate) fn install_hook() {
+///
+/// The LLVM runtime calls it at start, after its own hook; [`catch`]
+/// still checks, inline, for the Rust target and for tests. The check is
+/// one load: `catch` guards every runtime entry, and a call per entry was
+/// 3 % of a server's user time (2026-11-08).
+#[inline]
+pub fn install_hook() {
+    if !HOOK.is_completed() {
+        install_hook_once();
+    }
+}
+
+#[cold]
+#[inline(never)]
+fn install_hook_once() {
     HOOK.call_once(|| {
         let previous = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |info| {
