@@ -10,3 +10,13 @@ dedicated host's runs have their own table below the main one.
 | run | commit | date | worse | better | timing | changes |
 |---|---|---|---|---|---|---|
 | bar | 9a775116 | 2026-11-07 | 0 | 0 | 5 local, not comparable | 55 values, the bar |
+
+## Timing on the dedicated host
+
+Runs of `ignite-perf quality-remote` (`task quality-remote`): the timing rows only, measured on a
+single-tenant EC2 host made for the run, HEAD's median over interleaved passes; the changes are
+against the run before on a host of the same type.
+
+| run | commit | date | host | values | changes |
+|---|---|---|---|---|---|
+| run | 4029b559 | 2026-11-08 | ec2:c7i.metal-24xl | 5.3 llvm 105 ms; 6.1 all/check 185 ms; 6.1 all/plan 186 ms; 6.2 llvm 1183 ms; 6.2 rust 3897 ms | first on this host |

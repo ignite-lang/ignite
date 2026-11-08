@@ -101,17 +101,17 @@ Current values: run `bar` on 2026-11-07, commit `9a775116`.
 |---|---|---|---|---|---|---|
 | 5.1 | replay mismatches (E127) on recorded journals | gate | | unmeasured: no number: the named suites gate it in task gate | | |
 | 5.2 | crash-recovery matrix rows failing (docs/slice.md 17.7) | gate | | unmeasured: no number: the named suites gate it in task gate | | |
-| 5.3 | restart readiness, real clock | ratchet | llvm | 384 ms | 133 ms | local, not comparable |
+| 5.3 | restart readiness, real clock | ratchet | llvm | 384 ms | 105 ms | ec2:c7i.metal-24xl |
 | 5.4 | apply cycle time of the todo, per target | ratchet | | unmeasured: not in task quality: `ignite-perf apply-cycle` exports and builds the benchmark trees and runs about 15 minutes; it is measured per slice (docs/performance/) | | |
 
 ## 6 Compiler speed
 
 | # | metric | kind | target | bar | current | trend |
 |---|---|---|---|---|---|---|
-| 6.1 | check and plan of the design file | ratchet | all/check | 176 ms | 317 ms | local, not comparable |
-| 6.1 | check and plan of the design file | ratchet | all/plan | 153 ms | 241 ms | local, not comparable |
-| 6.2 | todo build, dev profile | ratchet | llvm | 993 ms | 1203 ms | local, not comparable |
-| 6.2 | todo build, dev profile | ratchet | rust | 3081 ms | 2907 ms | local, not comparable |
+| 6.1 | check and plan of the design file | ratchet | all/check | 176 ms | 185 ms | ec2:c7i.metal-24xl |
+| 6.1 | check and plan of the design file | ratchet | all/plan | 153 ms | 186 ms | ec2:c7i.metal-24xl |
+| 6.2 | todo build, dev profile | ratchet | llvm | 993 ms | 1183 ms | ec2:c7i.metal-24xl |
+| 6.2 | todo build, dev profile | ratchet | rust | 3081 ms | 3897 ms | ec2:c7i.metal-24xl |
 | 6.3 | `task gate` wall time | ratchet | | unmeasured: no instrument records the gate's wall time; waves note it in their close (AGENTS.md § Gate time) | | |
 
 ## 7 Engineering health
