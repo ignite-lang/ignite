@@ -1117,7 +1117,10 @@ pub mod wait;
 // `docs/readiness-io.md` 4.1, 4.3 to 4.6 (phase R1): stackful tasks on
 // epoll workers, the IO mode `readiness`.
 mod sched;
-pub use sched::{IoMode, TASK_STACK, TaskLocals, io_mode, set_task_locals, worker_limit};
+pub use sched::{
+    IoMode, SchedulerCounts, TASK_STACK, TaskLocals, io_mode, scheduler_counts, set_task_locals,
+    worker_limit,
+};
 // Story `text-fast-search`: the byte search of `Bytes.index_of` and
 // `Text.pieces`.
 pub mod text;
