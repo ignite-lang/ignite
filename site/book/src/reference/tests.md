@@ -144,9 +144,8 @@ error: assert failed at app.ignite:13:3: result == Err("out of range: 70000")
   includes the tests of the named files, then those of their sibling modules (each module
   once); the standard library modules they load are built without their tests.
 - Each test runs in its own child process, with a timeout (60 s by default). Exit status 0
-  passes; 101 fails; a timeout, another exit status or a signal also fails. Output is shown
+  passes; 101 fails; a timeout, another exit status or a signal also fails. A timeout is
+  reported as `FAILED (timed out after 60 s)`, with the `--timeout` value. Output is shown
   for failing tests only.
-- `ignite test` exits 0 when every selected test passed (or none exist), 1 when a test
-  failed, and 2 on a compile error.
-
-The command's flags are on the [command line](cli.md) page.
+The command's flags, output and exit statuses are under
+[`ignite test`](cli.md#ignite-test).

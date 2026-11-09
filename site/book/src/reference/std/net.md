@@ -15,10 +15,9 @@ import.
   and only checks that the names are builtins. `Endpoint` is declared in the file:
   `import std.net.Endpoint`.
 
-The substrate has more builtins: `Stdin`, `Stdout`, `Input`, `IoError`, `Process`, `Clock`
-and `log`. The std modules import `IoError` from `std.io`, the second substrate module, which
-has no file. An import from either substrate module only checks that the name is a builtin.
-`Input` is described here because every stream read returns it.
+The other builtins of the substrate, `Stdin`, `Stdout`, `Stderr`, `Process`, `Clock`, `Store`,
+`IoError` and `log`, are on [std.io](io.md). `Input` is described here because every stream
+read returns it.
 
 ## Effects
 

@@ -18,15 +18,15 @@ copies drift apart. The design document names three ways this goes wrong:
 - a provider replacement removes data that another part of the system assumes is durable.
 
 Ignite's answer is one typed model. Executables, control behaviour, command line interfaces
-and explanations are all derived from it, so there is one place to change and one place to
+and explanations are all derived from it. There is one place to change and one place to
 check.
 
 ## What one declaration says
 
 The terminal reference system in
 [`terminal.design.ignite`](https://github.com/ignite-lang/ignite/blob/main/examples/terminal/terminal.design.ignite)
-declares a listener, a console, a Telnet server and a client, and then, in the same
-language, a probe, a contract and an assembly:
+declares a listener, a console, a Telnet server and a client. In the same language it
+declares a probe, a contract and an assembly:
 
 ```ignite,fragment
 component server: TelnetServer {
@@ -50,39 +50,27 @@ contract reachable: Availability {
 ```
 
 `ignite build` turns the server into the executable `terminald` and the probe into
-`promptProbe`; the client is declared as an `Application` without a `main`, so it is not built.
-`ignite plan` evaluates every property and prints the system model. `ignite run` starts the
-server, probes it every 10 seconds and evaluates `reachable` on every attempt. The
-[terminal walkthrough](../guide/terminal.md) and
+`promptProbe`. The client is declared as an `Application` without a `main`, so it is not
+built. `ignite plan` evaluates every property and prints the system model. `ignite run`
+starts the server, probes it every 10 seconds and evaluates `reachable` on every attempt.
+The [terminal walkthrough](../guide/terminal.md) and
 [plan, explain, run and replay](../guide/operate.md) show each step.
 
-## The execution model
+## Application and control
 
-The design describes a runtime that is a deterministic decision engine around an effect
-boundary:
-
-1. An ordered stream of events enters a reducer.
-2. The reducer returns its next state and the effects it wants carried out.
-3. A journal records each decision and each intent to act before anything happens.
-4. Adapters carry out the effects and turn what they observe back into events.
-
-What is built follows that shape. Under `ignite run`, the reducers are pure Ignite functions
-in [`std.control`](../reference/std/control.md), stepped by the compile-time evaluator. The
-driver journals every event before the step and every effect before dispatch. Its adapters
-start processes, run probes and fire timers, and never decide anything. Because the
-decisions are pure functions of the journaled events, `ignite replay` reproduces them from
-the journal alone.
-
-The design also separates the application from its control: the controller creates and
-supervises a Telnet server, the application decodes bytes and answers commands, and
-contract evaluation observes the application. In the terminal system these are different
-pieces of Ignite:
+The design separates the application from its control. The controller creates and
+supervises a Telnet server. The application decodes bytes and answers commands. Contract
+evaluation observes the application. In the terminal system these are different pieces of
+Ignite:
 
 - the supervisor machine that `TelnetServer.machine` returns, which starts and restarts
   `terminald`;
 - `TelnetServer.main` and the console's `respond` function, which serve the sessions;
 - the evaluator that `Availability.machine` returns, which turns probe attempts into a
   standing.
+
+The control side is a set of pure reducers around an effect boundary, with a journal of
+every decision. [The run-time model](runtime.md) explains it.
 
 ## Design rules
 
@@ -97,31 +85,22 @@ Section 3.1 of the design states the rules that every other part follows:
 | Generated objects keep their source | every member and property in the system model maps to a file, line and column |
 | Compile-time evaluation is bounded | functions may recurse and loop, but evaluating a property stops at an explicit fuel limit with a diagnostic |
 
-The system surface is meant to be useful without the implementation subset: most programs
-compose imported components, and only module authors write the protocols and kinds
-underneath.
+The system surface is meant to be useful without the implementation subset. Most programs
+compose imported components. Only module authors write the protocols and kinds underneath.
 
 ## How the pieces relate
 
 | page | what it covers |
 |---|---|
-| [Intent and properties](intent.md) | the declaration forms, typed quantities, identities and edges, and why domain nouns live in the library |
-| [Effects and capabilities](effects.md) | `requires`, inference, effect roots, and why property expressions are pure |
-| [Protocols and roles](protocols.md) | `protocol Telnet` and `protocol Http` written in Ignite, generic over any byte stream |
-| [Components](components.md) | a kind is a record type; `K.main` makes an executable; the hooks `machine` and `validate` |
+| [Intent and properties](intent.md) | a declaration is a typed record, quantities carry units, members have identities, and the vocabulary lives in the library |
+| [Effects and capabilities](effects.md) | why authority is passed and never ambient, and why property expressions are pure |
+| [Protocols and roles](protocols.md) | a protocol is library code, generic over any byte stream, and no general layer knows one |
+| [Components](components.md) | a kind is a record type; `K.main` makes an executable; the hooks `validate` and `machine` |
 | [Systems and assemblies](systems.md) | the system as a graph, and assemblies that bind each member to a place |
-| [Contracts, policies and control](contracts.md) | indicators, objectives and agreements, restart and rollout policies, standings |
-| [One substrate, two targets](substrate.md) | the IO substrate written once in Rust, and the Rust and LLVM targets on top of it |
-| [The compile-time evaluator](evaluator.md) | property evaluation with fuel, the system model, and the reducers it steps at run time |
-| [Inspirations](inspirations.md) | the projects Ignite borrows from: what it takes from each and where it differs |
-| [Ignite among related work](related-work.md) | a side-by-side comparison, what Ignite does not have, and what the combination adds |
+| [Contracts and policies](contracts.md) | indicators, objectives and agreements, policy authority, missing data |
+| [The run-time model](runtime.md) | machines, the journal, adapters, replay, and the host that keeps them |
+| [The compile-time evaluator](evaluator.md) | property evaluation with fuel, and the system model it produces |
+| [One substrate, two targets](substrate.md) | the IO substrate written once, and the LLVM and Rust targets on top of it |
 
-Read them in order: each page uses the terms of the ones before it.
-
-## What is not built
-
-The design document reaches further than the implementation: a native controller compiled
-from the same semantics, packages and lockfiles, more targets and a self-hosted compiler.
-Those parts are designs, not features; the [roadmap](../roadmap.md) says where they stand.
-These pages describe what the compiler in the repository does today and say so where they
-quote the design.
+Read them in order: each page uses the terms of the ones before it. What the design reaches
+for beyond the implementation is on the [roadmap](../roadmap.md).

@@ -51,7 +51,7 @@ absolute_path() -> Text
 ## Paths
 
 Paths are relative and separated by `/`; `""` and `.` name the root. An absolute path, a `..`
-component or a NUL byte is refused before any IO, and is E140 when the path is a literal. A
+component or a NUL byte is refused before any IO, and is [E140](../diagnostics.md#e140) when the path is a literal. A
 symbolic link at any component is refused too.
 
 ## Helpers

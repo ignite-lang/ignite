@@ -34,7 +34,20 @@ name:
 | `x.read` | `x.read(n)` and `x.urgent_pending()` on a stream, `x.get(id)` and `x.values()` on a `Store`, `x.received_batches()` on a pipe end |
 | `x.write` | `x.write_all(b)`, `x.close()`, `x.set_idle_timeout(ms)`, `x.write_urgent(b)` on a stream; `x.next_id()`, `x.put(..)`, `x.remove(..)`, `x.update(..)`, `x.upsert(..)` on a `Store` |
 | `x.accept` | `x.accept()` on a `TcpListener` |
+| `x.read`, `x.write` | the methods of a `Directory` that read or change files ([`std.fs`](std/fs.md#methods)) |
+| `x.launch` | `x.start(..)`, `x.execute(..)` on a `Launcher` |
+| `x.wait`, `x.kill` | `x.wait()`, `x.kill()` on a `ChildProcess` |
+| `x.draw` | `x.random_bytes(n)` on an `Entropy` |
+| `x.argument` | `x.value()` on a `Setting`, `x.arguments()` on a `CommandLine` |
+| `x.variable` | `x.get(name)` on an `Environment` |
+| `x.send` | `send`, `try_send` and `close` on a `Sender<T>` |
+| `x.receive` | `receive`, `receive_within`, `closed` and `close` on a `Receiver<T>` |
 | `x.*` | every effect on `x` |
+
+A record that holds handles passes their effects through its own root: `requires [b.read]` on
+a record `b` with a `Directory` and a `Launcher` field grants the directory's reads only. The
+operations of each type are on its page: [`std.process`](std/process.md#effects),
+[`std.sync`](std/sync.md), [`std.io`](std/io.md#effects).
 
 `log(text)` writes a line to stderr and returns `Unit`, but it is not a tracked effect: it
 needs no `requires` entry and may be called where only pure code is allowed. `Process.flush()`,
@@ -122,6 +135,11 @@ fn serve_one(listener: TcpListener) -> Result<Unit, IoError> requires [listener.
 - Property expressions in system declarations are evaluated at compile time and must be pure
   (E116).
 - A `test` block is an effect root: it may perform any effect without declaring it.
+- `K.main` of a component kind is an effect root too. Its effects are inferred, and the
+  generated `main` of the executable grants them all
+  ([Compiled executables](cli.md#compiled-executables)).
+- The hooks `K.validate`, `K.machine` and `K.classify` are pure, with a fixed signature. An
+  effect there is E109 ([Hooks](systems.md#hooks)).
 
 ## Effectful fn types
 
@@ -165,7 +183,10 @@ test "an effectful field" {
 ## `spawn`
 
 `spawn f(args)` starts `f(args)` as a new task and returns `Unit` at once. Tasks run
-concurrently. Each has its own thread in the substrate.
+concurrently. By default a task is a stackful task on one of a few worker threads, and a task
+that waits for IO parks itself, not its thread. Scheduling is cooperative: a task runs until
+it waits. With `IGNITE_IO=threads` in the environment at start, each task has a thread of its
+own. Tasks pass values through [`std.sync`](std/sync.md) channels.
 
 ```ignite
 fn echo<S: ByteStream>(stream: S) -> Result<Unit, IoError> requires [stream.read, stream.write] {

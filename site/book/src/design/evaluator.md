@@ -4,28 +4,23 @@ A declaration is code: its properties are expressions that may call functions, l
 build lists. Ignite runs that code at compile time, with an interpreter over the typed
 program, and the result is the system model: every member with every property as a value.
 The same interpreter steps the control machines when `ignite run` operates the system. This
-page explains what the evaluator computes, its limits, the model it produces and how it is
-used at run time. The commands are in [Plan, explain, run and replay](../guide/operate.md).
+page explains what the evaluator computes, why it is bounded, and what the model is for.
+The commands are in [Plan, explain, run and replay](../guide/operate.md).
 
 ## What it is
 
-The evaluator is the crate
-[`crates/ignite-eval`](https://github.com/ignite-lang/ignite/tree/main/crates/ignite-eval).
-
-| used by | for |
-|---|---|
-| `ignite check` | evaluating every property, running `validate` hooks, resolving every assembly |
-| `ignite plan` | printing the system model |
-| `ignite explain` | printing one system, member, property, assembly or machine |
-| `ignite run`, `ignite replay` | stepping the `std.control` reducers |
-
-No backend and no compiled program links it, and `ignite build` does not use it.
+The evaluator is part of the compiler, not of a compiled program. `ignite check` uses it to
+evaluate every property, run the `validate` hooks and resolve every assembly. `ignite plan`
+and `ignite explain` use it to print the model. `ignite run` and `ignite replay` use it to
+step the control machines ([The run-time model](runtime.md)). `ignite build` does not use
+it.
 
 It evaluates the language a property expression may use: `let`, `var`, assignment, `if`,
 `match`, the loops, closures applied during the evaluation, records, enums, lists, maps,
 quantities, text and every builtin without an effect. Its semantics are those of the
-targets: overflow is a failure, map order and quantity arithmetic are the same, `debug` gives
-the same text.
+targets. Overflow is a failure, map order and quantity arithmetic are the same, and `debug`
+gives the same text. A test in the repository holds the evaluator and both targets to the
+same result over a set of pure functions.
 
 ## Properties are computed
 
@@ -70,16 +65,16 @@ is [E116](../reference/diagnostics.md#e116) ([Effects and capabilities](effects.
 
 ## Limits
 
-Evaluation is bounded by fuel: one unit per expression evaluated, per loop iteration and per
-call, 1,000,000 units per property expression. `--fuel N` on `plan` and `explain`
-changes it; `ignite check` has no `--fuel` and always uses the default. A value of more than 1,000,000 nodes, or more than 10,000 nested fn and closure calls, stops
-the evaluation too.
+A property may loop, so the compiler must be able to stop. Evaluation is bounded by fuel:
+one unit per expression evaluated, per loop iteration and per call, 1,000,000 units per
+property expression. The size of a value and the depth of nested calls are bounded too.
+Running out of any of them is [E115](../reference/diagnostics.md#e115), which names the limit
+and the function that was running. `--fuel N` on `plan` and `explain` changes the fuel
+([command line](../reference/cli.md#ignite-plan)).
 
-| diagnostic | cause |
-|---|---|
-| [E115](../reference/diagnostics.md#e115) | the fuel, the value size or the call depth ran out; names the limit and the function that was running |
-| [E117](../reference/diagnostics.md#e117) | a failure: `assert`, overflow, an index, a `match`, `?` on `Err`; with the same report text the targets print |
-| [E118](../reference/diagnostics.md#e118) | a result the model cannot encode: a closure, a function value that is not a named top-level function, a handle not produced by a member name |
+A failure while evaluating, such as a failed `assert`, an overflow or `?` on `Err`, is
+[E117](../reference/diagnostics.md#e117), with the report text the targets print. A result
+the model cannot hold, such as a closure, is [E118](../reference/diagnostics.md#e118).
 
 ```ignite,fails=E115
 type Worker {
@@ -135,60 +130,21 @@ system S {
 error[E118]: evaluating S.w.scale: a closure cannot be encoded in the model
 ```
 
-The evaluator and the two targets are held to one result: a fixture of at least 40 pure
-functions prints the same `debug` text in the evaluator, a Rust build and an LLVM build.
-
 ## The system model
 
-`ignite plan` prints the model of one system and at most one assembly as canonical JSON,
-so equal inputs give equal bytes:
-
-- object keys in byte order, two-space indentation, one key or item per line;
-- members, edges and resolution entries sorted, so declaration order does not show;
-- relative paths; no absolute path, timestamp, host name or compiler version.
-
-| key | content |
-|---|---|
-| `formatVersion` | `"ignite-model/0.1"` |
-| `systemId` | the system's name |
-| `resources`, `components`, `contracts`, `policies` | every member, with its kind and evaluated properties |
-| `edges` | `uses`, `references`, `observes`, `hosts`, `provisioning`, `readiness`, `recovery` |
-| `assembly` | the selected assembly and its resolution, or `null` |
-| `machines`, `observations` | the initial control machines; the signals, each with its producer and interval |
-| `sourceMap` | every member and property path to `file:line:column` |
-
-Values are encoded by type; a quantity keeps its unit, for example
-`"buffer": {"bytes": 65536, "type": "ByteSize"}`. A change that removes or reinterprets a key
-bumps `formatVersion`; an added key does not.
+The result of the evaluation is the system model: every member with its kind and its
+evaluated properties, the edges of the graph, the selected assembly and its resolution, the
+initial control machines, and a source map from every property to its file, line and
+column. `ignite plan` prints it as canonical JSON, so equal inputs give equal bytes, and
+declaration order, absolute paths and timestamps do not show. Two plans of one program can
+be compared with `diff`, and a tool can read the model without parsing Ignite.
 
 `ignite explain FILE PATH` renders the same model for one path in text: a system, a member,
-a property, an assembly or a machine id such as `Terminal.server.rollout`. An unknown path is
-[E119](../reference/diagnostics.md#e119).
+a property, an assembly, or a machine such as `Terminal.server.rollout`. The keys and the
+encoding are in [System declarations](../reference/systems.md#the-system-model).
 
-## At run time: stepping the reducers
+The model is also the contract between the compiler and the run-time driver: the journal of
+a run starts with it, and `ignite replay` refuses a journal whose model differs from the
+current plan ([The run-time model](runtime.md#replay)).
 
-The control machines of `std.control` are Ignite functions, `step(machine, event) -> Step`,
-and `ignite run` executes them in the evaluator rather than compiling them:
-
-1. the driver keeps one ordered queue of events (a process started, a probe attempt done, a
-   timer, a `rollout` command);
-2. each event is journaled, then stepped through the machines it is routed to;
-3. each effect a step returns (spawn, kill, set a timer, emit a signal) is journaled, then
-   dispatched by an adapter;
-4. adapters run on their own threads and feed results back as events.
-
-Reducers never do IO and adapters never decide. A reducer that fails is
-[E128](../reference/diagnostics.md#e128): that machine stops, the others go on, and the run
-exits 1. `--fuel N` on `run` and `replay` bounds each reducer step; the plan inside the run
-keeps the default fuel. The fixture `control_trace.ignite` steps the same reducers in the
-evaluator and on both compiled targets, and the results agree.
-
-## Replay
-
-Because every decision is a pure step over journaled events, the journal is enough to
-reproduce the run. `ignite replay` re-steps the journaled events and compares every effect,
-signal, standing and consequence record with the journal, byte for byte. The first difference
-is [E127](../reference/diagnostics.md#e127), with its sequence number. What a real process
-contributes (a pid, a latency, an exit code) enters only through events, so replay is exact.
-
-Next: [the roadmap](../roadmap.md) for what is designed and not built yet.
+Next: [One substrate, two targets](substrate.md).

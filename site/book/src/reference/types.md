@@ -15,7 +15,7 @@ lists the types and what each one supports. The intent behind them is in
 | user types | records (`type`), enums (`enum`), tuples, aliases |
 | functions | `fn(A) -> R`, `fn(a: A) -> R requires [..]`, closures |
 | quantities | `Duration`, `ByteSize`, `Ratio` |
-| substrate handles | `TcpListener`, `TcpStream`, `PipeStream`, `Store<T>`, `Input` |
+| substrate handles | `TcpListener`, `TcpStream`, `PipeStream`, `Store<T>`, `Directory`, `Launcher`, `Sender<T>`, `Receiver<T>`, … ([below](#substrate-and-system-types)) |
 | system declarations | `Ref<K>`, `Ref`, `Signal<T>`, `SystemRef`, `Protocol`, `Module<I>`, `Exposure` |
 
 Builtin type names are visible everywhere without an import. Declaring a type, fn or other
@@ -162,7 +162,7 @@ Builtin methods of `Text`: `len()` (in bytes), `is_empty()`, `trim()`, `starts_w
 `strip_prefix(p) -> Option<Text>`, `concat(t)`, `pieces(s) -> List<Text>`, `to_bytes()`,
 `to_text()`. `pieces(s)` returns the texts between the separators and is the body of `split`.
 Everything else, such as `split`, `contains`, `find` and `to_lower`, is Ignite code in
-[std.text](std/text.md), used by method call syntax after an import.
+[std.text](std/text.md), used by method call syntax after an import ([Method calls and UFCS](modules.md#method-calls-and-ufcs)).
 
 Offsets into a `Text` are byte offsets, and matching is byte for byte.
 
@@ -600,23 +600,25 @@ test "debug text" {
 
 ## Substrate and system types
 
-These types come from the substrate, the IO layer compiled programs link, and from system
-declarations. Their operations are in the [std.net](std/net.md) reference and the
-[Effects](effects.md) page.
+These types are builtins: the substrate, the IO layer compiled programs link, implements the
+handles, and system declarations use the rest. Each handle's operations and effects are on its
+standard-library page.
 
-| type | what it is |
-|---|---|
-| `TcpListener` | a bound TCP listening socket: `accept()`, `local_port()`; created by `TcpListener.bind(address, port)` or a `resource` |
-| `TcpStream` | a TCP connection: `read(n)`, `write_all(b)`, `close()`, `set_idle_timeout(ms)`, `write_urgent(b)`, `urgent_pending()`; `TcpStream.connect(address, port)` |
-| `PipeStream` | one end of an in-process pipe from `Pipe.pair()` (tests only); the same methods as `TcpStream` plus `received_batches()` |
-| `Input` | the result of a read: `Data(Bytes)` or `Eof` |
-| `Store<T>` | shared in-memory storage keyed by `Int`: `next_id()`, `get(id)`, `put(id, v)`, `remove(id)`, `values()`, `update(id, f)`, `upsert(id, f)`; a `resource`, or `Store.new()` in tests |
-| `Stdin`, `Stdout`, `Stderr`, `Process`, `Clock`, `Pipe` | static owners only: `Stdin.read(n)`, `Stdout.write_all(b)`, `Stderr.write_all(b)`, `Process.exit(code)`, `Process.flush()`, `Process.open_files_limit()`, `Clock.monotonic()`, `Clock.now()`, `Clock.sleep(d)`, `Pipe.pair()` |
-| `Ref<K>`, `Ref` | a reference to a member of a system, `System.member`; `Ref` is the kind-erased form |
-| `Signal<T>` | an output field of a component kind |
-| `SystemRef`, `Protocol` | a system or protocol named as a value |
-| `Module<I>` | a record `I` of fns filled from a module by `module("path")`; see [Modules](modules.md#module-bindings) |
-| `Exposure` | `Loopback`, `Private` or `Public`, for a `TcpListener` resource |
+| types | what they are | page |
+|---|---|---|
+| `TcpListener`, `TcpStream`, `PipeStream`, `Input`, `Pipe`, `Exposure` | sockets, in-process pipes, the result of a read | [`std.net`](std/net.md) |
+| `Stdin`, `Stdout`, `Stderr`, `Process`, `Clock`, `Store<T>`, `IoError` | the standard streams, the process, the clocks, in-memory storage | [`std.io`](std/io.md) |
+| `Directory` | the files under one root | [`std.fs`](std/fs.md) |
+| `Launcher`, `ChildProcess`, `Entropy`, `Setting`, `CommandLine`, `Environment` | child processes, random bytes, arguments, the environment | [`std.process`](std/process.md) |
+| `Sender<T>`, `Receiver<T>` | the ends of a bounded channel between tasks | [`std.sync`](std/sync.md) |
+| `Ref<K>`, `Ref` | a reference to a member of a system, `System.member`. `Ref` is the kind-erased form | [System declarations](systems.md#names-inside-a-system) |
+| `Signal<T>` | an output field of a component kind | [System declarations](systems.md#names-inside-a-system) |
+| `SystemRef`, `Protocol` | a system or a protocol named as a value | [System declarations](systems.md) |
+| `Module<I>` | a record `I` of fns filled from a module by `module("path")` | [Modules](modules.md#module-bindings) |
 
-Handles are shared: a copy of a `TcpStream` or a `Store` refers to the same socket or
-storage. Every other value behaves as a copy.
+`Stdin`, `Stdout`, `Stderr`, `Process`, `Clock` and `Pipe` are static owners only: their
+operations are called on the type name, such as `Stdout.write_all(b)`.
+
+Handles are shared: a copy of a `TcpStream`, a `Store` or another handle refers to the same
+socket, storage or capability. Every other value behaves as a copy
+([Copies and handles](statements.md#copies-and-handles)).

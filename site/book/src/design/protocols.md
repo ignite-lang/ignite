@@ -1,26 +1,20 @@
 # Protocols and roles
 
 A protocol in Ignite is ordinary code in the standard library, not a feature of the
-compiler or the runtime. `protocol Telnet` and `protocol Http` are written in Ignite, in
+compiler or the runtime. `protocol Telnet`, `protocol Http` and `protocol JsonRpc` are
+written in Ignite, in
 [`std/protocol/`](https://github.com/ignite-lang/ignite/tree/main/std/protocol). Their roles
 are generic over any byte stream, so the same session code runs over a TCP connection in a
-program and over an in-memory pipe in a test. This page explains the protocol form, the
-`ByteStream` bound, the limits records and the layering rule that keeps protocols out of
-the general layers.
+program and over an in-memory pipe in a test. This page explains why protocols take that
+shape, and the layering rule that keeps them out of the general layers of the library.
 
 ## A protocol is a set of roles
 
-`protocol Name { … }` declares the roles of a protocol over one stream:
-
-| role | parameters | called by |
-|---|---|---|
-| `serve` | `(stream, application)` or `(stream, limits, application)` | a server kind's `main`, once per accepted connection |
-| `connect` | `(stream)` | a client kind's `main` |
-
-Each role declares its `requires`. Any other function inside a protocol, a role without
-`requires` or a wrong parameter count is E030. Helpers are ordinary module-level functions
-beside the protocol. A role is called as `Telnet.serve(stream, limits, console)`, and the
-call is effectful.
+`protocol Name { … }` declares the roles of a protocol over one stream. A server role,
+`serve`, is called by a server kind's `main` once per accepted connection. A client role,
+`connect`, is called by a client kind's `main`. Each role declares its `requires`, so the
+caller pays for every effect the session has on the stream. Helpers are ordinary
+module-level functions beside the protocol. Anything else inside a protocol is E030.
 
 The server role of Telnet, from
 [`std/protocol/telnet.ignite`](https://github.com/ignite-lang/ignite/blob/main/std/protocol/telnet.ignite):
@@ -38,73 +32,33 @@ protocol Telnet {
 }
 ```
 
-`session` decodes the incoming bytes one at a time (so a command split across reads is
-handled), shows the console's prompt, passes each line to the console's `respond` and
-renders the reply. The console itself knows nothing about Telnet: it is a `Console` record
-from [`std.console`](../reference/std/console.md).
+`session` decodes the incoming bytes one at a time, so a command split across reads is
+handled. It shows the console's prompt, passes each line to the console's `respond` and
+renders the reply. The console knows nothing about Telnet: it is a `Console` record from
+[`std.console`](../reference/std/console.md). Every role's signature is on its module's page:
+[`std.protocol.telnet`](../reference/std/telnet.md#the-protocol),
+[`std.protocol.http`](../reference/std/http.md#the-protocol-and-the-server).
 
 ## Generic over the stream
 
-`<S: ByteStream>` bounds a type parameter of a function or role by the one interface the
-compiler knows. A value of type `S` then has six methods:
-
-| method | signature | effect on its root |
-|---|---|---|
-| `read` | `(stream: S, maximum: Int) -> IoResult<Input>` | `read` |
-| `write_all` | `(stream: S, data: Bytes) -> IoResult<Unit>` | `write` |
-| `close` | `(stream: S) -> IoResult<Unit>` | `write` |
-| `set_idle_timeout` | `(stream: S, ms: Int) -> IoResult<Unit>` | `write` |
-| `write_urgent` | `(stream: S, data: Bytes) -> IoResult<Unit>` | `write` |
-| `urgent_pending` | `(stream: S) -> IoResult<Bool>` | `read` |
-
-`TcpStream`, `PipeStream` and a type parameter bounded by `ByteStream` implement it; nothing
-else does. Passing another type is E096. `ByteStream` in a type position (a parameter, a
-field, a return type), an unknown interface in a bound, or two interfaces in one bound is
-E099. User-declared interfaces are not implemented.
+`<S: ByteStream>` bounds a type parameter by the one interface the compiler knows. A value
+of type `S` can be read, written, closed and given an idle timeout, and nothing else. The
+role cannot open a socket, so it cannot reach anything but the stream it was given.
+`TcpStream`, `PipeStream` and a type parameter bounded by `ByteStream` implement the
+interface. Its methods are in [`std.net`](../reference/std/net.md#bytestream).
 
 The bound is resolved statically. The generated Rust calls
-`Telnet::serve::<ignite_io::TcpStream>` and contains no `dyn ByteStream`; the LLVM target
+`Telnet::serve::<ignite_io::TcpStream>` and contains no `dyn ByteStream`. The LLVM target
 emits one instance of a bounded function per stream type, and each instance calls only the
-runtime entries of its own stream kind.
-
-The roles:
-
-| role | signature |
-|---|---|
-| `Telnet.serve` | `serve<S: ByteStream>(stream: S, limits: SessionLimits, application: Console) -> IoResult<Unit> requires [stream.read, stream.write]` |
-| `Telnet.connect` | `connect<S: ByteStream>(stream: S) -> IoResult<Unit> requires [stream.read, stream.write, stdin.read, stdin.mode, stdout.write, process.exit]` |
-| `Http.serve` | `serve<T: ByteStream, S>(stream: T, limits: HttpLimits, application: HttpApp<S>) -> IoResult<Unit> requires [stream.read, stream.write, application.*]` |
+runtime entries of its own stream kind. Being generic costs nothing at run time.
 
 ## Limits are a record
 
-A server role takes its protocol's limits as a record with defaults, so a declaration can
-set them as typed quantities:
-
-```ignite,fragment
-type SessionLimits {
-  maximum: Int = 1000
-  idle_timeout: Duration = 10 minutes
-  input_buffer: ByteSize = 16 KiB
-  output_buffer: ByteSize = 64 KiB
-  slow_reader_deadline: Duration = 30 seconds
-  maximum_subnegotiation: ByteSize = 1 KiB
-}
-
-type HttpLimits {
-  head: ByteSize = 8 KiB
-  body: ByteSize = 1 MiB
-  idle_timeout: Duration = 30 seconds
-  drain: ByteSize = 64 KiB
-  drain_timeout: Duration = 1 second
-}
-```
-
-`Telnet.serve` reads `idle_timeout` and `maximum_subnegotiation`; the other Telnet fields are
-declared and validated, without behaviour yet. Every `HttpLimits` field has behaviour: a head
-over `head` is answered 431, a body over `body` 413, and a rejected request is followed by a
-lingering close that drains up to `drain` bytes for at most `drain_timeout`. The terminal
-design file sets `sessions = { idle_timeout = 15 minutes, … }` on its server, and that value
-reaches `Telnet.serve` for every connection.
+A server role takes its protocol's limits as a record with defaults: `SessionLimits` for
+Telnet, `HttpLimits` for HTTP. A declaration sets them as typed quantities, and the value
+reaches the role for every connection. The terminal design file sets
+`sessions = { idle_timeout = 15 minutes, … }` on its server, and `Telnet.serve` applies it.
+Which fields have behaviour is on each module's page.
 
 ## Kinds that speak a protocol
 
@@ -121,84 +75,49 @@ fn TelnetServer.main(self: TelnetServer) -> IoResult<Unit> {
 }
 ```
 
-A failing session ends its own task; the server goes on accepting. `HttpServer<S>` has the same
-accept loop. `TelnetClient` and `TelnetPrompt` are kinds with a `main` too, but they connect
-once instead of accepting.
+A failing session ends its own task, and the server goes on accepting. `HttpServer<S>` has
+the same accept loop. `TelnetClient` and `TelnetPrompt` connect once instead of accepting.
 [Components](components.md) explains how a kind with `main` becomes an executable.
 
 ## Tests without a network
 
-`Pipe.pair()` returns two connected in-memory streams, `PipeStream`. What one end writes, the
-other reads. A pipe behaves like a TCP connection where it matters for protocol tests:
-
-- writes are buffered and delivered together at the writer's next flush (before a read, on
-  `close`, at task end), as `TcpStream` coalesces them;
-- `received_batches()` counts the deliveries into an end, so a test can assert that three
-  pipelined requests arrived in one batch;
-- the receive queue is bounded at 16 MiB; a delivery past it fails the writer instead of
-  blocking it;
-- `Pipe.pair()` is test-only: in a program it is E051, because a program's streams come from
-  a listener or a connect.
-
-A protocol of your own is tested the same way:
-
-```ignite
-type Greeting {
-  text: Text
-}
-
-protocol Greet {
-  fn serve<S: ByteStream>(stream: S, application: Greeting) -> Result<Unit, IoError> requires [
-    stream.read, stream.write
-  ] {
-    stream.write_all("{application.text}\r\n".to_bytes())?
-    stream.close()
-  }
-}
-
-test "the greeting arrives over a pipe" {
-  let (client, server) = Pipe.pair()
-  spawn Greet.serve(server, Greeting { text = "hello" })
-  let reply = match client.read(4096)? {
-    Data(bytes) => bytes.to_text()
-    Eof => ""
-  }
-  assert reply == "hello\r\n"
-}
-```
-
-The Telnet and HTTP session tests in `std/protocol/` run this way on both targets; one test
-in each module stays on loopback TCP so the `TcpStream` instance is exercised too. The
-[testing guide](../guide/testing.md#protocol-tests-without-a-network) and the
-[terminal walkthrough](../guide/terminal.md) show the console's transcript over a pipe.
+Because a role is generic, a test can hand it one end of `Pipe.pair()`, two connected
+in-memory streams, and talk to it from the other end. A pipe coalesces writes as a TCP
+connection does, so a test sees the batches a client would. It is test-only, because a
+program's streams come from a listener or a connect. Its behaviour is in
+[`std.net`](../reference/std/net.md#pipe-and-pipestream). The session tests in
+`std/protocol/` run this way on both targets, and one test in each module stays on loopback
+TCP. [Write a protocol and test it over a pipe](../howto/protocol.md) shows the steps.
 
 ## A general layer knows no protocol
 
-The standard library is layered, and a test in the repository enforces it:
-
-| layer | modules | may import |
-|---|---|---|
-| base | `std.io`, `std.net`, `std.option`, `std.result`, `std.text`, `std.json` | base |
-| leaf | `std.sli`, `std.time`, `std.policy` | base, leaf |
-| general | `std.control`, `std.contract`, `std.deploy`, `std.console`, `std.cli` | base, leaf, general |
-| protocol | every `std.protocol.*` | every layer |
+The standard library is layered, and a test in the repository enforces the layers. Base
+modules such as `std.net` and `std.text` import only base modules. The general modules,
+such as `std.control` and `std.deploy`, import no protocol module. Every `std.protocol.*`
+module may import every layer. The [standard library](../reference/std/index.md#layers)
+lists the modules of each layer.
 
 - No module outside `std.protocol.*` imports a protocol module or declares a name that
   contains a protocol's name.
-- A kind that speaks one protocol (a server, a client, a probe) lives in that protocol's
-  module: `TelnetServer`, `TelnetClient` and `TelnetPrompt` in `std.protocol.telnet`,
-  `HttpServer` in `std.protocol.http`.
-- The compiler crates and the substrate contain no protocol name. The substrate knows
-  sockets, pipes, stdio and tasks, not Telnet or HTTP.
+- A kind that speaks one protocol lives in that protocol's module: `TelnetServer`,
+  `TelnetClient` and `TelnetPrompt` in `std.protocol.telnet`, `HttpServer` in
+  `std.protocol.http`.
+- The compiler and the substrate contain no protocol name. The substrate knows sockets,
+  pipes, stdio and tasks, not Telnet or HTTP.
 
-So a new protocol is a new module, not a change to the compiler.
+A new protocol is a new module, not a change to the compiler.
 [`docs/layering.md`](https://github.com/ignite-lang/ignite/blob/main/docs/layering.md) has
 the full rule.
 
-## What is not built
+## Protocols and their specifications
+
+A protocol can name the specifications it follows: `protocol Telnet conforms [RFC854,
+RFC855]`. A function states the requirements it implements with `satisfies`, and a test the
+requirements it checks with `verifies`. `ignite conformance` runs those tests and prints
+whether each claim holds. [Check a protocol against its RFC](../howto/conformance.md) shows the steps, and
+[`std.rfc`](../reference/std/rfc.md) holds the catalogues.
 
 User `interface` and `impl` declarations, ABNF grammars, and TLS and Unix-socket transports
-are a design, not implemented ([roadmap](../roadmap.md)). RFC catalogues and conformance
-claims (`std.rfc`, `conforms`, `ignite conformance`) are built and released.
+are designs, not implemented ([roadmap](../roadmap.md)).
 
 Next: [Components](components.md).

@@ -6,8 +6,9 @@ by side and says what the combination adds.
 
 On both pages, every statement about another project is taken from that project's own
 documentation, linked where it is made, as read on 2026-11-04. Every statement about Ignite
-describes release v0.15.0, an early prototype: one local host, two native targets, and "planned"
-wherever something is designed and not built.
+describes release v0.15.0, an early prototype with one local host and two native targets.
+"Planned" marks what is designed and not built, and "unreleased" what is on `main` after
+v0.15.0.
 
 ## Why Ignite exists
 
@@ -17,7 +18,7 @@ wherever something is designed and not built.
   fix that." The LLVM target is the fast path. At release v0.15.0, on the dedicated timing host,
   the todo HTTP service built from a fresh output directory in 1.30 s on LLVM, dev, against
   4.12 s on the Rust target through cargo, dev
-  ([Building for Rust and LLVM](../guide/targets.md#build-times-as-measured)).
+  ([Quality](../quality.md#6-compiler-speed), row 6.2).
   The compiler itself is still Rust, so changing the compiler is no faster. A self-hosted
   compiler is planned ([roadmap](../roadmap.md)).
 - **Intent spread over many files.** What a system is for usually lives in application code,
@@ -183,7 +184,7 @@ Kubernetes "does not deploy source code and does not build your application"
 - **Where Ignite differs.** Ignite's machines are pure functions in
   [`std.control`](../reference/std/control.md), and the same program declares the system and
   holds the application it builds. The set of machines is closed at four. User-defined machines
-  are a later slice. They run on one host. Kubernetes runs across a cluster and is extended by
+  are not built. The machines run on one host. Kubernetes runs across a cluster and is extended by
   any program that speaks its API.
 
 ### Erlang/OTP supervision
@@ -195,11 +196,13 @@ the child processes and then itself". The defaults are `1` and `5`
 
 - **What Ignite takes.** A failure ends its task and is reported, and the service goes on. A
   failed `assert` or an overflow ends one session of `terminald`, not the server
-  ([FAQ](../faq.md)). Restarts are bounded: `Restart` has a backoff, `maximum_attempts` and an
-  `interval`. Typed actors with OTP's supervision strategies are designed
+  ([Failures](../reference/tests.md#failures)). Restarts are bounded: `Restart` has a backoff,
+  `maximum_attempts` and an `interval`. Typed actors with OTP's supervision strategies are designed
   ([`docs/actors.md`](https://github.com/ignite-lang/ignite/blob/main/docs/actors.md); planned).
-- **Where Ignite differs.** Ignite has no lightweight processes yet. A task is an OS thread, and
-  the supervisor restarts whole executables, not processes inside one.
+- **Where Ignite differs.** Ignite has no lightweight processes yet. In v0.15.0 a task is an OS
+  thread. On `main`, unreleased, spawned tasks run as stackful tasks on a few worker threads
+  ([roadmap](../roadmap.md#being-built-unreleased)). The supervisor restarts whole executables,
+  not processes inside one.
 
 ### Temporal
 
@@ -235,7 +238,8 @@ permissionless" ([Austral specification](https://austral-lang.org/spec/spec.html
   that writes to `stream` needs `stream.write` on that parameter
   ([Effects and capabilities](effects.md)).
 - **Where Ignite differs.** Ignite has no effect handlers, no user-defined effects and no
-  linear types. Values are copied. A few process-wide operations (`stdin.read`, `net.listen`,
+  linear types. Values have value semantics: a value moves at its last use and is copied
+  otherwise. A few process-wide operations (`stdin.read`, `net.listen`,
   `clock.read` and others) are named directly. They are not derived from a root capability.
 
 ### The Elm architecture
@@ -280,9 +284,9 @@ builds that Go was conceived", and "a factor of fifty less to do turns minutes i
 coffee breaks into interactive builds"
 ([Go at Google, 2012](https://go.dev/talks/2012/splash.article)).
 
-- **What Ignite takes.** Build time as a requirement of the language. The repository measures
-  program builds and its own test gate at every slice and records them in
-  [`AGENTS.md`](https://github.com/ignite-lang/ignite/blob/main/AGENTS.md).
+- **What Ignite takes.** Build time as a requirement of the language. Program build and check
+  times are measured on a dedicated host before every release, and a regression beyond its
+  tolerance refuses the release ([Quality](../quality.md)).
 - **Where Ignite differs.** The article names Go's handling of dependencies as "the single
   biggest reason why Go compilations are faster than C or C++ compilations".
   Ignite's fast path emits LLVM IR text for the standard library, the program and one main per
@@ -302,21 +306,6 @@ Zig "can also evaluate functions and blocks of code at compile-time"
 - **Where Ignite differs.** Zig wrote its own code generator. Ignite relies on clang for both
   the dev and the release profile.
 
-### Caching: sccache
-
-sccache "is a ccache-like compiler caching tool" with Rust support. Its README lists the
-limits: "Crates that invoke the system linker cannot be cached. This includes `bin`, `dylib`,
-`cdylib`, and `proc-macro` crates", "Incrementally compiled crates cannot be cached", and "by
-default, absolute paths to files must match to get a cache hit"
-([sccache](https://github.com/mozilla/sccache)).
-
-- **What Ignite took from it.** sccache was the approach tried first. The repository's
-  build-time measurements run with it on, and in the README's words "caches did not fix" the
-  machine-wide slowdown under concurrent agents.
-- **Where Ignite differs.** Ignite reduces the work instead of caching it. An inference, not a
-  measurement: the caveats above apply in the agent setting, where each agent builds in its own
-  worktree, so paths differ, and every build ends in a linked binary.
-
 ## Specification-driven agents: ESS
 
 [ESS](https://github.com/beyond10x/ess) describes "systems as typed data, compiling those
@@ -331,7 +320,7 @@ is generated, an obligation for a human, or refused
   and ESS's conformance suite checks that executable like any other. That loop is planned, not
   built
   ([`docs/research/review-2026-11-04-ecosystem.md`](https://github.com/ignite-lang/ignite/blob/main/docs/research/review-2026-11-04-ecosystem.md)).
-  `epic:agent-delivery-benchmark` will measure it against writing Rust directly. Like ESS,
+  A planned benchmark will measure it against writing Rust directly. Like ESS,
   Ignite reports what has no evidence. A contract without enough data is
   `InsufficientEvidence`, and `ignite conformance` marks a requirement that is claimed but
   has no passing test `inconclusive`.
