@@ -310,6 +310,17 @@ code reads the same in both modes, and both pass the same tests with the same re
 cost differs (`story:io-mode-setting`). `story:readiness-scheduler` rewrote wave D, D2 and D3
 when R1 landed (2026-11-08).
 
+T9. **Scheduling: one default, a raw-thread hatch, a declared property per executable**
+(Timo, 2026-11-09, option C of `docs/scheduling.md`). A process runs one default scheduler
+(readiness, T8) with no `async` colouring; a spawn form puts one task on a dedicated OS thread
+for CPU-bound work, and blocking substrate calls leave the workers through R2's pool; each
+executable component declares its IO mode and worker count in a `schedule` property, which
+`ignite plan` shows and `ignite apply` rolls out. Scheduler values in code and user-written
+schedulers are not taken: languages without colouring keep the scheduler closed, and
+suspension stays written once, in the substrate. Several schedulers in one process wait for
+actors P1. Stories, in order: `story:spawn-thread`, `story:schedule-property` (re-scopes
+`story:io-mode-setting`), `story:io-modes-in-the-gate`.
+
 ## 8 Open decisions
 
 Each needs Timo's answer; each changes what the next wave builds. The default is the
