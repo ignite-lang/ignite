@@ -35,3 +35,6 @@ nix = { version = "0.31", features = ["term", "fs"] }
 
 [profile.release.package.ignite-rt]
 codegen-units = 1
+
+[profile.dev.package.ignite-io]
+opt-level = 1

@@ -1366,6 +1366,65 @@ fn conformance_claims_hold_the_bar() {
     hold("conformance", &measured);
 }
 
+/// Row 3.2's release binaries at most 10 % over v0.15.0's values in
+/// `quality/history.jsonl` (story `readiness-binary-size`), built as
+/// `ignite-perf quality` builds them: the LLVM target against the runner
+/// archive of the dev profile (this test binary's), the Rust target with
+/// its generated release profile.
+#[test]
+fn release_binaries_stay_within_10_percent_of_v0_15_0() {
+    let before: BTreeMap<String, i64> = read_history()
+        .into_iter()
+        .filter(|record| record.run == "v0.15.0" && record.metric == "3.2")
+        .map(|record| (record.target, record.value))
+        .collect();
+    let scratch = Path::new(env!("CARGO_TARGET_TMPDIR")).join("quality-size");
+    let cargo_target = scratch.join("cargo");
+    let mut over = Vec::new();
+    for (source, executable) in [
+        ("examples/todo/todo.ignite", "todod"),
+        ("examples/terminal/terminal.ignite", "terminald"),
+    ] {
+        for (name, target) in [
+            ("llvm", ignite::Target::Llvm),
+            ("rust", ignite::Target::Rust),
+        ] {
+            let cell = format!("{name}/{executable}/release");
+            let options = ignite::BuildOptions {
+                target,
+                release: true,
+                out: Some(scratch.join(&cell)),
+                runtime: (target == ignite::Target::Llvm).then(crate::common::runner_archive),
+                target_dir: (target == ignite::Target::Rust).then(|| cargo_target.clone()),
+                ..Default::default()
+            };
+            let built = ignite::build(&workspace().join(source), &options)
+                .unwrap_or_else(|error| panic!("{cell}: {error}"));
+            let path = built
+                .executables
+                .iter()
+                .find(|path| path.file_stem().and_then(|stem| stem.to_str()) == Some(executable))
+                .unwrap_or_else(|| panic!("{cell}: no {executable} in {:?}", built.executables));
+            let size = std::fs::metadata(path).unwrap().len();
+            let reference = *before
+                .get(&cell)
+                .unwrap_or_else(|| panic!("no v0.15.0 record of 3.2 {cell}"));
+            let ceiling = reference + reference / 10;
+            if size > ceiling as u64 {
+                over.push(format!(
+                    "{cell}: {size} B, v0.15.0 {reference} B, at most {ceiling} B ({:+.1} %)",
+                    (size as f64 / reference as f64 - 1.0) * 100.0
+                ));
+            }
+        }
+    }
+    assert!(
+        over.is_empty(),
+        "over 110 % of v0.15.0:\n{}",
+        over.join("\n")
+    );
+}
+
 // ---- history, trend and pages -------------------------------------------
 
 /// One record of `quality/history.jsonl`.

@@ -38,7 +38,12 @@ instead, with the kit of start files, `libc.a` and `libunwind.a` and none of the
 
 Size. Every function and datum is in its own section (rustc emits the runtime's code that
 way by default), so `--gc-sections` drops what no executable reaches. The workspace builds `ignite-rt` with `codegen-units = 1` in the release
-profile.
+profile. Its dev profile builds `ignite-io` at `opt-level = 1`. That setting affects only
+runtimes built in the dev profile: the runtime a debug driver carries, and the dev-profile
+runner archive that `task quality` links into row 3.2's LLVM release executables, which with
+it stay within 10 % of v0.15.0's size (story `readiness-binary-size`; overflow checks and
+debug assertions stay on). A release driver's runtime is built in the release profile and is
+unchanged by it.
 
 LTO (story `llvm-lto-runtime`). A `-linux-gnu` driver carries the runtime twice: the native
 archive and the same archive built with `-Clinker-plugin-lto`, whose Rust code is LLVM

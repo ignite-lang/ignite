@@ -1246,6 +1246,29 @@ fn codes(result: Result<GeneratedProject, Vec<Diagnostic>>) -> Vec<(&'static str
     found
 }
 
+/// The release profile of the generated crate: `Int` overflow fails as in
+/// a dev build, and the crate is optimised as one unit with fat LTO, which
+/// keeps row 3.2's Rust release binaries within 10 % of v0.15.0
+/// (story `readiness-binary-size`).
+#[test]
+fn release_profile_checks_overflow_and_links_as_one_unit() {
+    let project = try_generate(vec![]).expect("generates");
+    let profile: Vec<&str> = project
+        .cargo_toml
+        .split("\n[profile.release]\n")
+        .nth(1)
+        .expect("a [profile.release] table")
+        .lines()
+        .take_while(|line| !line.is_empty() && !line.starts_with('['))
+        .collect();
+    assert_eq!(
+        profile,
+        ["overflow-checks = true", "codegen-units = 1", "lto = true"],
+        "{}",
+        project.cargo_toml
+    );
+}
+
 #[test]
 fn no_system_is_a_library_without_executables() {
     let project = try_generate(vec![]).expect("generates");
