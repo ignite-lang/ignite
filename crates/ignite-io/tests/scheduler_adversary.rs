@@ -350,9 +350,14 @@ fn child_stack_map_fails() {
     // One task holds the only stack: the worker's cache and the pool are
     // empty, so the next spawn on it must map one.
     let (release, held) = Channel::bounded::<bool>(1);
+    // The worker's thread has started (its own mappings are made) before
+    // the address space is limited.
+    let (running, started) = mpsc::channel::<()>();
     spawn(move || {
+        running.send(()).unwrap();
         let _ = held.receive();
     });
+    started.recv_timeout(LIMIT).expect("the holding task ran");
     let before = scheduler_counts();
     let (soft, hard) = getrlimit(Resource::RLIMIT_AS).unwrap();
     setrlimit(Resource::RLIMIT_AS, address_space() + 1024 * 1024, hard).unwrap();
