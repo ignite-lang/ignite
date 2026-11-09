@@ -132,7 +132,10 @@ its implementations, not as a stage to remove.
   cgroup-aware), and stay.
 - A **task** is a stack and a control block (its arena state, section 4.5; its owned handles;
   its parked reason). `spawn` creates a task; `task_end` frees it and returns the stack to the
-  worker's pool.
+  worker's pool. As landed (`story:readiness-connect-latency`): each worker keeps two free
+  stacks, the rest go to one shared pool of 64; a spawn takes the stack from the cache of the
+  worker it places the task on, from `main` too, so a connection accepted in `main` and served
+  on a worker takes no pool lock and maps no stack.
 - `main` stays on the process main thread outside the workers in phase R1: its waits block the
   OS thread, as today. An accept loop in `main` (`TelnetServer`, `HttpServer`) therefore costs
   one wakeup per connection, not per reply. R2 may move `main` onto a worker.

@@ -586,3 +586,106 @@ fn no_epoll_call_outside_the_reactor() {
     }
     assert!(found.is_empty(), "epoll outside the reactor: {found:#?}");
 }
+
+/// Clients of the connect-8 shape (`ignite-load`'s workload `connect`):
+/// each connects, sends one request, reads the reply and closes, again.
+const CONNECT_CLIENTS: usize = 8;
+/// Connections over all clients.
+const CONNECTIONS: usize = 256;
+
+/// The connection path's cost as counts (`story:readiness-connect-latency`):
+/// an accept loop that spawns one task per connection, served to 8
+/// concurrent clients that each connect, exchange one request and reply and
+/// close, with 4 workers; the accept loop a task, and on the process' main
+/// thread as a compiled server runs it.
+#[test]
+fn short_connections_take_stacks_from_the_worker_they_run_on() {
+    for accept in ["task", "main"] {
+        passed(&child(
+            "scheduler::child_connect_8",
+            &[("IGNITE_WORKERS", "4"), ("SCHEDULER_ACCEPT", accept)],
+        ));
+    }
+}
+
+#[test]
+fn child_connect_8() {
+    use std::io::{Read, Write};
+    if !in_child() {
+        return;
+    }
+    let on_task = std::env::var("SCHEDULER_ACCEPT").as_deref() == Ok("task");
+    let listener = TcpListener::bind(LOCALHOST.to_string(), 0).unwrap();
+    let port = listener.local_port() as u16;
+    let accept_loop = move || {
+        for _ in 0..CONNECTIONS {
+            let Ok(stream) = listener.accept() else {
+                return;
+            };
+            spawn(move || {
+                if let Ok(Input::Data(bytes)) = stream.read(64) {
+                    let _ = stream.write_all(bytes);
+                }
+            });
+        }
+    };
+    let clients: Vec<_> = (0..CONNECT_CLIENTS)
+        .map(|_| {
+            std::thread::spawn(move || {
+                for _ in 0..CONNECTIONS / CONNECT_CLIENTS {
+                    let mut peer = std::net::TcpStream::connect((LOCALHOST, port)).unwrap();
+                    peer.set_read_timeout(Some(LIMIT)).unwrap();
+                    peer.write_all(b"ping").unwrap();
+                    let mut reply = [0u8; 4];
+                    peer.read_exact(&mut reply).unwrap();
+                    assert_eq!(&reply, b"ping");
+                }
+            })
+        })
+        .collect();
+    if on_task {
+        spawn(accept_loop);
+    } else {
+        accept_loop();
+    }
+    for client in clients {
+        client.join().unwrap();
+    }
+    wait_for_tasks();
+    let counts = ignite_io::scheduler_counts();
+    let accept = if on_task { "task" } else { "main" };
+    println!("accept on {accept}: {counts:?}");
+    let connections = CONNECTIONS as u64;
+    assert_eq!(
+        counts.spawns,
+        connections + u64::from(on_task),
+        "{counts:?}"
+    );
+    assert_eq!(counts.wakes_across, 0, "{counts:?}");
+    // Stacks: a few mapped while the first connections overlap, then every
+    // connection reuses one.
+    assert!(
+        counts.stacks_allocated <= 2 * CONNECT_CLIENTS as u64,
+        "stacks mapped: {counts:?}"
+    );
+    assert_eq!(
+        counts.stacks_allocated + counts.stacks_from_cache + counts.stacks_from_pool,
+        counts.spawns,
+        "{counts:?}"
+    );
+    // A connection served on a worker takes the stack a task left there
+    // and leaves its own there: the shared pool's lock is taken for at
+    // most one connection in eight, either way (before the per-worker
+    // caches, 150 to 248 of 256 took and gave through the pool).
+    let bound = connections / 8;
+    assert!(
+        counts.stacks_from_pool <= bound && counts.stacks_to_pool <= bound,
+        "the shared pool's lock per connection: {counts:?}"
+    );
+    // Hand-overs: at most one per connection.
+    assert!(counts.spawns_handed_over <= connections, "{counts:?}");
+    assert!(
+        counts.notifies_sent <= counts.spawns_handed_over,
+        "{counts:?}"
+    );
+}
