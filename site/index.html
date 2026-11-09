@@ -74,7 +74,7 @@
 
       <div class="wrap hero-grid">
         <div class="hero-copy">
-          <p class="eyebrow"><span class="pulse" aria-hidden="true"></span> v0.15.0 &middot; an early prototype</p>
+          <p class="eyebrow"><span class="pulse" aria-hidden="true"></span> v0.16.0 &middot; an early prototype</p>
           <h1 id="hero-title">Say what your program is for. <span class="flame-text">One file, one build, one native executable.</span></h1>
           <p class="lede">A compiled, intent-oriented language for fast, resource-efficient software development by humans and AI agents. One typed file holds the program, its components, its contracts and its policies; the compiler turns it into native executables, then runs and checks them.</p>
           <div class="cta">
@@ -446,6 +446,7 @@ ignite explain examples/terminal/terminal.design.ignite local</code></pre>
           <li><span class="tag">v0.13.0</span> <span>stream ends handed to <code>spawn</code> inside branches and match arms, program names that shadow Rust primitives, a website checked for layout and accessibility on every merge</span></li>
           <li><span class="tag">v0.14.0</span> <span>environment variables, sleep, wall clock and peer addresses for programs, a clean exit after a drain, quality metrics every release must hold, a toolchain image</span></li>
           <li><span class="tag">v0.15.0</span> <span>bitwise operators, channels and timers, the shared data value model, and the examples answering at about the speed of plain Rust</span></li>
+          <li><span class="tag">v0.16.0</span> <span>tasks on a readiness scheduler, no leaked handles in a long-running server, SHA-1, SHA-256 and base64 in std, a reorganised book</span></li>
           <li><span class="tag tag-next">next</span> <span>the waves and designs below, not released</span></li>
         </ul>
       </div>
@@ -455,7 +456,7 @@ ignite explain examples/terminal/terminal.design.ignite local</code></pre>
       <div class="wrap">
         <p class="kicker">What's next</p>
         <h2 id="outlook-title">What is being built, and what is designed</h2>
-        <p class="outlook-lead">On <code>main</code>, not yet released: spawned tasks on epoll workers instead of one thread per connection, and a long-running server that leaks nothing. Planned next: WebSocket, RESP3 and NATS clients and codecs, one mid-level IR for both targets, then YAML and <code>ignite fmt</code>. These are plans, not dates.</p>
+        <p class="outlook-lead">Since v0.16.0 spawned tasks run on epoll workers instead of one thread per connection, and a long-running server leaks nothing. Planned next: WebSocket, RESP3 and NATS clients and codecs, one mid-level IR for both targets, then YAML and <code>ignite fmt</code>. These are plans, not dates.</p>
         <div class="doc-cards doc-cards-pair">
           <a class="doc-card" href="book/roadmap.html#xweb-the-web-app-is-part-of-the-system-design">
             <span class="doc-num">design</span>

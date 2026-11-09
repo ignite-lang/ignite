@@ -10,11 +10,11 @@ glibc, and `share/ignite/std`, the standard library it reads. Unpack it into a p
 `bin` is on your `PATH`, here `~/.local`:
 
 ```sh
-curl -LO https://github.com/ignite-lang/ignite/releases/download/v0.15.0/ignite-0.15.0-x86_64-linux.tar.gz
-tar -xzf ignite-0.15.0-x86_64-linux.tar.gz
-cp ignite-0.15.0-x86_64-linux/bin/ignite ~/.local/bin/
+curl -LO https://github.com/ignite-lang/ignite/releases/download/v0.16.0/ignite-0.16.0-x86_64-linux.tar.gz
+tar -xzf ignite-0.16.0-x86_64-linux.tar.gz
+cp ignite-0.16.0-x86_64-linux/bin/ignite ~/.local/bin/
 mkdir -p ~/.local/share/ignite
-cp -R ignite-0.15.0-x86_64-linux/share/ignite/std ~/.local/share/ignite/
+cp -R ignite-0.16.0-x86_64-linux/share/ignite/std ~/.local/share/ignite/
 ```
 
 Check it:
@@ -24,7 +24,7 @@ ignite --version
 ```
 
 ```text
-ignite 0.15.0
+ignite 0.16.0
 ```
 
 A driver at `PREFIX/bin/ignite` reads `PREFIX/share/ignite/std` when it exists. It also
@@ -38,7 +38,7 @@ The guide's pages build the examples of the repository. Fetch the release's sour
 history:
 
 ```sh
-git clone --depth 1 --branch v0.15.0 https://github.com/ignite-lang/ignite
+git clone --depth 1 --branch v0.16.0 https://github.com/ignite-lang/ignite
 cd ignite
 ignite check examples/terminal/terminal.ignite
 ```
@@ -55,7 +55,7 @@ targets. [Build in a container](../howto/container.md) shows how to use it.
 
 ## Install from source
 
-The releases are also tags of the repository, v0.1.0 to v0.15.0. You need:
+The releases are also tags of the repository, v0.1.0 to v0.16.0. You need:
 
 | tool | needed for |
 |---|---|
@@ -77,7 +77,7 @@ ignite --version
 ```
 
 ```text
-ignite 0.15.0+g91fa0a25740a
+ignite 0.16.0+g91fa0a25740a
 ```
 
 A build from a clone prints the commit after `+g`. It appends `.dirty` when a tracked source of

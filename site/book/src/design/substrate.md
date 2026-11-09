@@ -22,12 +22,11 @@ Two rules keep it small and shared:
 - **No target suspends a task itself.** The substrate does, as it does IO, so neither target
   has IO code of its own and both get the same scheduling.
 
-Release v0.15.0 runs one OS thread per task, with blocking IO. After it, the substrate runs
-spawned tasks as stackful tasks on a few worker threads, each waiting on its sockets with
+Up to release v0.15.0 every task was one OS thread with blocking IO. Since v0.16.0 the substrate
+runs spawned tasks as stackful tasks on a few worker threads, each waiting on its sockets with
 one epoll loop. Neither target's code generation changes. `IGNITE_IO=threads` selects one
 thread per task again. The decision is in
-[`docs/readiness-io.md`](https://github.com/ignite-lang/ignite/blob/main/docs/readiness-io.md),
-the state on the [roadmap](../roadmap.md).
+[`docs/readiness-io.md`](https://github.com/ignite-lang/ignite/blob/main/docs/readiness-io.md).
 
 ## The LLVM target
 

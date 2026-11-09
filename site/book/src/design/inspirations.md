@@ -6,9 +6,9 @@ by side and says what the combination adds.
 
 On both pages, every statement about another project is taken from that project's own
 documentation, linked where it is made, as read on 2026-11-04. Every statement about Ignite
-describes release v0.15.0, an early prototype with one local host and two native targets.
+describes release v0.16.0, an early prototype with one local host and two native targets.
 "Planned" marks what is designed and not built, and "unreleased" what is on `main` after
-v0.15.0.
+v0.16.0.
 
 ## Why Ignite exists
 
@@ -199,9 +199,9 @@ the child processes and then itself". The defaults are `1` and `5`
   ([Failures](../reference/tests.md#failures)). Restarts are bounded: `Restart` has a backoff,
   `maximum_attempts` and an `interval`. Typed actors with OTP's supervision strategies are designed
   ([`docs/actors.md`](https://github.com/ignite-lang/ignite/blob/main/docs/actors.md); planned).
-- **Where Ignite differs.** Ignite has no lightweight processes yet. In v0.15.0 a task is an OS
-  thread. On `main`, unreleased, spawned tasks run as stackful tasks on a few worker threads
-  ([roadmap](../roadmap.md#being-built-unreleased)). The supervisor restarts whole executables,
+- **Where Ignite differs.** Ignite has no lightweight processes yet. Since v0.16.0 spawned tasks
+  run as stackful tasks on a few worker threads, not as one OS thread each
+  ([One substrate, two targets](substrate.md)). The supervisor restarts whole executables,
   not processes inside one.
 
 ### Temporal

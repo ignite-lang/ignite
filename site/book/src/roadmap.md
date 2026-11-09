@@ -1,6 +1,6 @@
 # Roadmap
 
-Ignite is an early prototype. The latest release is v0.15.0. This page separates what is
+Ignite is an early prototype. The latest release is v0.16.0. This page separates what is
 released, what is built on `main` and not released, what is planned, and what exists only as a
 design document. Designs that are not built appear only on this page.
 
@@ -52,10 +52,11 @@ The measured state of each release, build times included, is on the [Quality](qu
 | **v0.13.0** | spawn handovers in branches and Rust names that shadow nothing: on the LLVM target a stream end passed to `spawn` at its last use inside `if`/`else` branches or `match` arms moves into the task; on the Rust target `spawn` evaluates its arguments in source order, and a program may name things after Rust primitives, crate roots or the generator's own locals; the website's pages are checked for layout and accessibility on every merge, the FAQ is in the landing page's header and text is at least 14 px ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.13.0)) |
 | **v0.14.0** | builtins a real service needs, a clean exit after a drain and a quality ratchet: environment variables (`Environment`), `Clock.sleep`, the wall clock `Clock.now()` and `Process.flush()`; `TcpStream.peer`, `timed_out` and `connect_within`; `Process.exit` during a drain exits with its code at once; user functions named like builtins and record literals as method receivers check; the chunked HTTP decoder copies no chunk, and `Store` reads no longer wait on an update; quality metrics with a bar that every release must hold (`task quality`), a differential runner over both targets and the evaluator; a toolchain image for every release ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.14.0)) |
 | **v0.15.0** | bitwise operators, channels and throughput near plain Rust: bitwise operators; channels and timers in `std.sync`; a drain that keeps the listeners open; a higher open-files limit; `IoError` compared in `assert`; the `std.data` value model and its bridge to `std.json`; `List.with_capacity` and `Bytes.with_capacity`; faster generated code and runtime on both targets, so the todo and terminal examples answer at 0.93 to 1.07 times the replies per second of plain Rust; ThinLTO release builds on the LLVM target, and `spawn` no longer waits for the task to start; timing and benchmarks against plain Rust and Go on a dedicated host before each release ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.15.0)) |
+| **v0.16.0** | tasks on a readiness scheduler and no leaks in a long-running server: spawned tasks run as stackful tasks on epoll workers inside the substrate (`IGNITE_IO=threads` keeps one thread each); the LLVM target releases every handle with its last owner and channel ends are inferred; `std.runtime` with `Runtime.census()` and `soak`; the modular 32-bit word `U32`; `TcpListener.bind_kept` keeps a listener bound at run time through the drain; SHA-1 and SHA-256 in `std.digest`, base64, base64url and hex in `std.encoding`; `std.json`'s `get` returns the last of a repeated member and `get_all` every one; `ignite --version` names the commit of a source build; the book reorganised by reader and job ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.16.0)) |
 
 ## What's next
 
-The work after v0.15.0 comes in waves of a few stories each. A wave is merged when every story
+The work after v0.16.0 comes in waves of a few stories each. A wave is merged when every story
 in it passes the gate, and a release follows every third wave. The order below is the current
 plan, not a promise of dates.
 
@@ -63,9 +64,7 @@ plan, not a promise of dates.
 
 | work | content | state |
 |---|---|---|
-| native parity | Ignite programs within 1.1× of plain Rust. Spawned tasks run as stackful tasks on epoll workers inside the substrate instead of one thread each, with no change to code generation ([`docs/readiness-io.md`](https://github.com/ignite-lang/ignite/blob/main/docs/readiness-io.md)). The modular 32-bit word `U32` with rotate ([`docs/fixed-width-ints.md`](https://github.com/ignite-lang/ignite/blob/main/docs/fixed-width-ints.md)) | on `main`; fixed-size lists in wave 11 |
-| leak guard | `std.runtime`: `Runtime.census()` counts live objects per kind and heap bytes on both targets, and `soak` fails a test whose body leaks ([`docs/leak-guard.md`](https://github.com/ignite-lang/ignite/blob/main/docs/leak-guard.md)) | on `main` |
-| wave 8 | no leaks in a long-running server: channels and every LLVM-target handle released on close, channel ends inferred; a drain that keeps listeners bound at run time; SHA-1 and SHA-256 in `std.digest`, base64, base64url and hex in `std.encoding`; `std.json`'s `get` returns the last of a repeated member; `ignite --version` names the commit of a source build | merged into the wave branch, not yet into `main` |
+| native parity | Ignite programs within 1.1× of plain Rust: fixed-size lists `[T; N]` of scalars and `List.with_capacity` complete the minimal set for codecs ([`docs/fixed-width-ints.md`](https://github.com/ignite-lang/ignite/blob/main/docs/fixed-width-ints.md)) | wave 11 |
 
 ### Planned
 
