@@ -8,6 +8,7 @@ mod fs_adversary;
 mod pipe;
 mod reactor;
 mod scheduler;
+mod scheduler_adversary;
 mod stdio;
 mod tcp;
 mod terminal;
