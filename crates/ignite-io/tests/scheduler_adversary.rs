@@ -395,6 +395,8 @@ fn tasks_left(live: i64) {
 /// workers: worker 2 holds a free stack and two tasks, worker 1 one task
 /// and no free stack; the connection accepted next goes to worker 1, the
 /// least loaded, and `free_stack` looks only at its cache and the pool.
+/// Red in pass 2 against the revised sentence; the coordinator narrowed the
+/// sentence and this case now holds today's count as a known gap.
 #[test]
 fn a_connection_accepted_in_main_maps_no_stack_while_another_worker_holds_one() {
     passed(&child(
@@ -460,8 +462,8 @@ fn child_accept_while_another_worker_holds_a_stack() {
             served.stacks_allocated - set.stacks_allocated,
             served.stacks_from_pool - set.stacks_from_pool,
         ),
-        (0, 0),
-        "the connection mapped a stack or took the pool while worker 2 held a free one\nset {set:?}\nserved {served:?}"
+        (1, 0),
+        "known gap, decided in wave 9 (docs/readiness-io.md 4.1): a running worker with an empty cache maps a stack while worker 2 holds a free one; this case turns red when that changes\nset {set:?}\nserved {served:?}"
     );
 }
 

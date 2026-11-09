@@ -136,8 +136,12 @@ its implementations, not as a stage to remove.
   stacks, the rest go to one shared pool of 64; a spawn takes the stack from the cache of the
   worker it places the task on, from `main` too, else from another worker's cache (a worker
   it starts has none), else from the pool, and maps one, without the placement lock held,
-  only when none is free. So a connection accepted in `main` and served on a worker takes no
-  pool lock and maps no stack while a worker holds a free one.
+  only when none is free. So a connection accepted in `main` takes no pool lock and maps no
+  stack while the worker it is placed on holds a free one, or, for a worker it starts, while
+  any worker does. A running worker with an empty cache still maps one when only another
+  worker caches a free stack (case `scheduler_adversary::a_connection_accepted_in_main_maps_no_stack_while_another_worker_holds_one`,
+  a known gap: taking from other workers' caches for running workers raised the pool takes
+  of the connect-8 shape from 0 to 2 to 2 to 19 per run).
 - `main` stays on the process main thread outside the workers in phase R1: its waits block the
   OS thread, as today. An accept loop in `main` (`TelnetServer`, `HttpServer`) therefore costs
   one wakeup per connection, not per reply. R2 may move `main` onto a worker.
