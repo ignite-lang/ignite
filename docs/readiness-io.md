@@ -134,8 +134,10 @@ its implementations, not as a stage to remove.
   its parked reason). `spawn` creates a task; `task_end` frees it and returns the stack to the
   worker's pool. As landed (`story:readiness-connect-latency`): each worker keeps two free
   stacks, the rest go to one shared pool of 64; a spawn takes the stack from the cache of the
-  worker it places the task on, from `main` too, so a connection accepted in `main` and served
-  on a worker takes no pool lock and maps no stack.
+  worker it places the task on, from `main` too, else from another worker's cache (a worker
+  it starts has none), else from the pool, and maps one, without the placement lock held,
+  only when none is free. So a connection accepted in `main` and served on a worker takes no
+  pool lock and maps no stack while a worker holds a free one.
 - `main` stays on the process main thread outside the workers in phase R1: its waits block the
   OS thread, as today. An accept loop in `main` (`TelnetServer`, `HttpServer`) therefore costs
   one wakeup per connection, not per reply. R2 may move `main` onto a worker.

@@ -131,12 +131,13 @@ type Job = Box<dyn FnOnce() + Send + 'static>;
 /// atomic bumped next to a lock or a system call the event costs anyway.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SchedulerCounts {
-    /// Tasks started.
+    /// Tasks started: given a stack and handed to a worker; a spawn that
+    /// fails is not counted, nor is the stack it found.
     pub spawns: u64,
     /// Stacks mapped fresh because no free one was found.
     pub stacks_allocated: u64,
-    /// Stacks a spawn took from the cache of the worker it placed the task
-    /// on, the stacks that worker's ended tasks left.
+    /// Stacks a spawn took from a worker's cache: the one it placed the
+    /// task on, or another when it starts a worker (which has none).
     pub stacks_from_cache: u64,
     /// Stacks a spawn took from the shared pool, under its lock.
     pub stacks_from_pool: u64,
@@ -551,42 +552,70 @@ pub(crate) fn wait_descriptor(
 /// already counted live (`crate::task`).
 pub(crate) fn spawn(job: Job) -> io::Result<()> {
     install_overflow_handler();
-    count(&COUNTERS.spawns);
     let here = HERE.with(Cell::get);
-    let mut workers = lock(&WORKERS);
-    let mut passed: Vec<*const Shared> = Vec::new();
-    while let Some((shared, last)) = choose(&workers, here, &passed) {
-        // SeqCst: this increment, then the `blocked` load, against
-        // `block_alone`'s `blocked` store, then its `tasks` load: either
-        // this spawn sees the worker blocked and goes elsewhere, or the
-        // worker sees a second task and does not block. `last`: every
-        // other worker was passed, so the task waits for this one.
-        shared.tasks.fetch_add(1, Ordering::SeqCst);
-        if !last && shared.blocked.load(Ordering::SeqCst) {
-            shared.tasks.fetch_sub(1, Ordering::SeqCst);
-            passed.push(Arc::as_ptr(&shared));
-            continue;
-        }
-        // The task is counted on `shared`, so the worker does not retire
-        // ([`Worker::retire`]) while its stack is found without `WORKERS`.
-        drop(workers);
-        let stack = match new_stack(Some(&shared)) {
-            Ok(stack) => stack,
-            Err(error) => {
+    // A stack mapped while `WORKERS` was not held, because no free one
+    // was found under it; the next look places the task with it.
+    let mut spare: Option<DefaultStack> = None;
+    'place: loop {
+        let workers = lock(&WORKERS);
+        let mut passed: Vec<*const Shared> = Vec::new();
+        while let Some((shared, last)) = choose(&workers, here, &passed) {
+            // SeqCst: this increment, then the `blocked` load, against
+            // `block_alone`'s `blocked` store, then its `tasks` load: either
+            // this spawn sees the worker blocked and goes elsewhere, or the
+            // worker sees a second task and does not block. `last`: every
+            // other worker was passed, so the task waits for this one.
+            shared.tasks.fetch_add(1, Ordering::SeqCst);
+            if !last && shared.blocked.load(Ordering::SeqCst) {
                 shared.tasks.fetch_sub(1, Ordering::SeqCst);
-                return Err(error);
+                passed.push(Arc::as_ptr(&shared));
+                continue;
             }
-        };
-        // Relaxed: a bound for `block_alone`, not an order with any data.
-        LIVE.fetch_add(1, Ordering::Relaxed);
-        shared.hand_over(|incoming| incoming.new.push((job, stack)));
-        if Arc::as_ptr(&shared) != here {
-            count(&COUNTERS.spawns_handed_over);
-            shared.notify();
+            let Some((stack, found)) = free_stack(&workers, Some(&shared), &mut spare) else {
+                shared.tasks.fetch_sub(1, Ordering::SeqCst);
+                drop(workers);
+                spare = Some(map_stack()?);
+                continue 'place;
+            };
+            // The task is counted on `shared`, so the worker does not
+            // retire ([`Worker::retire`]) while it is handed over without
+            // `WORKERS`.
+            drop(workers);
+            if let Some(unused) = spare.take() {
+                give_stack(unused, None);
+            }
+            // Relaxed: a bound for `block_alone`, not an order with any data.
+            LIVE.fetch_add(1, Ordering::Relaxed);
+            shared.hand_over(|incoming| incoming.new.push((job, stack)));
+            count(&COUNTERS.spawns);
+            found.count();
+            if Arc::as_ptr(&shared) != here {
+                count(&COUNTERS.spawns_handed_over);
+                shared.notify();
+            }
+            return Ok(());
         }
-        return Ok(());
+        let Some((stack, found)) = free_stack(&workers, None, &mut spare) else {
+            drop(workers);
+            spare = Some(map_stack()?);
+            continue 'place;
+        };
+        let started = start_worker(workers, job, stack, found);
+        if let Some(unused) = spare.take() {
+            give_stack(unused, None);
+        }
+        return started;
     }
-    let stack = new_stack(None)?;
+}
+
+/// Start a worker with `job` as its first task on `stack` (`found`: where
+/// it came from), and add it to `workers`.
+fn start_worker(
+    mut workers: MutexGuard<'_, Vec<Arc<Shared>>>,
+    job: Job,
+    stack: DefaultStack,
+    found: Found,
+) -> io::Result<()> {
     let shared = Arc::new(Shared::new());
     // Relaxed: the worker thread is not started yet; its start orders it.
     shared.tasks.store(1, Ordering::Relaxed);
@@ -597,6 +626,8 @@ pub(crate) fn spawn(job: Job) -> io::Result<()> {
         .spawn(move || work(started))
     {
         Ok(_) => {
+            count(&COUNTERS.spawns);
+            found.count();
             count(&COUNTERS.workers_started);
             workers.push(shared);
             // Relaxed: as above.
@@ -679,29 +710,51 @@ fn choose(
         .map(|shared| (Arc::clone(shared), true))
 }
 
-/// A free stack for a task placed on `worker` (`None`: a worker about to
-/// start): from that worker's cache, else from the pool.
-fn take_stack(worker: Option<&Shared>) -> Option<DefaultStack> {
-    if let Some(cached) = worker.and_then(|shared| lock(&shared.stacks).pop()) {
-        count(&COUNTERS.stacks_from_cache);
-        return Some(cached);
+/// A free stack for a task placed on `worker`, found under `WORKERS`
+/// (`workers`): from that worker's cache; for a worker about to start
+/// (`None`), which has none, from the first running worker's cache that
+/// holds one; else from the pool, else the `spare` the spawn mapped
+/// meanwhile. `None` when there is none, and the spawn maps one without
+/// the lock ([`map_stack`]). A running worker's own spawns do not take
+/// from another's cache: its tasks fill its own again, and taking from
+/// the others' would only move their next spawns to the pool. With the
+/// stack, the counter of where it came from, counted once the task is
+/// handed over ([`Found::count`]).
+fn free_stack(
+    workers: &[Arc<Shared>],
+    worker: Option<&Shared>,
+    spare: &mut Option<DefaultStack>,
+) -> Option<(DefaultStack, Found)> {
+    let cached = match worker {
+        Some(shared) => lock(&shared.stacks).pop(),
+        None => workers.iter().find_map(|shared| lock(&shared.stacks).pop()),
+    };
+    if let Some(stack) = cached {
+        return Some((stack, Found(&COUNTERS.stacks_from_cache)));
     }
-    let pooled = lock(&STACKS).pop();
-    if pooled.is_some() {
-        count(&COUNTERS.stacks_from_pool);
+    if let Some(stack) = lock(&STACKS).pop() {
+        return Some((stack, Found(&COUNTERS.stacks_from_pool)));
     }
-    pooled
+    spare
+        .take()
+        .map(|stack| (stack, Found(&COUNTERS.stacks_allocated)))
 }
 
-/// A free stack for a task placed on `worker` ([`take_stack`]), else a
-/// fresh one.
-fn new_stack(worker: Option<&Shared>) -> io::Result<DefaultStack> {
-    if let Some(stack) = take_stack(worker) {
-        return Ok(stack);
+/// Where a task's stack came from: its counter, bumped only when the task
+/// was handed over, so that every stack counted belongs to a spawn counted
+/// in [`SchedulerCounts::spawns`].
+struct Found(&'static AtomicU64);
+
+impl Found {
+    fn count(self) {
+        count(self.0);
     }
-    let stack = DefaultStack::new(TASK_STACK)?;
-    count(&COUNTERS.stacks_allocated);
-    Ok(stack)
+}
+
+/// A fresh stack, mapped while `WORKERS` is not held; counted as
+/// allocated when a task takes it ([`free_stack`]).
+fn map_stack() -> io::Result<DefaultStack> {
+    DefaultStack::new(TASK_STACK)
 }
 
 /// Keep a stack that a task left: in the cache of `worker`, the worker it
