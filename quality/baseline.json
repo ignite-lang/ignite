@@ -592,7 +592,7 @@
         },
         "llvm/terminald/release": {
           "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): every todod and terminald binary grew 16 to 48 % over v0.15.0 (LLVM release todod 2,107,792 to 2,837,352 B, terminald 1,512,792 to 2,242,824 B; Rust target release todod 1,011,216 to 1,219,336 B). Measured by building at each merge of PR 131: the readiness scheduler (1a8aba78) is 96 % of the LLVM and 97 % of the Rust-target growth, U32 nothing, the leak census 3 to 4 %, wave 8 under 1 %. Which part of the scheduler takes the space is not measured; story readiness-binary-size cuts it.",
-          "value": 2242824
+          "value": 1627008
         },
         "llvm/todod/dev": {
           "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): every todod and terminald binary grew 16 to 48 % over v0.15.0 (LLVM release todod 2,107,792 to 2,837,352 B, terminald 1,512,792 to 2,242,824 B; Rust target release todod 1,011,216 to 1,219,336 B). Measured by building at each merge of PR 131: the readiness scheduler (1a8aba78) is 96 % of the LLVM and 97 % of the Rust-target growth, U32 nothing, the leak census 3 to 4 %, wave 8 under 1 %. Which part of the scheduler takes the space is not measured; story readiness-binary-size cuts it.",
@@ -600,23 +600,23 @@
         },
         "llvm/todod/release": {
           "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): every todod and terminald binary grew 16 to 48 % over v0.15.0 (LLVM release todod 2,107,792 to 2,837,352 B, terminald 1,512,792 to 2,242,824 B; Rust target release todod 1,011,216 to 1,219,336 B). Measured by building at each merge of PR 131: the readiness scheduler (1a8aba78) is 96 % of the LLVM and 97 % of the Rust-target growth, U32 nothing, the leak census 3 to 4 %, wave 8 under 1 %. Which part of the scheduler takes the space is not measured; story readiness-binary-size cuts it.",
-          "value": 2837352
+          "value": 2140192
         },
         "rust/terminald/dev": {
           "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): every todod and terminald binary grew 16 to 48 % over v0.15.0 (LLVM release todod 2,107,792 to 2,837,352 B, terminald 1,512,792 to 2,242,824 B; Rust target release todod 1,011,216 to 1,219,336 B). Measured by building at each merge of PR 131: the readiness scheduler (1a8aba78) is 96 % of the LLVM and 97 % of the Rust-target growth, U32 nothing, the leak census 3 to 4 %, wave 8 under 1 %. Which part of the scheduler takes the space is not measured; story readiness-binary-size cuts it.",
-          "value": 7620632
+          "value": 7617776
         },
         "rust/terminald/release": {
           "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): every todod and terminald binary grew 16 to 48 % over v0.15.0 (LLVM release todod 2,107,792 to 2,837,352 B, terminald 1,512,792 to 2,242,824 B; Rust target release todod 1,011,216 to 1,219,336 B). Measured by building at each merge of PR 131: the readiness scheduler (1a8aba78) is 96 % of the LLVM and 97 % of the Rust-target growth, U32 nothing, the leak census 3 to 4 %, wave 8 under 1 %. Which part of the scheduler takes the space is not measured; story readiness-binary-size cuts it.",
-          "value": 911336
+          "value": 763184
         },
         "rust/todod/dev": {
           "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): every todod and terminald binary grew 16 to 48 % over v0.15.0 (LLVM release todod 2,107,792 to 2,837,352 B, terminald 1,512,792 to 2,242,824 B; Rust target release todod 1,011,216 to 1,219,336 B). Measured by building at each merge of PR 131: the readiness scheduler (1a8aba78) is 96 % of the LLVM and 97 % of the Rust-target growth, U32 nothing, the leak census 3 to 4 %, wave 8 under 1 %. Which part of the scheduler takes the space is not measured; story readiness-binary-size cuts it.",
-          "value": 8924288
+          "value": 8920888
         },
         "rust/todod/release": {
           "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): every todod and terminald binary grew 16 to 48 % over v0.15.0 (LLVM release todod 2,107,792 to 2,837,352 B, terminald 1,512,792 to 2,242,824 B; Rust target release todod 1,011,216 to 1,219,336 B). Measured by building at each merge of PR 131: the readiness scheduler (1a8aba78) is 96 % of the LLVM and 97 % of the Rust-target growth, U32 nothing, the leak census 3 to 4 %, wave 8 under 1 %. Which part of the scheduler takes the space is not measured; story readiness-binary-size cuts it.",
-          "value": 1219336
+          "value": 1038712
         }
       },
       "direction": "lower",
