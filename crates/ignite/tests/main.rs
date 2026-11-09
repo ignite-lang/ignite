@@ -48,6 +48,7 @@ mod rollout_repeat;
 mod run;
 mod siblings;
 mod site;
+mod size_adversary;
 mod slice10_llvm;
 mod slice16;
 mod slice17;
