@@ -42,9 +42,7 @@ test hello/greet puts the name in the sentence ... ok
 test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
 ```
 
-A test's full name is `<module>/<name>`. `ignite test` builds one test executable and runs
-every test in it; [Testing with ignite test](testing.md) has the details, and
-`--target all` runs the same tests on both targets.
+A test's full name is `<module>/<name>`. [Test it](testing.md) has more.
 
 ## An executable
 
@@ -88,32 +86,20 @@ Build and run it:
 
 ```sh
 ignite build hello.ignite
-target/ignite/hello/target/debug/hello
+target/ignite/hello/bin/hello
 ```
 
-Shortened, the output of both commands:
+The output of both commands:
 
 ```text
-note: building the generated Rust project in target/ignite/hello; compiler messages refer to generated code
-    Updating crates.io index
-   Compiling ignite-io v0.3.0 (…/crates/ignite-io)
-   Compiling hello v0.0.0 (…/target/ignite/hello)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.90s
-built target/ignite/hello/target/debug/hello
+built target/ignite/hello/bin/hello
 Hello, Ignite!
 ```
 
-The lines between `note:` and `built` are cargo's. A build into a fresh output directory
-resolves the substrate's dependencies from crates.io, so it needs network access.
+`ignite build` compiles the program on the default target, LLVM. It writes LLVM IR under
+`target/ignite/hello/llvm/`, and clang compiles and links it. It prints one `built <path>` line
+per executable. The [command-line reference](../reference/cli.md#ignite-build) has its
+options.
 
-`ignite build` writes a generated Rust project into `--out` (default `target/ignite/<package>`),
-runs cargo on it and prints one `built <path>` line per executable. The generated Rust is an
-artifact: never edit it. With `--target llvm` the same program is compiled through LLVM
-instead; see [Building for Rust and LLVM](targets.md).
-
-## What to read next
-
-- [The terminal walkthrough](terminal.md): a real system with a protocol, a console and two
-  executables.
-- [Language design](../design/index.md): why Ignite looks the way it does.
-- [Grammar](../reference/grammar.md) and [Types](../reference/types.md) for the details.
+Next: [the terminal system](terminal.md), a real system with a protocol, a console and two
+executables.

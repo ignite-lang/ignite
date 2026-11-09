@@ -6,7 +6,8 @@ number without fraction or exponent that fits the 64-bit `Int` is a `Number(Int)
 `-0`; every other number is a `Decimal` holding the token's exact text, never converted, so
 `encode` writes it back unchanged. `Decimal(text)` built by hand is not checked; `decimal`
 is the checked constructor. Strings are decoded completely, `\uXXXX` with surrogate pairs
-included; a lone surrogate is an error.
+included; a lone surrogate is an error. `read` and `write` bridge JSON to the
+[std.data](data.md) value model.
 
 - Layer: base.
 - Source: [`std/json.ignite`](https://github.com/ignite-lang/ignite/blob/main/std/json.ignite).
@@ -91,7 +92,63 @@ A name may repeat in an object, and RFC 8259 section 4 leaves open which member 
 keeps every member and `encode` writes every one back; `get`, and with it `text`, `int` and
 `bool`, reads the last one, so a server reads `{"channel":"/a","channel":"/b"}` as `/b`, the
 value a JavaScript client sees. `get_all` gives every member when the repetition matters.
-`read` (the bridge to `std.data`) refuses a repeated name instead.
+`read` (the bridge to `std.data`, below) refuses a repeated name instead.
+
+## The std.data bridge
+
+These functions read JSON into a [std.data](data.md) `Value` and write one back, the form every
+data format shares.
+
+```ignite,fragment
+fn to_data(json: Json) -> Value
+fn of_data(value: Value) -> Json
+fn read(text: Text) -> Result<Value, FormatError>
+fn read_with(text: Text, limits: DataLimits) -> Result<Value, FormatError>
+fn write(value: Value) -> Result<Text, FormatError>
+fn write_pretty(value: Value) -> Result<Text, FormatError>
+```
+
+| function | what it does |
+|---|---|
+| `to_data` | `Number` as `Int`, `Str` as `Text`, `Array` as `List`, `Object` as `Map`; `Null`, `Bool` and `Decimal` as they are |
+| `of_data` | the inverse; `Bytes` as `Str` of its base64, `Moment` as `Str` of its text. `of_data(to_data(j)) == j` for every `j` |
+| `read` | `read_with(text, DataLimits {})` |
+| `read_with` | the one value of `text` as `parse` reads it, then `to_data`, within `limits` |
+| `write` | `encode(of_data(value))` |
+| `write_pretty` | as `write`, one item or member per line, two spaces per level, `"name": value`; empty arrays and objects stay `[]` and `{}` |
+
+`read_with` refuses, each a `FormatError` at the byte named:
+
+| refused | message | at |
+|---|---|---|
+| more than `limits.size` bytes | `document larger than <n> bytes` | offset `n` |
+| nesting deeper than `limits.depth` | `nested deeper than <n>` | the bracket |
+| more than `limits.entries` items or members in one array or object | `more than <n> entries` | the first one too many |
+| a member name twice in one object | ``duplicate member `<name>` `` | its opening quote |
+| what `parse` refuses | the message of `parse` | the bad byte |
+
+`write` and `write_pretty` refuse a `Decimal` whose text is no JSON number, with
+``decimal `<text>` is not a JSON number``. `parse` and `encode` are unchanged by the bridge:
+`parse` keeps a repeated member name and bounds only the depth. JSON has no bytes and no
+moments, so a written `Bytes` or `Moment` reads back as `Text`.
+
+```ignite
+import std.json.{read, write, write_pretty}
+import std.data.Value
+
+test "read and write a data value" {
+  let value = read(r#"{"id": 1, "ratio": 0.5, "tags": []}"#)?
+  assert value == Value.Map([("id", Value.Int(1)), ("ratio", Value.Decimal("0.5")), ("tags", Value.List([]))])
+  assert write(value)? == r#"{"id":1,"ratio":0.5,"tags":[]}"#
+  assert write(Value.Bytes(b"fo"))? == r#""Zm8=""#
+  assert write_pretty(Value.List([Value.Int(1)]))? == "[\n  1\n]"
+  let duplicate = match read(r#"{"a": 1, "a": 2}"#) {
+    Ok(_) => ""
+    Err(error) => error.message
+  }
+  assert duplicate == "duplicate member `a`"
+}
+```
 
 ## Example
 

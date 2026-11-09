@@ -485,7 +485,7 @@ without waiting for a person.
 - Steps, as `v0.12.0` (`29f656f2`): one `chore(release): version X.Y.Z` commit bumping the
   workspace crates in `Cargo.toml` and `Cargo.lock` and the version the site names
   (`site/book/src/README.md`, `faq.md`, `guide/install.md`, `design/related-work.md`,
-  `design/inspirations.md`, a `roadmap.md` row, a milestone in `site/index.html`); a PR with a
+  `design/inspirations.md`, a `roadmap.md` row, a milestone and the version label (`eyebrow`) in `site/index.html`); a PR with a
   green `task gate`, merged; tag `vX.Y.Z` on the merge commit; `gh release create vX.Y.Z` with
   notes in the shape of `v0.12.0`'s: one bullet per merged PR, behaviour changes (a
   `CODEGEN_REVISION` bump means the first `ignite apply` rebuilds), what is not yet covered.

@@ -70,10 +70,12 @@ the module you mean, and the rest by glob.
 
 ## The standard library root
 
-`std.a.b` is the file `std/a/b.ignite` under the standard library root. By default the CLI reads the
-`std/` directory of the source tree it was built from (an installed `ignite` keeps reading its
-clone); `--std DIR` names another root. The modules are listed
-in the [standard library reference](std/index.md).
+`std.a.b` is the file `std/a/b.ignite` under the standard library root. By default the CLI
+reads `PREFIX/share/ignite/std` for a driver at `PREFIX/bin/ignite` when that directory
+exists. That is the layout of a release archive. Otherwise it reads the `std/` directory of
+the source tree it was built from, so an `ignite` installed with `cargo install` keeps reading
+its clone. `--std DIR` names another root. The modules are listed in the
+[standard library reference](std/index.md).
 
 ## Sibling modules
 
@@ -208,7 +210,7 @@ test "method calls" {
 - A fn field and a module-level fn that both match is E041 (ambiguous).
 - Declaring a fn named like a builtin method of its first parameter's type is E041 at the
   declaration: `fn len(t: Text) -> Int` can never be called as a method.
-- Arity is checked with the receiver counted. In v0.3.0 this also applies to a fn field
+- Arity is checked with the receiver counted. This also applies to a fn field
   that shares its name with a module-level fn in scope: `m.double(3)` with an imported
   `double(n: Int)` is E003 (two arguments). Give fn fields names that no imported fn uses.
 - Associated fns (`fn Server.local()`) are not methods: they are called on the type name,

@@ -1,9 +1,10 @@
-# The terminal walkthrough
+# The terminal system
 
 The reference system of Ignite is a small Telnet command console: a server, `terminald`, and
 a client, `tn`. It answers `help`, `echo`, `status` and `quit`. It lives in
-[`examples/terminal/`](https://github.com/ignite-lang/ignite/tree/main/examples/terminal) and
-is split over three files, and a fourth holds the full design declaration:
+[`examples/terminal/`](https://github.com/ignite-lang/ignite/tree/main/examples/terminal), in
+the clone of [Get the examples](install.md#get-the-examples). Three files make the system. A
+fourth holds the full design declaration:
 
 | file | what it holds |
 |---|---|
@@ -110,11 +111,8 @@ lines of at most `maximum_line` bytes, calls `respond` and renders the reply. `R
 
 ## Build and run
 
-From the clone:
-
 ```sh
-cargo build -p ignite-rt --features runner
-ignite build examples/terminal/terminal.ignite --runtime target/debug/libignite_rt.a
+ignite build examples/terminal/terminal.ignite
 ```
 
 ```text
@@ -145,68 +143,28 @@ terminal> quit
 bye
 ```
 
-Any Telnet client works too: `telnet 127.0.0.1 2323`. Both programs take `--port N`;
-`--port 0` binds a free port and the server's `listening on` line reports it. Inside the
-clone, `task server` and `task client` do the build and the start in one step.
+Any Telnet client works too: `telnet 127.0.0.1 2323`. Both programs take `--port N`.
+`--port 0` binds a free port, and the server's `listening on` line reports it:
 
-The executables' exit statuses:
-
-| status | meaning |
-|---|---|
-| 0 | `main` returned normally |
-| 1 | binding the listener failed, or `main` returned an error without an exit code of its own |
-| 2 | `--port` malformed or out of range |
-| 3 | `tn`: connecting to the server failed |
-| 4 | `tn`: the Telnet session ended with an error |
-
-## A failure ends its task, not the server
-
-Each connection runs in a task of its own. A failed `assert`, an integer overflow or an
-index out of range ends that one task and reports where it happened; the server keeps
-accepting:
+```sh
+target/ignite/terminal/bin/terminald --port 0
+```
 
 ```text
-task ended with error: index failed at <file>:<line>:<column>: index 5 out of range for length 2
+listening on 127.0.0.1:34631
 ```
 
-## The same transcript without a socket
+With no server on the port, `tn` exits 3:
 
-`commands.ignite` ends with a test that runs the whole Telnet session in-process.
-`Pipe.pair()` gives two connected in-memory streams, and `Telnet.serve` is generic over any
-`ByteStream`, so the test talks to the real protocol code without opening a port. Shortened,
-it reads:
-
-```ignite,fragment
-test "the terminal transcript over a pipe" {
-  let (client, server) = Pipe.pair()
-  client.set_idle_timeout(5000)?
-  spawn Telnet.serve(server, SessionLimits {}, Console { prompt = "terminal> ", respond = respond, maximum_line = 4096 })
-  assert read_once(client)? == "terminal> "
-  client.write_all(b"help\r\n")?
-  assert read_once(client)? == "help\r\necho <text>\r\nstatus\r\nquit\r\nterminal> "
-  client.write_all(b"quit\r\n")?
-  assert read_once(client)? == "bye\r\n"
-}
+```text
+error: connect 127.0.0.1:1: Connection refused (os error 111)
 ```
 
-Run the example's tests on the default target with the same runtime archive (`--target all`
-adds the Rust target; [Testing](testing.md#both-targets) has the details):
+SIGTERM stops `terminald` with exit 0. Every exit status of a compiled executable
+is in the [command-line reference](../reference/cli.md#compiled-executables).
 
-```sh
-ignite test examples/terminal/commands.ignite --runtime target/debug/libignite_rt.a
-```
+Each connection runs in a task of its own. A failed `assert`, an integer overflow or an index
+out of range ends that one task and reports where it happened, and the server keeps
+accepting. [Failures](../reference/tests.md#failures) gives the report's form.
 
-## With the Rust target
-
-```sh
-ignite build examples/terminal/terminal.ignite --target rust
-target/ignite/terminal/target/debug/terminald
-```
-
-The programs behave the same; cargo builds them, and the binaries are in
-`target/ignite/terminal/target/debug/` (in the clone, `task server` and `task client` build
-with the Rust target and start them, `TARGET=llvm` with the LLVM target). See
-[Building for Rust and LLVM](targets.md).
-
-Next: [testing with ignite test](testing.md), then
-[plan, explain, run and replay](operate.md) with the full declaration.
+Next: [an HTTP service](http.md), the todo example.

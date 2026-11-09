@@ -49,13 +49,19 @@ protocol Telnet {
 - The server's text, with Telnet commands removed and line ends as LF, goes to standard
   output.
 - When standard input is a terminal, it is switched to raw mode and a local line editor
-  sends each line: Enter sends the line, backspace erases the last character, Ctrl+D on a
-  partial line sends it without a line end, Ctrl+C sends IAC IP followed by the Synch (IAC
-  DM as urgent data), Ctrl+D on an empty line closes the write half, and Ctrl+] opens the
-  local `telnet> ` prompt, which knows `close`, `quit` and `help`.
+  sends each line. The editor's keys are in the table after this list.
 - Otherwise standard input is forwarded as NVT lines until it ends.
 - It ends with `Ok` when the server closes the connection, and with `Err` on a subnegotiation
   longer than `MAXIMUM_SUBNEGOTIATION`.
+
+| key | what the line editor does |
+|---|---|
+| Enter | sends the line |
+| backspace | erases the last character |
+| Ctrl+D on a partial line | sends it without a line end |
+| Ctrl+C | sends IAC IP followed by the Synch, IAC DM as urgent data |
+| Ctrl+D on an empty line | closes the write half |
+| Ctrl+] | opens the local `telnet> ` prompt, which knows `close`, `quit` and `help` |
 
 A role is called like an associated function: `Telnet.serve(stream, limits, console)`,
 usually through `spawn`.
@@ -84,7 +90,7 @@ type TelnetProfile {
   `maximum_subnegotiation`. The other fields are declared and validated, without behaviour
   yet.
 - `TelnetProfile` is the Telnet dialect a server speaks. Each field is a closed set written
-  as text; the defaults are what `Telnet` implements.
+  as text. The defaults are what `Telnet` implements.
 
 ## Component kinds
 
@@ -109,7 +115,7 @@ fn TelnetServer.validate(self: TelnetServer) -> List<Text>
 - `main` accepts connections and runs `Telnet.serve` under `sessions` in one task per
   connection. A session that fails ends its task, and the server goes on accepting.
 - `machine` gives `ignite run` a supervisor that restarts the server under `recovery`
-  ([std.policy](policy.md)); the `rollout` policy brings its rollout machine
+  ([std.policy](policy.md)). The `rollout` policy brings its rollout machine
   ([std.control](control.md)).
 - `validate` refuses session limits that admit no session: `sessions.maximum` below 1 or a
   non-positive `sessions.idle_timeout` (E120).
@@ -151,8 +157,8 @@ fn TelnetPrompt.validate(self: TelnetPrompt) -> List<Text>
   one line: the [`ProbeAttempt`](sli.md) in the model encoding. A refused connection, a
   stream closed before the prompt and a read past `timeout` are bad attempts
   (`received = false`) and exit 0. A target with no `--ref` binding, or a failed
-  `set_idle_timeout` or write of the line, ends `main` with the error: exit 1
-  (exit 2 for a malformed `--ref`).
+  `set_idle_timeout` or write of the line, ends `main` with the error: exit 1. A malformed
+  `--ref` is exit 2.
 - `machine` gives `ignite run` the probe scheduler: one attempt per `interval` from the
   target's first readiness, each with a deadline of `timeout`.
 - `validate` refuses an empty `expected_prompt` (E120). The timing rules (positive `interval`

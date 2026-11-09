@@ -19,3 +19,9 @@ level = 1
 
 [output.html.search]
 limit-results = 20
+
+[output.html.redirect]
+"/planned/web.html" = "../roadmap.html"
+"/planned/data.html" = "../roadmap.html"
+"/planned/simulation.html" = "../roadmap.html"
+"/planned/clients.html" = "../roadmap.html"

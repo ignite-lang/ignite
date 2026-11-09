@@ -18,92 +18,58 @@
 
 ## What it looks like
 
-A Telnet console system, the full program
-([`examples/terminal/terminal.ignite`](examples/terminal/terminal.ignite)):
+An excerpt of the Telnet console system
+[`examples/terminal/terminal.ignite`](examples/terminal/terminal.ignite):
 
 ```ignite
 system Terminal {
-  resource ingress: TcpListener {
-    address = "127.0.0.1"
-    port = 2323
-  }
-
-  component console: CommandConsole {
-    implementation = module("examples.terminal.commands")
-    prompt = "terminal> "
-    maximum_line = 4096 bytes
-  }
+  resource ingress: TcpListener { address = "127.0.0.1", port = 2323 }
 
   component server: TelnetServer {
     listener = ingress
     application = console
     executable = "terminald"
   }
-
-  component client: TelnetClient {
-    target = ingress
-    executable = "tn"
-  }
 }
 ```
 
-`ignite build` turns this into two programs: the server `terminald` and the client `tn`.
-The commands themselves are ordinary Ignite code
-([`commands.ignite`](examples/terminal/commands.ignite)):
-
-```ignite
-fn answer(command: Command) -> Reply = match command {
-  Help => Reply { lines = ["help", "echo <text>", "status", "quit"] }
-  Echo(text) => Reply { lines = [text] }
-  Status => Reply { lines = ["ready"] }
-  Quit => Reply { lines = ["bye"], action = Close }
-}
-```
-
-Tests live next to the code they check:
-
-```ignite
-test "slice takes byte offsets" {
-  assert slice("hello", 1, 4) == "ell"
-  assert "hello".slice(0, 5) == "hello"
-}
-```
+`ignite build` turns the whole file into two programs, the server `terminald` and the client
+`tn`. The book's [terminal walkthrough](https://ignite-lang.github.io/ignite/book/guide/terminal.html)
+reads the full program, its commands and its tests.
 
 ## Why Ignite
 
 - **Built for many agents compiling at once.** Ignite started as a replacement for Rust, whose
   compile times bring a machine to a halt when several coding agents build at the same time, and
-  caches did not fix that. An Ignite program is one file compiled in one pass: the todo HTTP
-  service builds in 0.286 s on the LLVM target against 3.125 s through cargo on the Rust target
-  (dev; release 0.733 s against 4.177 s; `AGENTS.md`, slice 14).
+  caches did not fix that. The todo HTTP service builds in 1.30 s on the LLVM target against
+  4.12 s through cargo on the Rust target. That is the dev profile at release v0.15.0 on the
+  dedicated timing host, from [`quality/trend.md`](quality/trend.md).
 - **Specified, then checked.** Ignite is meant as a native realization target for
   [ESS](https://github.com/beyond10x/ess), which turns intent into typed, machine-checkable
-  specifications with conformance suites. ESS stays language-independent; ESS-generated
-  conformance tests check an Ignite executable like any other (planned, see
-  [`docs/research/review-2026-11-04-ecosystem.md`](docs/research/review-2026-11-04-ecosystem.md)).
+  specifications with conformance suites. ESS stays language-independent. Its conformance tests
+  would check an Ignite executable like any other. This is planned, see
+  [`docs/research/review-2026-11-04-ecosystem.md`](docs/research/review-2026-11-04-ecosystem.md).
 - **Intent first.** Sizes, durations and ratios are typed quantities (`4096 bytes`,
   `15 minutes`, `99.9%`). Contracts, restart policies and deployments are declarations the
   compiler checks, not comments next to a YAML file.
-- **Protocols are code.** Telnet and HTTP are written in Ignite, in [`std/`](std/). Nothing
-  application-specific is hidden in the runtime.
-- **Two native targets.** LLVM (the default, built and linked with clang) and Rust
-  (`--target rust`, built with cargo). Both behave the same, down to the text of an error.
+- **Protocols are code.** Telnet, HTTP/1.1 and JSON-RPC are written in Ignite, in
+  [`std/`](std/). Nothing application-specific is hidden in the runtime.
+- **Two native targets.** LLVM is the default, built and linked with clang. Rust
+  (`--target rust`) is built with cargo. Both behave the same, down to the text of an error.
 - **A failure ends its task, not your server.** A failed `assert`, an integer overflow or an
-  out-of-range index stops the one session that hit it and reports the file, line and column:
-
-  ```text
-  task ended with error: index failed at <file>:<line>:<column>: index 5 out of range for length 2
-  task ended with error: + failed at <file>:<line>:<column>: 9223372036854775807 + 9
-  ```
+  out-of-range index stops the one session that hit it and reports the file, line and column.
 
 ## Try it
 
-You need Rust (stable), [go-task](https://taskfile.dev) and, for the LLVM target, clang.
+Install `ignite` as the book's [Install](https://ignite-lang.github.io/ignite/book/guide/install.html)
+page describes: the pre-built binary of a release on Linux x86_64, the toolchain image, or from
+this repository. From a clone, with Rust (stable) and clang:
 
 ```bash
-task compile      # build terminald and tn from examples/terminal/terminal.ignite (Rust target)
-task server       # start terminald on 127.0.0.1:2323
-task client       # connect with tn, in a second terminal
+cargo install --locked --path crates/ignite
+ignite build examples/terminal/terminal.ignite
+target/ignite/terminal/bin/terminald     # terminal 1
+target/ignite/terminal/bin/tn            # terminal 2
 ```
 
 ```text
@@ -118,26 +84,21 @@ terminal> quit
 bye
 ```
 
-Any Telnet client works too: `telnet 127.0.0.1 2323`.
-
-| more to try | command |
-|---|---|
-| the same programs built with LLVM | `task compile-llvm`, then `task server TARGET=llvm` |
-| the todo HTTP backend | `task compile-todo`, then `task todo-server` |
-| every inline test, both targets | `task test-ignite` |
-| the whole test suite | `task test` |
+Any Telnet client works too: `telnet 127.0.0.1 2323`. Contributors build and test the
+repository with [go-task](https://taskfile.dev): `task build`, `task test`, `task gate`.
+[`AGENTS.md`](AGENTS.md) lists every task.
 
 ## Status
 
-Ignite is an early prototype. The language, both targets, the standard library and the
-system declaration, planning (`ignite plan` and `ignite explain`), running (`ignite run`),
-journal replay (`ignite replay`) and local apply (`ignite host`, `ignite apply`, `ignite
-inspect`) work. The roadmap is in [`PLAN.md`](PLAN.md).
+Ignite is an early prototype. What works today, what is being built and what
+is only designed is on the book's
+[roadmap](https://ignite-lang.github.io/ignite/book/roadmap.html).
 
 ## Read more
 
 The website, [ignite-lang.github.io/ignite](https://ignite-lang.github.io/ignite/), has the
-guide, the language design and the reference; its source is [`site/`](site/).
+[book](https://ignite-lang.github.io/ignite/book/): a start, how-to guides, the concepts and the
+reference. Its source is [`site/`](site/).
 
 | document | what is in it |
 |---|---|

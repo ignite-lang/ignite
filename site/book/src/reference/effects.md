@@ -2,8 +2,8 @@
 
 An effect is something a function does to the world beyond computing its result: reading
 stdin, writing a socket, accepting a connection, ending the process. Ignite tracks effects in
-the type system. A function that performs none is **pure**; a function that performs some
-says which, or the compiler works it out. Why the language is built this way is in
+the type system. A function that performs none is **pure**. A function that performs some
+says which, or the compiler works it out. The reasons are in
 [Effects and capabilities](../design/effects.md).
 
 ## Effect names
@@ -34,7 +34,20 @@ name:
 | `x.read` | `x.read(n)` and `x.urgent_pending()` on a stream, `x.get(id)` and `x.values()` on a `Store`, `x.received_batches()` on a pipe end |
 | `x.write` | `x.write_all(b)`, `x.close()`, `x.set_idle_timeout(ms)`, `x.write_urgent(b)` on a stream; `x.next_id()`, `x.put(..)`, `x.remove(..)`, `x.update(..)`, `x.upsert(..)` on a `Store` |
 | `x.accept` | `x.accept()` on a `TcpListener` |
+| `x.read`, `x.write` | the methods of a `Directory` that read or change files ([`std.fs`](std/fs.md#methods)) |
+| `x.launch` | `x.start(..)`, `x.execute(..)` on a `Launcher` |
+| `x.wait`, `x.kill` | `x.wait()`, `x.kill()` on a `ChildProcess` |
+| `x.draw` | `x.random_bytes(n)` on an `Entropy` |
+| `x.argument` | `x.value()` on a `Setting`, `x.arguments()` on a `CommandLine` |
+| `x.variable` | `x.get(name)` on an `Environment` |
+| `x.send` | `send`, `try_send` and `close` on a `Sender<T>` |
+| `x.receive` | `receive`, `receive_within`, `closed` and `close` on a `Receiver<T>` |
 | `x.*` | every effect on `x` |
+
+A record that holds handles passes their effects through its own root: `requires [b.read]` on
+a record `b` with a `Directory` and a `Launcher` field grants the directory's reads only. The
+operations of each type are on its page: [`std.process`](std/process.md#effects),
+[`std.sync`](std/sync.md), [`std.io`](std/io.md#effects).
 
 `log(text)` writes a line to stderr and returns `Unit`, but it is not a tracked effect: it
 needs no `requires` entry and may be called where only pure code is allowed. `Process.flush()`,
@@ -95,8 +108,8 @@ A parameter effect of a callee is charged to the caller through the argument it 
 - A local bound from a parameter (`let s = conn`, a field `app.state`, a pattern binding)
   keeps that parameter as its root, so `app.state.put(..)` is an effect on `app`.
 - A value the function created itself, such as a stream from `listener.accept()` or
-  `TcpStream.connect(..)`, belongs to the function. Effects on it need not be declared;
-  creating it was the effect (`listener.accept`, `net.connect`).
+  `TcpStream.connect(..)`, belongs to the function. Effects on it need not be declared.
+  Creating it was the effect (`listener.accept`, `net.connect`).
 
 ```ignite
 fn echo<S: ByteStream>(stream: S) -> Result<Unit, IoError> requires [stream.read, stream.write] {
@@ -122,6 +135,11 @@ fn serve_one(listener: TcpListener) -> Result<Unit, IoError> requires [listener.
 - Property expressions in system declarations are evaluated at compile time and must be pure
   (E116).
 - A `test` block is an effect root: it may perform any effect without declaring it.
+- `K.main` of a component kind is an effect root too. Its effects are inferred, and the
+  generated `main` of the executable grants them all
+  ([Compiled executables](cli.md#compiled-executables)).
+- The hooks `K.validate`, `K.machine` and `K.classify` are pure, with a fixed signature. An
+  effect there is E109 ([Hooks](systems.md#hooks)).
 
 ## Effectful fn types
 
@@ -154,8 +172,8 @@ test "an effectful field" {
 - Using an effectful fn as a value where the expected type is a pure fn type, or where
   nothing expects a fn type that covers it, is E017.
 - A closure that performs effects on a captured value charges them to the function that
-  creates the closure, at the point of creation (E016 if that function's `requires` lacks
-  them).
+  creates the closure, at the point of creation. If that function's `requires` lacks
+  them, it is E016.
 - `xs.map(f)` on a `List` takes a closure, a named fn or a local holding one that performs
   effects of the function calling `map`: `ids.map(|id| store.get(id))` checks in a function with
   `requires [store.read]`. An effect the caller's `requires` does not cover, or one on `f`'s
@@ -165,7 +183,10 @@ test "an effectful field" {
 ## `spawn`
 
 `spawn f(args)` starts `f(args)` as a new task and returns `Unit` at once. Tasks run
-concurrently; each has its own thread in the substrate.
+concurrently. By default a task is a stackful task on one of a few worker threads, and a task
+that waits for IO parks itself, not its thread. Scheduling is cooperative: a task runs until
+it waits. With `IGNITE_IO=threads` in the environment at start, each task has a thread of its
+own. Tasks pass values through [`std.sync`](std/sync.md) channels.
 
 ```ignite
 fn echo<S: ByteStream>(stream: S) -> Result<Unit, IoError> requires [stream.read, stream.write] {
@@ -192,14 +213,13 @@ fn accept_loop(listener: TcpListener) -> Result<Unit, IoError> requires [listene
 
 ## `?` and failure
 
-`?` is error propagation, not an effect, but it is where effectful code most often meets the
-type system:
+`?` is error propagation, not an effect. Its rules:
 
 - In a function, `e?` takes a `Result<T, E>`. It needs the function to return
   `Result<_, E>` with the same `E` (E040: "`?` needs a function returning `Result`", or
   "`?` propagates `IoError`, the function returns errors of type `Text`").
-- `?` on an `Option` in a function is E040 ("`?` needs a `Result`, found `Option<Int>`");
-  convert it with `ok_or` from [std.option](std/option-result.md).
+- `?` on an `Option` in a function is E040 ("`?` needs a `Result`, found `Option<Int>`").
+  Convert it with `ok_or` from [std.option](std/option-result.md).
 - In a `test` block, `?` also takes an `Option`, and a failure fails the test. See
   [Tests and assertions](tests.md#-in-tests).
 

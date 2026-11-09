@@ -1,9 +1,9 @@
 # Diagnostics
 
-Every error Ignite reports about a program has a code, `E001` to `E129`. This page lists
+Every error Ignite reports about a program has a code, `E001` to `E151`. This page lists
 each code, what it means and which command reports it. Most codes come with a small program
-that triggers it; E032 and E125 show an excerpt, and E054, E114, E119 and E126 to E128 show
-the output of a repository fixture.
+that triggers it. E032 and E125 show an excerpt. E054, E114, E119, E126 to E128, E142 and
+E151 show the output of a repository fixture.
 
 ## Reading a diagnostic
 
@@ -39,20 +39,23 @@ check`, `ignite test`, `ignite build`, `ignite plan`, `ignite explain`, `ignite 
 
 | codes | phase | reported by |
 |---|---|---|
-| E001 to E099 | syntax, names, effects, types, and E020, an unsupported or malformed declaration | every command that reads a program |
-| E100 to E109, E116 | system declarations, from the type checker | every command that reads a program |
+| E001 to E089, E096, E099 | syntax, names, effects, types, and E020, an unsupported or malformed declaration | every command that reads a program |
+| E091, literal data | a catalogue constant, from the name checker | every command that reads a program |
+| E100 to E109, E116, E140, E141 | system declarations and capabilities, from the type checker | every command that reads a program |
+| E090 to E092 | conformance claims, from the evaluator | `check`, `conformance` |
 | E110 to E113, E115, E117, E118 | the compile-time evaluator | `check`, `plan`, `explain`, `run`, `replay` |
 | E114 | selecting an assembly | `plan`, `explain`, `run`, `replay` |
 | E119 | selecting an explain path | `explain` |
-| E120 to E124, E129 | run-time rules checked ahead of time | `check`, `plan`, `explain`, `run`, `replay` |
+| E120 to E124, E129, E150, E151 | run-time rules checked ahead of time | `check`, `plan`, `explain`, `run`, `replay` |
 | E125 to E128 | running and replaying | `run`, `replay` |
+| E142 | a setting a started member needs | `run`, `plan --for-apply` |
 
-Exit status when a program has an error, measured with the v0.3.0 CLI:
+Exit status when a program has an error:
 
 | command | exit status |
 |---|---|
-| `ignite check`, `ignite build`, `ignite plan`, `ignite explain`, `ignite replay` | 1 |
-| `ignite test`, `ignite run` | 2 |
+| `ignite check`, `ignite emit`, `ignite build`, `ignite plan`, `ignite explain`, `ignite replay` | 1 |
+| `ignite test`, `ignite run`, `ignite conformance` | 2 |
 
 `ignite check` prints nothing and exits 0 when the program is clean. A file that cannot be
 read is no diagnostic: it prints `error: <file>: <reason>` and exits 3. See
@@ -60,7 +63,7 @@ read is no diagnostic: it prints `error: <file>: <reason>` and exits 3. See
 
 The examples on this page marked checked are complete programs. Each one is checked against
 the standard library with `ignite check`, and the output shown below it is the real output,
-with the file named `example.ignite`. Most fixtures in the repository have more cases; each
+with the file named `example.ignite`. Most fixtures in the repository have more cases. Each
 section links them.
 
 ## Syntax
@@ -99,6 +102,24 @@ fn open() {
 
 ```text
 example.ignite:5:1: error[E002]: unexpected end of file, expected `}`
+```
+
+### E076 Rest pattern misplaced {#e076}
+
+A list pattern holds at most one `..`, and a named rest `..name` must be its last element.
+The two messages are ``a list pattern has at most one `..` `` and the one below. See
+[rest patterns](statements.md#list-patterns-and-rest).
+
+```ignite,fails=E076
+fn ends(xs: List<Int>) -> Int = match xs {
+  [first, .., last] => first + last
+  [..init, last] => last
+  _ => 0
+}
+```
+
+```text
+example.ignite:3:4: error[E076]: `..name` must be the last element of a list pattern
 ```
 
 ### E053 Test name empty or interpolated {#e053}
@@ -353,7 +374,7 @@ example.ignite:1:13: error[E057]: type parameter `T` of `Marker` is never used; 
 ### E099 Malformed bound {#e099}
 
 A bound that names an interface other than `ByteStream`, a type parameter with more than
-one bound, or `ByteStream` used as a type. `ByteStream` is the only interface; use it as a
+one bound, or `ByteStream` used as a type. `ByteStream` is the only interface. Use it as a
 bound, `<S: ByteStream>`.
 
 ```ignite,fails=E099
@@ -586,7 +607,7 @@ example.ignite:1:25: error[E045]: operator `<` is not defined for `Bool`
 ### E046 Match not exhaustive {#e046}
 
 A `match` that does not cover every value. The message names the missing cases. Ranges
-split `Int` and `Byte` into intervals; literal, list and constant patterns need a
+split `Int` and `Byte` into intervals. Literal, list and constant patterns need a
 catch-all arm.
 
 ```ignite,fails=E046
@@ -670,6 +691,23 @@ fn with_int() -> Int = same(1)
 example.ignite:3:24: error[E096]: `Int` does not implement `ByteStream`, which `S` of `same` requires; pass a `TcpStream`, a `PipeStream` or a type parameter bounded by `ByteStream`
 ```
 
+### E140 Path leaves its directory {#e140}
+
+A `Text` literal passed as the path of a `Directory` method is absolute, has a `..`
+component, or holds a NUL. The message ends in `absolute`, `leaves its root` or
+`contains NUL`. A path that is not a literal is checked at run time instead. See
+[`std.fs`](std/fs.md).
+
+```ignite,fails=E140
+fn load(files: Directory) -> Result<Bytes, IoError> requires [files.read] {
+  return files.read_file("../secrets")
+}
+```
+
+```text
+example.ignite:2:26: error[E140]: path `../secrets` of `read_file`: leaves its root
+```
+
 ## System declarations
 
 Systems, components, resources, contracts and assemblies are checked by the type checker,
@@ -680,8 +718,9 @@ See [Systems and assemblies](../design/systems.md).
 ### E020 Unsupported or malformed declaration {#e020}
 
 An unsupported or malformed resource, component, contract, policy or assembly: a resource
-kind other than `TcpListener` or `Store`, a kind that is no record type, two components with
-one executable name, or a `system` in a standard-library module.
+kind other than `TcpListener`, `Store`, `Directory`, `Launcher`, `Entropy`, `Setting`,
+`CommandLine` or `Environment`, a kind that is no record type, two components with one
+executable name, or a `system` in a standard-library module.
 
 ```ignite,fails=E020
 system S {
@@ -691,6 +730,24 @@ system S {
 
 ```text
 example.ignite:2:16: error[E020]: unsupported component kind `Int`: a kind is a record type declared in the standard library or the program
+```
+
+### E141 Flag used twice {#e141}
+
+The `flag` of a `Setting` or a `Directory` is also the flag of another resource of the
+system, or it is `--port` or `--ref`, which the generated `main` reads itself. The other
+message is ``flag `--port` of resource `<name>` is reserved: `--port` and `--ref` are the
+substrate's own``. See [Compiled executables](cli.md#compiled-executables).
+
+```ignite,fails=E141
+system Tool {
+  resource data: Directory { path = "data", flag = "--root" }
+  resource mode: Setting { flag = "--root" }
+}
+```
+
+```text
+example.ignite:3:35: error[E141]: flag `--root` of resource `mode` is also the flag of resource `data`; each flag names one resource
 ```
 
 ### E100 Brace literal without an expected type {#e100}
@@ -712,7 +769,7 @@ example.ignite:2:11: error[E100]: a brace literal `{ .. }` needs an expected typ
 ### E101 Quantity units do not fit {#e101}
 
 An operation that mixes quantity types, or a quantity with an `Int` where that is not
-allowed. `+`, `-` and comparisons take two values of one quantity type; `*` and `/` take a
+allowed. `+`, `-` and comparisons take two values of one quantity type. `*` and `/` take a
 quantity and an `Int`.
 
 ```ignite,fails=E101
@@ -757,9 +814,12 @@ example.ignite:3:33: error[E103]: `area` has no parameter `depth`; its parameter
 
 ### E104 Component or resource property {#e104}
 
-A property of a component or resource is wrong. There are three messages: a required
-field is missing, an output field (of type `Signal<T>`) is set, or `exposure = Loopback` is
-given with an address that is not a loopback address.
+A property of a component or resource is wrong: a required field is missing, an output field
+of type `Signal<T>` is set, or `exposure = Loopback` is given with an address that is not a
+loopback address. For the capability resources E104 also covers a `Directory` `path` that is
+empty or holds a NUL, a `Launcher` `maximum_children` outside 1 to 1024, a `flag` that is not
+`--` followed by lowercase letters, digits or `-`, and a property that is no literal where a
+literal is needed. An unknown property is E047.
 
 ```ignite,fails=E104
 system S {
@@ -894,6 +954,109 @@ system S {
 example.ignite:8:36: error[E116]: effectful call `noisy` in the property `input` of component `probe`: a property expression is pure
 ```
 
+## Conformance claims
+
+A protocol that declares `conforms [Spec]` makes a claim about every requirement of that spec
+in its scope ([grammar](grammar.md#protocol-clauses)). The evaluator checks the claim's
+statuses. `ignite check` and `ignite conformance` report these codes. E091's first rule comes
+from the name checker, so every command that reads a program reports it. Fixtures:
+[`crates/ignite/tests/fixtures`](https://github.com/ignite-lang/ignite/blob/main/crates/ignite/tests/fixtures),
+named `e090_*`, `e091_*` and `e092_*`. See [`ignite conformance`](cli.md#ignite-conformance).
+
+### E090 Requirement without a status, or with two {#e090}
+
+A MUST-class requirement in the scope of a conforming protocol has no status: no
+declaration names it in `satisfies`, and the protocol does not mark it `unsupported` or
+`not_applicable`. MUST class is `MUST`, `MUST NOT`, `REQUIRED`, `SHALL` and `SHALL NOT`. The
+other message is for a requirement with two statuses, such as `satisfies` and `unsupported`:
+``requirement `RFC7002.R2_2` has two statuses in `Echo`: unsupported and not_applicable``.
+
+```ignite,fails=E090
+import std.rfc.{Level, Requirement, Spec}
+
+const RFC7001: Spec = Spec {
+  rfc = 7001
+  title = "A line echo"
+  url = "https://example.invalid/rfc7001"
+  digest = "sha256:7001"
+  requirements = [R2_1]
+}
+
+const R2_1: Requirement = Requirement {
+  rfc = 7001
+  section = "2"
+  ordinal = 1
+  level = Must
+  text = "A server MUST echo every line."
+}
+
+protocol Echo conforms [RFC7001] {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"ok")
+  }
+}
+```
+
+```text
+example.ignite:19:25: error[E090]: requirement `RFC7001.R2_1` (MUST, section 2) is in scope of `Echo` and has no status; add `satisfies`, `unsupported` or `not_applicable`
+```
+
+### E091 Catalogue not literal data, or inconsistent {#e091}
+
+A constant of type `std.rfc.Requirement` or `std.rfc.Spec` must be literal data: no call, no
+interpolated text, no `if`, no name of another constant. The evaluator also checks the
+catalogue of the checked file. An ordinal must be 1 or more. A requirement's name must be its
+id, for example `R2_1` for section 2, ordinal 1. Each requirement is listed once in the
+`Spec`, has the spec's `rfc`, and a module declares one `Spec` constant.
+
+```ignite,fails=E091
+import std.rfc.{Level, Requirement, Spec}
+
+fn section() -> Text = "2"
+
+const RFC7001: Spec = Spec {
+  rfc = 7001
+  title = "A line echo"
+  url = "https://example.invalid/rfc7001"
+  digest = "sha256:7001"
+  requirements = [R2_1]
+}
+
+const R2_1: Requirement = Requirement {
+  rfc = 7001
+  section = section()
+  ordinal = 1
+  level = Must
+  text = "A server MUST echo every line."
+}
+```
+
+```text
+example.ignite:15:13: error[E091]: catalogue constant `R2_1` must be literal data, found a call
+```
+
+### E092 Requirement of a spec nobody conforms to {#e092}
+
+A `satisfies`, a `verifies` or a status names a requirement of a spec that its protocol, or
+no protocol of its module, conforms to.
+
+```ignite,fails=E092
+import std.rfc.rfc854.{RFC854}
+import std.rfc.rfc855.{RFC855}
+
+fn answer(line: Text) -> Text satisfies [RFC855.RP1_1] = line
+
+protocol Echo conforms [RFC854] scope { sections = ["99"] } {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"ok")
+  }
+}
+```
+
+```text
+example.ignite:4:42: error[E092]: `RFC855.RP1_1` belongs to RFC 855, which no protocol of this module conforms to
+```
+
 ## Evaluation and assemblies
 
 The compile-time evaluator computes every property and resolves each assembly through the
@@ -988,7 +1151,7 @@ example.ignite:30:5: error[E111]: `S.h` is both a bindings key and included by `
 
 ### E112 Binding not admitted {#e112}
 
-The binding's `admits` function refuses the member; the message carries its reason. Also a
+The binding's `admits` function refuses the member. The message carries its reason. Also a
 contract or policy used as a bindings key.
 
 ```ignite,fails=E112
@@ -1070,9 +1233,8 @@ example.ignite:29:5: error[E113]: binding of `S.w` does not include `S.h`, which
 
 The program declares several assemblies and the command got no `--assembly`, or
 `--assembly` names one that does not exist. `ignite check` accepts such a program, because
-it checks every assembly; `ignite plan`, `ignite explain`, `ignite run` and `ignite replay`
-must pick one. From the
-fixture
+it checks every assembly. `ignite plan`, `ignite explain`, `ignite run` and `ignite replay`
+must pick one. From the fixture
 [`e114_assembly_selection.ignite`](https://github.com/ignite-lang/ignite/blob/main/crates/ignite/tests/fixtures/e114_assembly_selection.ignite),
 which declares the assemblies `hosted` and `workstation`:
 
@@ -1087,7 +1249,7 @@ e114_assembly_selection.ignite:1:1: error[E114]: no assembly named `nowhere`: th
 
 Evaluating a property ran out of fuel, built a value that is too large, or nested calls too
 deeply. The limits are 1,000,000 fuel units (expressions, iterations, calls) per property
-expression, 1,000,000 nodes per value and 10,000 nested fn and closure calls; `--fuel N` on
+expression, 1,000,000 nodes per value and 10,000 nested fn and closure calls. `--fuel N` on
 `plan` and `explain` changes the fuel.
 
 ```ignite,fails=E115
@@ -1175,7 +1337,7 @@ them too. E121, E122 and E129 are checked per assembly. Fixtures:
 
 ### E120 Declaration refused by validate {#e120}
 
-A declaration that its kind's `validate` hook refuses; the message carries the reason the
+A declaration that its kind's `validate` hook refuses. The message carries the reason the
 hook returns. The standard library's hooks refuse, for example, an unknown outcome or time
 zone, `maximum_attempts` below 1, a `target` outside (0 %, 100 %], or a backoff whose
 initial delay is above its maximum.
@@ -1368,7 +1530,7 @@ example.ignite:15:58: error[E124]: `S.up.window` (5 seconds) is shorter than the
 ### E129 Hosted member lacks an entry {#e129}
 
 The assembly hosts a member with a binding that runs it, but the member's kind lacks a
-function the binding needs. The binding type's `entries` function names them: in
+function the binding needs. The binding type's `entries` function lists them: in
 `std.deploy`, `NativeProcess` needs `K.machine` and `ScheduledProbeHost` needs `K.main` and
 `K.machine`.
 
@@ -1413,10 +1575,64 @@ assembly a: Plan {
 example.ignite:32:5: error[E129]: `S.w` is hosted by a binding that runs it, but its kind `main.Worker` declares no `Worker.machine`
 ```
 
+### E150 Contract without classify {#e150}
+
+A contract's machine subscribes to a signal, and the contract's kind declares no
+`classify(self, sample: T) -> Bool` for the signal's element type `T`. The evaluator calls
+`classify` on every sample to decide whether it was good. See
+[System declarations](systems.md#hooks).
+
+```ignite,fails=E150
+import std.control.{Machine, Evaluator}
+import std.sli.{MissingData, rolling}
+
+type Beat {
+  alive: Bool
+}
+
+type Pulse {
+  interval: Duration = 10 seconds
+  beats: Signal<Beat>
+}
+
+type Watch {
+  signal: Signal<Beat>
+}
+
+fn Watch.machine(self: Watch, id: Text) -> Machine = Machine.Evaluate(Evaluator {
+  id = "{id}.evaluator"
+  contract = id
+  signal = self.signal.to_text()
+  target = 99%
+  window = rolling(1 hour)
+  missing_data = MissingData.InsufficientEvidence
+  minimum_completeness = 90%
+})
+
+system S {
+  component p: Pulse {}
+  contract c: Watch { signal = p.beats }
+}
+```
+
+```text
+example.ignite:29:32: error[E150]: contract `S.c` of kind `main.Watch` subscribes to `S.p.beats` of `main.Beat` but declares no `fn Watch.classify(self: Watch, sample: main.Beat) -> Bool`
+```
+
+### E151 Signal element is no outcome type {#e151}
+
+A signal that the assembly runs and a machine subscribes to carries a type that a probe
+cannot print as an outcome: a fn, a handle, a reference or a signal. From the fixture
+[`e151_undecodable_element.ignite`](https://github.com/ignite-lang/ignite/blob/main/crates/ignite/tests/fixtures/e151_undecodable_element.ignite):
+
+```text
+e151_undecodable_element.ignite:79:32: error[E151]: signal `S.p.beats` carries `fn() -> Int`; a probe outcome holds no fn, handle, reference or signal
+```
+
 ## Running and replaying
 
-Reported by `ignite run` and `ignite replay` only. `ignite check` and `ignite plan` accept
-these programs. `ignite run` exits 2 on E125 and E126; `ignite replay` exits 1 on E126 and E127.
+Reported by `ignite run` and `ignite replay`, and E142 also by `ignite plan --for-apply`. `ignite check`
+and plain `ignite plan` accept these programs. `ignite run` exits 2 on E125, E126 and E142. `ignite replay` exits 1 on E126 and E127.
 The fixtures in
 [`crates/ignite/tests/fixtures`](https://github.com/ignite-lang/ignite/blob/main/crates/ignite/tests/fixtures)
 name the command on their first line. See [Plan, explain, run and replay](../guide/operate.md).
@@ -1449,7 +1665,7 @@ The other message is ``assembly `<name>` runs nothing: no member it hosts has a 
 
 The state directory's journal was written for another model or another format version, or
 another `ignite run` or `ignite host` holds the state directory's lock, or the directory is
-the state of an `ignite host`. `ignite run` reports it before anything is built; `ignite replay`
+the state of an `ignite host`. `ignite run` reports it before anything is built. `ignite replay`
 reports it for a journal without a header or written for another model. Use another
 `--state`, or `--fresh` to start a new journal.
 
@@ -1484,14 +1700,26 @@ run with `--fuel 1`:
 {"at":{"ns":0,"type":"Duration"},"kind":"error","machine":"S.daemon.supervisor","seq":3,"value":{"code":"E128","report":"reducer of S.daemon.supervisor failed: the fuel limit of 1 units exceeded in std.control.step"}}
 ```
 
+### E142 Setting without a default {#e142}
+
+A member that `ignite run` or `ignite plan --for-apply` would start uses a `Setting` that has
+no `default`. Neither command passes setting values, so the member would exit 2 at every
+start. Both refuse the system before anything starts, and `plan --for-apply` before it
+contacts the host. Give the setting a `default`. `ignite check` accepts the program. From the
+fixture
+[`e142_setting_without_default.ignite`](https://github.com/ignite-lang/ignite/blob/main/crates/ignite/tests/fixtures/slice17/e142_setting_without_default.ignite):
+
+```text
+slice17/e142_setting_without_default.ignite:1:1: error[E142]: setting `Bench.tool` (`--tool`) has no `default`, and `Bench.runner` uses it: `ignite run` and `ignite apply` pass no setting values, so the member would exit 2 at every start; give it a `default`
+```
+
 ## Local apply
 
-`ignite host`, `ignite apply` and `ignite inspect` have no diagnostic codes of their own.
-`ignite plan --for-apply` checks the program first, so it reports the codes above. `ignite
-apply` answers with its exit status: 0 completed, 1 failed or recovery required, 2 plan,
-admission or revision rejected, 3 host or storage failure. `ignite run` on a directory that
-an `ignite host` owns is E126, and a host's journal that does not replay is E127. See
-[Local apply](../guide/apply.md).
+`ignite host`, `ignite apply`, `ignite inspect` and `ignite recover` have no diagnostic codes
+of their own. They answer with their exit statuses, listed in [Command line](cli.md#ignite-host).
+`ignite plan --for-apply` checks the program first, so it reports the codes above, E142
+among them. `ignite run` on a directory that an `ignite host` owns is E126, and a host's
+journal that does not replay is E127.
 
 ## Retired and unused codes
 
@@ -1503,4 +1731,4 @@ an `ignite host` owns is E126, and a host's journal that does not replay is E127
 | E021 | reserved, unused |
 | E097 | unused; `Store.new()` and `Pipe.pair()` outside a test are E051 |
 
-The compiler emits no code that this page does not list.
+Every code the compiler emits has an entry on this page.
