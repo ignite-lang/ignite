@@ -177,71 +177,76 @@ fn child_overflow_pooled() {
 }
 
 /// `docs/readiness-io.md` 4.1 as landed: "a connection accepted in `main`
-/// and served on a worker takes no pool lock and maps no stack". Read once
-/// the workers are warm (the second half of the connections), for one
-/// client and for the connect-8 shape of the unit's own test.
+/// and served on a worker takes no pool lock and maps no stack". Built
+/// deterministically with 2 workers: worker 1 holds a free stack in its
+/// cache and one task; the connection accepted in `main` next starts
+/// worker 2 (`choose` spreads while a worker may start), whose stack
+/// comes from the pool or a fresh map (`new_stack(None)`), never from
+/// worker 1's cache.
 #[test]
-fn connections_accepted_in_main_take_no_pool_lock_and_map_no_stack_once_warm() {
-    for clients in ["1", "8"] {
-        passed(&child(
-            "scheduler_adversary::child_accept_in_main",
-            &[("IGNITE_WORKERS", "4"), ("SCHEDULER_CLIENTS", clients)],
-        ));
-    }
+fn a_connection_accepted_in_main_maps_no_stack_while_one_is_free() {
+    passed(&child(
+        "scheduler_adversary::child_accept_while_a_stack_is_free",
+        &[("IGNITE_WORKERS", "2")],
+    ));
 }
 
 #[test]
-fn child_accept_in_main() {
+fn child_accept_while_a_stack_is_free() {
     use std::io::{Read, Write};
     if !in_child() {
         return;
     }
-    const CONNECTIONS: usize = 256;
-    let clients: usize = std::env::var("SCHEDULER_CLIENTS").unwrap().parse().unwrap();
+    // Worker 1 runs a task and the task it spawns (it stays on its worker
+    // while another may start): both stacks end in worker 1's cache.
+    spawn(|| spawn(|| {}));
+    wait_for_tasks();
+    let warm = scheduler_counts();
+    assert_eq!(
+        (warm.workers_started, warm.stacks_allocated),
+        (1, 2),
+        "{warm:?}"
+    );
+    // A session parked on worker 1 takes one of them; one stays free there.
+    let (release, held) = Channel::bounded::<bool>(1);
+    spawn(move || {
+        let _ = held.receive();
+    });
+    let parked = scheduler_counts();
+    assert_eq!(
+        parked.stacks_from_cache - warm.stacks_from_cache,
+        1,
+        "{parked:?}"
+    );
+    // A connection accepted in `main`.
     let listener = TcpListener::bind(LOCALHOST.to_string(), 0).unwrap();
     let port = listener.local_port() as u16;
-    let peers: Vec<_> = (0..clients)
-        .map(|_| {
-            std::thread::spawn(move || {
-                for _ in 0..CONNECTIONS / clients {
-                    let mut peer = std::net::TcpStream::connect((LOCALHOST, port)).unwrap();
-                    peer.set_read_timeout(Some(LIMIT)).unwrap();
-                    peer.write_all(b"ping").unwrap();
-                    let mut reply = [0u8; 4];
-                    peer.read_exact(&mut reply).unwrap();
-                    assert_eq!(&reply, b"ping");
-                }
-            })
-        })
-        .collect();
-    let mut warm = None;
-    for accepted in 0..CONNECTIONS {
-        if accepted == CONNECTIONS / 2 {
-            warm = Some(scheduler_counts());
+    let peer = std::thread::spawn(move || {
+        let mut peer = std::net::TcpStream::connect((LOCALHOST, port)).unwrap();
+        peer.set_read_timeout(Some(LIMIT)).unwrap();
+        peer.write_all(b"ping").unwrap();
+        let mut reply = [0u8; 4];
+        peer.read_exact(&mut reply).unwrap();
+        assert_eq!(&reply, b"ping");
+    });
+    let stream = listener.accept().unwrap();
+    spawn(move || {
+        if let Ok(Input::Data(bytes)) = stream.read(64) {
+            let _ = stream.write_all(bytes);
         }
-        let stream = listener.accept().unwrap();
-        spawn(move || {
-            if let Ok(Input::Data(bytes)) = stream.read(64) {
-                let _ = stream.write_all(bytes);
-            }
-        });
-    }
-    for peer in peers {
-        peer.join().unwrap();
-    }
+    });
+    let served = scheduler_counts();
+    peer.join().unwrap();
+    release.send(true);
     wait_for_tasks();
-    let warm = warm.unwrap();
-    let end = scheduler_counts();
-    println!("{clients} client(s): warm {warm:?}\nend {end:?}");
-    assert_eq!(end.spawns - warm.spawns, (CONNECTIONS / 2) as u64);
+    println!("warm {warm:?}\nparked {parked:?}\nserved {served:?}");
     assert_eq!(
         (
-            end.stacks_allocated - warm.stacks_allocated,
-            end.stacks_from_pool - warm.stacks_from_pool,
-            end.stacks_to_pool - warm.stacks_to_pool,
+            served.stacks_allocated - parked.stacks_allocated,
+            served.stacks_from_pool - parked.stacks_from_pool,
         ),
-        (0, 0, 0),
-        "{clients} client(s), the warm half: (mapped, from the pool, to the pool)\nwarm {warm:?}\nend {end:?}"
+        (0, 0),
+        "the connection mapped a stack or took the pool while worker 1 held a free one\nparked {parked:?}\nserved {served:?}"
     );
 }
 
