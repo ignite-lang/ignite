@@ -502,7 +502,7 @@ fn child_retry_storm() {
                         spawn(move || {
                             inner[id + 1].fetch_add(1, Ordering::SeqCst);
                         });
-                        if id % 3 == 0 {
+                        if id.is_multiple_of(3) {
                             ignite_io::clock::sleep(1_000_000);
                         }
                     });
