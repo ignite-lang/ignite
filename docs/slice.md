@@ -772,6 +772,7 @@ For `ignite build terminal.ignite --target rust --out DIR` (the default target u
 
 ```
 DIR/Cargo.toml          [package] name = <package last segment>, edition 2024, [workspace] empty,
+                        [profile.release] overflow-checks = true, codegen-units = 1, lto = true (release size, `docs/quality.md` row 3.2)
                         [dependencies] ignite-io = { path = <substrate> }, ignite-std = { path = "std" } when the program imports a std module
                         one [[bin]] per component: name = executable, path = src/bin/<executable>.rs
 DIR/src/lib.rs          the program's imports as `use`, every type, enum, protocol and fn

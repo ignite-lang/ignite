@@ -7208,6 +7208,15 @@ fn toml_string(text: &str) -> String {
     out
 }
 
+/// The generated crate's release profile: `Int` overflow fails as in a dev
+/// build (`docs/slice.md` section 4), and the program, `ignite-std`,
+/// `ignite-io` and the Rust standard library are optimised as one unit
+/// (fat LTO, one codegen unit), which keeps a release executable within
+/// 10 % of its v0.15.0 size with the readiness scheduler linked (row 3.2
+/// of `docs/quality.md`, story `readiness-binary-size`).
+const RELEASE_PROFILE: &str =
+    "\n[profile.release]\noverflow-checks = true\ncodegen-units = 1\nlto = true\n";
+
 fn cargo_toml(
     package_name: &str,
     executables: &[Executable],
@@ -7222,7 +7231,7 @@ fn cargo_toml(
     out.push_str("version = \"0.0.0\"\n");
     out.push_str("edition = \"2024\"\n");
     out.push_str("\n[workspace]\n");
-    out.push_str("\n[profile.release]\noverflow-checks = true\n");
+    out.push_str(RELEASE_PROFILE);
     out.push_str("\n[lib]\n");
     let lib = crate_name(package_name);
     if lib != package_name.replace('-', "_") {
