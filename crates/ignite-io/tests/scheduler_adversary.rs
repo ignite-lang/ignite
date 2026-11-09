@@ -379,3 +379,155 @@ fn child_stack_map_fails() {
         "a spawn that started no task counted as one: {after:?}"
     );
 }
+
+/// Wait until `live` tasks are left (`census` kind `Tasks`).
+fn tasks_left(live: i64) {
+    let deadline = Instant::now() + LIMIT;
+    while census::count(Kind::Tasks) != live && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(census::count(Kind::Tasks), live, "tasks left");
+}
+
+/// Pass 2, `docs/readiness-io.md` 4.1 as revised by ac15a522: "a
+/// connection accepted in `main` and served on a worker takes no pool lock
+/// and maps no stack while a worker holds a free one". Built with 2
+/// workers: worker 2 holds a free stack and two tasks, worker 1 one task
+/// and no free stack; the connection accepted next goes to worker 1, the
+/// least loaded, and `free_stack` looks only at its cache and the pool.
+#[test]
+fn a_connection_accepted_in_main_maps_no_stack_while_another_worker_holds_one() {
+    passed(&child(
+        "scheduler_adversary::child_accept_while_another_worker_holds_a_stack",
+        &[("IGNITE_WORKERS", "2")],
+    ));
+}
+
+#[test]
+fn child_accept_while_another_worker_holds_a_stack() {
+    use std::io::{Read, Write};
+    if !in_child() {
+        return;
+    }
+    let (release, held) = Channel::bounded::<bool>(4);
+    // Worker 1: one parked task.
+    let first = held.clone();
+    spawn(move || {
+        let _ = first.receive();
+    });
+    tasks_left(1);
+    // Worker 2 (started for it): a task that keeps one task of its own
+    // parked there and lets a second end, whose stack stays in worker 2's
+    // cache.
+    let second = held.clone();
+    spawn(move || {
+        let kept = second.clone();
+        spawn(move || {
+            let _ = kept.receive();
+        });
+        spawn(|| {});
+        let _ = second.receive();
+    });
+    tasks_left(3);
+    let set = scheduler_counts();
+    assert_eq!(set.workers_started, 2, "{set:?}");
+    // A connection accepted in `main`.
+    let listener = TcpListener::bind(LOCALHOST.to_string(), 0).unwrap();
+    let port = listener.local_port() as u16;
+    let peer = std::thread::spawn(move || {
+        let mut peer = std::net::TcpStream::connect((LOCALHOST, port)).unwrap();
+        peer.set_read_timeout(Some(LIMIT)).unwrap();
+        peer.write_all(b"ping").unwrap();
+        let mut reply = [0u8; 4];
+        peer.read_exact(&mut reply).unwrap();
+        assert_eq!(&reply, b"ping");
+    });
+    let stream = listener.accept().unwrap();
+    spawn(move || {
+        if let Ok(Input::Data(bytes)) = stream.read(64) {
+            let _ = stream.write_all(bytes);
+        }
+    });
+    let served = scheduler_counts();
+    peer.join().unwrap();
+    for _ in 0..3 {
+        release.send(true);
+    }
+    wait_for_tasks();
+    println!("set {set:?}\nserved {served:?}");
+    assert_eq!(
+        (
+            served.stacks_allocated - set.stacks_allocated,
+            served.stacks_from_pool - set.stacks_from_pool,
+        ),
+        (0, 0),
+        "the connection mapped a stack or took the pool while worker 2 held a free one\nset {set:?}\nserved {served:?}"
+    );
+}
+
+/// Pass 2, the take-back-and-replace path of ac15a522: many threads spawn
+/// at once while tasks end and workers start, so a spawn often finds no
+/// free stack, maps one unlocked and places again. Every task runs exactly
+/// once, every spawn counted has its stack counted, and the workers end.
+#[test]
+fn concurrent_spawns_through_the_retry_place_every_task_once() {
+    passed(&child(
+        "scheduler_adversary::child_retry_storm",
+        &[("IGNITE_WORKERS", "4")],
+    ));
+}
+
+#[test]
+fn child_retry_storm() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU8, Ordering};
+    if !in_child() {
+        return;
+    }
+    const SPAWNERS: usize = 8;
+    const EACH: usize = 300;
+    let runs: Arc<Vec<AtomicU8>> =
+        Arc::new((0..SPAWNERS * EACH * 2).map(|_| AtomicU8::new(0)).collect());
+    let spawners: Vec<_> = (0..SPAWNERS)
+        .map(|spawner| {
+            let runs = Arc::clone(&runs);
+            std::thread::spawn(move || {
+                for each in 0..EACH {
+                    let id = 2 * (spawner * EACH + each);
+                    let runs = Arc::clone(&runs);
+                    spawn(move || {
+                        runs[id].fetch_add(1, Ordering::SeqCst);
+                        // A task spawning a task: placed from a worker.
+                        let inner = Arc::clone(&runs);
+                        spawn(move || {
+                            inner[id + 1].fetch_add(1, Ordering::SeqCst);
+                        });
+                        if id % 3 == 0 {
+                            ignite_io::clock::sleep(1_000_000);
+                        }
+                    });
+                }
+            })
+        })
+        .collect();
+    for spawner in spawners {
+        spawner.join().unwrap();
+    }
+    wait_for_tasks();
+    let wrong: Vec<(usize, u8)> = runs
+        .iter()
+        .enumerate()
+        .map(|(id, ran)| (id, ran.load(Ordering::SeqCst)))
+        .filter(|&(_, ran)| ran != 1)
+        .collect();
+    let counts = scheduler_counts();
+    println!("{counts:?}");
+    assert!(wrong.is_empty(), "tasks not run exactly once: {wrong:?}");
+    assert_eq!(counts.spawns, (SPAWNERS * EACH * 2) as u64, "{counts:?}");
+    assert_eq!(stacks_found(&counts), counts.spawns, "{counts:?}");
+    let deadline = Instant::now() + LIMIT + LINGER;
+    while census::count(Kind::Workers) != 0 && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(census::count(Kind::Workers), 0, "a worker did not retire");
+}
