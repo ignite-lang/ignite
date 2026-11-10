@@ -37,6 +37,7 @@ mod leak;
 mod llvm;
 mod llvm_build;
 mod llvm_memory;
+mod nats;
 mod net_builtins;
 mod open_files_limit;
 mod plan;

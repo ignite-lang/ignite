@@ -130,6 +130,8 @@ fn ordinary_words_are_no_mention_and_every_other_occurrence_is() {
     assert!(mentions("https://example.org", "http"));
     assert!(mentions("TelnetServer", "telnet"));
     assert!(mentions("responsive", "resp"));
+    assert!(mentions("NatsMessage", "nats"));
+    assert!(mentions("std.protocol.nats", "nats"));
 }
 
 /// `std.rfc` and every catalogue under it are leaf (`docs/slice.md` 19.11).
@@ -350,7 +352,7 @@ fn std_modules_import_only_their_own_layer_or_below() {
     let protocols = protocol_names(&std);
     let catalogued = catalogued(&std);
     assert!(
-        ["telnet", "http", "jsonrpc", "resp"]
+        ["telnet", "http", "jsonrpc", "resp", "nats"]
             .iter()
             .all(|p| protocols.contains(*p)),
         "protocol names read from std/protocol/: {protocols:?}"
