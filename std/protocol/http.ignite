@@ -1937,7 +1937,11 @@ fn waiting_only(held: List<Receiver<Response>>) -> List<Receiver<Response>> {
 // within `deadline`, else `on_timeout`. The receiver is registered with
 // `holds` first, so the drain can close it and end the wait with what was
 // sent before; a register that is gone (the drain began) closes it at
-// once. It is closed after the wait, so a later `send` is false.
+// once. It is closed after the wait, so a later `send` is false. The wait
+// does not watch the stream: a held request whose client has gone keeps
+// its task, its receiver and its place in the register until a message,
+// the deadline or the drain ends the wait, so `deadline` bounds what a
+// vanished client costs.
 fn wait_held(holds: Holds, receiver: Receiver<Response>, deadline: Duration, on_timeout: Response) -> Response {
   match holds.events {
     Some(events) => if !events.send(Held(receiver)) {
@@ -1993,10 +1997,14 @@ fn upgrade<T: ByteStream, S>(stream: T, limits: HttpLimits, application: HttpApp
 // a lingering close, as for every rejection. With it, its answer to `head`
 // (asked as `asked` asks) and `limits.body` is sent, and the connection
 // goes on when the request keeps it, the answer does not ask to close and
-// the body has a known `length`: the body is read and dropped and the
-// bytes after it returned. Otherwise the answer is followed by a lingering
-// close; a chunked body over the limit always ends the connection, since
-// its remaining chunks are not decoded. `None` when the connection ends.
+// the body has a known `length` and was not announced with
+// `Expect: 100-continue`: the body is read and dropped and the bytes after
+// it returned. Otherwise the answer is followed by a lingering close; a
+// chunked body over the limit always ends the connection, since its
+// remaining chunks are not decoded, and so does a body the client waits to
+// send until it reads 100 (RFC 9110 section 10.1.1), which it may never
+// send, so that reading it would take the next request for it. `None`
+// when the connection ends.
 fn oversized<T: ByteStream, S>(stream: T, limits: HttpLimits, application: HttpApp<S, T>, head: Request, rest: Bytes, length: Int) -> IoResult<Option<Bytes>> {
   let hook: fn(state: S, head: Request, limit: ByteSize) -> Response requires [state.*] = match application.on_oversized {
     Some(hook) => hook
@@ -2006,11 +2014,18 @@ fn oversized<T: ByteStream, S>(stream: T, limits: HttpLimits, application: HttpA
     }
   }
   let answer = hook(application.state, asked(head), limits.body)
-  if !respond(stream, application, head, answer, keep_alive(head) && length >= 0)? {
+  if !respond(stream, application, head, answer, keep_alive(head) && length >= 0 && !expects_continue(head))? {
     linger(stream, limits)?
     return Ok(None)
   }
   discard(stream, rest, length)
+}
+
+// Whether `request` asks for 100 before it sends its body (RFC 9110
+// section 10.1.1): its `Expect` field is `100-continue`, in any case.
+fn expects_continue(request: Request) -> Bool = match header(request, "expect") {
+  Some(value) => trim_ows(value).to_lower() == "100-continue"
+  None => false
 }
 
 // Reads and drops the `length` bytes of a body of which `data` holds the

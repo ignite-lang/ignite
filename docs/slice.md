@@ -10629,8 +10629,13 @@ type HttpServer<S> { listener: TcpListener, application: HttpApp<S, TcpStream>, 
   stream, so the stream must be one of its parameters, and a fn value has one type: `T` is that
   type. `HttpServer<S>` keeps one parameter and names `HttpApp<S, TcpStream>`; a pipe test's
   `HttpApp { .. }` infers `PipeStream` from `Http.serve`'s stream: a record literal passed to a
-  generic fn is now typed against the parameter as far as the other arguments bind it, as a
-  closure was (`crates/ignite-types` typer, `generics::a_record_literal_argument_takes_its_type_parameters_from_the_call`).
+  generic fn is now typed against the parameter as far as the arguments before it bind it
+  (`crates/ignite-types` typer, `generics::a_record_literal_argument_takes_its_type_parameters_from_the_call`).
+  Only those before it: a closure is deferred to the second pass and sees every other argument,
+  a record literal is not, so a literal before the argument that binds its parameter still
+  cannot infer it (E042; `adversary_http_app::a_record_literal_before_the_argument_that_binds_its_parameter`,
+  ignored for `story:typer-record-literal-deferred`). `Http.serve` and `serve_connection` take
+  the stream first, so their literals infer `T`.
   A literal bound by `let` with no annotation still has no `T` (E042), so such a binding writes
   `let app: HttpApp<S, PipeStream> = ..`. A declaration that wrote
   `HttpApp<X>` now writes `HttpApp<X, TcpStream>` (two fixtures of `crates/ignite/tests`
@@ -10683,7 +10688,10 @@ drain). The answer goes through `checked` and is sent as `Respond`'s would be, s
 connection goes on after it. The receiver is closed after the wait, so the application's `send`
 to an answered request returns false. A held request holds up only its own connection: each
 connection is a task of its own, and a channel wait blocks a task, not a worker (30.1); requests
-pipelined behind it wait. Effects: the wait is the session's, on a receiver the reply returned,
+pipelined behind it wait. The wait does not watch the stream: a held request whose client has
+gone keeps its task, its receiver and its place in the register until a message, the deadline
+or the drain ends the wait, so the hold's deadline bounds what a vanished client costs.
+Effects: the wait is the session's, on a receiver the reply returned,
 so the handler's type keeps `requires [state.*]` and needs no effect of its own; no change to
 the effects of `crates/ignite-types` was needed for it.
 
@@ -10729,8 +10737,11 @@ the connection goes on when the request keeps it, the answer does not list `clos
 `length` is known: `discard` reads and drops the rest of the body and the session reads the
 next request from the bytes after it. Otherwise the answer is followed by `linger`, the
 lingering close `reject` uses. A chunked body over the limit always ends the connection, since
-its remaining chunks are not decoded; the discard of a `Content-Length` body is bounded by the
-length and by the idle timeout of each read, not by `limits.drain`.
+its remaining chunks are not decoded; so does a body announced with `Expect: 100-continue`
+(`expects_continue`, any case): such a client waits for 100 before it sends the body (RFC 9110
+section 10.1.1), the server never sends 100 for a body it refuses, and reading `length` bytes
+would take the client's next request for the body. The discard of a `Content-Length` body is
+bounded by the length and by the idle timeout of each read, not by `limits.drain`.
 
 The inline tests that compare `next_request` with `Reject(413)` read it through `next_with`,
 which maps `Oversized(head, ..)` to `rejected(head, 413)`, the session's answer without a hook;
@@ -10740,7 +10751,10 @@ their assertions are unchanged.
 
 No `satisfies` or `verifies` clause moved; `next_request`, `session` and `reject` keep theirs,
 and `ignite conformance std/protocol/http.ignite` prints the claims it printed before on both
-targets.
+targets. What this section adds is outside the imported catalogue: `std/rfc/rfc9110.ignite`
+imports sections 5, 6, 7.2 and 9.x of RFC 9110, not Upgrade (section 7.8), Expect (section
+10.1.1) or 413 Content Too Large (section 15.5.14), so no requirement of those sections is
+claimed, verified or reported as a gap; their behaviour here rests on the inline tests of NN.7.
 
 ### NN.7 Tests
 
