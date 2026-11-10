@@ -678,7 +678,7 @@ example.ignite:2:10: error[E052]: `assert` needs a `Bool` condition, found `Int`
 ### E096 ByteStream bound not met {#e096}
 
 A call passes a type that does not implement `ByteStream` where a type parameter bounded by
-`ByteStream` is expected. Pass a `TcpStream`, a `PipeStream` or a type parameter that has
+`ByteStream` is expected. Pass a `TcpStream`, a `PipeStream`, a `TlsStream` or a type parameter that has
 the bound itself.
 
 ```ignite,fails=E096
@@ -688,7 +688,7 @@ fn with_int() -> Int = same(1)
 ```
 
 ```text
-example.ignite:3:24: error[E096]: `Int` does not implement `ByteStream`, which `S` of `same` requires; pass a `TcpStream`, a `PipeStream` or a type parameter bounded by `ByteStream`
+example.ignite:3:24: error[E096]: `Int` does not implement `ByteStream`, which `S` of `same` requires; pass a `TcpStream`, a `PipeStream`, a `TlsStream` or a type parameter bounded by `ByteStream`
 ```
 
 ### E140 Path leaves its directory {#e140}

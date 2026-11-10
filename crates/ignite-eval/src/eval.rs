@@ -1518,7 +1518,8 @@ impl<'p> Evaluator<'p> {
                 | Builtin::ReceiverReceive
                 | Builtin::ReceiverReceiveWithin
                 | Builtin::ReceiverClosed
-                | Builtin::ReceiverClose,
+                | Builtin::ReceiverClose
+                | Builtin::TlsStreamAlpn,
                 _,
             ) => Err(internal(format!(
                 "builtin `{builtin:?}` has no value at compile time"
@@ -2404,6 +2405,7 @@ fn is_static(builtin: Builtin) -> bool {
             | Builtin::ProcessOpenFilesLimit
             | Builtin::TcpStreamConnectWithin
             | Builtin::ChannelBounded
+            | Builtin::TlsClient
     )
 }
 

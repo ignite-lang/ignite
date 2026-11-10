@@ -110,6 +110,7 @@ pub const BUILTIN_TYPES: &[&str] = &[
     "TcpListener",
     "TcpStream",
     "PipeStream",
+    "TlsStream",
     "Stdin",
     "Stdout",
     "Stderr",
@@ -175,6 +176,7 @@ pub const BUILTIN_STATICS: &[(&str, &str)] = &[
     ("Channel", "bounded"),
     ("Runtime", "census"),
     ("Runtime", "settle"),
+    ("Tls", "client"),
 ];
 
 /// Owners of [`BUILTIN_STATICS`] that are records of the standard library,
@@ -259,6 +261,7 @@ pub const BUILTIN_METHODS: &[&str] = &[
     "peer",
     "local",
     "timed_out",
+    "alpn",
 ];
 
 /// Free builtin functions.
@@ -337,6 +340,7 @@ const BUILTIN_STATIC_ARITIES: &[(&str, &str, usize)] = &[
     ("Channel", "bounded", 1),
     ("Runtime", "census", 0),
     ("Runtime", "settle", 2),
+    ("Tls", "client", 3),
 ];
 
 /// Builtin statics that are effectful substrate operations.
@@ -357,6 +361,7 @@ const EFFECTFUL_STATICS: &[(&str, &str)] = &[
     ("Process", "open_files_limit"),
     ("TcpStream", "connect_within"),
     ("Channel", "bounded"),
+    ("Tls", "client"),
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -569,6 +574,7 @@ pub fn static_effect(owner: &str, name: &str) -> Option<&'static str> {
         ("Process", "open_files_limit") => Some("process.limit"),
         ("Endpoint", "of") => Some("process.args"),
         ("TcpStream", "connect_within") => Some("net.connect"),
+        ("Tls", "client") => Some("net.connect"),
         _ => None,
     }
 }
@@ -849,6 +855,7 @@ fn is_builtin_name(name: &str) -> bool {
         || BUILTIN_FUNCTIONS.contains(&name)
         || BUILTIN_INTERFACES.contains(&name)
         || name == "Pipe"
+        || name == "Tls"
 }
 
 fn plural(count: usize, word: &str) -> String {
@@ -2392,9 +2399,9 @@ impl Checker {
             "Int" | "Text" | "Bool" | "Byte" | "U32" | "Bytes" | "Unit" | "IoError" | "Input" => {
                 return false;
             }
-            "TcpStream" | "PipeStream" | "TcpListener" | "Store" | "Stdin" | "Stdout"
-            | "Stderr" | "Directory" | "Launcher" | "ChildProcess" | "Entropy" | "Setting"
-            | "CommandLine" | "Environment" | "Sender" | "Receiver" => {
+            "TcpStream" | "PipeStream" | "TlsStream" | "TcpListener" | "Store" | "Stdin"
+            | "Stdout" | "Stderr" | "Directory" | "Launcher" | "ChildProcess" | "Entropy"
+            | "Setting" | "CommandLine" | "Environment" | "Sender" | "Receiver" => {
                 return true;
             }
             "List" | "Option" | "Result" | "Tuple" => {
@@ -4483,6 +4490,7 @@ pub fn builtin_applies(ty: &Type, method: &str) -> bool {
         "TcpListener" => matches!(method, "accept" | "local_port"),
         "TcpStream" => is_stream_method(method) || matches!(method, "peer" | "local" | "timed_out"),
         "PipeStream" => is_stream_method(method) || method == "received_batches",
+        "TlsStream" => is_stream_method(method) || method == "alpn",
         "Map" => matches!(
             method,
             "get" | "put" | "remove" | "keys" | "len" | "contains"

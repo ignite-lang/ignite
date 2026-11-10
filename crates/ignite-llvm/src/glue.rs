@@ -166,6 +166,7 @@ fn is_handle(ty: &Ty) -> bool {
         Ty::TcpListener
             | Ty::TcpStream
             | Ty::PipeStream
+            | Ty::TlsStream
             | Ty::Sender(_)
             | Ty::Receiver(_)
             | Ty::Capability(_)
@@ -1403,6 +1404,7 @@ fn debug_function(module: &mut Module<'_>, ty: &Ty) -> String {
         Ty::Fn(..) | Ty::EffectFn(..) => append_literal(module, &mut f, buf, "<fn>"),
         Ty::TcpStream => append_literal(module, &mut f, buf, "<TcpStream>"),
         Ty::PipeStream => append_literal(module, &mut f, buf, "<PipeStream>"),
+        Ty::TlsStream => append_literal(module, &mut f, buf, "<TlsStream>"),
         Ty::TcpListener => append_literal(module, &mut f, buf, "<TcpListener>"),
         Ty::Store(_) => append_literal(module, &mut f, buf, "<Store>"),
         Ty::Sender(_) => append_literal(module, &mut f, buf, "<Sender>"),

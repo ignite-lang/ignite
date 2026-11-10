@@ -418,6 +418,7 @@ fn generate_program(
         || !executable_infos.is_empty();
     let cargo_toml = cargo_toml(
         &package_name,
+        &lib_rs,
         &executables,
         &options.substrate_path,
         uses_std,
@@ -1390,6 +1391,7 @@ pub fn generate_tests(
     }];
     let cargo_toml = cargo_toml(
         TEST_PACKAGE,
+        &lib,
         &executables,
         &options.substrate_path,
         true,
@@ -1740,9 +1742,9 @@ fn rust_type_in(ty: &Type, params: &BTreeSet<String>) -> String {
         "Unit" => "()".to_string(),
         "Tuple" => format!("({})", args.join(", ")),
         "List" => generic("Vec"),
-        "TcpListener" | "TcpStream" | "PipeStream" | "Stdin" | "Stdout" | "Stderr" | "Input"
-        | "IoError" | "Exposure" | "Directory" | "Launcher" | "ChildProcess" | "Entropy"
-        | "Setting" | "CommandLine" | "Environment" => {
+        "TcpListener" | "TcpStream" | "PipeStream" | "TlsStream" | "Stdin" | "Stdout"
+        | "Stderr" | "Input" | "IoError" | "Exposure" | "Directory" | "Launcher"
+        | "ChildProcess" | "Entropy" | "Setting" | "CommandLine" | "Environment" => {
             format!("::ignite_io::{}", ty.name.name)
         }
         "Store" => generic("::ignite_io::Store"),
@@ -2727,6 +2729,7 @@ impl<'a> Generator<'a> {
             Ty::Capability(kind) => format!("::ignite_io::{}", kind.name()),
             Ty::TcpStream => "::ignite_io::TcpStream".to_string(),
             Ty::PipeStream => "::ignite_io::PipeStream".to_string(),
+            Ty::TlsStream => "::ignite_io::TlsStream".to_string(),
             Ty::IoError => "::ignite_io::IoError".to_string(),
             Ty::Input => "::ignite_io::Input".to_string(),
             Ty::Param(name) => ident(name),
@@ -4721,6 +4724,10 @@ impl<'a> Generator<'a> {
                 format!("::ignite_io::Channel::bounded({capacity})")
             }
             ("Pipe", "pair", []) => "::ignite_io::Pipe::pair()".to_string(),
+            ("Tls", "client", [stream, server_name, options]) => format!(
+                "::ignite_io::TlsStream::client({stream}, {server_name}, {})",
+                substrate_tls_options(options)
+            ),
             ("Directory", "temporary", []) => "::ignite_io::Directory::temporary()".to_string(),
             ("Launcher", "new", []) => "::ignite_io::Launcher::new()".to_string(),
             ("Entropy", "new", []) => "::ignite_io::Entropy::new()".to_string(),
@@ -4910,7 +4917,8 @@ impl<'a> Generator<'a> {
                 | Builtin::PipeStreamSetIdleTimeout
                 | Builtin::PipeStreamReceivedBatches
                 | Builtin::PipeStreamWriteUrgent
-                | Builtin::PipeStreamUrgentPending,
+                | Builtin::PipeStreamUrgentPending
+                | Builtin::TlsStreamAlpn,
             )) => {
                 let r = self.receiver(receiver);
                 let a = self.args(args);
@@ -5908,6 +5916,7 @@ impl<'a> Generator<'a> {
             Ty::Fn(..) | Ty::EffectFn(..) => fixed("<fn>"),
             Ty::TcpStream => fixed("<TcpStream>"),
             Ty::PipeStream => fixed("<PipeStream>"),
+            Ty::TlsStream => fixed("<TlsStream>"),
             Ty::TcpListener => fixed("<TcpListener>"),
             Ty::Store(_) => fixed("<Store>"),
             Ty::Sender(_) => fixed("<Sender>"),
@@ -6701,6 +6710,22 @@ const INVOCATION_FIELDS: [&str; 8] = [
     "input",
 ];
 const CHILD_EXIT_FIELDS: [&str; 5] = ["ending", "code", "stdout", "stderr", "dropped"];
+/// The fields of `std.tls.TlsOptions`, which `ignite_io::TlsOptions` has
+/// under the same names.
+const TLS_OPTIONS_FIELDS: [&str; 4] = ["alpn", "authorities", "verify", "handshake_timeout"];
+
+/// The `ignite_io::TlsOptions` of the generated `std.tls.TlsOptions`
+/// `value`, field by field.
+fn substrate_tls_options(value: &str) -> String {
+    let fields: Vec<String> = TLS_OPTIONS_FIELDS
+        .iter()
+        .map(|f| format!("{f}: o.{}", ident(f)))
+        .collect();
+    format!(
+        "{{ let o = {value}; ::ignite_io::TlsOptions {{ {} }} }}",
+        fields.join(", ")
+    )
+}
 
 /// The `ignite_io::Invocation` of the generated `std.process.Invocation`
 /// value `value`, field by field.
@@ -7357,11 +7382,16 @@ const RELEASE_PROFILE: &str =
 
 fn cargo_toml(
     package_name: &str,
+    lib_rs: &str,
     executables: &[Executable],
     substrate: &Path,
     uses_std: bool,
     feature: Option<&str>,
 ) -> String {
+    let mut features: Vec<&str> = feature.into_iter().collect();
+    let mut sources = vec![lib_rs];
+    sources.extend(executables.iter().map(|e| e.source.as_str()));
+    features.extend(substrate_features(&sources));
     let substrate = substrate.to_string_lossy().replace('\\', "/");
     let mut out = String::new();
     out.push_str("[package]\n");
@@ -7386,7 +7416,7 @@ fn cargo_toml(
         );
     }
     out.push_str("\n[dependencies]\n");
-    out.push_str(&ignite_io_dependency(&substrate, feature));
+    out.push_str(&ignite_io_dependency(&substrate, &features));
     if uses_std {
         let _ = writeln!(out, "{STD_PACKAGE} = {{ path = \"std\" }}");
     }
@@ -7420,18 +7450,35 @@ fn std_cargo_toml(substrate: &Path, lib_rs: &str) -> String {
     out.push_str("\n[lib]\n");
     out.push_str("path = \"src/lib.rs\"\n");
     out.push_str("\n[dependencies]\n");
-    out.push_str(&ignite_io_dependency(&substrate, None));
+    out.push_str(&ignite_io_dependency(
+        &substrate,
+        &substrate_features(&[lib_rs]),
+    ));
     out
 }
 
-/// The `ignite-io` dependency line, with `feature` enabled when given.
-fn ignite_io_dependency(substrate: &str, feature: Option<&str>) -> String {
-    match feature {
-        Some(feature) => format!(
-            "ignite-io = {{ path = {}, features = [{}] }}\n",
-            toml_string(substrate),
-            toml_string(feature)
-        ),
-        None => format!("ignite-io = {{ path = {} }}\n", toml_string(substrate)),
+/// The optional `ignite-io` features a crate of Rust `sources` needs:
+/// `tls` when one names a TLS item of the substrate (`::ignite_io::Tls..`),
+/// so a program without TLS builds without rustls and ring. Cargo unifies
+/// features, so the crate (program or `ignite-std`) that names one turns it
+/// on for the build.
+fn substrate_features(sources: &[&str]) -> Vec<&'static str> {
+    if sources.iter().any(|s| s.contains("::ignite_io::Tls")) {
+        vec!["tls"]
+    } else {
+        Vec::new()
     }
+}
+
+/// The `ignite-io` dependency line, with `features` enabled.
+fn ignite_io_dependency(substrate: &str, features: &[&str]) -> String {
+    if features.is_empty() {
+        return format!("ignite-io = {{ path = {} }}\n", toml_string(substrate));
+    }
+    let features: Vec<String> = features.iter().map(|f| toml_string(f)).collect();
+    format!(
+        "ignite-io = {{ path = {}, features = [{}] }}\n",
+        toml_string(substrate),
+        features.join(", ")
+    )
 }

@@ -1,0 +1,120 @@
+package std.tls
+
+// TLS client sessions (`docs/slice.md`, section "TLS client sessions"):
+// a session over a `TcpStream` that is itself a `ByteStream`, so a
+// protocol role generic over its stream (`S: ByteStream`) runs over TLS
+// unchanged. The engine is rustls in the substrate (`crates/ignite-io`);
+// this module declares the options record, the error test and the tests.
+//
+//   Tls.client(stream: TcpStream, server_name: Text, options: TlsOptions)
+//     -> Result<TlsStream, IoError>                    effect net.connect
+//
+// performs the handshake on `stream` and returns the session. The
+// session holds the stream: a copy of either shares the socket, and the
+// raw stream must not be written to afterwards. `server_name` is sent as
+// SNI and is the name the certificate must be valid for (a DNS name or an
+// IP address). A `TlsStream` has the six `ByteStream` methods (`read`,
+// `write_all`, `close`, `set_idle_timeout`, `write_urgent`,
+// `urgent_pending`) and
+//
+//   session.alpn() -> Text   the protocol the server chose from
+//                            `options.alpn`, empty when it chose none
+//
+// `close` sends close_notify, then closes the write half. A read returns
+// `Eof` after the server's close_notify or when the idle timeout passes;
+// a server that closes the connection without close_notify is an error
+// (the stream may have been cut short). Urgent data is no TLS concept:
+// `write_urgent` is refused and `urgent_pending` is always false.
+//
+// Every failure is an `IoError` whose message starts with
+// `tls <server_name>: `. A certificate the client does not accept is
+// `tls <server_name>: certificate refused: <reason>`, `<reason>` one of
+// `expired`, `not yet valid`, `not valid for <server_name>`, `unknown
+// issuer`, `revoked` or the engine's own text; `certificate_refused`
+// tells those apart from the rest. A handshake longer than
+// `handshake_timeout` is `tls <server_name>: handshake timed out after
+// <ms> ms`.
+
+import std.text.{contains}
+
+// How a client session verifies its server and what it offers.
+//
+// - `alpn`: the protocols offered in the handshake, most preferred first;
+//   none offered when empty.
+// - `authorities`: PEM certificates trusted instead of the system roots;
+//   empty for the system roots (`SSL_CERT_FILE`, `SSL_CERT_DIR` or the
+//   system bundle).
+// - `verify`: whether the server's certificate is checked at all; only
+//   for a peer whose identity does not matter.
+// - `handshake_timeout`: the longest the handshake may take, from the
+//   call on.
+type TlsOptions {
+  alpn: List<Text> = []
+  authorities: Text = ""
+  verify: Bool = true
+  handshake_timeout: Duration = 10 seconds
+}
+
+// Whether `error` is the refusal of the server's certificate.
+fn certificate_refused(error: IoError) -> Bool = error.message.contains(": certificate refused: ")
+
+test "the default options verify against the system roots within 10 seconds" {
+  let options = TlsOptions {}
+  assert options.verify
+  assert options.authorities == ""
+  assert options.alpn.is_empty()
+  assert options.handshake_timeout == 10 seconds
+}
+
+test "the handshake deadline bounds a server that never answers" {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let stream = TcpStream.connect("127.0.0.1", listener.local_port())?
+  let started = Clock.monotonic()
+  let opened = Tls.client(stream, "localhost", TlsOptions { handshake_timeout = 200 ms })
+  let waited = Clock.monotonic() - started
+  assert waited >= 180 ms
+  assert waited < 5 seconds
+  assert match opened {
+    Ok(_) => false
+    Err(e) => e.message == "tls localhost: handshake timed out after 200 ms" && !certificate_refused(e)
+  }
+}
+
+test "a handshake timeout that is not positive is refused" {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let stream = TcpStream.connect("127.0.0.1", listener.local_port())?
+  assert match Tls.client(stream, "localhost", TlsOptions { handshake_timeout = 0 ms }) {
+    Ok(_) => false
+    Err(e) => e.message == "tls localhost: handshake timeout 0 ms is not positive"
+  }
+}
+
+test "a peer that speaks no TLS fails with an IoError" {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let stream = TcpStream.connect("127.0.0.1", listener.local_port())?
+  let server = listener.accept()?
+  server.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n")?
+  server.close()?
+  assert match Tls.client(stream, "localhost", TlsOptions {}) {
+    Ok(_) => false
+    Err(e) => e.message.starts_with("tls localhost: ") && !certificate_refused(e)
+  }
+}
+
+test "an invalid server name is refused before the handshake" {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let stream = TcpStream.connect("127.0.0.1", listener.local_port())?
+  assert match Tls.client(stream, "not a name", TlsOptions {}) {
+    Ok(_) => false
+    Err(e) => e.message == "tls: invalid server name `not a name`"
+  }
+}
+
+test "authorities without a certificate are refused" {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let stream = TcpStream.connect("127.0.0.1", listener.local_port())?
+  assert match Tls.client(stream, "localhost", TlsOptions { authorities = "no pem here" }) {
+    Ok(_) => false
+    Err(e) => e.message == "tls localhost: no certificate in the authorities"
+  }
+}
