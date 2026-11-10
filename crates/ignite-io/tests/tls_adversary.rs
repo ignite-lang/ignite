@@ -1,5 +1,5 @@
-//! Adversary cases of `story:tls-client` (`docs/slice.md`, section "TLS
-//! client sessions"): `TlsStream::client` against local TLS servers that
+//! Adversary cases of `story:tls-client` (`docs/slice.md`
+//! 38):`TlsStream::client` against local TLS servers that
 //! misbehave, with authorities generated in the test; loopback only, no
 //! network. Every client call runs on its own thread under a deadline, so
 //! a hang is a red case and not a stuck suite. The cases under both IO

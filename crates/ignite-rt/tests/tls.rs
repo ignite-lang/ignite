@@ -1,5 +1,5 @@
-//! The TLS entries of the C ABI (`docs/slice.md`, section "TLS client
-//! sessions"), called as generated code calls them: the session is a
+//! The TLS entries of the C ABI (`docs/slice.md` 38),
+//!called as generated code calls them: the session is a
 //! handle of the one table, and `std.tls.TlsOptions` crosses as
 //! `IgniteTlsOptions`. The handshake itself is `ignite-io`'s and tested
 //! there; these cases need no TLS server.

@@ -282,7 +282,7 @@ pub use channel::{
     ignite_rt_channel_try_send,
 };
 
-// TLS client sessions (`docs/slice.md`, section "TLS client sessions"):
+// TLS client sessions (`docs/slice.md` 38):
 // the entries of `crate::tls`, after the tests for the same reason.
 mod tls;
 pub use tls::{

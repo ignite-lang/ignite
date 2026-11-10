@@ -1,7 +1,7 @@
 //! Adversary pass 1 on story `http-app-connection`: the typer rule that a
 //! record literal passed to a generic fn is typed against the parameter
 //! "as far as the other arguments bind it, as a closure was"
-//! (`docs/slice.md` NN.1, `crates/ignite-types/src/typer.rs` `infer`).
+//! (`docs/slice.md` 37.1, `crates/ignite-types/src/typer.rs` `infer`).
 
 use ignite_check::{Modules, check_module};
 use ignite_syntax::SourceFile;

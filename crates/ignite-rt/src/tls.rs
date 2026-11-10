@@ -1,4 +1,4 @@
-//! TLS client sessions (`docs/slice.md`, section "TLS client sessions"):
+//! TLS client sessions (`docs/slice.md` 38):
 //! the C ABI over `ignite_io::TlsStream`. A session is a handle of the one
 //! table in `crate::net`, with its generation and reuse rules;
 //! `ignite_rt_tcp_own` and `ignite_rt_tcp_release` take it as any handle.

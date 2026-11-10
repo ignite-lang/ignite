@@ -1,6 +1,6 @@
 package std.tls
 
-// TLS client sessions (`docs/slice.md`, section "TLS client sessions"):
+// TLS client sessions (`docs/slice.md` 38):
 // a session over a `TcpStream` that is itself a `ByteStream`, so a
 // protocol role generic over its stream (`S: ByteStream`) runs over TLS
 // unchanged. The engine is rustls in the substrate (`crates/ignite-io`);

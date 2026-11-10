@@ -69,7 +69,7 @@ with its reason, or a derivation from the program.
 |---|---|---|
 | `crates/ignite-check/src/lib.rs` | `std.net`, `std.io`, `std.fs`, `std.process` | `SUBSTRATE_MODULES`, the home modules of the builtins; `std.net` is also the example of the E031 hint |
 | `crates/ignite-check/src/lib.rs` | `std.rfc` | `RFC_MODULE`, the clause vocabulary the checker, the type checker and the evaluator read by name (`docs/slice.md` 19.3) |
-| `crates/ignite-types/src/builtins.rs` | `std.process`, `std.net`, `std.runtime`, `std.tls` | `Invocation`, `ChildExit`, `Endpoint`, `Census` and `TlsOptions`, record types in builtin signatures (14.14, 21.5, 32, "TLS client sessions") |
+| `crates/ignite-types/src/builtins.rs` | `std.process`, `std.net`, `std.runtime`, `std.tls` | `Invocation`, `ChildExit`, `Endpoint`, `Census` and `TlsOptions`, record types in builtin signatures (14.14, 21.5, 32, 38) |
 | `crates/ignite-types/src/lib.rs` | `std.control` | `CONTROL_MODULE`: the hook `K.machine` returns `std.control.Machine`, and the run driver calls its reducers (16.6) |
 | `crates/ignite-eval/src/model.rs` | `std.sli` | `SLI_MODULE`: `Window`, which E123 compares with a probe interval, and the `Sample` and `Verdict` the run driver builds (22.3) |
 | `crates/ignite-eval/src/model.rs` | `std.deploy` | `DEPLOY_MODULE`: `admits`, `includes` and `entries` resolve an assembly and are asked about its `Member` (15.6, 16.17) |

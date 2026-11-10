@@ -1,5 +1,5 @@
-//! TLS client sessions end to end (`docs/slice.md`, section "TLS client
-//! sessions"): `Tls.client` and `TlsStream` in inline tests run by
+//! TLS client sessions end to end (`docs/slice.md` 38):
+//!`Tls.client` and `TlsStream` in inline tests run by
 //! `ignite test` on both targets (`tls::rust::<case>`, `tls::llvm::<case>`)
 //! against TLS servers this test starts on the loopback interface, with an
 //! authority it generates. No network. The program is the template

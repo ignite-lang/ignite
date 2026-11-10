@@ -10491,7 +10491,7 @@ counted object holds (both targets). Release builds ignore the variable.
   (`fixtures/leak/repro.ignite`) on both targets and runs every mode at `N=20000`: each mode's
   peak resident size (`VmHWM`, the lowest of up to three runs) is within 2 MB of `none`'s.
 
-## 34. SHA-1, SHA-256 and base64 in std (`std.digest`, `std.encoding`)
+## 34 SHA-1, SHA-256 and base64 in std (`std.digest`, `std.encoding`)
 
 **Status: implemented in `story:std-digest`.**
 
@@ -10573,7 +10573,260 @@ are the last record and were taken over the same SHA-1 rounds.
   300 bytes gives the one-shot digest of a 300-byte message for both algorithms.
 - `layering::` with the two new rows; `bitwise::` over the rewritten fixture.
 
-## NN HttpApp sees its connection, holds, takes over and answers oversized bodies
+## 35 std.protocol.resp: RESP3 client with pub/sub and Sentinel
+
+**Status: implemented in `story:std-resp-client`.**
+
+Case-study gap G9: no Redis or Sentinel client in std. `std.protocol.resp` is a client of the
+Redis serialization protocol, RESP2 and RESP3, generic over `T: ByteStream`, written in Ignite on
+the existing stream, channel and spawn builtins; no builtin and no substrate code is added, so the
+compiler and both backends are unchanged and no generated code changes.
+
+### 35.1 Values and limits
+
+| item | meaning |
+|---|---|
+| `enum RespValue` | `Simple(Text)`, `Error(Text)`, `Integer(Int)`, `Blob(Bytes)`, `Null`, `Double(Text)`, `Boolean(Bool)`, `BlobError(Bytes)`, `Verbatim(Text, Bytes)`, `BigNumber(Text)`, `Array`, `Map` (pairs), `Set`, `Push`, `Attributed(pairs, value)`: every RESP3 type; `Double` and `BigNumber` keep the exact text, as `std.json`'s `Decimal` |
+| `type RespLimits` | `line` 64 KiB (one line's text), `bulk` 16 MiB (one bulk string, blob error or verbatim string; a streamed string in total), `elements` 1,048,576 (items of one aggregate, a map's pairs), `depth` 32 (aggregates inside aggregates; the value an attribute annotates is one level deeper), `reply` 64 MiB (the encoded bytes of one value) |
+| `enum RespError` | `UnknownType(Byte)`, `Malformed(Text)`, `LineTooLong`, `BulkTooLarge`, `TooManyElements`, `TooDeep`, `ReplyTooLarge`, `Truncated`; `describe` |
+| `encode(value) -> Bytes` | the RESP3 form; a line type's text must hold no CR or LF |
+| `encode_command(args)`, `words(parts)` | a command as an array of bulk strings |
+| `decode(data, limits) -> Split` | `Complete(value, rest)`, `Partial`, `Invalid(error)`, without reading |
+| `read_value(stream, limits, buffer) -> IoResult<Read>` | `Got(value, rest)`, `Closed`, `Failed(error)` |
+
+The decoder reads RESP2's `$-1` and `*-1` as `Null`, a leading `+` on an integer, and RESP3's
+streamed strings (`$?`, `;` parts, `;0`) and streamed aggregates (`*?`, `~?`, `%?`, ended by `.`)
+as the value they spell. It refuses a line holding a CR or LF of its own, a length or integer that
+is no number, a negative length other than RESP2's nulls, and every limit one past it. A value
+that is still incomplete is decoded again from its start when more bytes arrive; a bulk string's
+length is checked before its bytes are, so only aggregates of many small items pay for the
+repeated parse.
+
+### 35.2 Commands
+
+`type Client<T> { stream: T, limits: RespLimits = RespLimits {} }`; `connect(endpoint, timeout)`
+is one over TCP whose reads also give up after `timeout`. `command(client, args)` returns the
+reply as a value, the server's error included; `pipeline(client, commands)` writes every command
+in one write and returns one reply per command in order. A push frame on a command connection is
+skipped, before the replies and after them; anything else after the last reply is the `IoError`
+`resp: a reply no command asked for`. So under RESP3 a `SUBSCRIBE` sent with `command` or
+`pipeline` waits until the stream's idle timeout, its confirmation being a push; `subscribe`
+(35.3) is the way to subscribe. A client serves one task at a time.
+
+The typed helpers, called as plain fns (`get(client, key)`; the method form is E042 on a
+generic record receiver): `ping`, `hello`, `auth`; strings `get`, `set`, `set_for` (`PX`),
+`set_if_absent` (`NX`), `mget`, `incr`, `incr_by`; hashes `hget`, `hset`, `hgetall`, `hdel`,
+`hexists`; sets `sadd`, `srem`, `smembers`, `sismember`, `scard`; keys `del`, `exists`,
+`rename`, `key_type`; expiry `expire` (`PEXPIRE`), `persist`, `ttl` (`PTTL` as `Expiry`:
+`Missing`, `Persistent`, `Remaining(Duration)`); `publish`. Keys, fields and channels are
+`Text`, values `Bytes`. Each reads RESP2 and RESP3 replies alike (a map or a flat array for
+`HGETALL`, a set or an array for `SMEMBERS`, attributes seen through); the server's error is an
+`IoError` whose message is the error line, a reply of another type the `IoError`
+`resp: unexpected reply to <NAME>: <debug text>`.
+
+### 35.3 Pub/sub
+
+`subscribe(stream, topics: Topics, limits) -> IoResult<Subscription<T>>` sends `SUBSCRIBE` and
+`PSUBSCRIBE` for `Topics { channels, patterns }` and reads the first confirmation, so a refusal
+(`-NOAUTH`) is its error. Then a spawned task reads the connection and sends every `Message
+{ channel, pattern, payload }` (`message`, `pmessage`, `smessage`, RESP2 arrays or RESP3 pushes)
+on `Subscription.messages`, a bounded channel of 1,024, until an unsubscribe confirmation leaves
+no subscription, the connection ends or sends bytes that are no value, or the receiver is
+closed; then the channel closes and `receive()` gives `None`. `unsubscribe(subscription)` ends
+every subscription. The connection is closed, not reused, after a subscription.
+
+Reconnecting is the caller's: `retry_delay(attempt)` (100 ms doubled per attempt, at most 10 s)
+and `resubscribe(stream, ended, limits)` (a new subscription to the ended one's topics); the
+module's comment shows the loop. Messages published while no connection was subscribed are lost,
+as pub/sub keeps none.
+
+### 35.4 Sentinel
+
+`ask_master(stream, name, limits)` is `SENTINEL get-master-addr-by-name`: `Some(Endpoint)`, or
+`None` for a name the sentinel does not monitor. `master_from(sentinels: List<T>, ..)` and
+`master_at(sentinels: List<Endpoint>, name, timeout, limits)` (connect, ask, close) ask a list in
+order and return the first master named; a sentinel that fails, cannot be reached or knows no
+such master is skipped, and the error names each. `watch_master(stream, limits)` subscribes to
+`+switch-master`, `switched_master(message, name)` reads `<name> <old address> <old port> <new
+address> <new port>`, and `next_master(subscription, name)` waits for the next switch of `name`.
+
+### 35.5 Layering
+
+A file under `std/protocol/` is a protocol name for `layering::` (`docs/layering.md` rules 3 and
+5), and `resp` begins `response`, `respond` and `respects`, which the compiler crates and
+`std.console` use. The rules now read a name as contained unless it lies inside an English word
+listed for that protocol (`ORDINARY_WORDS` in `crates/ignite-check/tests/layering.rs`); a word is
+a run of letters, so `RespValue` and `HttpResponse` still name it. Matching for the other
+protocols is unchanged.
+
+### 35.6 Tests
+
+- `std/protocol/resp.ignite`, both targets, 23 tests over `Pipe.pair()` with a scripted server
+  (`script`: reads each expected request byte-exact, writes its reply): every RESP3 type encodes
+  as the specification writes it and decodes back with the following bytes kept; every proper
+  prefix of each is `Partial`; RESP2 nulls and streamed values; each refusal and each limit;
+  a value split over five deliveries; truncation; the typed helpers with RESP2 and RESP3
+  replies; a pipeline in one delivery; server errors, pushes, extra and cut replies; a
+  subscription over channels and a pattern ended by `unsubscribe`, a refused one, one whose
+  connection ends and its `resubscribe`; `retry_delay`; `master_from` over four sentinels,
+  `master_at` over TCP; `+switch-master` followed.
+- `resp::a_real_server_and_sentinel_on_both_targets` in `crates/ignite/tests/resp.rs`,
+  `#[ignore]` like `image::`, since neither server is installed where the gate runs: per target,
+  a master, a replica and a sentinel on free loopback ports, then commands,
+  a pipeline, `HELLO 3`, a subscription, `master_at` past a dead port, a forced `SENTINEL
+  failover` and `next_master` to the replica. Run with
+  `cargo test -p ignite --test main resp:: -- --ignored` where `redis-server` and
+  `redis-sentinel` are on `PATH`.
+- `layering::` with `ordinary_words_are_no_mention_and_every_other_occurrence_is`.
+
+## 36 std.protocol.nats: NATS core client
+
+**Status: implemented in `story:std-nats-client`.**
+
+Case-study gap G9: no NATS client in std. `std.protocol.nats` is a client of NATS core (no
+JetStream), generic over `T: ByteStream`, written in Ignite on the existing stream, channel,
+clock and spawn builtins; no builtin and no substrate code is added, so the compiler and both
+backends are unchanged and no generated code changes.
+
+### 36.1 Wire and limits
+
+| item | meaning |
+|---|---|
+| `type NatsLimits` | `line` 64 KiB (one control line from the server, INFO included), `payload` 1 MiB (one message, its header block included; publishing is also bounded by the server's `max_payload`), `headers` 64 KiB (one header block), `pending` 4,096 and `pending_bytes` 8 MiB (the messages held while no connection is up, each counted with its header block), `pending_age` 1 s (a message older than this is dropped, not sent), `subscription` 1,024 (one subscription's channel), `backlog` 8 MiB (the bytes a connection may leave unwritten; past it the connection is lost), `lingering` 4 (the lost connections whose tasks still run before `connect_to` waits to dial) |
+| `enum NatsAuth`, `type NatsOptions` | `Anonymous`, `UserPassword(user, password)`, `Token(token)`; `name`, `verbose`, `pedantic`, `echo`, `ping_interval` 120 s, `max_pings_out` 2, `inbox_prefix` (`_INBOX.<token>` when empty) |
+| `type ServerInfo` | the INFO fields a client reads: `server_id`, `server_name`, `version`, `proto`, `max_payload`, `headers`, `auth_required`, `client_id`; a missing member keeps its default |
+| `type NatsMessage` | `subject`, `reply`, `headers` (`(name, value)` pairs in order), `status` (the code of `NATS/1.0 503`), `payload` |
+| `encode_connect(options, info)` | `CONNECT {json}`: `verbose`, `pedantic`, `tls_required`, `lang`, `version`, `protocol` 1, `echo`, `name`, `headers` and `no_responders` when the server has headers, `user` and `pass` or `auth_token` |
+| `encode_publish(message)`, `encode_subscribe(subject, queue, sid)`, `encode_unsubscribe(sid, max)` | PUB, or HPUB with the header block `NATS/1.0`, the headers and an empty line; SUB with an optional queue group; UNSUB at once or after `max` messages |
+| `enum ServerOp`, `decode(data, limits) -> Split` | `Info`, `Delivery(sid, message)` (MSG or HMSG), `Ping`, `Pong`, `Accepted` (+OK), `Refused(reason)` (-ERR, quotes removed); `Complete(op, rest)`, `Partial`, `Invalid(NatsError)` |
+| `enum NatsError` | `UnknownOperation(name)`, `Malformed(what)`, `LineTooLong`, `PayloadTooLarge`, `HeadersTooLarge`, `Truncated`; `describe` |
+| `valid_subject`, `valid_filter`, `subject_matches(filter, subject)` | the server's rules: tokens separated by `.`, none empty or holding whitespace; a subject to publish to has no wildcard token; in a filter `*` stands for one token and `>`, the last token only, for one or more; a `*` inside a longer token is literal; case-sensitive |
+
+Operation names are read in any case and fields are split on runs of spaces and tabs, as the
+server writes them. A line holding a CR or LF of its own, a sid or size that is no decimal
+number, a header size larger than the total, a payload not ended by CR LF, a header block that
+does not start with `NATS/1.0` or does not end with an empty line, a header line without a
+colon, a status that is not three digits, an INFO that is no JSON object and a PING, PONG or
++OK with arguments are refused, and each limit one past it.
+
+### 36.2 The client
+
+`connect(stream, options, limits)` reads INFO, writes CONNECT and PING, and returns when the
+PONG arrives, answering the server's PING and reading `+OK` and INFO updates meanwhile; a
+`-ERR` (`Authorization Violation`) is its error `nats: <reason>`. It is bounded by the stream's
+idle timeout, which the caller sets. Then per connection a reader decodes the server's
+operations and a writer writes the stream, and a client task owns all state, fed by one
+bounded channel of commands (1,024). The client task never writes the stream: it hands bytes
+to the writer through a channel of one chunk and holds the rest itself, up to
+`limits.backlog`, past which the connection is lost. A server that stops reading blocks only
+the writer, so the keepalive still finds it. The fns are plain fns over `Nats<T>`, as the
+method form on a generic record receiver is E042:
+
+| fn | what it does |
+|---|---|
+| `publish(client, subject, payload)`, `publish_message(client, message)` | checks the subject, the reply subject, header names and values; the client task then checks headers against the newest connection's INFO `headers`, and the size, header block included, against the smaller of `limits.payload` and its `max_payload`, and answers; then the message is queued with the time it was queued |
+| `subscribe(client, filter)`, `queue_subscribe(client, filter, queue)` | a `Subscription { sid, subject, queue, messages }` whose bounded channel gets each delivery in order; a full channel drops and counts it (`slow`) |
+| `unsubscribe`, `unsubscribe_after(client, subscription, max)` | UNSUB at once or after `max` messages in all; the channel closes after the last |
+| `request(client, subject, payload, timeout)`, `request_message` | SUB to `<inbox prefix>.<sid>`, UNSUB after one, PUB with it as the reply subject, then `receive_within(timeout)` on the reply channel (`docs/slice.md` 30); at the deadline UNSUB and the error `nats: no reply to <subject> within <ms> ms`; a reply with status 503 is `nats: no responders for <subject>`. The one reply closes the channel, so a channel found closed at the deadline is read once more before it counts as shut down; `flush` does the same |
+| `respond(client, message, payload)` | PUB to the message's reply subject |
+| `flush(client, timeout)` | PING after everything queued before it, and waits for its PONG |
+| `stats(client) -> NatsStats` | `connected`, `connections`, `losses`, `sent`, `received`, `pending`, `stale`, `overflow`, `slow`, `refused`, `dropped`, `lingering`, `errors`, `last_error` |
+| `shutdown(client)` | after the commands queued before it, hands the writer every byte queued, closes the connection and every subscription's channel; every later call, and every one queued behind it, is `nats: the client is shut down` |
+
+The client task sends PING every `ping_interval` and loses a connection that left
+`max_pings_out` of them unanswered; it answers the server's PING with PONG. A `-ERR` that does
+not end the connection (a permissions violation) is counted in `errors` and `last_error`.
+
+### 36.3 Reconnect and the outgoing buffer
+
+A lost connection (the connection ended, a write failed, bytes that are no operation, the
+backlog, or the keepalive) sends the number of losses so far on `Nats.losses`. Delivery is at
+most once: the client task takes back the chunk the writer has not taken and drops it with the
+unsent bytes, and their messages move from `sent` to `dropped`; what the writer took is not
+sent again. Every acknowledged message is in exactly one of `sent`, `pending`, `stale`,
+`overflow`, `refused` and `dropped` (the doc of `NatsStats`). While no
+connection is up the client task holds each published message, up to `pending` messages and
+`pending_bytes` bytes, header blocks included; one past either is dropped and counted
+(`overflow`). A message is stale when more than
+`pending_age` (1 s, the case study's rule) passed since it was queued: a stale one is dropped and
+counted (`stale`) instead of written, whether it waited in the buffer or in the command channel,
+so a reconnect never replays a stale message. `reconnect(client, stream)` runs the handshake on
+a new stream in the caller's task and hands it over; the client task closes the old connection
+if one is up, subscribes again to every live subscription (UNSUB with the messages left for one
+with a limit), writes the held messages that are still fresh and that the new server's INFO
+takes (the others are counted in `refused`; a held request among them is answered with the
+refusal at once, and its inbox is not subscribed again), and starts a reader and a writer for
+the new connection; the reader and writer of an old one are ignored. From then on publishing
+is checked against the new INFO, and against each INFO update the server sends.
+`connect_to(endpoint, timeout, options, limits)` is a client over TCP that reconnects itself:
+a task reads `losses` and dials again, waiting `retry_delay(attempt)` (100 ms doubled per
+attempt, at most 10 s) before each attempt; connect and handshake give up after `timeout`.
+
+`shutdown` hands the writer the chunk it has not taken and the unsent bytes as one last chunk,
+closes its channel and returns; it waits for no write. The writer writes everything the client
+acknowledged, then closes the stream. Commands queued behind `Shutdown` are answered as shut
+down (a publish, request, subscribe, flush or stats call, and a second `shutdown`), so no caller
+waits without a bound.
+
+The substrate's `close` ends a stream's write half only (a TCP `shutdown(Write)`), and a read
+or write blocked on a silent peer is not woken by it. So `dial` sets the stream's idle timeout,
+after the handshake, to `quiet_limit(options)`, `ping_interval` times `max_pings_out + 1`,
+saturating at about 100 years: a live server answers a PING within it, and the reader of a dead
+connection ends. A `ping_interval` of 0 or less is refused by the handshake. A writer blocked on
+a server that stopped reading stays blocked until the server or the kernel ends the connection:
+the substrate has no operation that ends a blocked write, a full `shutdown(Both)` of a TCP
+stream (or an abort that closes the socket) callable from another task without the stream's
+write lock. Per lost connection to such a server, the growth is two tasks (the writer until
+then, the reader until `quiet_limit`), one socket, and the one chunk of the blocked write, at
+most `backlog` bytes plus one message; the client task holds none of it. The client counts these
+connections (`NatsStats.lingering`, from the `Ended` each task sends) and `connect_to` does not
+dial while `NatsLimits.lingering` (4) of them run, so the growth is at most `lingering` times
+that. A caller that reconnects itself reads `lingering` from `stats`. After `shutdown` the
+connection that was up may linger the same way.
+
+### 36.4 Tests
+
+- `std/protocol/nats.ignite`, both targets, 37 tests, all but eight over `Pipe.pair()`, with a
+  scripted server (`script`: reads each expected request byte-exact, writes its reply, and with
+  `hold` keeps the connection open until the client closes it): every client operation encodes
+  as the protocol writes it; every server operation decodes with the following bytes kept, and
+  every proper prefix of each is `Partial`; each refusal and each limit; the defaults; subject
+  matching and validity; the handshake with user and password, with a token, and with
+  `verbose`, a server PING and an INFO update inside it; a refused, ended and garbled
+  handshake; subscriptions with a wildcard and a queue group, HMSG headers and reply,
+  publishing with headers and `respond`; the checks before sending; the server's PING and a
+  counted `-ERR`; request and reply, its deadline and no responders; `unsubscribe_after` and
+  `unsubscribe`; a lost connection that drops a message stale when published and one gone
+  stale while held, and sends the fresh one and the subscription on `reconnect`; the bounded
+  outgoing buffer; `connect_to` over TCP, which reconnects by itself and subscribes again; a
+  keepalive that loses a silent connection; a shut-down client; `retry_delay`. The adversary's
+  cases, moved in: a TCP server that stops reading during a burst of forty 1 MB publishes is
+  lost by the keepalive within 3 s, and without the burst too; one is lost by a 1 MiB backlog
+  with the keepalive at 120 s; the buffer's byte bound counts the header block; after a
+  reconnect publishing and requests are checked against the new server's `max_payload`, and a
+  held message it refuses is counted, not sent; `unsubscribe_after` sends the messages left on
+  the new connection; a reply after a request's deadline reaches nobody; MSG, HMSG and PING
+  written one byte per read are read whole. From the second pass: forty 1 MB publishes
+  acknowledged while the server does not read are all written after `shutdown`; after a loss
+  by the backlog `sent` times the message size is what the server reads, and the counters add
+  up to the 40 acknowledged; eight publishers racing `shutdown` all return; a `connect_to` loop
+  against a server that stops reading stops at `lingering` (2) lost connections, and after
+  `shutdown` only their two tasks each remain until the server ends; an INFO update on the live
+  connection bounds publishing; a held request the new server refuses gets the refusal and no
+  SUB of its inbox; a quiet TCP connection whose server answers each PING is kept;
+  `quiet_limit` saturates, and a `ping_interval` of 0 is refused; on the client task's state,
+  a loss leaves no chunk in the writer's channel and counts its messages as dropped.
+- `nats::a_real_server_on_both_targets` in `crates/ignite/tests/nats.rs`, `#[ignore]` like
+  `image::`, since `nats-server` is not installed where the gate runs: per target, a server with
+  a user and a password, then `connect_to` with them, wildcards, a queue group, headers, a
+  request answered by a task, no responders, a wrong password, and a reconnect through a proxy
+  in the test that cuts the connection: a message held 1.5 s is dropped, a fresh one arrives.
+  Run with `cargo test -p ignite --test main nats:: -- --ignored` where `nats-server` is on
+  `PATH`.
+- `layering::` reads `nats` as a protocol name from the file name; no word of the tree contains
+  it, so `ORDINARY_WORDS` gets no entry.
+
+## 37 HttpApp sees its connection, holds, takes over and answers oversized bodies
 
 **Status: implemented in `story:http-app-connection`.**
 
@@ -10583,7 +10836,7 @@ address for an allow list, no takeover for an upgrade), could not wait (waiting 
 not in the state is E017 in a handler), and std answered a body over the limit with its own 413
 before the application ran. Waiting uses section 30's channels.
 
-### NN.1 The surface
+### 37.1 The surface
 
 ```ignite,fragment
 // std.net
@@ -10650,7 +10903,7 @@ type HttpServer<S> { listener: TcpListener, application: HttpApp<S, TcpStream>, 
   `fn poll<T>(state: Waiters, request: Request) -> Reply<Waiters, T>` and
   `fn echo<T: ByteStream>(state: Unit, request: Request, stream: T, early: Bytes) -> ..`.
 
-### NN.2 The connection
+### 37.2 The connection
 
 `Request.connection` is the connection the request came on, set by the session for every
 request it asks of the application (`handle`, `reply`, `piece`, `on_oversized`); a request
@@ -10679,7 +10932,7 @@ handle that is no stream gives `Endpoint { address = "", port = 0 }` on the LLVM
 The generated code of a program that does not call `local` is unchanged; one that calls it
 needs the new builtin, so `CODEGEN_REVISION` is the coordinator's to bump.
 
-### NN.3 Holding a request
+### 37.3 Holding a request
 
 `Hold(receiver, deadline, on_timeout)` makes the connection's task wait (`wait_held`):
 `receiver.receive_within(deadline)` gives the answer, `on_timeout` is the answer when the wait
@@ -10695,7 +10948,7 @@ Effects: the wait is the session's, on a receiver the reply returned,
 so the handler's type keeps `requires [state.*]` and needs no effect of its own; no change to
 the effects of `crates/ignite-types` was needed for it.
 
-A thousand held requests over TCP with the clients in the same process (the last test of NN.7)
+A thousand held requests over TCP with the clients in the same process (the last test of 37.7)
 first lost answers under the default IO mode `readiness`, and so did fifty in-process clients
 of an in-process echo server with no HTTP at all: a short read hid an end of stream behind it in
 the substrate. With that fixed (`fix(io): a short read no longer hides an end of stream behind
@@ -10715,7 +10968,7 @@ because `Store.new()` is test-only (E051) and a non-test fn cannot make one. `ma
 returns and the process ends when the open connections have. `Http.serve` waits with
 `Holds.none()`, which no drain reaches.
 
-### NN.4 Taking the connection over
+### 37.4 Taking the connection over
 
 `Upgrade(response, takeover)`: the session writes the head of `response`, `checked`, framed as
 an inline response to the request (`inline_framing`; a 101 has no body) but without a
@@ -10726,7 +10979,7 @@ first frame with the upgrade request). The session ends when `takeover` returns,
 `serve_connection` closes the stream. A response `checked` refuses (`checked(r) != r`) is
 answered with `reject(.., 500, ..)`, and nothing takes over.
 
-### NN.5 A body over the limit
+### 37.5 A body over the limit
 
 `next_request` returns `Oversized(head, rest, length)` for a body over `limits.body` where it
 returned `Reject(413)`: the head, the bytes read after it, and the declared `Content-Length`,
@@ -10747,16 +11000,16 @@ The inline tests that compare `next_request` with `Reject(413)` read it through 
 which maps `Oversized(head, ..)` to `rejected(head, 413)`, the session's answer without a hook;
 their assertions are unchanged.
 
-### NN.6 Claims
+### 37.6 Claims
 
 No `satisfies` or `verifies` clause moved; `next_request`, `session` and `reject` keep theirs,
 and `ignite conformance std/protocol/http.ignite` prints the claims it printed before on both
 targets. What this section adds is outside the imported catalogue: `std/rfc/rfc9110.ignite`
 imports sections 5, 6, 7.2 and 9.x of RFC 9110, not Upgrade (section 7.8), Expect (section
 10.1.1) or 413 Content Too Large (section 15.5.14), so no requirement of those sections is
-claimed, verified or reported as a gap; their behaviour here rests on the inline tests of NN.7.
+claimed, verified or reported as a gap; their behaviour here rests on the inline tests of 37.7.
 
-### NN.7 Tests
+### 37.7 Tests
 
 - `std/protocol/http.ignite` (both targets, over `Pipe.pair()` unless named): "the handler sees
   its connection and an allow list refuses a peer with 403" (a pipe from a listed and an
@@ -10784,260 +11037,7 @@ claimed, verified or reported as a gap; their behaviour here rests on the inline
   looks for the in-place header loop in `render_fields`. The plan goldens `todo.model.json` and
   `studio.model.json` show the two new `HttpApp` fields, `None`, and moved std spans.
 
-## NN std.protocol.resp: RESP3 client with pub/sub and Sentinel
-
-**Status: implemented in `story:std-resp-client`.**
-
-Case-study gap G9: no Redis or Sentinel client in std. `std.protocol.resp` is a client of the
-Redis serialization protocol, RESP2 and RESP3, generic over `T: ByteStream`, written in Ignite on
-the existing stream, channel and spawn builtins; no builtin and no substrate code is added, so the
-compiler and both backends are unchanged and no generated code changes.
-
-### NN.1 Values and limits
-
-| item | meaning |
-|---|---|
-| `enum RespValue` | `Simple(Text)`, `Error(Text)`, `Integer(Int)`, `Blob(Bytes)`, `Null`, `Double(Text)`, `Boolean(Bool)`, `BlobError(Bytes)`, `Verbatim(Text, Bytes)`, `BigNumber(Text)`, `Array`, `Map` (pairs), `Set`, `Push`, `Attributed(pairs, value)`: every RESP3 type; `Double` and `BigNumber` keep the exact text, as `std.json`'s `Decimal` |
-| `type RespLimits` | `line` 64 KiB (one line's text), `bulk` 16 MiB (one bulk string, blob error or verbatim string; a streamed string in total), `elements` 1,048,576 (items of one aggregate, a map's pairs), `depth` 32 (aggregates inside aggregates; the value an attribute annotates is one level deeper), `reply` 64 MiB (the encoded bytes of one value) |
-| `enum RespError` | `UnknownType(Byte)`, `Malformed(Text)`, `LineTooLong`, `BulkTooLarge`, `TooManyElements`, `TooDeep`, `ReplyTooLarge`, `Truncated`; `describe` |
-| `encode(value) -> Bytes` | the RESP3 form; a line type's text must hold no CR or LF |
-| `encode_command(args)`, `words(parts)` | a command as an array of bulk strings |
-| `decode(data, limits) -> Split` | `Complete(value, rest)`, `Partial`, `Invalid(error)`, without reading |
-| `read_value(stream, limits, buffer) -> IoResult<Read>` | `Got(value, rest)`, `Closed`, `Failed(error)` |
-
-The decoder reads RESP2's `$-1` and `*-1` as `Null`, a leading `+` on an integer, and RESP3's
-streamed strings (`$?`, `;` parts, `;0`) and streamed aggregates (`*?`, `~?`, `%?`, ended by `.`)
-as the value they spell. It refuses a line holding a CR or LF of its own, a length or integer that
-is no number, a negative length other than RESP2's nulls, and every limit one past it. A value
-that is still incomplete is decoded again from its start when more bytes arrive; a bulk string's
-length is checked before its bytes are, so only aggregates of many small items pay for the
-repeated parse.
-
-### NN.2 Commands
-
-`type Client<T> { stream: T, limits: RespLimits = RespLimits {} }`; `connect(endpoint, timeout)`
-is one over TCP whose reads also give up after `timeout`. `command(client, args)` returns the
-reply as a value, the server's error included; `pipeline(client, commands)` writes every command
-in one write and returns one reply per command in order. A push frame on a command connection is
-skipped, before the replies and after them; anything else after the last reply is the `IoError`
-`resp: a reply no command asked for`. So under RESP3 a `SUBSCRIBE` sent with `command` or
-`pipeline` waits until the stream's idle timeout, its confirmation being a push; `subscribe`
-(NN.3) is the way to subscribe. A client serves one task at a time.
-
-The typed helpers, called as plain fns (`get(client, key)`; the method form is E042 on a
-generic record receiver): `ping`, `hello`, `auth`; strings `get`, `set`, `set_for` (`PX`),
-`set_if_absent` (`NX`), `mget`, `incr`, `incr_by`; hashes `hget`, `hset`, `hgetall`, `hdel`,
-`hexists`; sets `sadd`, `srem`, `smembers`, `sismember`, `scard`; keys `del`, `exists`,
-`rename`, `key_type`; expiry `expire` (`PEXPIRE`), `persist`, `ttl` (`PTTL` as `Expiry`:
-`Missing`, `Persistent`, `Remaining(Duration)`); `publish`. Keys, fields and channels are
-`Text`, values `Bytes`. Each reads RESP2 and RESP3 replies alike (a map or a flat array for
-`HGETALL`, a set or an array for `SMEMBERS`, attributes seen through); the server's error is an
-`IoError` whose message is the error line, a reply of another type the `IoError`
-`resp: unexpected reply to <NAME>: <debug text>`.
-
-### NN.3 Pub/sub
-
-`subscribe(stream, topics: Topics, limits) -> IoResult<Subscription<T>>` sends `SUBSCRIBE` and
-`PSUBSCRIBE` for `Topics { channels, patterns }` and reads the first confirmation, so a refusal
-(`-NOAUTH`) is its error. Then a spawned task reads the connection and sends every `Message
-{ channel, pattern, payload }` (`message`, `pmessage`, `smessage`, RESP2 arrays or RESP3 pushes)
-on `Subscription.messages`, a bounded channel of 1,024, until an unsubscribe confirmation leaves
-no subscription, the connection ends or sends bytes that are no value, or the receiver is
-closed; then the channel closes and `receive()` gives `None`. `unsubscribe(subscription)` ends
-every subscription. The connection is closed, not reused, after a subscription.
-
-Reconnecting is the caller's: `retry_delay(attempt)` (100 ms doubled per attempt, at most 10 s)
-and `resubscribe(stream, ended, limits)` (a new subscription to the ended one's topics); the
-module's comment shows the loop. Messages published while no connection was subscribed are lost,
-as pub/sub keeps none.
-
-### NN.4 Sentinel
-
-`ask_master(stream, name, limits)` is `SENTINEL get-master-addr-by-name`: `Some(Endpoint)`, or
-`None` for a name the sentinel does not monitor. `master_from(sentinels: List<T>, ..)` and
-`master_at(sentinels: List<Endpoint>, name, timeout, limits)` (connect, ask, close) ask a list in
-order and return the first master named; a sentinel that fails, cannot be reached or knows no
-such master is skipped, and the error names each. `watch_master(stream, limits)` subscribes to
-`+switch-master`, `switched_master(message, name)` reads `<name> <old address> <old port> <new
-address> <new port>`, and `next_master(subscription, name)` waits for the next switch of `name`.
-
-### NN.5 Layering
-
-A file under `std/protocol/` is a protocol name for `layering::` (`docs/layering.md` rules 3 and
-5), and `resp` begins `response`, `respond` and `respects`, which the compiler crates and
-`std.console` use. The rules now read a name as contained unless it lies inside an English word
-listed for that protocol (`ORDINARY_WORDS` in `crates/ignite-check/tests/layering.rs`); a word is
-a run of letters, so `RespValue` and `HttpResponse` still name it. Matching for the other
-protocols is unchanged.
-
-### NN.6 Tests
-
-- `std/protocol/resp.ignite`, both targets, 23 tests over `Pipe.pair()` with a scripted server
-  (`script`: reads each expected request byte-exact, writes its reply): every RESP3 type encodes
-  as the specification writes it and decodes back with the following bytes kept; every proper
-  prefix of each is `Partial`; RESP2 nulls and streamed values; each refusal and each limit;
-  a value split over five deliveries; truncation; the typed helpers with RESP2 and RESP3
-  replies; a pipeline in one delivery; server errors, pushes, extra and cut replies; a
-  subscription over channels and a pattern ended by `unsubscribe`, a refused one, one whose
-  connection ends and its `resubscribe`; `retry_delay`; `master_from` over four sentinels,
-  `master_at` over TCP; `+switch-master` followed.
-- `resp::a_real_server_and_sentinel_on_both_targets` in `crates/ignite/tests/resp.rs`,
-  `#[ignore]` like `image::`, since neither server is installed where the gate runs: per target,
-  a master, a replica and a sentinel on free loopback ports, then commands,
-  a pipeline, `HELLO 3`, a subscription, `master_at` past a dead port, a forced `SENTINEL
-  failover` and `next_master` to the replica. Run with
-  `cargo test -p ignite --test main resp:: -- --ignored` where `redis-server` and
-  `redis-sentinel` are on `PATH`.
-- `layering::` with `ordinary_words_are_no_mention_and_every_other_occurrence_is`.
-
-## NN std.protocol.nats: NATS core client
-
-**Status: implemented in `story:std-nats-client`.**
-
-Case-study gap G9: no NATS client in std. `std.protocol.nats` is a client of NATS core (no
-JetStream), generic over `T: ByteStream`, written in Ignite on the existing stream, channel,
-clock and spawn builtins; no builtin and no substrate code is added, so the compiler and both
-backends are unchanged and no generated code changes.
-
-### NN.1 Wire and limits
-
-| item | meaning |
-|---|---|
-| `type NatsLimits` | `line` 64 KiB (one control line from the server, INFO included), `payload` 1 MiB (one message, its header block included; publishing is also bounded by the server's `max_payload`), `headers` 64 KiB (one header block), `pending` 4,096 and `pending_bytes` 8 MiB (the messages held while no connection is up, each counted with its header block), `pending_age` 1 s (a message older than this is dropped, not sent), `subscription` 1,024 (one subscription's channel), `backlog` 8 MiB (the bytes a connection may leave unwritten; past it the connection is lost), `lingering` 4 (the lost connections whose tasks still run before `connect_to` waits to dial) |
-| `enum NatsAuth`, `type NatsOptions` | `Anonymous`, `UserPassword(user, password)`, `Token(token)`; `name`, `verbose`, `pedantic`, `echo`, `ping_interval` 120 s, `max_pings_out` 2, `inbox_prefix` (`_INBOX.<token>` when empty) |
-| `type ServerInfo` | the INFO fields a client reads: `server_id`, `server_name`, `version`, `proto`, `max_payload`, `headers`, `auth_required`, `client_id`; a missing member keeps its default |
-| `type NatsMessage` | `subject`, `reply`, `headers` (`(name, value)` pairs in order), `status` (the code of `NATS/1.0 503`), `payload` |
-| `encode_connect(options, info)` | `CONNECT {json}`: `verbose`, `pedantic`, `tls_required`, `lang`, `version`, `protocol` 1, `echo`, `name`, `headers` and `no_responders` when the server has headers, `user` and `pass` or `auth_token` |
-| `encode_publish(message)`, `encode_subscribe(subject, queue, sid)`, `encode_unsubscribe(sid, max)` | PUB, or HPUB with the header block `NATS/1.0`, the headers and an empty line; SUB with an optional queue group; UNSUB at once or after `max` messages |
-| `enum ServerOp`, `decode(data, limits) -> Split` | `Info`, `Delivery(sid, message)` (MSG or HMSG), `Ping`, `Pong`, `Accepted` (+OK), `Refused(reason)` (-ERR, quotes removed); `Complete(op, rest)`, `Partial`, `Invalid(NatsError)` |
-| `enum NatsError` | `UnknownOperation(name)`, `Malformed(what)`, `LineTooLong`, `PayloadTooLarge`, `HeadersTooLarge`, `Truncated`; `describe` |
-| `valid_subject`, `valid_filter`, `subject_matches(filter, subject)` | the server's rules: tokens separated by `.`, none empty or holding whitespace; a subject to publish to has no wildcard token; in a filter `*` stands for one token and `>`, the last token only, for one or more; a `*` inside a longer token is literal; case-sensitive |
-
-Operation names are read in any case and fields are split on runs of spaces and tabs, as the
-server writes them. A line holding a CR or LF of its own, a sid or size that is no decimal
-number, a header size larger than the total, a payload not ended by CR LF, a header block that
-does not start with `NATS/1.0` or does not end with an empty line, a header line without a
-colon, a status that is not three digits, an INFO that is no JSON object and a PING, PONG or
-+OK with arguments are refused, and each limit one past it.
-
-### NN.2 The client
-
-`connect(stream, options, limits)` reads INFO, writes CONNECT and PING, and returns when the
-PONG arrives, answering the server's PING and reading `+OK` and INFO updates meanwhile; a
-`-ERR` (`Authorization Violation`) is its error `nats: <reason>`. It is bounded by the stream's
-idle timeout, which the caller sets. Then per connection a reader decodes the server's
-operations and a writer writes the stream, and a client task owns all state, fed by one
-bounded channel of commands (1,024). The client task never writes the stream: it hands bytes
-to the writer through a channel of one chunk and holds the rest itself, up to
-`limits.backlog`, past which the connection is lost. A server that stops reading blocks only
-the writer, so the keepalive still finds it. The fns are plain fns over `Nats<T>`, as the
-method form on a generic record receiver is E042:
-
-| fn | what it does |
-|---|---|
-| `publish(client, subject, payload)`, `publish_message(client, message)` | checks the subject, the reply subject, header names and values; the client task then checks headers against the newest connection's INFO `headers`, and the size, header block included, against the smaller of `limits.payload` and its `max_payload`, and answers; then the message is queued with the time it was queued |
-| `subscribe(client, filter)`, `queue_subscribe(client, filter, queue)` | a `Subscription { sid, subject, queue, messages }` whose bounded channel gets each delivery in order; a full channel drops and counts it (`slow`) |
-| `unsubscribe`, `unsubscribe_after(client, subscription, max)` | UNSUB at once or after `max` messages in all; the channel closes after the last |
-| `request(client, subject, payload, timeout)`, `request_message` | SUB to `<inbox prefix>.<sid>`, UNSUB after one, PUB with it as the reply subject, then `receive_within(timeout)` on the reply channel (`docs/slice.md` 30); at the deadline UNSUB and the error `nats: no reply to <subject> within <ms> ms`; a reply with status 503 is `nats: no responders for <subject>`. The one reply closes the channel, so a channel found closed at the deadline is read once more before it counts as shut down; `flush` does the same |
-| `respond(client, message, payload)` | PUB to the message's reply subject |
-| `flush(client, timeout)` | PING after everything queued before it, and waits for its PONG |
-| `stats(client) -> NatsStats` | `connected`, `connections`, `losses`, `sent`, `received`, `pending`, `stale`, `overflow`, `slow`, `refused`, `dropped`, `lingering`, `errors`, `last_error` |
-| `shutdown(client)` | after the commands queued before it, hands the writer every byte queued, closes the connection and every subscription's channel; every later call, and every one queued behind it, is `nats: the client is shut down` |
-
-The client task sends PING every `ping_interval` and loses a connection that left
-`max_pings_out` of them unanswered; it answers the server's PING with PONG. A `-ERR` that does
-not end the connection (a permissions violation) is counted in `errors` and `last_error`.
-
-### NN.3 Reconnect and the outgoing buffer
-
-A lost connection (the connection ended, a write failed, bytes that are no operation, the
-backlog, or the keepalive) sends the number of losses so far on `Nats.losses`. Delivery is at
-most once: the client task takes back the chunk the writer has not taken and drops it with the
-unsent bytes, and their messages move from `sent` to `dropped`; what the writer took is not
-sent again. Every acknowledged message is in exactly one of `sent`, `pending`, `stale`,
-`overflow`, `refused` and `dropped` (the doc of `NatsStats`). While no
-connection is up the client task holds each published message, up to `pending` messages and
-`pending_bytes` bytes, header blocks included; one past either is dropped and counted
-(`overflow`). A message is stale when more than
-`pending_age` (1 s, the case study's rule) passed since it was queued: a stale one is dropped and
-counted (`stale`) instead of written, whether it waited in the buffer or in the command channel,
-so a reconnect never replays a stale message. `reconnect(client, stream)` runs the handshake on
-a new stream in the caller's task and hands it over; the client task closes the old connection
-if one is up, subscribes again to every live subscription (UNSUB with the messages left for one
-with a limit), writes the held messages that are still fresh and that the new server's INFO
-takes (the others are counted in `refused`; a held request among them is answered with the
-refusal at once, and its inbox is not subscribed again), and starts a reader and a writer for
-the new connection; the reader and writer of an old one are ignored. From then on publishing
-is checked against the new INFO, and against each INFO update the server sends.
-`connect_to(endpoint, timeout, options, limits)` is a client over TCP that reconnects itself:
-a task reads `losses` and dials again, waiting `retry_delay(attempt)` (100 ms doubled per
-attempt, at most 10 s) before each attempt; connect and handshake give up after `timeout`.
-
-`shutdown` hands the writer the chunk it has not taken and the unsent bytes as one last chunk,
-closes its channel and returns; it waits for no write. The writer writes everything the client
-acknowledged, then closes the stream. Commands queued behind `Shutdown` are answered as shut
-down (a publish, request, subscribe, flush or stats call, and a second `shutdown`), so no caller
-waits without a bound.
-
-The substrate's `close` ends a stream's write half only (a TCP `shutdown(Write)`), and a read
-or write blocked on a silent peer is not woken by it. So `dial` sets the stream's idle timeout,
-after the handshake, to `quiet_limit(options)`, `ping_interval` times `max_pings_out + 1`,
-saturating at about 100 years: a live server answers a PING within it, and the reader of a dead
-connection ends. A `ping_interval` of 0 or less is refused by the handshake. A writer blocked on
-a server that stopped reading stays blocked until the server or the kernel ends the connection:
-the substrate has no operation that ends a blocked write, a full `shutdown(Both)` of a TCP
-stream (or an abort that closes the socket) callable from another task without the stream's
-write lock. Per lost connection to such a server, the growth is two tasks (the writer until
-then, the reader until `quiet_limit`), one socket, and the one chunk of the blocked write, at
-most `backlog` bytes plus one message; the client task holds none of it. The client counts these
-connections (`NatsStats.lingering`, from the `Ended` each task sends) and `connect_to` does not
-dial while `NatsLimits.lingering` (4) of them run, so the growth is at most `lingering` times
-that. A caller that reconnects itself reads `lingering` from `stats`. After `shutdown` the
-connection that was up may linger the same way.
-
-### NN.4 Tests
-
-- `std/protocol/nats.ignite`, both targets, 37 tests, all but eight over `Pipe.pair()`, with a
-  scripted server (`script`: reads each expected request byte-exact, writes its reply, and with
-  `hold` keeps the connection open until the client closes it): every client operation encodes
-  as the protocol writes it; every server operation decodes with the following bytes kept, and
-  every proper prefix of each is `Partial`; each refusal and each limit; the defaults; subject
-  matching and validity; the handshake with user and password, with a token, and with
-  `verbose`, a server PING and an INFO update inside it; a refused, ended and garbled
-  handshake; subscriptions with a wildcard and a queue group, HMSG headers and reply,
-  publishing with headers and `respond`; the checks before sending; the server's PING and a
-  counted `-ERR`; request and reply, its deadline and no responders; `unsubscribe_after` and
-  `unsubscribe`; a lost connection that drops a message stale when published and one gone
-  stale while held, and sends the fresh one and the subscription on `reconnect`; the bounded
-  outgoing buffer; `connect_to` over TCP, which reconnects by itself and subscribes again; a
-  keepalive that loses a silent connection; a shut-down client; `retry_delay`. The adversary's
-  cases, moved in: a TCP server that stops reading during a burst of forty 1 MB publishes is
-  lost by the keepalive within 3 s, and without the burst too; one is lost by a 1 MiB backlog
-  with the keepalive at 120 s; the buffer's byte bound counts the header block; after a
-  reconnect publishing and requests are checked against the new server's `max_payload`, and a
-  held message it refuses is counted, not sent; `unsubscribe_after` sends the messages left on
-  the new connection; a reply after a request's deadline reaches nobody; MSG, HMSG and PING
-  written one byte per read are read whole. From the second pass: forty 1 MB publishes
-  acknowledged while the server does not read are all written after `shutdown`; after a loss
-  by the backlog `sent` times the message size is what the server reads, and the counters add
-  up to the 40 acknowledged; eight publishers racing `shutdown` all return; a `connect_to` loop
-  against a server that stops reading stops at `lingering` (2) lost connections, and after
-  `shutdown` only their two tasks each remain until the server ends; an INFO update on the live
-  connection bounds publishing; a held request the new server refuses gets the refusal and no
-  SUB of its inbox; a quiet TCP connection whose server answers each PING is kept;
-  `quiet_limit` saturates, and a `ping_interval` of 0 is refused; on the client task's state,
-  a loss leaves no chunk in the writer's channel and counts its messages as dropped.
-- `nats::a_real_server_on_both_targets` in `crates/ignite/tests/nats.rs`, `#[ignore]` like
-  `image::`, since `nats-server` is not installed where the gate runs: per target, a server with
-  a user and a password, then `connect_to` with them, wildcards, a queue group, headers, a
-  request answered by a task, no responders, a wrong password, and a reconnect through a proxy
-  in the test that cuts the connection: a message held 1.5 s is dropped, a fresh one arrives.
-  Run with `cargo test -p ignite --test main nats:: -- --ignored` where `nats-server` is on
-  `PATH`.
-- `layering::` reads `nats` as a protocol name from the file name; no word of the tree contains
-  it, so `ORDINARY_WORDS` gets no entry.
-
-## NN TLS client sessions as a ByteStream
+## 38 TLS client sessions as a ByteStream
 
 **Status: implemented in `story:tls-client`.**
 
@@ -11048,7 +11048,7 @@ its stream runs over TLS unchanged. The TLS engine is rustls in `crates/ignite-i
 layout rules: the substrate knows sockets and TLS sessions); the module `std.tls` holds the
 options record, the error test and the inline tests.
 
-### NN.1 Surface
+### 38.1 Surface
 
 | item | meaning |
 |---|---|
@@ -11096,7 +11096,7 @@ Errors, each an `IoError` whose message starts with `tls <server_name>: `:
 | the server closed during the handshake | `tls <name>: the server closed the connection during the handshake` |
 | anything else rustls refuses (a peer that speaks no TLS, an alert) | `tls <name>: <rustls' message>` |
 
-### NN.2 Lowering
+### 38.2 Lowering
 
 - Rust target: `::ignite_io::TlsStream::client(stream, name, ::ignite_io::TlsOptions { .. })`,
   the record converted field by field; the stream methods as `<::ignite_io::TlsStream as
@@ -11110,7 +11110,7 @@ Errors, each an `IoError` whose message starts with `tls <server_name>: `:
   with "`<h>` is not a TLS stream".
 - Generation changes (two builtins, one type), so `CODEGEN_REVISION` is bumped at integration.
 
-### NN.3 Dependencies
+### 38.3 Dependencies
 
 `rustls` 0.23 with the `ring` provider, `std` and `tls12` (no default features, so no
 `aws-lc-rs`), in `ignite-io`; its tree adds `ring`, `rustls-webpki`, `rustls-pki-types`,
@@ -11124,7 +11124,7 @@ had no TLS. `rcgen` 0.14 is a dev-dependency of `ignite-io`
 and `ignite` only, for the authorities the tests generate. No crate reads the system roots for
 us (`rustls-native-certs` was not taken): the substrate reads the PEM bundle itself.
 
-### NN.4 Tests
+### 38.4 Tests
 
 - `crates/ignite-io/tests/tls.rs` (`tls::`): a TLS server in the test with an authority
   generated by `rcgen`, on the loopback interface: a verified session carries bytes both ways

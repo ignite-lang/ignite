@@ -1,4 +1,4 @@
-//! TLS client sessions (`docs/slice.md`, section "TLS client sessions"):
+//! TLS client sessions (`docs/slice.md` 38):
 //! `TlsStream::client` over a `TcpStream` against a TLS server built in
 //! the test with a generated authority, on the loopback interface; no
 //! network. Verified sessions carry bytes both ways as a `ByteStream`; a

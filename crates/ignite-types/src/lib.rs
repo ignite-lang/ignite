@@ -176,7 +176,7 @@ pub enum Ty {
     /// 18.4): a handle like `TcpStream`.
     PipeStream,
     /// A TLS client session over a `TcpStream`, `Tls.client(..)`
-    /// (`docs/slice.md`, section "TLS client sessions"): a handle like
+    /// (`docs/slice.md` 38): a handle like
     /// `TcpStream` that implements `ByteStream`.
     TlsStream,
     IoError,
@@ -921,8 +921,8 @@ pub enum Builtin {
     ReceiverClose,
     /// `Tls.client(stream: TcpStream, server_name: Text, options:
     /// std.tls.TlsOptions) -> Result<TlsStream, IoError>`: the client
-    /// handshake on `stream`; effect `net.connect` (`docs/slice.md`,
-    /// section "TLS client sessions"). The six stream methods of a
+    /// handshake on `stream`; effect `net.connect` (`docs/slice.md`
+    /// 38). The six stream methods of a
     /// `TlsStream` are the `Stream*` builtins.
     TlsClient,
     /// `s.alpn() -> Text` on a `TlsStream`: the protocol the server chose

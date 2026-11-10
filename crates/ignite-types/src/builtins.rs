@@ -465,8 +465,7 @@ pub(crate) fn static_fn(owner: &str, name: &str) -> Option<Sig> {
     }
 }
 
-/// The name of the record `std.tls.TlsOptions` (`docs/slice.md`, section
-/// "TLS client sessions").
+/// The name of the record `std.tls.TlsOptions` (`docs/slice.md` 38).
 pub fn tls_options_name() -> crate::QualName {
     crate::QualName::new("std.tls", "TlsOptions")
 }

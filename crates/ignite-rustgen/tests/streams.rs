@@ -67,7 +67,7 @@ fn the_terminal_calls_the_tcp_instances_of_the_telnet_roles() {
     );
 }
 
-/// TLS client sessions (`docs/slice.md`, section "TLS client sessions"):
+/// TLS client sessions (`docs/slice.md` 38):
 /// a program that names `Tls.client` or `TlsStream` turns on the substrate's
 /// feature `tls`; one that does not builds without rustls and ring.
 #[test]

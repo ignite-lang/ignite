@@ -2697,7 +2697,7 @@ test fn deaf_many(listener: TcpListener, n: Int, stop: Receiver<Int>, accepted: 
 }
 
 // The substrate cannot end a write blocked on a peer that stopped reading
-// (docs/slice.md NN.3): each lost connection to such a server keeps its
+// (docs/slice.md 36.3): each lost connection to such a server keeps its
 // writer and its reader. What the client bounds is their number.
 test "a reconnect loop against a server that stops reading keeps at most `lingering` lost connections running" {
   let before = Runtime.census()

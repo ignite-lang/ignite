@@ -1,4 +1,4 @@
-//! TLS client sessions (`docs/slice.md`, section "TLS client sessions"):
+//! TLS client sessions (`docs/slice.md` 38):
 //! [`TlsStream`], a rustls client session over a [`TcpStream`], and the
 //! fourth [`crate::ByteStream`]. The substrate knows the TLS session, not
 //! what is spoken over it (`AGENTS.md`, layout rules).
