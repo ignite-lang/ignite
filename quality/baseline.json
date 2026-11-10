@@ -250,6 +250,35 @@
     "std/protocol/jsonrpc.ignite::serve does not write a response to a notification": "builtin `PipePair` has no value at compile time",
     "std/protocol/jsonrpc.ignite::serve ends on a framing error": "builtin `PipePair` has no value at compile time",
     "std/protocol/jsonrpc.ignite::two messages back to back are read as two": "builtin `PipePair` has no value at compile time",
+    "std/protocol/nats.ignite::a connection that answers no keepalive PING is lost": "builtin `PipePair` has no value at compile time",
+    "std/protocol/nats.ignite::a connection that leaves more than the backlog unwritten is lost": "builtin `TcpListenerBind` has no value at compile time",
+    "std/protocol/nats.ignite::a held request the new server refuses is answered with the refusal, its inbox not subscribed again": "builtin `PipePair` has no value at compile time",
+    "std/protocol/nats.ignite::a lost connection holds publishes, drops the stale ones, held or not, and sends the fresh ones on reconnect": "builtin `PipePair` has no value at compile time",
+    "std/protocol/nats.ignite::a lost connection's writer channel keeps no chunk, and its messages count as dropped": "builtin `ChannelBounded` has no value at compile time",
+    "std/protocol/nats.ignite::a publish racing shutdown returns": "builtin `PipePair` has no value at compile time",
+    "std/protocol/nats.ignite::a quiet connection whose server answers every PING is kept": "builtin `TcpListenerBind` has no value at compile time",
+    "std/protocol/nats.ignite::a reconnect loop against a server that stops reading keeps at most `lingering` lost connections running": "builtin `RuntimeCensus` has no value at compile time",
+    "std/protocol/nats.ignite::a refused or broken handshake is the connect call's error": "builtin `PipePair` has no value at compile time",
+    "std/protocol/nats.ignite::a reply after the request's deadline reaches nobody": "builtin `PipePair` has no value at compile time",
+    "std/protocol/nats.ignite::a request waits for one reply on its inbox, gives up at its deadline and reports no responders": "builtin `PipePair` has no value at compile time",
+    "std/protocol/nats.ignite::a shut-down client refuses every call": "builtin `PipePair` has no value at compile time",
+    "std/protocol/nats.ignite::after a reconnect, publishing is checked against the new server's INFO": "builtin `PipePair` has no value at compile time",
+    "std/protocol/nats.ignite::an INFO update on the live connection is what publishing is checked against": "builtin `PipePair` has no value at compile time",
+    "std/protocol/nats.ignite::connect sends CONNECT with the credentials, waits for PONG and reads the server's INFO": "builtin `PipePair` has no value at compile time",
+    "std/protocol/nats.ignite::connect_to reconnects over TCP by itself and subscribes again": "builtin `TcpListenerBind` has no value at compile time",
+    "std/protocol/nats.ignite::invalid subjects, oversized messages and headers the server lacks are refused before they are sent": "builtin `PipePair` has no value at compile time",
+    "std/protocol/nats.ignite::keepalive loses a TCP connection whose server stopped reading during a publish burst": "builtin `TcpListenerBind` has no value at compile time",
+    "std/protocol/nats.ignite::keepalive loses the deaf TCP server when nothing is being published": "builtin `TcpListenerBind` has no value at compile time",
+    "std/protocol/nats.ignite::operations split at every byte across reads are read whole": "builtin `PipePair` has no value at compile time",
+    "std/protocol/nats.ignite::publishes acknowledged before shutdown are written": "builtin `TcpListenerBind` has no value at compile time",
+    "std/protocol/nats.ignite::quiet_limit saturates instead of overflowing, and a ping_interval of 0 is refused": "builtin `PipePair` has no value at compile time",
+    "std/protocol/nats.ignite::sent counts only the messages handed to the writer, and every acknowledged message is counted once": "builtin `TcpListenerBind` has no value at compile time",
+    "std/protocol/nats.ignite::subscriptions with wildcards and queue groups get their messages in order, headers and reply included": "builtin `PipePair` has no value at compile time",
+    "std/protocol/nats.ignite::the outgoing buffer is bounded: a publish past it is dropped and counted": "builtin `PipePair` has no value at compile time",
+    "std/protocol/nats.ignite::the outgoing buffer's byte bound counts the header block": "builtin `PipePair` has no value at compile time",
+    "std/protocol/nats.ignite::the server's PING is answered, its -ERR is counted and the connection stays up": "builtin `PipePair` has no value at compile time",
+    "std/protocol/nats.ignite::unsubscribe_after ends a subscription after its last message, unsubscribe at once": "builtin `PipePair` has no value at compile time",
+    "std/protocol/nats.ignite::unsubscribe_after sends the messages left after a reconnect": "builtin `PipePair` has no value at compile time",
     "std/protocol/resp.ignite::a +switch-master message names the new master, and next_master follows it": "builtin `PipePair` has no value at compile time",
     "std/protocol/resp.ignite::a connection that ends before the reply is an error": "builtin `PipePair` has no value at compile time",
     "std/protocol/resp.ignite::a pipeline sends its commands in one write and returns the replies in order": "builtin `PipePair` has no value at compile time",
@@ -394,13 +423,13 @@
       "area": "Semantics: one meaning across the three consumers",
       "bars": {
         "eval": {
-          "value": 485
+          "value": 493
         },
         "llvm": {
-          "value": 788
+          "value": 825
         },
         "rust": {
-          "value": 788
+          "value": 825
         }
       },
       "direction": "higher",
@@ -471,8 +500,8 @@
       "area": "Semantics: one meaning across the three consumers",
       "bars": {
         "eval": {
-          "decision": "story channel-release-on-close (2026-11-08), wave 8 unit leaks: the four G30 soaks now in std/sync.ignite read Runtime.census() or make a store, and the main of the case study's reproducer (crates/ignite/tests/fixtures/leak/repro.ignite) does IO, none with a value at compile time (docs/slice.md 33.4); the two soaks of the removed fixtures/leak/g30.ignite left the list; the six adversary cases of crates/ignite/tests/fixtures/leak/attack.ignite (25d418ae) start tasks, read Runtime.census() or make stores and channels, so 266; listed in eval_cannot_run; wave 8 integration (2026-11-09): the 16 adversary cases of crates/ignite/tests/fixtures/leak/attack2.ignite and the two store-end tests of std/sync.ignite (story infer-channel-ends) make stores, channels or read Runtime.census(), std/net.ignite's bind_kept test binds a listener (story drain-keeps-bound-listeners), and std/digest.ignite's two million-byte vectors exceed the evaluator's node limit (story std-digest), so 287; listed in eval_cannot_run; wave 10 (2026-11-10): the 15 stream tests of std/protocol/resp.ignite (story std-resp-client) talk to a scripted server over Pipe.pair() or TcpListener.bind, and its adversary pass 1 case of crates/ignite/tests/fixtures/tests/resp_adversary.ignite (TYPE refused by the server) talks to one over Pipe.pair(), so 303; listed in eval_cannot_run",
-          "value": 303
+          "decision": "story channel-release-on-close (2026-11-08), wave 8 unit leaks: the four G30 soaks now in std/sync.ignite read Runtime.census() or make a store, and the main of the case study's reproducer (crates/ignite/tests/fixtures/leak/repro.ignite) does IO, none with a value at compile time (docs/slice.md 33.4); the two soaks of the removed fixtures/leak/g30.ignite left the list; the six adversary cases of crates/ignite/tests/fixtures/leak/attack.ignite (25d418ae) start tasks, read Runtime.census() or make stores and channels, so 266; listed in eval_cannot_run; wave 8 integration (2026-11-09): the 16 adversary cases of crates/ignite/tests/fixtures/leak/attack2.ignite and the two store-end tests of std/sync.ignite (story infer-channel-ends) make stores, channels or read Runtime.census(), std/net.ignite's bind_kept test binds a listener (story drain-keeps-bound-listeners), and std/digest.ignite's two million-byte vectors exceed the evaluator's node limit (story std-digest), so 287; listed in eval_cannot_run; wave 10 (2026-11-10): the 15 stream tests of std/protocol/resp.ignite (story std-resp-client) talk to a scripted server over Pipe.pair() or TcpListener.bind, and its adversary pass 1 case of crates/ignite/tests/fixtures/tests/resp_adversary.ignite (TYPE refused by the server) talks to one over Pipe.pair(), so 303; listed in eval_cannot_run; wave 10 (2026-11-10): 29 tests of std/protocol/nats.ignite (story std-nats-client): 27 talk to a scripted server over Pipe.pair() or TcpListener.bind, one reads Runtime.census() and one makes a channel, so 332; listed in eval_cannot_run",
+          "value": 332
         }
       },
       "direction": "lower",
@@ -932,13 +961,13 @@
       "area": "Standard library and protocols",
       "bars": {
         "eval": {
-          "value": 225
+          "value": 233
         },
         "llvm": {
-          "value": 398
+          "value": 435
         },
         "rust": {
-          "value": 398
+          "value": 435
         }
       },
       "direction": "higher",
@@ -1067,8 +1096,8 @@
       "area": "Engineering health",
       "bars": {
         "all": {
-          "decision": "wave 7 integration (2026-11-08): story bitwise-operators adds the ignored timing test bitwise::codecs_within_3x_of_hand_written_rust, a timing bound kept out of the loaded gate; wave 10 (2026-11-10): story std-resp-client adds resp::a_real_server_and_sentinel_on_both_targets, which needs redis-server and redis-sentinel and is ignored like image::",
-          "value": 25
+          "decision": "wave 7 integration (2026-11-08): story bitwise-operators adds the ignored timing test bitwise::codecs_within_3x_of_hand_written_rust, a timing bound kept out of the loaded gate; wave 10 (2026-11-10): story std-resp-client adds resp::a_real_server_and_sentinel_on_both_targets, which needs redis-server and redis-sentinel and is ignored like image::; story std-nats-client adds nats::a_real_server_on_both_targets, which needs nats-server and is ignored like image::",
+          "value": 26
         }
       },
       "direction": "lower",
