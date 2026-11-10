@@ -183,32 +183,39 @@
     },
     "http-example/1440x900": {
       "glance_cost.median": {
-        "tolerance": 0,
-        "value": 1
-      },
-      "glance_cost.p95": {
+        "decision": "Wave 8 restructured the book: the reference's standard-library index lists 25 modules (17 before) and a How-to section joins the sidebar. A reader passes more links on the way to std.fs and std.protocol.http; the pages are the content the restructure meant to add.",
         "tolerance": 0,
         "value": 2
       },
-      "keyboard.actions": {
+      "glance_cost.p95": {
+        "decision": "Wave 8 restructured the book: the reference's standard-library index lists 25 modules (17 before) and a How-to section joins the sidebar. A reader passes more links on the way to std.fs and std.protocol.http; the pages are the content the restructure meant to add.",
         "tolerance": 0,
-        "value": 50
+        "value": 3
+      },
+      "keyboard.actions": {
+        "decision": "Wave 8 restructured the book: the reference's standard-library index lists 25 modules (17 before) and a How-to section joins the sidebar. A reader passes more links on the way to std.fs and std.protocol.http; the pages are the content the restructure meant to add.",
+        "tolerance": 0,
+        "value": 53
       },
       "screen_only.actions": {
+        "decision": "Wave 8 restructured the book: the reference's standard-library index lists 25 modules (17 before) and a How-to section joins the sidebar. A reader passes more links on the way to std.fs and std.protocol.http; the pages are the content the restructure meant to add.",
         "tolerance": 0,
-        "value": 3
+        "value": 5
       },
       "screen_only.looks": {
+        "decision": "Wave 8 restructured the book: the reference's standard-library index lists 25 modules (17 before) and a How-to section joins the sidebar. A reader passes more links on the way to std.fs and std.protocol.http; the pages are the content the restructure meant to add.",
         "tolerance": 0,
-        "value": 3
+        "value": 5
       },
       "screen_only.steers": {
+        "decision": "Wave 8 restructured the book: the reference's standard-library index lists 25 modules (17 before) and a How-to section joins the sidebar. A reader passes more links on the way to std.fs and std.protocol.http; the pages are the content the restructure meant to add.",
         "tolerance": 0,
-        "value": 0
+        "value": 2
       },
       "screen_only.time_to_act_steps.max": {
+        "decision": "Wave 8 restructured the book: the reference's standard-library index lists 25 modules (17 before) and a How-to section joins the sidebar. A reader passes more links on the way to std.fs and std.protocol.http; the pages are the content the restructure meant to add.",
         "tolerance": "5%",
-        "value": 1
+        "value": 3
       }
     },
     "http-example/390x844": {
@@ -221,24 +228,29 @@
         "value": 3
       },
       "keyboard.actions": {
+        "decision": "Wave 8 restructured the book: the reference's standard-library index lists 25 modules (17 before) and a How-to section joins the sidebar. A reader passes more links on the way to std.fs and std.protocol.http; the pages are the content the restructure meant to add.",
         "tolerance": 0,
-        "value": 53
+        "value": 56
       },
       "screen_only.actions": {
+        "decision": "Wave 8 restructured the book: the reference's standard-library index lists 25 modules (17 before) and a How-to section joins the sidebar. A reader passes more links on the way to std.fs and std.protocol.http; the pages are the content the restructure meant to add.",
         "tolerance": 0,
-        "value": 6
+        "value": 8
       },
       "screen_only.looks": {
+        "decision": "Wave 8 restructured the book: the reference's standard-library index lists 25 modules (17 before) and a How-to section joins the sidebar. A reader passes more links on the way to std.fs and std.protocol.http; the pages are the content the restructure meant to add.",
         "tolerance": 0,
-        "value": 6
+        "value": 8
       },
       "screen_only.steers": {
+        "decision": "Wave 8 restructured the book: the reference's standard-library index lists 25 modules (17 before) and a How-to section joins the sidebar. A reader passes more links on the way to std.fs and std.protocol.http; the pages are the content the restructure meant to add.",
         "tolerance": 0,
-        "value": 3
+        "value": 5
       },
       "screen_only.time_to_act_steps.max": {
+        "decision": "Wave 8 restructured the book: the reference's standard-library index lists 25 modules (17 before) and a How-to section joins the sidebar. A reader passes more links on the way to std.fs and std.protocol.http; the pages are the content the restructure meant to add.",
         "tolerance": "5%",
-        "value": 2
+        "value": 4
       }
     },
     "install/1440x900": {
@@ -423,8 +435,9 @@
         "value": 2
       },
       "keyboard.actions": {
+        "decision": "Wave 8 restructured the book: the reference's standard-library index lists 25 modules (17 before) and a How-to section joins the sidebar. A reader passes more links on the way to std.fs and std.protocol.http; the pages are the content the restructure meant to add.",
         "tolerance": 0,
-        "value": 40
+        "value": 45
       },
       "screen_only.actions": {
         "tolerance": 0,
@@ -453,24 +466,29 @@
         "value": 3
       },
       "keyboard.actions": {
+        "decision": "Wave 8 restructured the book: the reference's standard-library index lists 25 modules (17 before) and a How-to section joins the sidebar. A reader passes more links on the way to std.fs and std.protocol.http; the pages are the content the restructure meant to add.",
         "tolerance": 0,
-        "value": 43
+        "value": 48
       },
       "screen_only.actions": {
+        "decision": "Wave 8 restructured the book: the reference's standard-library index lists 25 modules (17 before) and a How-to section joins the sidebar. A reader passes more links on the way to std.fs and std.protocol.http; the pages are the content the restructure meant to add.",
         "tolerance": 0,
-        "value": 6
+        "value": 7
       },
       "screen_only.looks": {
+        "decision": "Wave 8 restructured the book: the reference's standard-library index lists 25 modules (17 before) and a How-to section joins the sidebar. A reader passes more links on the way to std.fs and std.protocol.http; the pages are the content the restructure meant to add.",
         "tolerance": 0,
-        "value": 6
+        "value": 7
       },
       "screen_only.steers": {
+        "decision": "Wave 8 restructured the book: the reference's standard-library index lists 25 modules (17 before) and a How-to section joins the sidebar. A reader passes more links on the way to std.fs and std.protocol.http; the pages are the content the restructure meant to add.",
         "tolerance": 0,
-        "value": 3
+        "value": 4
       },
       "screen_only.time_to_act_steps.max": {
+        "decision": "Wave 8 restructured the book: the reference's standard-library index lists 25 modules (17 before) and a How-to section joins the sidebar. A reader passes more links on the way to std.fs and std.protocol.http; the pages are the content the restructure meant to add.",
         "tolerance": "5%",
-        "value": 2
+        "value": 3
       }
     }
   },
