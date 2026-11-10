@@ -11119,7 +11119,14 @@ Errors, each an `IoError` whose message starts with `tls <server_name>: `:
 target turns it on in a generated crate's `Cargo.toml` (program or `ignite-std`) whose source
 names `::ignite_io::Tls..`, so a program without TLS compiles neither rustls nor ring
 (`crates/ignite-rustgen/tests/streams.rs`,
-`only_a_program_with_tls_turns_on_the_substrate_feature`). Nothing is replaced: the workspace
+`only_a_program_with_tls_turns_on_the_substrate_feature`). On the LLVM target a program that
+opens no session links none of the engine (`llvm_build::a_program_without_tls_links_no_tls_engine`):
+the runtime's handle table holds a session behind `dyn Any`, so only `ignite_rt_tls_client`
+reaches the engine's drop and clone, and the workspace's dev profile builds these eight crates
+and `rustls` at `opt-level = 2`, so they export no shared generic instances that the runtime's
+own code would link in their place (in the dev runtime archive they made the LLVM release
+executables of terminald and todod 9 and 11 % larger than at wave 9, `quality::release_binaries_stay_within_10_percent_of_v0_15_0`).
+Nothing is replaced: the workspace
 had no TLS. `rcgen` 0.14 is a dev-dependency of `ignite-io`
 and `ignite` only, for the authorities the tests generate. No crate reads the system roots for
 us (`rustls-native-certs` was not taken): the substrate reads the PEM bundle itself.

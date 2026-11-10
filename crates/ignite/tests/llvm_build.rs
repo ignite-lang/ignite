@@ -424,6 +424,43 @@ fn release_tests_link_the_native_runtime() {
     assert!(!text.contains("-flto"), "{text}");
 }
 
+/// `docs/slice.md` 38.2: the runtime archive carries the TLS engine, and a
+/// program that opens no TLS session links none of it, so the size rows of
+/// `docs/quality.md` (3.2) do not pay for TLS in every LLVM executable: no
+/// symbol it defines names the engine's crate, neither the engine's own
+/// code nor a generic instance the engine's crate compiled and shared.
+#[test]
+fn a_program_without_tls_links_no_tls_engine() {
+    let mentions = |path: &Path| {
+        let listed = run(Command::new("nm").arg("--defined-only").arg(path));
+        String::from_utf8_lossy(&listed.stdout)
+            .lines()
+            .filter(|line| line.contains("rustls"))
+            .count()
+    };
+    let runtime = common::runtime_archive();
+    assert!(
+        mentions(&runtime) > 0,
+        "{} holds no TLS engine, so this case checks nothing",
+        runtime.display()
+    );
+    let dir = tmp("llvm-no-tls");
+    let out = dir.join("out");
+    run(&mut llvm_build(
+        &terminal_source(),
+        &out,
+        &which("clang"),
+        false,
+    ));
+    let terminald = out.join("bin/terminald");
+    assert_eq!(
+        mentions(&terminald),
+        0,
+        "{} links the TLS engine without opening a session",
+        terminald.display()
+    );
+}
+
 /// `docs/llvm.md` section 1, target: a runtime archive built for another
 /// architecture than `--triple` fails with a clear error (exit 3) before
 /// clang compiles anything.

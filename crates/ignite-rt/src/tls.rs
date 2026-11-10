@@ -7,11 +7,21 @@
 //! ([`IgniteTlsOptions`]). The session, its locks and its errors are
 //! `ignite-io`'s.
 
+use std::any::Any;
+use std::sync::Arc;
+
 use ignite_io::{IoError, TlsOptions, TlsStream};
 
 use crate::net::{Handle, lookup_handle, read_into_arena, register, tcp_stream};
 use crate::text::texts;
 use crate::{IgniteInput, IgniteIoError, IgniteList, bytes, get, put, status};
+
+/// A session as the handle table holds it: a `TlsStream` behind `dyn Any`.
+/// The table's drop and clone of a handle then name no TLS type, and the
+/// one coercion, in [`ignite_rt_tls_client`], is the only code that
+/// reaches the engine's, so `--gc-sections` drops the engine from a
+/// program that never calls it.
+pub(crate) type Session = Arc<dyn Any + Send + Sync>;
 
 /// `std.tls.TlsOptions`: its fields in declaration order (`docs/llvm.md`
 /// section 3); `handshake_timeout` in nanoseconds.
@@ -45,7 +55,10 @@ impl IgniteTlsOptions {
 /// TLS stream".
 fn tls(handle: i64) -> Result<TlsStream, IoError> {
     match lookup_handle(handle)? {
-        Handle::Tls(session) => Ok(session),
+        Handle::Tls(session) => session
+            .downcast_ref::<TlsStream>()
+            .cloned()
+            .ok_or_else(|| IoError::new(format!("{handle} is not a TLS stream"))),
         _ => Err(IoError::new(format!("{handle} is not a TLS stream"))),
     }
 }
@@ -67,7 +80,11 @@ pub extern "C" fn ignite_rt_tls_client(
             let name = String::from_utf8_lossy(bytes(server_name)).into_owned();
             TlsStream::client(stream, name, IgniteTlsOptions::read(options)?)
         });
-        status(opened.map(|s| register(Handle::Tls(s))), out, err)
+        status(
+            opened.map(|s| register(Handle::Tls(Arc::new(s) as Session))),
+            out,
+            err,
+        )
     })
 }
 

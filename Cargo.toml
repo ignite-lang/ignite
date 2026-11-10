@@ -40,3 +40,30 @@ codegen-units = 1
 
 [profile.dev.package.ignite-io]
 opt-level = 1
+
+[profile.dev.package.rustls]
+opt-level = 2
+
+[profile.dev.package.rustls-webpki]
+opt-level = 2
+
+[profile.dev.package.rustls-pki-types]
+opt-level = 2
+
+[profile.dev.package.ring]
+opt-level = 2
+
+[profile.dev.package.untrusted]
+opt-level = 2
+
+[profile.dev.package.subtle]
+opt-level = 2
+
+[profile.dev.package.zeroize]
+opt-level = 2
+
+[profile.dev.package.getrandom]
+opt-level = 2
+
+[profile.dev.package.once_cell]
+opt-level = 2

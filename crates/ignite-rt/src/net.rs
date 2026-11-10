@@ -34,7 +34,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use ignite_io::{
     ChildProcess, CommandLine, Directory, Entropy, Environment, IoError, Launcher, PipeStream,
-    Setting, TcpListener, TcpStream, TlsStream,
+    Setting, TcpListener, TcpStream,
 };
 
 use crate::{IgniteInput, IgniteIoError, IgniteList, arena, bytes, status};
@@ -144,8 +144,11 @@ pub(crate) enum Handle {
     Stream(TcpStream),
     /// An end of an in-memory pipe (`crate::pipe`).
     Pipe(PipeStream),
-    /// A TLS client session (`crate::tls`).
-    Tls(TlsStream),
+    /// A TLS client session (`crate::tls`), its type erased: the session's
+    /// drop and clone are reached through the vtable only
+    /// `ignite_rt_tls_client` makes, so a program that opens no session
+    /// links no TLS engine (`docs/slice.md` 38.2).
+    Tls(crate::tls::Session),
     /// A root directory (`crate::fs`, `docs/slice.md` 21.4).
     Directory(Directory),
     /// The authority to start children (`crate::child`, 21.5).
