@@ -236,13 +236,19 @@ pub(crate) trait Buffered: Send + Sync {
     fn flush_at_exit(&self, deadline: Instant);
 }
 
-/// Streams a thread wrote to since it last flushed; sent when the thread
-/// ends, so a thread that is not a task (one `std::thread` started) does not
-/// lose what it wrote. The references are weak: the list must not keep a
-/// stream alive, because dropping the last handle sends the buffer and
-/// closes the socket at once (`Stream`'s `Drop`), not at the next flush.
+/// Streams a task wrote to since it last flushed: what its next flush
+/// sends (`docs/slice.md` section 7, "the writing task's next flush").
+/// Sent when the thread ends, so a thread that is not a task (one
+/// `std::thread` started) does not lose what it wrote. On a worker each
+/// task has its own, in the thread-local while the task runs
+/// ([`swap_pending`]): a task's flush sends its own writes only and never
+/// waits for the write lock of a stream another task of the worker holds
+/// while it is parked for room. The references are weak: the list must
+/// not keep a stream alive, because dropping the last handle sends the
+/// buffer and closes the socket at once (`Stream`'s `Drop`), not at the
+/// next flush.
 #[derive(Default)]
-struct Pending(Vec<Weak<dyn Buffered>>);
+pub(crate) struct Pending(Vec<Weak<dyn Buffered>>);
 
 impl Drop for Pending {
     fn drop(&mut self) {
@@ -255,6 +261,13 @@ impl Drop for Pending {
 thread_local! {
     /// Streams the current task wrote to since it last flushed.
     static PENDING: RefCell<Pending> = const { RefCell::new(Pending(Vec::new())) };
+}
+
+/// Exchange the running thread's pending list with `list`: a worker puts a
+/// task's list in place when it resumes the task and takes it back when
+/// the task parks or ends (`crate::sched`).
+pub(crate) fn swap_pending(list: &mut Pending) {
+    let _ = PENDING.try_with(|pending| std::mem::swap(&mut *pending.borrow_mut(), list));
 }
 
 /// Register `stream` with the current task's pending list, once. `false`
