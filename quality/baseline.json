@@ -713,7 +713,7 @@
         },
         "llvm/terminal/rr-64": {
           "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): the dedicated-host run iq-20261109t005132z-6d93 (BASE v0.15.0, HEAD 66a3d5b9, spot c7i.metal-24xl, 0.64 USD) refused this row. The release carries the readiness scheduler (stackful tasks on epoll workers, PR 131), which in the same run cut peak RSS (LLVM terminal connect-8 3.08x to 1.14x of plain Rust, Rust-target todo get-64 2.62x to 0.84x) and raised write throughput (todo patch-16 1.02x to 1.19x on both targets). Replies per second 0.975x to 0.859x; the five passes spread 0.674 to 1.086, so noise is likely, not shown.",
-          "value": 859
+          "value": 871
         },
         "llvm/todo/get-1": {
           "value": 1033
@@ -731,14 +731,14 @@
           "value": 971
         },
         "rust/terminal/rr-64": {
-          "value": 1024
+          "value": 1045
         },
         "rust/todo/get-1": {
           "value": 975
         },
         "rust/todo/get-64": {
           "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): the dedicated-host run iq-20261109t005132z-6d93 (BASE v0.15.0, HEAD 66a3d5b9, spot c7i.metal-24xl, 0.64 USD) refused this row. The release carries the readiness scheduler (stackful tasks on epoll workers, PR 131), which in the same run cut peak RSS (LLVM terminal connect-8 3.08x to 1.14x of plain Rust, Rust-target todo get-64 2.62x to 0.84x) and raised write throughput (todo patch-16 1.02x to 1.19x on both targets). Replies per second 0.983x to 0.826x; the five passes spread 0.643 to 1.040, so noise is likely, not shown.",
-          "value": 826
+          "value": 1057
         },
         "rust/todo/patch-16": {
           "value": 1185
@@ -802,42 +802,42 @@
       "bars": {
         "llvm/terminal/connect-8": {
           "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): the dedicated-host run iq-20261109t005132z-6d93 (BASE v0.15.0, HEAD 66a3d5b9, spot c7i.metal-24xl, 0.64 USD) refused this row. The release carries the readiness scheduler (stackful tasks on epoll workers, PR 131), which in the same run cut peak RSS (LLVM terminal connect-8 3.08x to 1.14x of plain Rust, Rust-target todo get-64 2.62x to 0.84x) and raised write throughput (todo patch-16 1.02x to 1.19x on both targets). p99 1.106x to 1.470x, the same in all five passes: connection setup through the scheduler is slower; story readiness-connect-latency.",
-          "value": 1470
+          "value": 1467
         },
         "llvm/terminal/rr-1": {
-          "value": 1000
+          "value": 992
         },
         "llvm/terminal/rr-64": {
-          "value": 719
+          "value": 700
         },
         "llvm/todo/get-1": {
           "value": 984
         },
         "llvm/todo/get-64": {
           "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): the dedicated-host run iq-20261109t005132z-6d93 (BASE v0.15.0, HEAD 66a3d5b9, spot c7i.metal-24xl, 0.64 USD) refused this row. The release carries the readiness scheduler (stackful tasks on epoll workers, PR 131), which in the same run cut peak RSS (LLVM terminal connect-8 3.08x to 1.14x of plain Rust, Rust-target todo get-64 2.62x to 0.84x) and raised write throughput (todo patch-16 1.02x to 1.19x on both targets). p99 1.137x to 1.500x; the passes spread 0.849 to 1.836; story readiness-connect-latency.",
-          "value": 1500
+          "value": 650
         },
         "llvm/todo/patch-16": {
-          "value": 903
+          "value": 688
         },
         "rust/terminal/connect-8": {
           "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): the dedicated-host run iq-20261109t005132z-6d93 (BASE v0.15.0, HEAD 66a3d5b9, spot c7i.metal-24xl, 0.64 USD) refused this row. The release carries the readiness scheduler (stackful tasks on epoll workers, PR 131), which in the same run cut peak RSS (LLVM terminal connect-8 3.08x to 1.14x of plain Rust, Rust-target todo get-64 2.62x to 0.84x) and raised write throughput (todo patch-16 1.02x to 1.19x on both targets). p99 1.061x to 1.415x, the same in all five passes; story readiness-connect-latency.",
-          "value": 1415
+          "value": 1387
         },
         "rust/terminal/rr-1": {
           "value": 980
         },
         "rust/terminal/rr-64": {
-          "value": 526
+          "value": 510
         },
         "rust/todo/get-1": {
           "value": 1044
         },
         "rust/todo/get-64": {
-          "value": 1054
+          "value": 856
         },
         "rust/todo/patch-16": {
-          "value": 1207
+          "value": 984
         }
       },
       "direction": "lower",
@@ -853,13 +853,13 @@
       "bars": {
         "llvm/terminal/connect-8": {
           "decision": "release v0.15.0 (2026-11-08): the coordinator accepts peak RSS under connect-8 on the LLVM target rising from 2.637x at v0.14.0 to 2.938x of plain Rust (dedicated-host run of 798033f2); it rose with spawn-without-handshake (PR 125: the parent copies a task's arguments into transfer memory, the task takes it as the start of its arena; worker threads 10 to 13 in that unit's measurement; the cause is not pinned beyond that); story readiness-scheduler replaces one thread per connection, and the bar is revisited when it lands",
-          "value": 1137
+          "value": 1136
         },
         "llvm/terminal/rr-1": {
           "value": 1203
         },
         "llvm/terminal/rr-64": {
-          "value": 1314
+          "value": 1313
         },
         "llvm/todo/get-1": {
           "value": 819
@@ -871,13 +871,13 @@
           "value": 913
         },
         "rust/terminal/connect-8": {
-          "value": 981
+          "value": 967
         },
         "rust/terminal/rr-1": {
           "value": 1063
         },
         "rust/terminal/rr-64": {
-          "value": 858
+          "value": 841
         },
         "rust/todo/get-1": {
           "value": 765
@@ -886,7 +886,7 @@
           "value": 837
         },
         "rust/todo/patch-16": {
-          "value": 878
+          "value": 877
         }
       },
       "direction": "lower",
@@ -910,11 +910,11 @@
         },
         "rust/terminal": {
           "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): the dedicated-host run iq-20261109t005132z-6d93 (BASE v0.15.0, HEAD 66a3d5b9, spot c7i.metal-24xl, 0.64 USD) refused this row. The release carries the readiness scheduler (stackful tasks on epoll workers, PR 131), which in the same run cut peak RSS (LLVM terminal connect-8 3.08x to 1.14x of plain Rust, Rust-target todo get-64 2.62x to 0.84x) and raised write throughput (todo patch-16 1.02x to 1.19x on both targets). Stripped binary 1.304x to 1.669x; story readiness-binary-size.",
-          "value": 1669
+          "value": 1547
         },
         "rust/todo": {
           "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): the dedicated-host run iq-20261109t005132z-6d93 (BASE v0.15.0, HEAD 66a3d5b9, spot c7i.metal-24xl, 0.64 USD) refused this row. The release carries the readiness scheduler (stackful tasks on epoll workers, PR 131), which in the same run cut peak RSS (LLVM terminal connect-8 3.08x to 1.14x of plain Rust, Rust-target todo get-64 2.62x to 0.84x) and raised write throughput (todo patch-16 1.02x to 1.19x on both targets). Stripped binary 0.723x to 0.864x; story readiness-binary-size.",
-          "value": 864
+          "value": 850
         }
       },
       "direction": "lower",
