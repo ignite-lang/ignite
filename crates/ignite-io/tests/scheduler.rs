@@ -689,3 +689,150 @@ fn child_connect_8() {
         "{counts:?}"
     );
 }
+
+/// In-process clients of an in-process echo server, every one a task
+/// sharing workers with the others: each is answered. An end of stream
+/// that arrives with the reply raises no readiness edge of its own, so a
+/// client that took its short read of the reply for an emptied socket
+/// waited for one until its idle timeout (`answered 0` of 50 on one
+/// worker, 2 to 7 on four, about 30 on twenty).
+#[test]
+fn in_process_clients_sharing_workers_are_each_answered() {
+    for workers in ["1", "4"] {
+        passed(&child(
+            "scheduler::child_clients",
+            &[("IGNITE_WORKERS", workers), ("SCHEDULER_CLIENTS", "50")],
+        ));
+    }
+}
+
+/// An accept loop task spawns one task per connection that reads once,
+/// writes the bytes back and closes; each client task connects, writes
+/// four bytes, reads until end of stream and reports on a channel that
+/// the process' main thread receives within [`LIMIT`] per report.
+#[test]
+fn child_clients() {
+    use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
+    if !in_child() {
+        return;
+    }
+    static ACCEPTED: AtomicUsize = AtomicUsize::new(0);
+    static SERVED: AtomicUsize = AtomicUsize::new(0);
+    static CONNECTED: AtomicUsize = AtomicUsize::new(0);
+    let count: usize = std::env::var("SCHEDULER_CLIENTS").unwrap().parse().unwrap();
+    let listener = TcpListener::bind(LOCALHOST.to_string(), 0).unwrap();
+    let port = listener.local_port();
+    spawn(move || {
+        for _ in 0..count {
+            let Ok(stream) = listener.accept() else {
+                return;
+            };
+            ACCEPTED.fetch_add(1, SeqCst);
+            spawn(move || {
+                if let Ok(Input::Data(bytes)) = stream.read(4096) {
+                    let _ = stream.write_all(bytes);
+                }
+                let _ = stream.close();
+                SERVED.fetch_add(1, SeqCst);
+            });
+        }
+    });
+    let (results, reported) = Channel::bounded::<bool>(count as i64);
+    for _ in 0..count {
+        let results = results.clone();
+        spawn(move || {
+            let answered = (|| {
+                let stream = TcpStream::connect(LOCALHOST.to_string(), port).ok()?;
+                CONNECTED.fetch_add(1, SeqCst);
+                stream.set_idle_timeout(20_000).ok()?;
+                stream.write_all(b"ping".to_vec()).ok()?;
+                let mut out = Vec::new();
+                while let Input::Data(bytes) = stream.read(4096).ok()? {
+                    out.extend(bytes);
+                }
+                Some(out == b"ping")
+            })();
+            results.send(answered == Some(true));
+        });
+    }
+    let (mut yes, mut seen) = (0, 0);
+    while seen < count {
+        match reported.receive_within(LIMIT.as_nanos() as i64) {
+            Some(ok) => {
+                seen += 1;
+                yes += usize::from(ok);
+            }
+            None => break,
+        }
+    }
+    assert_eq!(
+        yes,
+        count,
+        "answered {yes}, wrong {}, none {}; connected {}, accepted {}, served {}",
+        seen - yes,
+        count - seen,
+        CONNECTED.load(SeqCst),
+        ACCEPTED.load(SeqCst),
+        SERVED.load(SeqCst)
+    );
+}
+
+/// A short read does not show that a socket is empty: what came in the
+/// same readiness edge as the bytes it returned is still there, with no
+/// edge of its own to come. The peer's end of stream behind the bytes is
+/// read at once, not at the idle timeout; so is the urgent byte a read
+/// stopped before. One worker, the reader parked in the reactor (another
+/// task keeps it from waiting alone), and the peer writing on the same
+/// worker, so both arrive before the worker looks at its reactor.
+#[test]
+fn what_a_short_read_left_behind_is_read_at_once() {
+    for case in ["end", "urgent"] {
+        passed(&child(
+            "scheduler::child_short_read",
+            &[("IGNITE_WORKERS", "1"), ("SCHEDULER_CASE", case)],
+        ));
+    }
+}
+
+#[test]
+fn child_short_read() {
+    if !in_child() {
+        return;
+    }
+    let urgent = std::env::var("SCHEDULER_CASE").as_deref() == Ok("urgent");
+    let listener = TcpListener::bind(LOCALHOST.to_string(), 0).unwrap();
+    let peer = TcpStream::connect(LOCALHOST.to_string(), listener.local_port()).unwrap();
+    let stream = listener.accept().unwrap();
+    let (keep, kept) = Channel::bounded::<bool>(1);
+    spawn(move || {
+        kept.receive();
+    });
+    let (report, reports) = mpsc::channel();
+    spawn(move || {
+        stream.set_idle_timeout(2_000).unwrap();
+        let first = stream.read(4096).unwrap();
+        let second = stream.read(4096).unwrap();
+        report
+            .send(format!("{first:?} {second:?} {}", stream.timed_out()))
+            .unwrap();
+    });
+    spawn(move || {
+        // Parked on a timer until the reader parks in its first read.
+        ignite_io::wait::sleep(Duration::from_millis(100));
+        peer.write_all(b"ping".to_vec()).unwrap();
+        if urgent {
+            peer.write_urgent(vec![255, 242]).unwrap();
+        } else {
+            peer.close().unwrap();
+        }
+    });
+    let read = reports.recv_timeout(LIMIT).expect("the reader ended");
+    let expected = if urgent {
+        "Data([112, 105, 110, 103, 255]) Data([242]) false"
+    } else {
+        "Data([112, 105, 110, 103]) Eof false"
+    };
+    assert_eq!(read, expected);
+    drop(keep);
+    wait_for_tasks();
+}
