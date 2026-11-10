@@ -10696,10 +10696,10 @@ so the handler's type keeps `requires [state.*]` and needs no effect of its own;
 the effects of `crates/ignite-types` was needed for it.
 
 A thousand held requests over TCP with the clients in the same process (the last test of NN.7)
-are answered under `IGNITE_IO=threads`, but under the default IO mode `readiness` only a few
-dozen of them are: the rest of the clients wait with no answer. A test with no HTTP (fifty
-in-process clients of an in-process echo server, each its own task) shows the same, so the cause
-is in the substrate's scheduler, not in holds; the test stays red until that is fixed.
+first lost answers under the default IO mode `readiness`, and so did fifty in-process clients
+of an in-process echo server with no HTTP at all: a short read hid an end of stream behind it in
+the substrate. With that fixed (`fix(io): a short read no longer hides an end of stream behind
+it`) every request is answered in both IO modes.
 
 The drain (16.13). `serve_listener` keeps one `Holds` for all its connections,
 `Holds.start()`: a bounded channel of `HoldEvent`s to a register task, `keep_holds`. Each held
