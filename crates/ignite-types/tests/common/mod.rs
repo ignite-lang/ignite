@@ -68,6 +68,27 @@ pub fn std_imports(program: &Program) -> Vec<String> {
         .collect()
 }
 
+/// The modules `source` reaches through builtins without importing them,
+/// as the driver orders them (`docs/slice.md` 16.22, 21.8): a module that
+/// calls `Runtime.census()` is typed after `std.runtime`, which declares
+/// the `Census` it returns.
+fn builtin_dependencies(source: &SourceFile, own: &str) -> Vec<String> {
+    let names = ignite_types::builtin_std_modules();
+    let Ok(tokens) = ignite_syntax::lexer::lex(&source.text) else {
+        return Vec::new();
+    };
+    tokens
+        .iter()
+        .filter_map(|token| match &token.kind {
+            ignite_syntax::lexer::TokenKind::Ident(name) => names.get(name.as_str()),
+            _ => None,
+        })
+        .flatten()
+        .filter(|module| module.as_str() != own)
+        .cloned()
+        .collect()
+}
+
 /// Parse every file under `root`, check and type them in import order.
 /// Any diagnostic, package mismatch or import cycle is an `Err` with the
 /// rendered diagnostics.
@@ -112,11 +133,13 @@ pub fn load_std(root: &Path) -> Result<Std, String> {
         if visiting.iter().any(|m| m == module) {
             return Err(format!("import cycle through `{module}`: {visiting:?}"));
         }
-        let Some((_, program)) = parsed.get(module) else {
+        let Some((source, program)) = parsed.get(module) else {
             return Ok(());
         };
         visiting.push(module.to_string());
-        for dependency in std_imports(program) {
+        let mut dependencies = std_imports(program);
+        dependencies.extend(builtin_dependencies(source, module));
+        for dependency in dependencies {
             visit(&dependency, parsed, order, visiting)?;
         }
         visiting.pop();
