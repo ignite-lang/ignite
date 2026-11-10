@@ -1,0 +1,7 @@
+package std.left
+
+import std.right.{kept}
+
+fn greet() -> Text {
+  return kept().concat("farewell")
+}

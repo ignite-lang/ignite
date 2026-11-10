@@ -66,6 +66,36 @@ fn follows_roles_into_their_module_and_its_imports() {
     assert!(!out.contains("pub enum Mode"), "{out}");
 }
 
+/// A name in an item reaches only the items of that name its own module
+/// defines or imports, as Rust resolves it: the text `farewell` in
+/// `std.left`'s `greet` does not keep `std.right`'s `farewell`, which
+/// `std.left` does not import, nor the type only that fn names; `kept`,
+/// which it imports, stays with its `use` line. (Before, any item of the
+/// name anywhere was kept: a string `"ratio"` in a `std.json` test kept
+/// `std.control`'s `ratio`, and from there names that one module defines
+/// and another uses for something else (`checked`, `set`, `command`,
+/// `describe`, `start`, `session`, most of them fns of `std.protocol.resp`
+/// and `std.protocol.nats`) led to `std.protocol.telnet` and `Console`.)
+#[test]
+fn a_name_reaches_only_what_its_module_defines_or_imports() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/reachable/std");
+    let library = common::load_std(&root);
+    let types = common::type_std(&library).expect("the fixture library types");
+    let inputs: Vec<TypedStdModule<'_>> = library
+        .iter()
+        .zip(&types)
+        .map(|((m, p, s), t)| (m.clone(), p, s, t))
+        .collect();
+    let project =
+        generate_std_reachable(&inputs, &options(), &["::ignite_std::left::greet()"]).unwrap();
+    let out = norm(&project.lib_rs);
+    assert!(out.contains("pub fn greet("), "{out}");
+    assert!(out.contains("use crate::right::kept;"), "{out}");
+    assert!(out.contains("pub fn kept("), "{out}");
+    assert!(!out.contains("pub fn farewell("), "{out}");
+    assert!(!out.contains("pub struct Unreached"), "{out}");
+}
+
 #[test]
 fn methods_fields_and_ranges_do_not_name_items() {
     let out = golden_reachable(&["fn main() { x.shout(); y.Line; z.pump(0..pump) }"]);

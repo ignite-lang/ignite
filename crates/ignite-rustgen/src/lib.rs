@@ -40,7 +40,7 @@
 //! `const` declarations. A constant is a zero-argument fn, so a non-local
 //! name that is a constant is emitted as `N()` and is never a place.
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Write as _;
 use std::fs;
 use std::io;
@@ -549,7 +549,7 @@ impl PreparedStd {
         for (index, module) in self.modules.iter().enumerate() {
             let text = module.render(
                 retained.map(|retained| retained.items[index].as_slice()),
-                retained.map(|retained| &retained.names),
+                retained.map(|retained| &retained.names[index]),
             );
             tree.insert(&std_segments(&module.path), text);
         }
@@ -705,17 +705,111 @@ fn plain_ident(rust: &str) -> &str {
     rust.strip_prefix("r#").unwrap_or(rust)
 }
 
-/// Dependencies are source identifiers under the same conservative rule
-/// as the original pruning walk. Compute them once per immutable template.
+/// Dependencies are source identifiers under the conservative rule of the
+/// original pruning walk (a name in a string or comment counts), resolved
+/// within the item's module as Rust resolves them there: to the module's
+/// own items of that name, to those its `use` lines import (by name or by
+/// glob), and to those of a module the item names by a `crate::` path (a
+/// variant of an enum not imported, `crate::modes::Mode::Loud`). The
+/// roots, which lie outside the library, reach every item of each name
+/// they contain. Compute them once per immutable template.
 #[derive(Debug)]
 struct StdDependencies {
+    /// Items by name, for the roots.
     definitions: BTreeMap<String, Vec<(usize, usize)>>,
+    /// Per module and item, the distinct identifiers of its text.
     references: Vec<Vec<Vec<String>>>,
+    /// Per module and item, the items those identifiers resolve to.
+    targets: Vec<Vec<Vec<(usize, usize)>>>,
 }
 
 struct RetainedStd {
     items: Vec<Vec<bool>>,
-    names: BTreeSet<String>,
+    /// Per module, the identifiers of its kept items: its `use` lines keep
+    /// those names only, so no line imports an item that was dropped.
+    names: Vec<BTreeSet<String>>,
+}
+
+/// The modules one std module's names can resolve to.
+struct Scope {
+    own: usize,
+    /// Modules a `use` line takes a name from, by that name.
+    named: HashMap<String, Vec<usize>>,
+    /// Modules a `use` line takes every name from.
+    globs: Vec<usize>,
+}
+
+impl Scope {
+    fn of(own: usize, module: &LoweredModule, by_path: &HashMap<String, usize>) -> Scope {
+        let mut scope = Scope {
+            own,
+            named: HashMap::new(),
+            globs: Vec::new(),
+        };
+        for target in &module.uses {
+            let Some(&from) = by_path.get(&target.path) else {
+                continue;
+            };
+            for name in &target.names {
+                if name == "*" {
+                    scope.globs.push(from);
+                } else {
+                    scope
+                        .named
+                        .entry(plain_ident(name).to_string())
+                        .or_default()
+                        .push(from);
+                }
+            }
+        }
+        scope
+    }
+
+    /// Whether `name` in an item that names the modules `by_paths` by a
+    /// `crate::` path may be `module`'s item of that name.
+    fn sees(&self, module: usize, name: &str, by_paths: &[usize]) -> bool {
+        module == self.own
+            || self.globs.contains(&module)
+            || by_paths.contains(&module)
+            || self
+                .named
+                .get(name)
+                .is_some_and(|from| from.contains(&module))
+    }
+}
+
+/// The std modules the Rust source `text` names by a `crate::` path: for
+/// each `crate::a::b::…`, the longest prefix that is a module of `by_path`.
+fn path_modules(text: &str, by_path: &HashMap<String, usize>) -> Vec<usize> {
+    let mut found = Vec::new();
+    for (start, _) in text.match_indices("crate::") {
+        let path: String = text[start..]
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | ':' | '#'))
+            .collect();
+        let segments: Vec<&str> = path.split("::").collect();
+        for end in (1..=segments.len()).rev() {
+            if let Some(&module) = by_path.get(&segments[..end].join("::")) {
+                if !found.contains(&module) {
+                    found.push(module);
+                }
+                break;
+            }
+        }
+    }
+    found
+}
+
+/// The Rust path of std module `path` inside the `ignite-std` crate, as its
+/// importers' `use` lines write it (`use_targets`): `std.a.b` is
+/// `crate::a::b`.
+fn std_rust_path(path: &str) -> String {
+    let mut rust = String::from("crate");
+    for segment in std_segments(path) {
+        rust.push_str("::");
+        rust.push_str(&ident(segment));
+    }
+    rust
 }
 
 impl StdDependencies {
@@ -737,23 +831,55 @@ impl StdDependencies {
             }
             references.push(items);
         }
+        let by_path: HashMap<String, usize> = modules
+            .iter()
+            .enumerate()
+            .map(|(index, module)| (std_rust_path(&module.path), index))
+            .collect();
+        let targets = modules
+            .iter()
+            .enumerate()
+            .map(|(index, module)| {
+                let scope = Scope::of(index, module, &by_path);
+                references[index]
+                    .iter()
+                    .zip(&module.items)
+                    .map(|(names, item): (&Vec<String>, &Item)| {
+                        let by_paths = path_modules(&item.text, &by_path);
+                        names
+                            .iter()
+                            .filter_map(|name| Some((name, definitions.get(name)?)))
+                            .flat_map(|(name, defined)| {
+                                defined
+                                    .iter()
+                                    .copied()
+                                    .filter(|&(module, _)| scope.sees(module, name, &by_paths))
+                                    .collect::<Vec<_>>()
+                            })
+                            .collect()
+                    })
+                    .collect()
+            })
+            .collect();
         Self {
             definitions,
             references,
+            targets,
         }
     }
 
     fn reachable(&self, modules: &[LoweredModule], roots: &[&str]) -> RetainedStd {
-        // Generated operator chains can repeat a few names millions of times.
-        // Borrow every token and queue each distinct name once; only the final
-        // use-filter set needs owned strings. Roots and item bodies stay alive
-        // throughout this walk, and rendering order comes from the modules.
-        let mut names = HashSet::new();
-        let mut pending = Vec::new();
+        // Generated operator chains can repeat a few names millions of times:
+        // each root name is looked up once, and an item's names were made
+        // distinct and resolved once in `new`.
+        let mut seen = HashSet::new();
+        let mut pending: Vec<(usize, usize)> = Vec::new();
         for root in roots {
             rust_identifiers(root, |name| {
-                if names.insert(name) {
-                    pending.push(name);
+                if seen.insert(name)
+                    && let Some(defined) = self.definitions.get(name)
+                {
+                    pending.extend(defined.iter().copied());
                 }
             });
         }
@@ -761,24 +887,29 @@ impl StdDependencies {
             .iter()
             .map(|module| vec![false; module.items.len()])
             .collect();
-        while let Some(name) = pending.pop() {
-            if let Some(defined) = self.definitions.get(name) {
-                for &(module, item) in defined {
-                    if !items[module][item] {
-                        items[module][item] = true;
-                        for reference in &self.references[module][item] {
-                            if names.insert(reference.as_str()) {
-                                pending.push(reference.as_str());
-                            }
-                        }
-                    }
-                }
+        while let Some((module, item)) = pending.pop() {
+            if !items[module][item] {
+                items[module][item] = true;
+                pending.extend(
+                    self.targets[module][item]
+                        .iter()
+                        .copied()
+                        .filter(|&(module, item)| !items[module][item]),
+                );
             }
         }
-        RetainedStd {
-            items,
-            names: names.into_iter().map(str::to_string).collect(),
-        }
+        let names = items
+            .iter()
+            .enumerate()
+            .map(|(module, kept)| {
+                kept.iter()
+                    .enumerate()
+                    .filter(|(_, kept)| **kept)
+                    .flat_map(|(item, _)| self.references[module][item].iter().cloned())
+                    .collect()
+            })
+            .collect();
+        RetainedStd { items, names }
     }
 }
 

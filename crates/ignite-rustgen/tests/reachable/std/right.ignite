@@ -1,0 +1,13 @@
+package std.right
+
+type Unreached {
+  name: Text
+}
+
+fn kept() -> Text {
+  return "kept"
+}
+
+fn farewell(unreached: Unreached) -> Text {
+  return unreached.name
+}
