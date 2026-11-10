@@ -890,6 +890,9 @@ pub enum Builtin {
     /// `s.peer() -> std.net.Endpoint` on a `TcpStream`: the other end's
     /// address and port; pure (`docs/slice.md` 26.1).
     TcpStreamPeer,
+    /// `s.local() -> std.net.Endpoint` on a `TcpStream`: this end's address
+    /// and port; pure, as `peer`.
+    TcpStreamLocal,
     /// `s.timed_out() -> Bool` on a `TcpStream`: whether the last read
     /// ended because the idle timeout passed; effect `<root>.read` (26.2).
     TcpStreamTimedOut,

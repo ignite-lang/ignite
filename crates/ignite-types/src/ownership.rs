@@ -177,6 +177,7 @@ pub fn change(builtin: Builtin) -> Option<Change> {
         | TcpStreamClose
         | TcpStreamConnect
         | TcpStreamConnectWithin
+        | TcpStreamLocal
         | TcpStreamPeer
         | TcpStreamRead
         | TcpStreamSetIdleTimeout

@@ -196,7 +196,10 @@ struct Stream {
     /// readiness against it before its first `recv`, since a `recv` right
     /// away would find nothing (a request-reply peer has not answered
     /// yet). A read that filled its buffer leaves it unset, so the next
-    /// read tries at once. Only with `blocking` false.
+    /// read tries at once; so does a short read once the readiness
+    /// reported an end of stream, an error or urgent data
+    /// (`Readiness::short_read_may_leave_input`). Only with `blocking`
+    /// false.
     emptied: AtomicU64,
     /// The idle timeout in milliseconds; 0 is none (`crate::idle`).
     idle: AtomicI64,
@@ -769,7 +772,14 @@ impl TcpStream {
             let blocked = blocking.take().is_some();
             match attempted {
                 Ok(value) => {
-                    if !self.inner.blocking && emptied.get() {
+                    // A short read after an end of stream, an error or
+                    // urgent data was reported may have left them behind,
+                    // with no edge to come for them: the next read tries
+                    // at once.
+                    if !self.inner.blocking
+                        && emptied.get()
+                        && !self.inner.readiness.short_read_may_leave_input()
+                    {
                         self.inner.emptied.store(mark, Ordering::Relaxed);
                     }
                     ended(false);
@@ -860,6 +870,24 @@ impl TcpStream {
     /// operating system could not report it then.
     pub fn peer(&self) -> (String, i64) {
         self.inner.peer.clone()
+    }
+
+    /// This end's address and port: the
+    /// address the connection arrived at or left from, written as
+    /// [`TcpStream::peer`] writes its address, asked of the operating
+    /// system at each call (`getsockname`), so a stream that never asks
+    /// pays nothing. `("", 0)` when the operating system cannot report it.
+    pub fn local(&self) -> (String, i64) {
+        self.inner
+            .socket
+            .local_addr()
+            .map(|local| {
+                (
+                    local.ip().to_canonical().to_string(),
+                    i64::from(local.port()),
+                )
+            })
+            .unwrap_or_default()
     }
 
     /// [`TcpStream::connect`] that gives up after `timeout_ns`
@@ -1085,6 +1113,24 @@ mod tests {
         assert!(
             nix::sys::socket::getsockopt(socket, nix::sys::socket::sockopt::OobInline).unwrap()
         );
+    }
+
+    /// `TcpStream::local`: an accepted
+    /// stream's local end is the listener's address and port, a connected
+    /// one's the address and port the client socket left from, in both
+    /// families, and it stays known after `close`.
+    #[test]
+    fn a_stream_knows_its_local_end_in_both_families() {
+        for address in ["127.0.0.1", "::1"] {
+            let listener = super::TcpListener::bind(address.to_string(), 0).unwrap();
+            let port = listener.local_port();
+            let client = super::TcpStream::connect(address.to_string(), port).unwrap();
+            let accepted = listener.accept().unwrap();
+            assert_eq!(accepted.local(), (address.to_string(), port));
+            assert_eq!(client.local(), accepted.peer());
+            accepted.close().unwrap();
+            assert_eq!(accepted.local(), (address.to_string(), port));
+        }
     }
 
     /// `Slot::release` (the drain, 16.13): a pending `accept` is woken

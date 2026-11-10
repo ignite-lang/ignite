@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-10T04:30:13Z",
+  "actor": "human:timo",
+  "artifact": "story:std-nats-client",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "review-result:adversary-std-nats-client-pass-2",
+    "reference": "067e3abb",
+    "review": "review-result:adversary-std-nats-client-pass-2",
+    "outcome": "fixed"
+  }
+}

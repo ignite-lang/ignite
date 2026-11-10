@@ -1,0 +1,248 @@
+package tests.http_app_adversary
+
+// Adversary pass 1 on story `http-app-connection` (`docs/slice.md` "HttpApp
+// sees its connection"): holds, upgrades, bodies over the limit and the
+// connection view, beyond the unit's own tests. Run with
+// `ignite test crates/ignite/tests/fixtures/http_app_adversary.ignite` on
+// both targets.
+
+import std.protocol.http.*
+import std.net.{ByteStream, Pipe, PipeStream, TcpStream, Endpoint, Connection}
+import std.text.*
+
+// A connected pair of pipe ends, each giving up on a peer silent for 5 s,
+// the bound the module's own tests use.
+test fn pair() -> IoResult<(PipeStream, PipeStream)> {
+  let (client, server) = Pipe.pair()
+  client.set_idle_timeout(5000)?
+  server.set_idle_timeout(5000)?
+  Ok((client, server))
+}
+
+// Everything `client` reads until the end of the stream.
+test fn all_of<T: ByteStream>(client: T) -> IoResult<Text> requires [client.read] {
+  var out = Bytes.empty()
+  loop {
+    match client.read(4096)? {
+      Eof => return Ok(out.to_text())
+      Data(bytes) => out.append(bytes)
+    }
+  }
+}
+
+test fn ok(body: Text, connection: Text) -> Text = render(Response.plain(200, body), connection == "keep-alive").to_text()
+
+test fn ok_head(body: Text, connection: Text) -> Text = render_message(Response.plain(200, body), connection == "keep-alive", false).to_text()
+
+// Answers `<method> <path> <body>`.
+test fn echo_answer(state: Unit, request: Request) -> Response = Response.plain(200, "{request.method} {request.path} {request.body}")
+
+// The body over the limit, answered by the application.
+test fn big(state: Unit, head: Request, limit: ByteSize) -> Response = Response.plain(413, "over {limit.to_int()}")
+
+test fn big_reply(connection: Text) -> Text = render(Response.plain(413, "over 4"), connection == "keep-alive").to_text()
+
+// Everything `serve_connection` sends for `input` over a pipe until it
+// closes, the client's write half left open.
+test fn exchange<S>(input: Bytes, limits: HttpLimits, application: HttpApp<S, PipeStream>) -> IoResult<Text> {
+  let (client, server) = pair()?
+  spawn serve_connection(server, Connection.unknown(), limits, application, Holds.none())
+  client.write_all(input)?
+  all_of(client)
+}
+
+// ---- bodies over the limit ----------------------------------------------
+
+test "adv: a body at the limit is handled, one byte over is on_oversized's, and the next request starts right after the discarded body" {
+  let limits = HttpLimits { body = 4 bytes }
+  let app: HttpApp<Unit, PipeStream> = HttpApp { state = (), handle = echo_answer, on_oversized = Some(big) }
+  let input = b"POST /a HTTP/1.1\r\nHost: h\r\nContent-Length: 4\r\n\r\nabcdPOST /b HTTP/1.1\r\nHost: h\r\nContent-Length: 5\r\n\r\nabcdeGET /c HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n"
+  assert exchange(input, limits, app)? == ok("POST /a abcd", "keep-alive") + big_reply("keep-alive") + ok("GET /c ", "close")
+}
+
+// RFC 9110 section 10.1.1: a client that sent `Expect: 100-continue` waits
+// for 100 before it sends the body, and the server never sends 100 for a
+// body it refuses. Answering such a request keep-alive and then reading
+// `Content-Length` bytes as its body eats the client's next request.
+test "adv: a body over the limit announced with Expect: 100-continue and never sent does not swallow the next request" {
+  let limits = HttpLimits { body = 4 bytes }
+  let app: HttpApp<Unit, PipeStream> = HttpApp { state = (), handle = echo_answer, on_oversized = Some(big) }
+  let input = b"POST /big HTTP/1.1\r\nHost: h\r\nContent-Length: 10\r\nExpect: 100-continue\r\n\r\nGET /next HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n"
+  let out = exchange(input, limits, app)?
+  assert !out.contains("400 Bad Request"), "the next request was read as the refused body: {out}"
+  assert out == big_reply("close") || out == big_reply("keep-alive") + ok("GET /next ", "close"), out
+}
+
+test "adv: discarding a body that never comes ends at the idle timeout" {
+  let limits = HttpLimits { body = 4 bytes, idle_timeout = 200 ms }
+  let app: HttpApp<Unit, PipeStream> = HttpApp { state = (), handle = echo_answer, on_oversized = Some(big) }
+  assert exchange(b"POST /stall HTTP/1.1\r\nHost: h\r\nContent-Length: 1000\r\n\r\nxy", limits, app)? == big_reply("keep-alive")
+}
+
+test "adv: an upgrade asked with a body over the limit goes to on_oversized and nothing takes over" {
+  let limits = HttpLimits { body = 4 bytes }
+  let app: HttpApp<Unit, PipeStream> = HttpApp { state = (), reply = Some(upgrade_to), on_oversized = Some(big) }
+  let input = b"POST /up HTTP/1.1\r\nHost: h\r\nUpgrade: echo\r\nConnection: upgrade\r\nContent-Length: 10\r\n\r\n0123456789GET /c HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n"
+  assert exchange(input, limits, app)? == big_reply("keep-alive") + ok("GET /c ", "close")
+}
+
+// ---- holds --------------------------------------------------------------
+
+// Holds every request for 60 s but `/now`; each sender waits in `state`,
+// in a channel with room for two messages.
+test fn hold_two<T>(state: Store<Sender<Response>>, request: Request) -> Reply<Store<Sender<Response>>, T> {
+  if request.path == "/now" {
+    return Respond(Response.plain(200, "now"))
+  }
+  let (tx, rx) = Channel.bounded(2)
+  state.put(state.next_id(), tx)
+  Hold(rx, 60 seconds, Response.plain(200, "timed out"))
+}
+
+// Holds for 60 s on a channel whose sender is dropped at once.
+test fn hold_dropped<T>(state: Unit, request: Request) -> Reply<Unit, T> {
+  let (tx, rx) = Channel.bounded(1)
+  Hold(rx, 60 seconds, Response.plain(200, "dropped"))
+}
+
+// Whether `count` requests wait in `waiters` within 5 s.
+test fn waiting(waiters: Store<Sender<Response>>, count: Int) -> Bool {
+  let started = Clock.monotonic()
+  while waiters.values().len() < count {
+    if Clock.monotonic() - started > 5 seconds {
+      return false
+    }
+    Clock.sleep(5 ms)
+  }
+  true
+}
+
+test "adv: a held request whose sender is gone is answered at once with on_timeout" {
+  let out = exchange(b"GET /p HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n", HttpLimits {}, HttpApp { state = (), reply = Some(hold_dropped) })?
+  assert out == ok("dropped", "close")
+}
+
+test "adv: two messages to a held request answer it once, and pipelined requests behind it, HEAD among them, keep their order" {
+  let waiters: Store<Sender<Response>> = Store.new()
+  let (client, server) = pair()?
+  spawn Http.serve(server, HttpLimits {}, HttpApp { state = waiters, reply = Some(hold_two) })
+  client.write_all(b"GET /a HTTP/1.1\r\nHost: h\r\n\r\nHEAD /b HTTP/1.1\r\nHost: h\r\n\r\nGET /now HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n")?
+  assert waiting(waiters, 1)
+  let first: Sender<Response> = waiters.values().at(0)
+  assert first.send(Response.plain(200, "first"))
+  let raced = first.send(Response.plain(200, "second"))
+  assert waiting(waiters, 2)
+  assert !first.send(Response.plain(200, "late"))
+  let second: Sender<Response> = waiters.values().at(1)
+  assert second.send(Response.plain(200, "head"))
+  assert all_of(client)? == ok("first", "keep-alive") + ok_head("head", "keep-alive") + ok("now", "close")
+}
+
+test "adv: a request held after the drain is answered at once" {
+  let holds = Holds.start()
+  drain_holds(holds)
+  let waiters: Store<Sender<Response>> = Store.new()
+  let (client, server) = pair()?
+  spawn serve_connection(server, Connection.unknown(), HttpLimits {}, HttpApp { state = waiters, reply = Some(hold_two) }, holds)
+  client.write_all(b"GET /p HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n")?
+  assert all_of(client)? == ok("timed out", "close")
+}
+
+test "adv: the register of held requests ends at the drain while a copy of its holds lives" {
+  let tasks = Runtime.census().tasks
+  let holds = Holds.start()
+  drain_holds(holds)
+  assert Runtime.settle(tasks, 5 seconds), "{Runtime.census().tasks - tasks} task(s) left after the drain"
+  drain_holds(holds)
+}
+
+// ---- upgrades -----------------------------------------------------------
+
+// `/up` is taken over with 101, `/plain` with a 200 that has a body,
+// `/slow` by a takeover that reads until the idle timeout fails it.
+test fn upgrade_to<T: ByteStream>(state: Unit, request: Request) -> Reply<Unit, T> = if request.path == "/up" {
+  Upgrade(Response { status = 101, headers = [("Upgrade", "echo"), ("Connection", "upgrade")] }, take)
+} else if request.path == "/plain" {
+  Upgrade(Response.plain(200, "hi"), take)
+} else if request.path == "/slow" {
+  Upgrade(Response { status = 101, headers = [("Upgrade", "echo"), ("Connection", "upgrade")] }, take_slow)
+} else {
+  Respond(echo_answer((), request))
+}
+
+// Writes `[<method> <body>|<early>]` and returns.
+test fn take<T: ByteStream>(state: Unit, request: Request, stream: T, early: Bytes) -> IoResult<Unit> requires [stream.read, stream.write] {
+  stream.write_all("[{request.method} {request.body}|".to_bytes())?
+  stream.write_all(early)?
+  stream.write_all(b"]")
+}
+
+// Writes `taken`, then reads until the read fails.
+test fn take_slow<T: ByteStream>(state: Unit, request: Request, stream: T, early: Bytes) -> IoResult<Unit> requires [stream.read, stream.write] {
+  stream.write_all(b"taken")?
+  loop {
+    match stream.read(4096)? {
+      Eof => return Ok(())
+      Data(bytes) => {}
+    }
+  }
+}
+
+test fn switching() -> Text = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: echo\r\nConnection: upgrade\r\n\r\n"
+
+test "adv: takeover gets exactly the bytes after the request: after a body, after a chunked body, none, and pipelined requests" {
+  let app: HttpApp<Unit, PipeStream> = HttpApp { state = (), reply = Some(upgrade_to) }
+  let up = "Host: h\r\nUpgrade: echo\r\nConnection: upgrade\r\n"
+  assert exchange("POST /up HTTP/1.1\r\n{up}Content-Length: 3\r\n\r\nabcearly".to_bytes(), HttpLimits {}, app)? == switching() + "[POST abc|early]"
+  assert exchange("POST /up HTTP/1.1\r\n{up}Transfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n0\r\n\r\nzz".to_bytes(), HttpLimits {}, app)? == switching() + "[POST abc|zz]"
+  assert exchange("GET /up HTTP/1.1\r\n{up}\r\n".to_bytes(), HttpLimits {}, app)? == switching() + "[GET |]"
+  assert exchange("GET /up HTTP/1.1\r\n{up}\r\nGET /x HTTP/1.1\r\nHost: h\r\n\r\n".to_bytes(), HttpLimits {}, app)? == switching() + "[GET |GET /x HTTP/1.1\r\nHost: h\r\n\r\n]"
+}
+
+test "adv: an upgrade answered 200 with a body is framed by its length, then taken over" {
+  let app: HttpApp<Unit, PipeStream> = HttpApp { state = (), reply = Some(upgrade_to) }
+  let expected = "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 2\r\n\r\nhi[GET |]"
+  assert exchange(b"GET /plain HTTP/1.1\r\nHost: h\r\n\r\n", HttpLimits {}, app)? == expected
+}
+
+test "adv: a takeover that fails ends the connection and the server writes nothing more" {
+  let app: HttpApp<Unit, PipeStream> = HttpApp { state = (), reply = Some(upgrade_to) }
+  let out = exchange(b"GET /slow HTTP/1.1\r\nHost: h\r\nUpgrade: echo\r\nConnection: upgrade\r\n\r\nGET /x HTTP/1.1\r\nHost: h\r\n\r\n", HttpLimits { idle_timeout = 100 ms }, app)?
+  assert out == switching() + "taken"
+}
+
+// ---- the connection -----------------------------------------------------
+
+test fn who(state: Unit, request: Request) -> Response = if request.connection.peer.address == "10.0.0.7" {
+  Response.plain(200, "welcome")
+} else {
+  status_response(403)
+}
+
+test "adv: forwarding headers do not change the peer an allow list sees" {
+  let (client, server) = pair()?
+  let connection = Connection { peer = Endpoint { address = "10.0.0.8", port = 4000 }, local = Endpoint { address = "10.0.0.1", port = 80 } }
+  spawn serve_connection(server, connection, HttpLimits {}, HttpApp { state = (), handle = who }, Holds.none())
+  client.write_all(b"GET / HTTP/1.1\r\nHost: h\r\nX-Forwarded-For: 10.0.0.7\r\nForwarded: for=10.0.0.7\r\nX-Real-IP: 10.0.0.7\r\nConnection: close\r\n\r\n")?
+  assert all_of(client)? == render(status_response(403), false).to_text()
+}
+
+test "adv: a dual-stack listener shows an IPv4 peer and local end as IPv4" {
+  let listener = TcpListener.bind("::", 0)?
+  let port = listener.local_port()
+  let client = TcpStream.connect("127.0.0.1", port)?
+  let server = listener.accept()?
+  assert Connection.of(server) == Connection { peer = client.local(), local = Endpoint { address = "127.0.0.1", port } }
+}
+
+test "adv: the local end stays known after the peer closed and after this end closed" {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let client = TcpStream.connect("127.0.0.1", listener.local_port())?
+  let server = listener.accept()?
+  let before = server.local()
+  client.close()?
+  assert server.local() == before
+  server.close()?
+  assert server.local() == before
+  assert before == Endpoint { address = "127.0.0.1", port = listener.local_port() }
+}

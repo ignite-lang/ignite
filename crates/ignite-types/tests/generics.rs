@@ -290,3 +290,57 @@ fn effectful_fn_types() {
         "fn(state: S, stream: TcpStream) -> Result<Unit, IoError> requires [state.*, stream.*]"
     );
 }
+
+/// The diagnostics of checking and typing `body` alone, rendered.
+fn diagnostics_of(body: &str) -> Option<String> {
+    let source = SourceFile::new("probe.ignite", body.to_string());
+    let program = ignite_syntax::parse(&source)
+        .unwrap_or_else(|d| panic!("parse failed:\n{}", source.render_all(&d)));
+    let symbols = match check_module(&program, &Modules::new()) {
+        Ok(symbols) => symbols,
+        Err(d) => return Some(source.render_all(&d)),
+    };
+    type_module(&program, &symbols, &TypedModules::new())
+        .err()
+        .map(|d| source.render_all(&d))
+}
+
+/// A record literal passed to a generic fn is typed against the parameter
+/// as far as the other arguments bind it: a type parameter of the record
+/// that none of its fields names (`T`, the stream type of a field's fn
+/// type that defaults) comes from the call, as a closure's parameter
+/// types do. Without such an argument it stays E042.
+#[test]
+fn a_record_literal_argument_takes_its_type_parameters_from_the_call() {
+    let program = r#"
+type Box<S, T> {
+  state: S
+  touch: Option<fn(state: S, stream: T) -> Int> = None
+}
+
+fn serve<T, S>(stream: T, boxed: Box<S, T>) -> Int = match boxed.touch {
+  Some(touch) => touch(boxed.state, stream)
+  None => 0
+}
+
+fn hold(stream: Int, boxed: Box<Text, Int>) -> Int = serve(stream, boxed)
+
+fn main() -> Int = serve(7, Box { state = "s" })
+"#;
+    assert_eq!(diagnostics_of(program), None);
+    let unbound = r#"
+type Box<S, T> {
+  state: S
+  touch: Option<fn(state: S, stream: T) -> Int> = None
+}
+
+fn keep<S, T>(boxed: Box<S, T>) -> Int = 0
+
+fn main() -> Int = keep(Box { state = "s" })
+"#;
+    let text = diagnostics_of(unbound).expect("`T` is bound by nothing");
+    assert!(
+        text.contains("error[E042]") && text.contains("`T`"),
+        "{text}"
+    );
+}

@@ -73,15 +73,17 @@ the head of its response, with the `Content-Length` of the body, but not the bod
 type IoResult<T> = Result<T, IoError>
 
 protocol Http {
-  fn serve<T: ByteStream, S>(stream: T, limits: HttpLimits, application: HttpApp<S>) -> IoResult<Unit> requires [
+  fn serve<T: ByteStream, S>(stream: T, limits: HttpLimits, application: HttpApp<S, T>) -> IoResult<Unit> requires [
     stream.read, stream.write, application.*
   ]
 }
 
-type HttpApp<S> {
+type HttpApp<S, T> {
   state: S
-  handle: fn(state: S, request: Request) -> Response requires [state.*]
+  handle: fn(state: S, request: Request) -> Response requires [state.*] = not_found
   piece: fn(state: S, request: Request) -> IoResult<Option<Bytes>> requires [state.*] = no_piece
+  reply: Option<fn(state: S, request: Request) -> Reply<S, T> requires [state.*]> = None
+  on_oversized: Option<fn(state: S, head: Request, limit: ByteSize) -> Response requires [state.*]> = None
 }
 
 type HttpLimits {
@@ -94,26 +96,35 @@ type HttpLimits {
 
 type HttpServer<S> {
   listener: TcpListener
-  application: HttpApp<S>
+  application: HttpApp<S, TcpStream>
   executable: Text
   limits: HttpLimits = HttpLimits {}
 }
 
 fn HttpServer.main<S>(self: HttpServer<S>) -> IoResult<Unit>
+fn serve_connection<T: ByteStream, S>(stream: T, connection: Connection, limits: HttpLimits, application: HttpApp<S, T>, holds: Holds) -> IoResult<Unit>
+fn serve_listener<S>(listener: TcpListener, limits: HttpLimits, application: HttpApp<S, TcpStream>) -> IoResult<Unit>
 ```
 
 - `Http.serve` sets the stream's idle timeout, answers requests until the connection ends,
-  and closes the stream.
-- `HttpApp<S>` is what a server runs: shared state, and the handler called once per request
-  with that state. The handler may use effects on the state, such as a `Store`. `piece` gives
-  the body of a streamed response, see [Responses](#responses). It defaults to `no_piece`,
-  which ends every body at once.
+  and closes the stream. The application sees the connection as `Connection.unknown()`.
+- `serve_connection` is `Http.serve` for a connection the application sees as `connection`,
+  with its held requests registered in `holds` (see [Holding a request](#holding-a-request)).
+- `HttpApp<S, T>` is what a server runs: shared state, and the handler called once per
+  request with that state. The handler may use effects on the state, such as a `Store`.
+  `piece` gives the body of a streamed response, see [Responses](#responses). It defaults to
+  `no_piece`, which ends every body at once. `reply` and `on_oversized` are described in
+  [The connection, holds and upgrades](#the-connection-holds-and-upgrades). `T` is the stream
+  type a takeover gets: `TcpStream` under `HttpServer`, `PipeStream` over a pipe. `handle`
+  defaults to `not_found`, which answers 404, for an application that answers through `reply`.
 - `HttpLimits` bounds a connection: the longest head (else 431) and body (else 413), the idle
   time after which the connection is closed, and how much input a lingering close drains, each
   read waiting at most `drain_timeout`.
-- `HttpServer.main` accepts connections and runs `Http.serve` under `limits` in one task per
-  connection. A connection whose handler fails ends its task, and the server goes on
-  accepting.
+- `HttpServer.main` is `serve_listener`: it accepts connections and serves each under `limits`
+  in one task per connection, the application seeing the stream's `Connection.of`. A
+  connection whose handler fails ends its task, and the server goes on accepting. When
+  `accept` fails, as it does once a SIGTERM drain began, every held request is answered at
+  once and `main` returns while the open connections finish.
 
 The constants `READ_SIZE` (65536, the size of one read) and `MAXIMUM_LENGTH_DIGITS` (18, the
 longest `Content-Length` value) are framing facts, not limits.
@@ -128,6 +139,7 @@ type Request {
   version: Text
   headers: List<(Text, Text)>
   body: Text
+  connection: Connection = Connection { peer = Endpoint { address = "", port = 0 }, local = Endpoint { address = "", port = 0 } }
 }
 
 fn header(request: Request, name: Text) -> Option<Text>
@@ -138,7 +150,8 @@ fn parse_head(head: Text) -> Option<Request>
 ```
 
 `path` is the request target without its query, `query` the text after `?`. Header names are
-in lower case and values trimmed.
+in lower case and values trimmed. `connection` is the connection the request came on, see
+[The connection, holds and upgrades](#the-connection-holds-and-upgrades).
 
 | function | what it does |
 |---|---|
@@ -203,6 +216,125 @@ the request until it returns `Ok(None)`, and sends each piece as it comes:
 An `Err` from `piece` ends the connection without the last chunk, so the client sees the body
 as incomplete. Http never sends a `Transfer-Encoding` in a 1xx or 204 response, in a 2xx
 response to `CONNECT`, or to an HTTP/1.0 request (RFC 9112 section 6.1).
+
+## The connection, holds and upgrades
+
+```ignite,fragment
+// std.net
+type Connection {
+  peer: Endpoint
+  local: Endpoint
+  tls: Bool = false
+}
+
+fn Connection.unknown() -> Connection
+fn Connection.of(stream: TcpStream) -> Connection
+
+// std.protocol.http
+enum Reply<S, T> {
+  Respond(Response)
+  Hold(Receiver<Response>, Duration, Response)
+  Upgrade(Response, fn(state: S, request: Request, stream: T, early: Bytes) -> IoResult<Unit> requires [state.*, stream.read, stream.write])
+}
+
+type Holds {
+  events: Option<Sender<HoldEvent>>
+}
+
+enum HoldEvent { Held(Receiver<Response>), Drain }
+
+fn Holds.none() -> Holds
+fn Holds.start() -> Holds
+fn drain_holds(holds: Holds) -> Unit
+fn not_found<S>(state: S, request: Request) -> Response
+```
+
+### The connection
+
+Every request carries the connection it came on as `request.connection`: the peer's address
+and port, the local address and port, and whether TLS carries it. Under `HttpServer` that is
+`Connection.of(stream)` of the accepted `TcpStream`; a `TcpStream` gives its ends with
+`stream.peer()` and `stream.local()`. `Http.serve` knows no address of a stream it is given
+and says `Connection.unknown()`: both ends empty, port 0. `serve_connection` takes the view
+as an argument, which is how a test serves a pipe as a connection from a given peer. `tls` is
+false until a TLS layer exists.
+
+An allow list refuses every peer it does not name:
+
+```ignite
+import std.protocol.http.*
+
+fn allow_listed(state: List<Text>, request: Request) -> Response {
+  for address in state {
+    if address == request.connection.peer.address {
+      return Response.plain(200, "welcome\n")
+    }
+  }
+  status_response(403)
+}
+```
+
+### Holding a request
+
+When `reply` is given it answers each request in place of `handle`. `Respond(response)`
+answers at once. `Hold(receiver, deadline, on_timeout)` makes the connection's task wait on a
+[`std.sync`](sync.md) receiver: the response sent on its channel is the answer, `on_timeout`
+is the answer at the deadline or as soon as the channel is closed. Other connections are not
+held up, since each runs in its own task; requests pipelined behind the held one wait for it.
+After the wait the receiver is closed, so a `send` to an answered request returns false.
+
+```ignite
+import std.protocol.http.*
+
+// Holds every request until a message or 30 s; the senders wait in the state.
+fn poll<T>(state: Store<Sender<Response>>, request: Request) -> Reply<Store<Sender<Response>>, T> {
+  let (tx, rx) = Channel.bounded(1)
+  state.put(state.next_id(), tx)
+  Hold(rx, 30 seconds, status_response(204))
+}
+```
+
+`HttpServer` keeps one `Holds` for all its connections (`Holds.start()`): a register task
+that each held receiver is sent to. When the drain begins, `accept` fails and `drain_holds`
+tells the register, which closes every held receiver and ends: each held request is answered
+at once with what was sent to it or with its `on_timeout`, and so is a request held after that.
+`Http.serve` waits with `Holds.none()`, which no drain reaches.
+
+### Taking the connection over
+
+`Upgrade(response, takeover)` writes the head of `response` without a `Connection` field of
+Http's own (the application names `Connection: upgrade` and `Upgrade` itself), then calls
+`takeover` on the connection's task with the state, the request, the stream and the bytes
+already read after the request. The connection is closed when `takeover` returns. A response
+`checked` refuses is answered 500 instead, and nothing takes over. The takeover is generic in
+the stream, so the same fn serves a pipe in a test and a `TcpStream` under `HttpServer`:
+
+```ignite
+import std.protocol.http.*
+
+fn echo<T: ByteStream>(state: Unit, request: Request, stream: T, early: Bytes) -> IoResult<Unit> requires [stream.read, stream.write] {
+  stream.write_all(early)?
+  loop {
+    match stream.read(4096)? {
+      Eof => return Ok(())
+      Data(bytes) => stream.write_all(bytes)?
+    }
+  }
+}
+
+fn upgrade<T: ByteStream>(state: Unit, request: Request) -> Reply<Unit, T> =
+  Upgrade(Response { status = 101, headers = [("Upgrade", "echo"), ("Connection", "upgrade")] }, echo)
+```
+
+### A body over the limit
+
+Without `on_oversized`, a body over `HttpLimits.body` is answered 413 and the connection
+closed after a lingering close. With it, `on_oversized(state, head, limit)` decides the answer:
+`head` is the request without its body, `limit` the body limit. The connection goes on when the
+request keeps it, the answer does not say `Connection: close`, and the body has a
+`Content-Length`: the server reads and drops the body, then reads the next request. A chunked
+body over the limit is answered and the connection closed, since its remaining chunks are
+not decoded.
 
 ## A server in a system
 

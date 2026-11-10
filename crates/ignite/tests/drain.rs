@@ -544,6 +544,44 @@ fn adversary_process_exit_during_the_drain_with_a_stalled_writer() {
     });
 }
 
+/// Story `http-app-connection`: a request an `HttpServer` holds for 60 s
+/// (`fixtures/http_hold_drain.ignite`) is answered by the drain at once
+/// with its hold's `on_timeout`, well before its deadline, and the drained
+/// server then exits.
+#[test]
+fn the_drain_answers_a_held_http_request_at_once() {
+    on_both_targets(|target| {
+        let binary = build_fixture("http_hold_drain", "holddrain", target);
+        let mut server = Server::start(&binary);
+        let mut client = TcpStream::connect(("127.0.0.1", server.port)).expect("connect");
+        client
+            .set_read_timeout(Some(TIMEOUT))
+            .expect("read timeout");
+        client
+            .write_all(b"GET /poll HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n")
+            .expect("send the request");
+        wait_line(&server.stderr, "held", &mut server.skipped, |l| l == "held");
+        let signalled = Instant::now();
+        signal(server.pid(), Signal::SIGTERM);
+        let mut received = Vec::new();
+        client
+            .read_to_end(&mut received)
+            .unwrap_or_else(|e| panic!("{target}: read the answer: {e}"));
+        let answered = signalled.elapsed();
+        let answer = text(&received);
+        assert!(
+            answer.starts_with("HTTP/1.1 200 OK\r\n") && answer.ends_with("\r\n\r\ndrained"),
+            "{target}: {answer:?}"
+        );
+        assert!(
+            answered < Duration::from_secs(30),
+            "{target}: answered {answered:?} after SIGTERM, the hold's deadline is 60 s"
+        );
+        let status = wait_exit(&mut server.child, "the drained server");
+        assert!(status.code().is_some(), "{target}: {status:?}");
+    });
+}
+
 /// The next `listening on 127.0.0.1:<port>` line of `server`; its port.
 fn next_listening_port(server: &mut Server) -> u16 {
     let listening = wait_line(&server.stderr, "listening on", &mut server.skipped, |l| {

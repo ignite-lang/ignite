@@ -1,0 +1,26 @@
+package tests.http_hold_drain
+
+import std.protocol.http.*
+
+// Built for both targets and run by tests/drain.rs (story
+// `http-app-connection`): an `HttpServer` holds every request for 60 s,
+// its sender kept in the state, and logs `held`. After SIGTERM the drain
+// answers the held request at once with the hold's `on_timeout`.
+
+fn hold<T>(state: Store<Sender<Response>>, request: Request) -> Reply<Store<Sender<Response>>, T> {
+  let (tx, rx) = Channel.bounded(1)
+  state.put(state.next_id(), tx)
+  log("held")
+  Hold(rx, 60 seconds, Response.plain(200, "drained"))
+}
+
+system HoldDrain {
+  resource listener: TcpListener { address = "127.0.0.1", port = 0 }
+  resource waiters: Store<Sender<Response>>
+
+  component server: HttpServer {
+    listener = listener
+    application = HttpApp { state = waiters, reply = Some(hold) }
+    executable = "holddrain"
+  }
+}

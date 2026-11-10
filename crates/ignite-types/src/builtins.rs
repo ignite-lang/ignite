@@ -107,6 +107,7 @@ pub(crate) fn method(receiver: &Ty, name: &str) -> Option<Sig> {
         (Ty::PipeStream, "write_urgent") => sig(PipeStreamWriteUrgent, vec![bytes()], io(Ty::Unit)),
         (Ty::PipeStream, "urgent_pending") => sig(PipeStreamUrgentPending, vec![], io(Ty::Bool)),
         (Ty::TcpStream, "peer") => sig(TcpStreamPeer, vec![], endpoint()),
+        (Ty::TcpStream, "local") => sig(TcpStreamLocal, vec![], endpoint()),
         (Ty::TcpStream, "timed_out") => sig(TcpStreamTimedOut, vec![], Ty::Bool),
         (Ty::TlsStream, "alpn") => sig(TlsStreamAlpn, vec![], Ty::Text),
         (Ty::TlsStream, _) => stream_method(name),
@@ -547,6 +548,12 @@ mod tests {
             .into_iter()
             .map(|(name, modules)| (name, modules.into_iter().collect()))
             .collect();
-        assert_eq!(modules, [("peer", vec!["std.net".to_string()])]);
+        assert_eq!(
+            modules,
+            [
+                ("local", vec!["std.net".to_string()]),
+                ("peer", vec!["std.net".to_string()])
+            ]
+        );
     }
 }

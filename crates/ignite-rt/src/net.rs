@@ -554,6 +554,24 @@ pub extern "C" fn ignite_rt_tcp_peer(out: *mut crate::IgniteEndpoint, handle: i6
     })
 }
 
+/// `void tcp_local(Endpoint* out, i64 stream)`: this end of the stream,
+/// its address allocated in the task's arena (`ignite_io::TcpStream::local`);
+/// an empty address and port 0 when the
+/// handle is not a stream, as `tcp_peer` gives.
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_tcp_local(out: *mut crate::IgniteEndpoint, handle: i64) {
+    crate::entry(move || {
+        let (address, port) = stream(handle).map(|s| s.local()).unwrap_or_default();
+        crate::put(
+            out,
+            crate::IgniteEndpoint {
+                address: IgniteList::from_bytes(address.as_bytes()),
+                port,
+            },
+        );
+    })
+}
+
 /// `i8 tcp_timed_out(i64 stream)`: 1 when the last read of the stream
 /// ended because the idle timeout passed, else 0, also for a handle that
 /// is not a stream (`ignite_io::TcpStream::timed_out`, `docs/slice.md`

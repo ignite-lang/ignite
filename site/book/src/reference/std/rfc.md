@@ -96,7 +96,7 @@ import std.rfc.{Party}
 import std.rfc.rfc9112.{RFC9112}
 
 protocol Http conforms [RFC9112] scope { parties = [Server, Any] } {
-  fn serve<T: ByteStream, S>(stream: T, limits: HttpLimits, application: HttpApp<S>) -> IoResult<Unit> requires [stream.read, stream.write, application.*] satisfies [RFC9112.R2_2_3] { .. }
+  fn serve<T: ByteStream, S>(stream: T, limits: HttpLimits, application: HttpApp<S, T>) -> IoResult<Unit> requires [stream.read, stream.write, application.*] satisfies [RFC9112.R2_2_3] { .. }
   unsupported RFC9112.R7_1_2 "only Content-Length framing; any Transfer-Encoding is 501"
 }
 

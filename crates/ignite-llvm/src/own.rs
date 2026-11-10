@@ -685,6 +685,7 @@ fn keeps_receiver(builtin: Builtin) -> bool {
             | PipeStreamUrgentPending
             | StreamWriteUrgent
             | StreamUrgentPending
+            | TcpStreamLocal
             | TcpStreamPeer
             | TcpStreamTimedOut
             | TlsStreamAlpn

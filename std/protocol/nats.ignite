@@ -2,7 +2,7 @@ package std.protocol.nats
 
 import std.net.{ByteStream, Pipe, PipeStream, TcpStream, TcpListener, Endpoint}
 import std.io.IoError
-import std.text.{bytes_find_from, is_digit, is_whitespace, split, to_upper}
+import std.text.{bytes_find_from, is_digit, is_whitespace, repeat, split, to_upper}
 import std.json.{Json, encode, parse, get}
 
 // A client of NATS core over any `ByteStream`: a `TcpStream` in programs,
@@ -18,17 +18,23 @@ import std.json.{Json, encode, parse, get}
 // - `connect(stream, options, limits)` reads INFO, sends CONNECT with the
 //   options' credentials (user and password, or a token) and PING, and
 //   returns once the server answers PONG; a refusal (`-ERR`) is its error.
-//   Then two tasks run the connection: one reads the server's operations,
-//   the other (the client task) owns the stream's writes and every piece
-//   of state, and the fns below send it commands. The helpers are called
-//   as plain fns, `publish(client, subject, payload)`: the method form on
-//   a binding of type `Nats<T>` is E042.
-// - `publish` and `publish_message` queue a message and return; the client
-//   task writes it, or, while no connection is up, holds it in a buffer
-//   bounded by `NatsLimits.pending` and `pending_bytes`. A message older
-//   than `pending_age` (one second) when its turn comes is dropped and
-//   counted (`NatsStats.stale`), never sent late; one past the buffer is
-//   dropped and counted (`overflow`).
+//   Then three tasks run the client: per connection a reader of the
+//   server's operations and a writer of the stream, and the client task,
+//   which owns every piece of state; the fns below send it commands. The
+//   client task never writes the stream itself, so a server that stops
+//   reading blocks only the writer, and the keepalive still finds it. The
+//   helpers are called as plain fns, `publish(client, subject, payload)`:
+//   the method form on a binding of type `Nats<T>` is E042.
+// - `publish` and `publish_message` check the message against the INFO of
+//   the newest connection (headers, `max_payload`) and queue it; the
+//   writer writes it, or, while no connection is up, the client task holds
+//   it in a buffer bounded by `NatsLimits.pending` and `pending_bytes`. A
+//   message older than `pending_age` (one second) when its turn comes is
+//   dropped and counted (`NatsStats.stale`), never sent late; one past the
+//   buffer is dropped and counted (`overflow`). Bytes the writer has not
+//   taken are bounded by `NatsLimits.backlog`; past it the connection is
+//   lost. Delivery is at most once: what a lost connection had not
+//   written is not sent again.
 // - `subscribe` and `queue_subscribe` give a `Subscription` whose
 //   `messages` channel gets each delivery; a full channel drops and counts
 //   (`slow`). `unsubscribe` ends it at once, `unsubscribe_after` after a
@@ -43,10 +49,22 @@ import std.json.{Json, encode, parse, get}
 // - Reconnect: a lost connection sends one value on `Nats.losses`; the
 //   caller hands a new stream to `reconnect`, which runs the handshake;
 //   the client task then subscribes again to every live subscription and
-//   sends the held messages that are not stale. `connect_to` does this
+//   sends the held messages that are not stale and that the new server's
+//   INFO takes (`refused` counts the others). `connect_to` does this
 //   itself over TCP, waiting `retry_delay(attempt)` between attempts.
-// - `shutdown` closes the connection and every subscription's channel;
-//   every call after it is the error "nats: the client is shut down".
+// - `shutdown` hands the writer every byte queued, closes the connection
+//   and every subscription's channel, and waits for no write; every call
+//   after it, and every one queued behind it, is the error "nats: the
+//   client is shut down".
+// - Closing: the substrate's `close` ends a stream's write half only, and
+//   a read or write blocked on a silent peer waits on. `dial` sets a TCP
+//   stream's idle timeout to `quiet_limit(options)`, so the reader of a
+//   dead connection ends; a writer blocked on a peer that stopped reading
+//   stays blocked until the peer or the kernel ends the connection, its
+//   task, its socket and the one chunk it writes held so long. The
+//   substrate has no operation that ends such a write. `NatsStats.lingering`
+//   counts these connections, and `connect_to` does not dial while
+//   `NatsLimits.lingering` of them run.
 //
 // A copy of a client is the same client, and many tasks may use it at once:
 // each fn only sends the client task a command, so their writes never
@@ -60,10 +78,15 @@ type IoResult<T> = Result<T, IoError>
 // and its JSON included, without CR LF. `payload`: one message's bytes,
 // its header block included, received or published (the server's
 // `max_payload` bounds publishing too). `headers`: one message's header
-// block. `pending`, `pending_bytes`: the messages, and their payload
-// bytes, held while no connection is up. `pending_age`: a message older
-// than this when its turn to be written comes is dropped and counted.
-// `subscription`: the messages one subscription's channel holds.
+// block. `pending`, `pending_bytes`: the messages, and their bytes with
+// the header block, held while no connection is up. `pending_age`: a
+// message older than this when its turn to be written comes is dropped
+// and counted. `subscription`: the messages one subscription's channel
+// holds. `backlog`: the bytes a connection may leave unwritten; past it
+// the connection, a peer that stopped reading, is lost. `lingering`: the
+// lost connections whose reader or writer may still run (a writer blocked
+// on a peer that stopped reading, a reader within its idle timeout) before
+// `connect_to` waits to dial again.
 type NatsLimits {
   line: ByteSize = 64 KiB
   payload: ByteSize = 1 MiB
@@ -72,6 +95,8 @@ type NatsLimits {
   pending_bytes: ByteSize = 8 MiB
   pending_age: Duration = 1 seconds
   subscription: Int = 1024
+  backlog: ByteSize = 8 MiB
+  lingering: Int = 4
 }
 
 // The credentials CONNECT carries.
@@ -630,6 +655,10 @@ fn failed(reason: Text) -> IoError = IoError.new("nats: {reason}")
 // PONG. The server's PING meanwhile is answered; its -ERR is the error.
 // Bounded by the stream's idle timeout, which the caller sets.
 fn handshake<T: ByteStream>(stream: T, options: NatsOptions, limits: NatsLimits) -> IoResult<(ServerInfo, Bytes)> {
+  // A keepalive due at once would PING without pause.
+  if options.ping_interval <= 0 ms {
+    return Err(failed("ping_interval must be more than 0 ms, not {options.ping_interval.to_ms()} ms"))
+  }
   var data = Bytes.empty()
   var at = 0
   var info = match next_op(stream, limits, data, at)? {
@@ -670,36 +699,48 @@ fn handshake<T: ByteStream>(stream: T, options: NatsOptions, limits: NatsLimits)
 
 // ---- the client -------------------------------------------------------------
 
-// A message queued for writing and when it was queued (`Clock.monotonic`).
+// A message queued for writing and when it was queued (`Clock.monotonic`);
+// for a request's message, the sid of the request's inbox.
 type Outgoing {
   message: NatsMessage
   queued: Duration
+  request: Option<Int> = None
 }
 
-// What the client task is told: by the client's fns, by the reader of
-// connection `generation` (`Inbound`, `Lost`), or `Attach`, a new stream
-// whose handshake is done, with its INFO and the bytes read after it.
+// What the client task is told: by the client's fns, by the reader or
+// writer of connection `generation` (`Inbound`, `Lost`, and `Ended` when
+// the task ends), or `Attach`, a new stream whose handshake is done, with
+// its INFO and the bytes read after it. `Publish` and `Request` are
+// answered with the reason the server's INFO refuses the message, `None`
+// (or the sid) when it does not.
 enum Command<T> {
-  Publish(Outgoing),
+  Publish(Outgoing, Sender<Option<Text>>),
   Subscribe(Text, Option<Text>, Sender<NatsMessage>, Sender<Int>),
   Unsubscribe(Int, Option<Int>),
-  Request(Outgoing, Sender<NatsMessage>, Sender<Int>),
+  Request(Outgoing, Sender<NatsMessage>, Sender<Result<Int, Text>>),
   Flush(Sender<Bool>),
   Stats(Sender<NatsStats>),
   Inbound(Int, ServerOp),
   Lost(Int, Text),
+  Ended(Int),
   Attach(T, ServerInfo, Bytes),
   Shutdown(Sender<Bool>)
 }
 
 // What a client counts. `connections`: handshakes completed, the first
-// included; `losses`: connections lost. `sent`: messages written;
-// `received`: deliveries put on a subscription's channel. `pending`:
-// messages held now. `stale`, `overflow`, `slow`: messages dropped as
-// older than `pending_age`, past the outgoing buffer, and past a full
-// subscription channel. `errors`: the server's -ERR lines, and
-// `last_error` the newest of them or the reason the last connection was
-// lost.
+// included; `losses`: connections lost. `received`: deliveries put on a
+// subscription's channel; `slow`: deliveries dropped at a full one.
+// `errors`: the server's -ERR lines, and `last_error` the newest of them or
+// the reason the last connection was lost. `lingering`: lost connections
+// whose reader or writer still runs (`NatsLimits.lingering`).
+//
+// Every message a publish or a request acknowledged is in exactly one of:
+// `sent`, queued for the connection that is up, or taken by the writer of
+// one lost since; `pending`, held now while no connection is up; `stale`,
+// dropped as older than `pending_age`; `overflow`, dropped past the
+// outgoing buffer; `refused`, held and then refused by the next server's
+// INFO; `dropped`, queued for a connection that was lost before its writer
+// took it. Messages a writer took are not sent again.
 type NatsStats {
   connected: Bool = false
   connections: Int = 0
@@ -710,6 +751,9 @@ type NatsStats {
   stale: Int = 0
   overflow: Int = 0
   slow: Int = 0
+  refused: Int = 0
+  dropped: Int = 0
+  lingering: Int = 0
   errors: Int = 0
   last_error: Option<Text> = None
 }
@@ -742,6 +786,13 @@ const LOSS_CAPACITY: Int = 64
 // The client task's wait when no keepalive is due: no connection is up.
 const IDLE_WAIT: Duration = 60 seconds
 
+// The chunks a connection's writer holds besides the one it writes: the
+// rest waits in `Session.unsent`, bounded by `NatsLimits.backlog`.
+const WRITER_CAPACITY: Int = 1
+
+// The client task's wait while bytes wait for the writer to take them.
+const DRAIN_WAIT: Duration = 5 ms
+
 // A live subscription: what was sent for it, where its deliveries go, and
 // its limit (`unsubscribe_after`, a request's one reply) with the number
 // delivered so far.
@@ -758,11 +809,36 @@ type Route {
 // `flush` waiting for its answer.
 enum Waiter { Keepalive, Flusher(Sender<Bool>) }
 
-// The client task's state.
+// The channel of a connection's writer, both ends: the client task sends
+// on `writer`, and takes back from `chunks` what the writer has not taken
+// when the connection is lost or the client shuts down.
+type Link {
+  writer: Sender<Bytes>
+  chunks: Receiver<Bytes>
+}
+
+// The tasks of connection `generation` still running: its reader, its
+// writer, or both.
+type Running {
+  generation: Int
+  tasks: Int
+}
+
+// The client task's state. `link` takes the bytes for the connection that
+// is up: `unsent` holds those not handed to it yet, `unsent_messages` the
+// messages among them, and `handed_messages` the messages of the chunk
+// handed last, which the writer may not have taken yet. `info` is the
+// INFO of the newest connection, which publishing is checked against.
+// `running`: the connections whose tasks still run.
 type Session<T> {
-  stream: T
+  link: Link
+  unsent: Bytes
+  unsent_messages: Int = 0
+  handed_messages: Int = 0
+  running: List<Running>
   connected: Bool = true
   generation: Int = 1
+  info: ServerInfo
   options: NatsOptions
   limits: NatsLimits
   inbox: Text
@@ -786,17 +862,31 @@ fn inbox_of(options: NatsOptions, info: ServerInfo) -> Text =
   if options.inbox_prefix != "" { options.inbox_prefix } else { "_INBOX.{info.client_id}_{Clock.now().to_ns()}" }
 
 // A client over `stream`: the handshake within the stream's idle timeout,
-// then the reader and the client task.
+// then the reader, the writer and the client task.
 fn connect<T: ByteStream>(stream: T, options: NatsOptions, limits: NatsLimits) -> IoResult<Nats<T>> {
   let (info, rest) = handshake(stream, options, limits)?
   Ok(start(stream, info, rest, options, limits))
 }
 
+// The tasks of connection `generation` over `stream`: the reader, and the
+// writer, whose channel is returned.
+fn run_connection<T: ByteStream>(stream: T, limits: NatsLimits, rest: Bytes, generation: Int, commands: Sender<Command<T>>) -> Link {
+  let (writer, chunks) = Channel.bounded(WRITER_CAPACITY)
+  spawn write_ops(stream, chunks, generation, commands)
+  spawn read_ops(stream, limits, rest, generation, commands)
+  Link { writer, chunks }
+}
+
+// A client over `stream`, whose handshake is done, read `info` and left
+// `rest`: the connection's tasks and the client task.
 fn start<T: ByteStream>(stream: T, info: ServerInfo, rest: Bytes, options: NatsOptions, limits: NatsLimits) -> Nats<T> {
   let (commands, inbound) = Channel.bounded(COMMAND_CAPACITY)
   let (lost, losses) = Channel.bounded(LOSS_CAPACITY)
   let session = Session {
-    stream,
+    link = run_connection(stream, limits, rest, 1, commands),
+    unsent = Bytes.empty(),
+    running = [Running { generation = 1, tasks = 2 }],
+    info,
     options,
     limits,
     inbox = inbox_of(options, info),
@@ -804,7 +894,6 @@ fn start<T: ByteStream>(stream: T, info: ServerInfo, rest: Bytes, options: NatsO
     losses = lost,
     next_ping = Clock.monotonic() + options.ping_interval
   }
-  spawn read_ops(stream, limits, rest, 1, commands)
   spawn serve(session, inbound)
   Nats { commands, losses, info, options, limits }
 }
@@ -818,7 +907,12 @@ fn reconnect<T: ByteStream>(client: Nats<T>, stream: T) -> IoResult<Unit> {
 }
 
 // Closes the connection and every subscription's channel, after the
-// commands queued before it; returns once the client task has ended.
+// commands queued before it; returns once the client task has ended, and
+// waits for no write. The writer gets every byte queued before, published
+// messages included, and writes them after: a server that reads them
+// gets them all, then the end of the stream; one that never reads keeps
+// the writer blocked (section "Closing" above). Commands queued after it
+// are answered as shut down.
 fn shutdown<T>(client: Nats<T>) -> Unit {
   let (ack, done) = Channel.bounded(1)
   if client.commands.send(Shutdown(ack)) {
@@ -826,8 +920,9 @@ fn shutdown<T>(client: Nats<T>) -> Unit {
   }
 }
 
-// Whether `message` may be published by `client`.
-fn checked<T>(client: Nats<T>, message: NatsMessage) -> IoResult<Unit> {
+// Whether `message` is one to publish: its subjects and headers. What the
+// server takes, `admitted` decides in the client task.
+fn checked(message: NatsMessage) -> IoResult<Unit> {
   if !valid_subject(message.subject) {
     return Err(failed("{message.subject.debug()} is no subject to publish to"))
   }
@@ -837,26 +932,27 @@ fn checked<T>(client: Nats<T>, message: NatsMessage) -> IoResult<Unit> {
     }
     None => {}
   }
-  var size = message.payload.len()
-  if !message.headers.is_empty() {
-    if !client.info.headers {
-      return Err(failed("the server takes no headers"))
+  for header in message.headers {
+    if !valid_header_name(header.0) {
+      return Err(failed("{header.0.debug()} is no header name"))
     }
-    for header in message.headers {
-      if !valid_header_name(header.0) {
-        return Err(failed("{header.0.debug()} is no header name"))
-      }
-      if has_line_break(header.1) {
-        return Err(failed("a header value holds a CR or LF"))
-      }
+    if has_line_break(header.1) {
+      return Err(failed("a header value holds a CR or LF"))
     }
-    size = size + header_block(message.headers).len()
-  }
-  let limit = if client.info.max_payload < client.limits.payload.to_int() { client.info.max_payload } else { client.limits.payload.to_int() }
-  if size > limit {
-    return Err(failed("a message of {size} bytes is larger than the limit of {limit}"))
   }
   Ok(())
+}
+
+// Why the server of `info` refuses `message` within `limits`: headers it
+// lacks, or a size past its `max_payload` or the limit; `None` when it
+// takes it.
+fn admitted(info: ServerInfo, limits: NatsLimits, message: NatsMessage) -> Option<Text> {
+  if !message.headers.is_empty() && !info.headers {
+    return Some("nats: the server takes no headers")
+  }
+  let size = size_of(message)
+  let limit = if info.max_payload < limits.payload.to_int() { info.max_payload } else { limits.payload.to_int() }
+  if size > limit { Some("nats: a message of {size} bytes is larger than the limit of {limit}") } else { None }
 }
 
 // PUB `payload` to `subject`: queued for the client task, which writes it
@@ -865,8 +961,16 @@ fn publish<T>(client: Nats<T>, subject: Text, payload: Bytes) -> IoResult<Unit> 
 
 // PUB or HPUB of `message`, its reply subject and headers included.
 fn publish_message<T>(client: Nats<T>, message: NatsMessage) -> IoResult<Unit> {
-  checked(client, message)?
-  if client.commands.send(Publish(Outgoing { message, queued = Clock.monotonic() })) { Ok(()) } else { Err(shut_down()) }
+  checked(message)?
+  let (ack, answer) = Channel.bounded(1)
+  if !client.commands.send(Publish(Outgoing { message, queued = Clock.monotonic() }, ack)) {
+    return Err(shut_down())
+  }
+  match answer.receive() {
+    Some(None) => Ok(())
+    Some(Some(reason)) => Err(IoError.new(reason))
+    None => Err(shut_down())
+  }
 }
 
 fn subscribe_to<T>(client: Nats<T>, subject: Text, queue: Option<Text>) -> IoResult<Subscription> {
@@ -914,21 +1018,42 @@ fn request<T>(client: Nats<T>, subject: Text, payload: Bytes, timeout: Duration)
 // `request` of a message with headers; its own reply subject is replaced
 // by the inbox.
 fn request_message<T>(client: Nats<T>, message: NatsMessage, timeout: Duration) -> IoResult<NatsMessage> {
-  checked(client, message)?
+  checked(message)?
   let (replies, reply) = Channel.bounded(1)
   let (ack, sids) = Channel.bounded(1)
   if !client.commands.send(Request(Outgoing { message, queued = Clock.monotonic() }, replies, ack)) {
     return Err(shut_down())
   }
   let sid = match sids.receive() {
-    Some(found) => found
+    Some(Ok(found)) => found
+    Some(Err(reason)) => return Err(IoError.new(reason))
     None => return Err(shut_down())
   }
-  match reply.receive_within(timeout) {
-    Some(answer) => if answer.status == Some(503) { Err(failed("no responders for {message.subject}")) } else { Ok(answer) }
+  // A reply channel found closed at the deadline is read once more: the
+  // one reply closes it, and may have come just after the deadline. The
+  // window left is a reply that comes after `closed()` answered false: it
+  // is reported as no reply, and reaches nobody, as one after the
+  // deadline does.
+  let answer = match reply.receive_within(timeout) {
+    Some(found) => Some(found)
     None => if reply.closed() {
-      Err(shut_down())
+      match reply.receive_within(0 ms) {
+        Some(found) => Some(found)
+        None => return Err(shut_down())
+      }
     } else {
+      None
+    }
+  }
+  match answer {
+    Some(found) => if found.subject == "" {
+      Err(IoError.new(found.payload.to_text()))
+    } else if found.status == Some(503) {
+      Err(failed("no responders for {message.subject}"))
+    } else {
+      Ok(found)
+    }
+    None => {
       _ = client.commands.send(Unsubscribe(sid, None))
       Err(failed("no reply to {message.subject} within {timeout.to_ms()} ms"))
     }
@@ -948,9 +1073,13 @@ fn flush<T>(client: Nats<T>, timeout: Duration) -> IoResult<Unit> {
   if !client.commands.send(Flush(ack)) {
     return Err(shut_down())
   }
-  match done.receive_within(timeout) {
+  let answer = match done.receive_within(timeout) {
+    Some(answered) => Some(answered)
+    None => if done.closed() { done.receive_within(0 ms) } else { return Err(failed("no PONG within {timeout.to_ms()} ms")) }
+  }
+  match answer {
     Some(answered) => if answered { Ok(()) } else { Err(failed("no connection is up")) }
-    None => if done.closed() { Err(shut_down()) } else { Err(failed("no PONG within {timeout.to_ms()} ms")) }
+    None => Err(shut_down())
   }
 }
 
@@ -969,7 +1098,7 @@ fn stats<T>(client: Nats<T>) -> IoResult<NatsStats> {
 // ---- the reader -------------------------------------------------------------
 
 // Reads connection `generation` and tells the client task each operation,
-// then that the connection ended and why.
+// then that the connection ended and why, and that this task ends.
 fn read_ops<T: ByteStream>(stream: T, limits: NatsLimits, buffer: Bytes, generation: Int, commands: Sender<Command<T>>) -> IoResult<Unit> {
   var data = buffer
   var at = 0
@@ -983,13 +1112,44 @@ fn read_ops<T: ByteStream>(stream: T, limits: NatsLimits, buffer: Bytes, generat
         }
         ""
       }
-      Ok(Ended) => "nats: the server closed the connection"
+      Ok(Ended) => "nats: the connection ended"
       Ok(Broken(error)) => protocol_error(error).message
       Err(error) => error.message
     }
     if reason != "" {
       _ = commands.send(Lost(generation, reason))
+      _ = commands.send(Ended(generation))
       return Ok(())
+    }
+  }
+}
+
+// ---- the writer -------------------------------------------------------------
+
+// Writes connection `generation`: each chunk in turn, until the client
+// task closes the channel, then closes the stream and tells the client
+// task it ended. A failed write tells it the connection is lost. A peer
+// that stops reading blocks this task, and only this one, in its write;
+// what it holds then is the one chunk of that write, since the client task
+// takes back the chunk waiting in the channel when it loses the connection.
+fn write_ops<T: ByteStream>(stream: T, chunks: Receiver<Bytes>, generation: Int, commands: Sender<Command<T>>) -> IoResult<Unit> {
+  loop {
+    match chunks.receive() {
+      Some(bytes) => match stream.write_all(bytes) {
+        Ok(_) => {}
+        Err(error) => {
+          chunks.close()
+          _ = commands.send(Lost(generation, error.message))
+          _ = stream.close()
+          _ = commands.send(Ended(generation))
+          return Ok(())
+        }
+      }
+      None => {
+        _ = stream.close()
+        _ = commands.send(Ended(generation))
+        return Ok(())
+      }
     }
   }
 }
@@ -997,14 +1157,17 @@ fn read_ops<T: ByteStream>(stream: T, limits: NatsLimits, buffer: Bytes, generat
 // ---- the client task --------------------------------------------------------
 
 // Runs the client until `Shutdown`: each command in turn, and the
-// keepalive between them.
+// keepalive between them. It never writes the stream itself: the bytes
+// go to the connection's writer, so a peer that stops reading cannot stop
+// the keepalive that finds it.
 fn serve<T: ByteStream>(begin: Session<T>, inbound: Receiver<Command<T>>) -> IoResult<Unit> {
   var session = begin
   loop {
-    match inbound.receive_within(until_ping(session)) {
+    match inbound.receive_within(wait_of(session)) {
       Some(Shutdown(ack)) => {
         finish(session)
         inbound.close()
+        refuse_queued(inbound)
         tell(ack, true)
         return Ok(())
       }
@@ -1013,14 +1176,31 @@ fn serve<T: ByteStream>(begin: Session<T>, inbound: Receiver<Command<T>>) -> IoR
       }
       None => {}
     }
-    session = keepalive(session)
+    session = drain(keepalive(session))
   }
 }
 
-fn until_ping<T>(session: Session<T>) -> Duration = if session.connected { session.next_ping - Clock.monotonic() } else { IDLE_WAIT }
+// How long the client task waits for a command: until the next PING, and
+// a short while only when bytes wait for the writer.
+fn wait_of<T>(session: Session<T>) -> Duration {
+  if !session.connected {
+    return IDLE_WAIT
+  }
+  let until_ping = session.next_ping - Clock.monotonic()
+  if session.unsent.len() > 0 && DRAIN_WAIT < until_ping { DRAIN_WAIT } else { until_ping }
+}
 
 fn handle<T: ByteStream>(session: Session<T>, command: Command<T>) -> Session<T> = match command {
-  Publish(out) => send_message(session, out)
+  Publish(out, ack) => match admitted(session.info, session.limits, out.message) {
+    Some(reason) => {
+      tell(ack, Some(reason))
+      session
+    }
+    None => {
+      tell(ack, None)
+      send_message(session, out)
+    }
+  }
   Subscribe(subject, queue, messages, ack) => {
     var next = session
     let sid = next.next_sid
@@ -1030,19 +1210,25 @@ fn handle<T: ByteStream>(session: Session<T>, command: Command<T>) -> Session<T>
     write(next, encode_subscribe(subject, queue, sid))
   }
   Unsubscribe(sid, max) => unsubscribe_route(session, sid, max)
-  Request(out, replies, ack) => {
-    var next = session
-    let sid = next.next_sid
-    next.next_sid = sid + 1
-    let inbox = "{next.inbox}.{sid}"
-    next.routes.push(Route { sid, subject = inbox, queue = None, messages = replies, max = Some(1) })
-    tell(ack, sid)
-    var subscribing = encode_subscribe(inbox, None, sid)
-    subscribing.append(encode_unsubscribe(sid, Some(1)))
-    next = write(next, subscribing)
-    var message = out.message
-    message.reply = Some(inbox)
-    send_message(next, Outgoing { message, queued = out.queued })
+  Request(out, replies, ack) => match admitted(session.info, session.limits, out.message) {
+    Some(reason) => {
+      tell(ack, Err(reason))
+      session
+    }
+    None => {
+      var next = session
+      let sid = next.next_sid
+      next.next_sid = sid + 1
+      let inbox = "{next.inbox}.{sid}"
+      next.routes.push(Route { sid, subject = inbox, queue = None, messages = replies, max = Some(1) })
+      tell(ack, Ok(sid))
+      var subscribing = encode_subscribe(inbox, None, sid)
+      subscribing.append(encode_unsubscribe(sid, Some(1)))
+      next = write(next, subscribing)
+      var message = out.message
+      message.reply = Some(inbox)
+      send_message(next, Outgoing { message, queued = out.queued, request = Some(sid) })
+    }
   }
   Flush(ack) => if session.connected {
     var next = session
@@ -1058,6 +1244,7 @@ fn handle<T: ByteStream>(session: Session<T>, command: Command<T>) -> Session<T>
   }
   Inbound(generation, op) => if generation == session.generation && session.connected { on_op(session, op) } else { session }
   Lost(generation, reason) => if generation == session.generation { lose(session, reason) } else { session }
+  Ended(generation) => task_ended(session, generation)
   Attach(stream, info, rest) => attach(session, stream, info, rest)
   Shutdown(_) => session
 }
@@ -1068,22 +1255,128 @@ fn tell<V>(ack: Sender<V>, value: V) -> Unit {
   _ = ack.try_send(value)
 }
 
+// Answers every command queued when the client task ends as shut down, so
+// no caller waits on an answer that never comes. `inbound` is closed: a
+// send after it fails at once.
+fn refuse_queued<T: ByteStream>(inbound: Receiver<Command<T>>) -> Unit {
+  loop {
+    match inbound.receive() {
+      Some(command) => refuse(command)
+      None => return
+    }
+  }
+}
+
+fn refuse<T: ByteStream>(command: Command<T>) -> Unit = match command {
+  Publish(_, ack) => tell(ack, Some(shut_down().message))
+  Subscribe(_, _, messages, ack) => {
+    close_end(messages)
+    close_end(ack)
+  }
+  Request(_, replies, ack) => {
+    close_end(replies)
+    tell(ack, Err(shut_down().message))
+  }
+  Flush(ack) => close_end(ack)
+  Stats(ack) => close_end(ack)
+  Attach(stream, _, _) => close_stream(stream)
+  Shutdown(ack) => tell(ack, true)
+  Unsubscribe(_, _) => {}
+  Inbound(_, _) => {}
+  Lost(_, _) => {}
+  Ended(_) => {}
+}
+
+// Closes a channel whose receiver waits on an answer: it gets `None`.
+fn close_end<V>(end: Sender<V>) -> Unit {
+  end.close()
+}
+
+fn close_stream<T: ByteStream>(stream: T) -> Unit {
+  _ = stream.close()
+}
+
+// One task of connection `generation` ended.
+fn task_ended<T>(session: Session<T>, generation: Int) -> Session<T> {
+  var next = session
+  var kept: List<Running> = []
+  for entry in next.running {
+    if entry.generation != generation {
+      kept.push(entry)
+    } else if entry.tasks > 1 {
+      kept.push(Running { generation, tasks = entry.tasks - 1 })
+    }
+  }
+  next.running = kept
+  next
+}
+
+// The lost connections whose reader or writer still runs.
+fn lingering_of<T>(session: Session<T>) -> Int {
+  var n = 0
+  for entry in session.running {
+    if entry.generation != session.generation || !session.connected {
+      n = n + 1
+    }
+  }
+  n
+}
+
 fn counts_of<T>(session: Session<T>) -> NatsStats {
   var counts = session.counts
   counts.connected = session.connected
   counts.pending = session.pending.len()
+  counts.lingering = lingering_of(session)
   counts
 }
 
-// Writes `bytes` when a connection is up; a failed write loses it.
+// Queues `bytes` for the connection that is up, after those queued before;
+// past `NatsLimits.backlog` unwritten the connection is lost.
 fn write<T: ByteStream>(session: Session<T>, bytes: Bytes) -> Session<T> {
   if !session.connected {
     return session
   }
-  match session.stream.write_all(bytes) {
-    Ok(_) => session
-    Err(error) => lose(session, error.message)
+  var next = session
+  next.unsent.append(bytes)
+  let waiting = next.unsent.len()
+  if waiting > next.limits.backlog.to_int() {
+    return lose(next, "nats: the connection takes no writes, {waiting} bytes wait")
   }
+  next
+}
+
+// Hands the unsent bytes to the writer when it has room: the channel holds
+// one chunk, so room means the writer took the chunk handed before.
+fn drain<T>(session: Session<T>) -> Session<T> {
+  if !session.connected || session.unsent.len() == 0 {
+    return session
+  }
+  var next = session
+  if next.link.writer.try_send(next.unsent) {
+    next.unsent = Bytes.empty()
+    next.handed_messages = next.unsent_messages
+    next.unsent_messages = 0
+  }
+  next
+}
+
+// Takes back the chunk the writer has not taken, and drops the unsent
+// bytes: the messages among them move from `sent` to `dropped`.
+fn take_back<T>(session: Session<T>) -> Session<T> {
+  var next = session
+  var lost = next.unsent_messages
+  match next.link.chunks.receive_within(0 ms) {
+    Some(_) => {
+      lost = lost + next.handed_messages
+    }
+    None => {}
+  }
+  next.counts.sent = next.counts.sent - lost
+  next.counts.dropped = next.counts.dropped + lost
+  next.unsent = Bytes.empty()
+  next.unsent_messages = 0
+  next.handed_messages = 0
+  next
 }
 
 fn stale(out: Outgoing, limits: NatsLimits) -> Bool = Clock.monotonic() - out.queued > limits.pending_age
@@ -1104,10 +1397,14 @@ fn send_message<T: ByteStream>(session: Session<T>, out: Outgoing) -> Session<T>
     return hold(next, out)
   }
   next.counts.sent = next.counts.sent + 1
+  next.unsent_messages = next.unsent_messages + 1
   next
 }
 
-fn size_of(message: NatsMessage) -> Int = message.payload.len()
+// A message's bytes as the server counts them: the payload, and the
+// header block when there are headers.
+fn size_of(message: NatsMessage) -> Int =
+  if message.headers.is_empty() { message.payload.len() } else { message.payload.len() + header_block(message.headers).len() }
 
 // Holds `out` for the next connection, after dropping the held messages
 // that went stale; past the buffer's bounds it is dropped and counted.
@@ -1196,7 +1493,11 @@ fn on_op<T: ByteStream>(session: Session<T>, op: ServerOp) -> Session<T> = match
     }
     next
   }
-  Info(_) => session
+  Info(update) => {
+    var next = session
+    next.info = update
+    next
+  }
   Accepted => session
   Refused(reason) => {
     var next = session
@@ -1264,10 +1565,20 @@ fn lose<T: ByteStream>(session: Session<T>, reason: Text) -> Session<T> {
   next
 }
 
-fn disconnect<T: ByteStream>(session: Session<T>) -> Session<T> {
+// Drops the connection that is up: the chunk its writer has not taken and
+// the unsent bytes are dropped (`take_back`), and the connection ends.
+fn disconnect<T: ByteStream>(session: Session<T>) -> Session<T> =
+  if session.connected { end_connection(take_back(session)) } else { session }
+
+// Ends the connection that is up: its writer's channel closes, and the
+// writer closes the stream once it has written the chunk it holds and any
+// left in the channel. The stream's write lock is never taken here, so a
+// writer blocked on a peer that stopped reading cannot block the client
+// task.
+fn end_connection<T: ByteStream>(session: Session<T>) -> Session<T> {
   var next = session
   if next.connected {
-    _ = next.stream.close()
+    next.link.writer.close()
   }
   for waiter in next.waiters {
     match waiter {
@@ -1284,14 +1595,42 @@ fn disconnect<T: ByteStream>(session: Session<T>) -> Session<T> {
 }
 
 // Takes `stream`, whose handshake is done, as the connection: the live
-// subscriptions are sent again, then the held messages that are not stale.
+// subscriptions are sent again, then the held messages that are neither
+// stale nor refused by the new server's INFO. A held request the INFO
+// refuses is answered with the refusal, and its inbox is not subscribed
+// again. At `NatsLimits.lingering` lost connections still running, the
+// stream is taken all the same: `connect_to` waits before it dials, and
+// `stats` shows the count to a caller that reconnects itself.
 fn attach<T: ByteStream>(session: Session<T>, stream: T, info: ServerInfo, rest: Bytes) -> Session<T> {
   var next: Session<T> = disconnect(session)
-  next.stream = stream
   next.connected = true
   next.generation = next.generation + 1
+  next.info = info
+  next.link = run_connection(stream, next.limits, rest, next.generation, next.commands)
+  next.running.push(Running { generation = next.generation, tasks = 2 })
   next.next_ping = Clock.monotonic() + next.options.ping_interval
   next.counts.connections = next.counts.connections + 1
+  let held = next.pending
+  next.pending = []
+  next.pending_bytes = 0
+  var publishing = Bytes.empty()
+  var sent = 0
+  for out_message in held {
+    if stale(out_message, next.limits) {
+      next.counts.stale = next.counts.stale + 1
+    } else {
+      match admitted(info, next.limits, out_message.message) {
+        Some(reason) => {
+          next.counts.refused = next.counts.refused + 1
+          next = refuse_request(next, out_message.request, reason)
+        }
+        None => {
+          publishing.append(encode_publish(out_message.message))
+          sent = sent + 1
+        }
+      }
+    }
+  }
   var out = Bytes.empty()
   for route in next.routes {
     out.append(encode_subscribe(route.subject, route.queue, route.sid))
@@ -1300,27 +1639,63 @@ fn attach<T: ByteStream>(session: Session<T>, stream: T, info: ServerInfo, rest:
       None => {}
     }
   }
-  let held = next.pending
-  next.pending = []
-  next.pending_bytes = 0
-  var sent = 0
-  for out_message in held {
-    if stale(out_message, next.limits) {
-      next.counts.stale = next.counts.stale + 1
-    } else {
-      out.append(encode_publish(out_message.message))
-      sent = sent + 1
-    }
-  }
+  out.append(publishing)
   next.counts.sent = next.counts.sent + sent
-  spawn read_ops(stream, next.limits, rest, next.generation, next.commands)
-  write(next, out)
+  // The new writer's channel is empty: the batch goes to it whole, so the
+  // held messages, up to `pending_bytes`, are not counted against the
+  // backlog.
+  if next.link.writer.try_send(out) {
+    next.handed_messages = sent
+  } else {
+    next.unsent = out
+    next.unsent_messages = sent
+  }
+  next
 }
 
-// Ends the client: the connection closes, and so does every subscription's
-// channel and the loss signal.
+// Answers the request of inbox `sid`, if there is one, with `reason`: a
+// reply with no subject, which no server sends, carries the client's own
+// refusal to the caller of `request`. Its inbox is ended.
+fn refuse_request<T>(session: Session<T>, sid: Option<Int>, reason: Text) -> Session<T> {
+  let request = match sid {
+    Some(found) => found
+    None => return session
+  }
+  let index = match route_index(session.routes, request) {
+    Some(found) => found
+    None => return session
+  }
+  var next = session
+  let route: Route = next.routes.at(index)
+  _ = route.messages.try_send(NatsMessage { subject = "", payload = reason.to_bytes() })
+  route.messages.close()
+  next.routes = without(next.routes, index)
+  next
+}
+
+// Ends the client: the connection's writer gets the bytes queued so far,
+// the chunk it has not taken and the unsent ones in one, and writes them
+// after; the client waits for none of it. Then every subscription's
+// channel and the loss signal close.
 fn finish<T: ByteStream>(session: Session<T>) -> Unit {
-  let ended: Session<T> = disconnect(session)
+  var last = session
+  if last.connected {
+    var rest = Bytes.empty()
+    match last.link.chunks.receive_within(0 ms) {
+      Some(chunk) => {
+        rest = chunk
+      }
+      None => {}
+    }
+    rest.append(last.unsent)
+    // The channel holds one chunk and is empty now, and only this task
+    // sends on it: the chunk fits.
+    if rest.len() > 0 {
+      _ = last.link.writer.try_send(rest)
+    }
+    last.unsent = Bytes.empty()
+  }
+  let ended: Session<T> = end_connection(last)
   for route in ended.routes {
     route.messages.close()
   }
@@ -1342,8 +1717,11 @@ fn retry_delay(attempt: Int) -> Duration {
 }
 
 // A TCP connection to `endpoint` whose handshake is done: connecting and
-// the handshake give up after `timeout`; then reads wait as long as they
-// must, since the keepalive finds a dead connection.
+// the handshake give up after `timeout`. Then a read gives up after
+// `quiet_limit(options)`, a span in which a live server answers a
+// keepalive PING, so the reader of a dead connection ends too: the
+// substrate's `close` ends only the write half, and a read it blocks in
+// would wait for ever.
 fn dial(endpoint: Endpoint, timeout: Duration, options: NatsOptions, limits: NatsLimits) -> IoResult<(TcpStream, ServerInfo, Bytes)> {
   let stream = TcpStream.connect_within(endpoint.address, endpoint.port, timeout)?
   let shaken = match stream.set_idle_timeout(timeout.to_ms()) {
@@ -1352,7 +1730,7 @@ fn dial(endpoint: Endpoint, timeout: Duration, options: NatsOptions, limits: Nat
   }
   match shaken {
     Ok((info, rest)) => {
-      stream.set_idle_timeout(0)?
+      stream.set_idle_timeout(quiet_limit(options).to_ms())?
       Ok((stream, info, rest))
     }
     Err(error) => {
@@ -1362,9 +1740,28 @@ fn dial(endpoint: Endpoint, timeout: Duration, options: NatsOptions, limits: Nat
   }
 }
 
+// The most `quiet_limit` gives: about 100 years.
+const QUIET_MOST: Duration = 3153600000 seconds
+
+// The longest a live connection stays silent: one `ping_interval` per
+// PING the keepalive may leave unanswered, and one more; at most
+// `QUIET_MOST` (and at least `ping_interval`), so no product overflows.
+fn quiet_limit(options: NatsOptions) -> Duration {
+  let interval = options.ping_interval
+  if interval >= QUIET_MOST {
+    return interval
+  }
+  if interval <= 0 ms {
+    return QUIET_MOST
+  }
+  let pings = if options.max_pings_out > 0 { options.max_pings_out } else { 0 }
+  if pings >= QUIET_MOST.to_ns() / interval.to_ns() { QUIET_MOST } else { interval * (pings + 1) }
+}
+
 // A client of the server at `endpoint` that reconnects itself: after each
 // lost connection it dials again, waiting `retry_delay(attempt)` before
-// each attempt, until one succeeds or the client is shut down. Its
+// each attempt, until one succeeds or the client is shut down. While
+// `NatsLimits.lingering` lost connections still run, it does not dial. Its
 // `losses` are read by that task.
 fn connect_to(endpoint: Endpoint, timeout: Duration, options: NatsOptions, limits: NatsLimits) -> IoResult<Nats<TcpStream>> {
   let (stream, info, rest) = dial(endpoint, timeout, options, limits)?
@@ -1383,19 +1780,28 @@ fn redial(client: Nats<TcpStream>, endpoint: Endpoint, timeout: Duration) -> IoR
     var waiting = true
     while waiting {
       Clock.sleep(retry_delay(attempt))
-      match dial(endpoint, timeout, client.options, client.limits) {
-        Ok((stream, info, rest)) => {
-          if !client.commands.send(Attach(stream, info, rest)) {
-            _ = stream.close()
-            return Ok(())
+      let lingering = match stats(client) {
+        Ok(counts) => counts.lingering
+        Err(_) => return Ok(())
+      }
+      if lingering >= client.limits.lingering {
+        // At the cap of lost connections still running: no new one.
+        attempt = attempt + 1
+      } else {
+        match dial(endpoint, timeout, client.options, client.limits) {
+          Ok((stream, info, rest)) => {
+            if !client.commands.send(Attach(stream, info, rest)) {
+              _ = stream.close()
+              return Ok(())
+            }
+            waiting = false
           }
-          waiting = false
-        }
-        Err(_) => {
-          if client.losses.closed() {
-            return Ok(())
+          Err(_) => {
+            if client.losses.closed() {
+              return Ok(())
+            }
+            attempt = attempt + 1
           }
-          attempt = attempt + 1
         }
       }
     }
@@ -1493,8 +1899,10 @@ test fn message_of<T>(result: IoResult<T>) -> Text = match result {
 
 // A publish whose message was queued at `queued`: the client's clock, set
 // back to make a message stale without waiting.
-test fn publish_queued_at<T>(client: Nats<T>, subject: Text, payload: Bytes, queued: Duration) -> Bool =
-  client.commands.send(Publish(Outgoing { message = NatsMessage { subject, payload }, queued }))
+test fn publish_queued_at<T>(client: Nats<T>, subject: Text, payload: Bytes, queued: Duration) -> Bool {
+  let (ack, answer) = Channel.bounded(1)
+  client.commands.send(Publish(Outgoing { message = NatsMessage { subject, payload }, queued }, ack)) && answer.receive() == Some(None)
+}
 
 test "the client's operations encode as the protocol writes them" {
   let headed = ServerInfo { headers = true }
@@ -1594,6 +2002,8 @@ test "the limits default to 64 KiB lines, 1 MiB messages and a second of pending
   assert limits.pending_bytes.to_int() == 8388608
   assert limits.pending_age == 1 seconds
   assert limits.subscription == 1024
+  assert limits.backlog.to_int() == 8388608
+  assert limits.lingering == 4
   let options = NatsOptions {}
   assert options.auth == Anonymous
   assert options.echo && !options.verbose && !options.pedantic
@@ -1877,6 +2287,197 @@ test "a connection that answers no keepalive PING is lost" {
   shutdown(client)
 }
 
+// A TCP server that runs the handshake and then reads nothing for
+// `quiet`, as a server behind a partition or a stalled one does.
+test fn deaf_on_tcp(listener: TcpListener, greeting: Bytes, quiet: Duration) -> IoResult<Unit> {
+  let stream = listener.accept()?
+  stream.set_idle_timeout(5000)?
+  stream.write_all(info_line())?
+  var data = Bytes.empty()
+  while data.len() < greeting.len() {
+    match stream.read(65536)? {
+      Data(more) => data.append(more)
+      Eof => return stream.close()
+    }
+  }
+  stream.write_all(b"PONG\r\n")?
+  Clock.sleep(quiet)
+  stream.close()
+}
+
+// A client of a deaf TCP server, built as `connect_to` builds one.
+test fn deaf_client(options: NatsOptions, limits: NatsLimits) -> IoResult<Nats<TcpStream>> {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  spawn deaf_on_tcp(listener, hello(options), 8 seconds)
+  let endpoint = Endpoint { address = "127.0.0.1", port = listener.local_port() }
+  let (stream, info, rest) = dial(endpoint, 2 seconds, options, limits)?
+  Ok(start(stream, info, rest, options, limits))
+}
+
+// Publishes `count` copies of `payload`, until the client is shut down.
+test fn flood(client: Nats<TcpStream>, count: Int, payload: Bytes) -> IoResult<Unit> {
+  var i = 0
+  while i < count {
+    if message_of(publish(client, "bulk", payload)) != "ok" {
+      return Ok(())
+    }
+    i = i + 1
+  }
+  Ok(())
+}
+
+test "keepalive loses a TCP connection whose server stopped reading during a publish burst" {
+  let options = NatsOptions { ping_interval = 100 ms, max_pings_out = 1 }
+  let client = deaf_client(options, NatsLimits {})?
+  spawn flood(client, 40, repeat("x", 1000000).to_bytes())
+  assert client.losses.receive_within(3 seconds) == Some(1), "no loss within 3 s, with ping_interval 100 ms and max_pings_out 1"
+  shutdown(client)
+}
+
+test "keepalive loses the deaf TCP server when nothing is being published" {
+  let options = NatsOptions { ping_interval = 100 ms, max_pings_out = 1 }
+  let client = deaf_client(options, NatsLimits {})?
+  assert client.losses.receive_within(3 seconds) == Some(1)
+  shutdown(client)
+}
+
+test "a connection that leaves more than the backlog unwritten is lost" {
+  let client = deaf_client(NatsOptions {}, NatsLimits { backlog = 1 MiB })?
+  spawn flood(client, 40, repeat("x", 1000000).to_bytes())
+  assert client.losses.receive_within(3 seconds) == Some(1)
+  let reason = match stats(client)?.last_error {
+    Some(text) => text
+    None => "none"
+  }
+  assert reason.starts_with("nats: the connection takes no writes, "), reason
+  shutdown(client)
+}
+
+test "the outgoing buffer's byte bound counts the header block" {
+  let (near, far) = connected()?
+  spawn script(far, [(Bytes.empty(), info_line()), (hello(NatsOptions {}), b"PONG\r\n")], false)
+  let client: Nats<PipeStream> = connect(near, NatsOptions {}, NatsLimits { pending_bytes = 40 bytes })?
+  assert client.losses.receive_within(5 seconds) == Some(1)
+  // 32 bytes each: a header block of 31 ("NATS/1.0", "Trace: 0123456789", "") and 1 of payload.
+  let message = NatsMessage { subject = "a", headers = [("Trace", "0123456789")], payload = b"x" }
+  publish_message(client, message)?
+  publish_message(client, message)?
+  publish_message(client, message)?
+  let counts = stats(client)?
+  assert counts.pending == 1 && counts.overflow == 2, "pending {counts.pending}, overflow {counts.overflow}"
+  shutdown(client)
+}
+
+test "after a reconnect, publishing is checked against the new server's INFO" {
+  let (first, ending) = connected()?
+  spawn script(ending, [(Bytes.empty(), info_line()), (hello(NatsOptions {}), b"PONG\r\n")], false)
+  let client: Nats<PipeStream> = connect(first, NatsOptions {}, NatsLimits {})?
+  assert client.losses.receive_within(5 seconds) == Some(1)
+  publish(client, "a", b"held, and too large for the next server")?
+  publish(client, "a", b"held")?
+  let (second, small) = connected()?
+  let small_info = line(r#"INFO {"server_id":"N2","version":"2.10.18","proto":1,"max_payload":8,"headers":true,"client_id":8}"#)
+  spawn script(small, [(Bytes.empty(), small_info), (hello(NatsOptions {}), b"PONG\r\n"), (b"PUB a 4\r\nheld\r\nPING\r\n", b"PONG\r\n")], true)
+  reconnect(client, second)?
+  assert message_of(publish(client, "a", b"123456789")) == "nats: a message of 9 bytes is larger than the limit of 8"
+  assert message_of(request(client, "a", b"123456789", 1 seconds)) == "nats: a message of 9 bytes is larger than the limit of 8"
+  flush(client, 5 seconds)?
+  let counts = stats(client)?
+  assert counts.refused == 1
+  assert counts.sent == 1
+  shutdown(client)
+}
+
+test "unsubscribe_after sends the messages left after a reconnect" {
+  let (first, ending) = connected()?
+  spawn script(ending, [
+    (Bytes.empty(), info_line()),
+    (hello(NatsOptions {}), b"PONG\r\n"),
+    (b"SUB a 1\r\nUNSUB 1 3\r\nPING\r\n", b"PONG\r\nMSG a 1 1\r\nx\r\n")
+  ], false)
+  let client: Nats<PipeStream> = connect(first, NatsOptions {}, NatsLimits {})?
+  let sub: Subscription = subscribe(client, "a")?
+  unsubscribe_after(client, sub, 3)?
+  flush(client, 5 seconds)?
+  assert sub.messages.receive_within(5 seconds) == Some(NatsMessage { subject = "a", payload = b"x" })
+  assert client.losses.receive_within(5 seconds) == Some(1)
+  let (second, again) = connected()?
+  spawn script(again, [
+    (Bytes.empty(), info_line()),
+    (hello(NatsOptions {}), b"PONG\r\n"),
+    (b"SUB a 1\r\nUNSUB 1 2\r\nPING\r\n", b"PONG\r\nMSG a 1 1\r\ny\r\nMSG a 1 1\r\nz\r\nMSG a 1 1\r\nw\r\n")
+  ], true)
+  reconnect(client, second)?
+  flush(client, 5 seconds)?
+  assert sub.messages.receive_within(5 seconds) == Some(NatsMessage { subject = "a", payload = b"y" })
+  assert sub.messages.receive_within(5 seconds) == Some(NatsMessage { subject = "a", payload = b"z" })
+  assert sub.messages.receive_within(5 seconds) == None
+  shutdown(client)
+}
+
+test "a reply after the request's deadline reaches nobody" {
+  let options = NatsOptions { inbox_prefix = "_INBOX.t" }
+  let (near, far) = connected()?
+  spawn script(far, [
+    (Bytes.empty(), info_line()),
+    (hello(options), b"PONG\r\n"),
+    (joined([b"SUB _INBOX.t.1 1\r\n", b"UNSUB 1 1\r\n", b"PUB svc _INBOX.t.1 0\r\n\r\n", b"UNSUB 1\r\n"]), b"MSG _INBOX.t.1 1 4\r\nlate\r\n"),
+    (joined([b"SUB _INBOX.t.2 2\r\n", b"UNSUB 2 1\r\n", b"PUB svc _INBOX.t.2 0\r\n\r\n"]), b"MSG _INBOX.t.1 1 5\r\nstale\r\nMSG _INBOX.t.2 2 2\r\nok\r\n"),
+    (b"PING\r\n", b"PONG\r\n")
+  ], true)
+  let client: Nats<PipeStream> = connect(near, options, NatsLimits {})?
+  assert message_of(request(client, "svc", Bytes.empty(), 100 ms)) == "nats: no reply to svc within 100 ms"
+  assert request(client, "svc", Bytes.empty(), 5 seconds)? == NatsMessage { subject = "_INBOX.t.2", payload = b"ok" }
+  flush(client, 5 seconds)?
+  assert stats(client)?.received == 1
+  shutdown(client)
+}
+
+// A scripted server that runs `exchanges`, then writes `bytes` one byte at
+// a time, a sleep between, so each reaches the client in a read of its own.
+test fn trickle(server: PipeStream, exchanges: List<(Bytes, Bytes)>, bytes: Bytes) -> IoResult<Unit> {
+  var data = Bytes.empty()
+  for exchange in exchanges {
+    let request = exchange.0
+    while data.len() < request.len() {
+      match server.read(65536)? {
+        Data(more) => data.append(more)
+        Eof => return server.close()
+      }
+    }
+    data = data.slice(request.len(), data.len())
+    server.write_all(exchange.1)?
+  }
+  var i = 0
+  while i < bytes.len() {
+    server.write_all(bytes.slice(i, i + 1))?
+    Clock.sleep(1 ms)
+    i = i + 1
+  }
+  loop {
+    match server.read(65536)? {
+      Data(_) => {}
+      Eof => return server.close()
+    }
+  }
+}
+
+test "operations split at every byte across reads are read whole" {
+  let (near, far) = connected()?
+  let ops = joined([
+    b"msg\ta  1\t3\r\na\r\n\r\n",
+    b"HMSG a 1 _R 20 20\r\nNATS/1.0\r\nK: v:w\r\n\r\n\r\n",
+    b"PING\r\n"
+  ])
+  spawn trickle(far, [(Bytes.empty(), info_line()), (hello(NatsOptions {}), b"PONG\r\n"), (b"SUB a 1\r\n", Bytes.empty())], ops)
+  let client: Nats<PipeStream> = connect(near, NatsOptions {}, NatsLimits {})?
+  let sub: Subscription = subscribe(client, "a")?
+  assert sub.messages.receive_within(5 seconds) == Some(NatsMessage { subject = "a", payload = b"a\r\n" })
+  assert sub.messages.receive_within(5 seconds) == Some(NatsMessage { subject = "a", reply = Some("_R"), headers = [("K", "v:w")], payload = b"" })
+  assert stats(client)?.connected
+  shutdown(client)
+}
+
 test "a shut-down client refuses every call" {
   let client = session([], NatsOptions {}, NatsLimits {})?
   shutdown(client)
@@ -1892,4 +2493,364 @@ test "the retry delay doubles from 100 ms to at most 10 seconds" {
   assert retry_delay(3) == 800 ms
   assert retry_delay(7) == 10 seconds
   assert retry_delay(1000) == 10 seconds
+}
+
+// The INFO of a server whose `max_payload` is `max_payload`.
+test fn info_with(max_payload: Int) -> Bytes {
+  var out = r#"INFO {"server_id":"A","version":"2.10.18","proto":1,"headers":true,"client_id":7,"max_payload":"#.to_bytes()
+  out.append("{max_payload}".to_bytes())
+  out.append(b"}\r\n")
+  out
+}
+
+// A server over `stream`: INFO, then for each of `replies` waits for one
+// more PING from the client and writes the reply; then reads until the
+// client closes, or with `hold` false closes at once.
+test fn pinged<S: ByteStream>(stream: S, info: Bytes, replies: List<Bytes>, hold: Bool) -> IoResult<Unit> {
+  stream.write_all(info)?
+  var data = Bytes.empty()
+  var at = 0
+  for reply in replies {
+    var found = false
+    while !found {
+      match data.index_of(b"PING\r\n", at) {
+        Some(i) => {
+          at = i + 6
+          found = true
+        }
+        None => match stream.read(65536)? {
+          Data(more) => data.append(more)
+          Eof => return stream.close()
+        }
+      }
+    }
+    stream.write_all(reply)?
+  }
+  if hold {
+    loop {
+      match stream.read(65536)? {
+        Data(_) => {}
+        Eof => return stream.close()
+      }
+    }
+  }
+  stream.close()
+}
+
+// A client over a pipe whose server is `pinged`.
+test fn piped(info: Bytes, replies: List<Bytes>, hold: Bool) -> IoResult<Nats<PipeStream>> {
+  let (near, far) = connected()?
+  spawn pinged(far, info, replies, hold)
+  connect(near, NatsOptions {}, NatsLimits {})
+}
+
+// A TCP server for one connection: the handshake, then nothing read until
+// a value arrives on `go`; then it reads to the end and sends the number
+// of bytes it read after the handshake's PING.
+test fn deaf_then_count(listener: TcpListener, go: Receiver<Int>, got: Sender<Int>) -> IoResult<Unit> {
+  let stream = listener.accept()?
+  stream.set_idle_timeout(5000)?
+  stream.write_all(info_with(1048576))?
+  var data = Bytes.empty()
+  while data.index_of(b"PING\r\n", 0) == None {
+    match stream.read(65536)? {
+      Data(more) => data.append(more)
+      Eof => return stream.close()
+    }
+  }
+  let after = match data.index_of(b"PING\r\n", 0) {
+    Some(i) => data.len() - (i + 6)
+    None => 0
+  }
+  stream.write_all(b"PONG\r\n")?
+  _ = go.receive()
+  stream.set_idle_timeout(2000)?
+  var total = after
+  loop {
+    match stream.read(1048576)? {
+      Data(more) => {
+        total = total + more.len()
+      }
+      Eof => {
+        _ = got.send(total)
+        return stream.close()
+      }
+    }
+  }
+}
+
+// A client over TCP, built as `connect_to` builds one, without redialling.
+test fn tcp_client(port: Int, options: NatsOptions, limits: NatsLimits) -> IoResult<Nats<TcpStream>> {
+  let (stream, info, rest) = dial(Endpoint { address = "127.0.0.1", port }, 2 seconds, options, limits)?
+  Ok(start(stream, info, rest, options, limits))
+}
+
+test "publishes acknowledged before shutdown are written" {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let (go, going) = Channel.bounded(1)
+  let (got, counted) = Channel.bounded(1)
+  spawn deaf_then_count(listener, going, got)
+  let client = tcp_client(listener.local_port(), NatsOptions {}, NatsLimits { backlog = 64 MiB })?
+  let payload = repeat("x", 1000000).to_bytes()
+  var i = 0
+  while i < 40 {
+    publish(client, "bulk", payload)?
+    i = i + 1
+  }
+  let counts = stats(client)?
+  assert counts.losses == 0 && counts.sent == 40, "precondition: losses {counts.losses}, sent {counts.sent}"
+  shutdown(client)
+  _ = go.send(1)
+  let per = encode_publish(NatsMessage { subject = "bulk", payload }).len()
+  let received = match counted.receive_within(5 seconds) {
+    Some(n) => n
+    None => -1
+  }
+  assert received == 40 * per, "the server got {received} bytes of {40 * per}: {(40 * per - received) / per} acknowledged messages dropped at shutdown"
+}
+
+test "sent counts only the messages handed to the writer, and every acknowledged message is counted once" {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let (go, going) = Channel.bounded(1)
+  let (got, counted) = Channel.bounded(1)
+  spawn deaf_then_count(listener, going, got)
+  let client = tcp_client(listener.local_port(), NatsOptions {}, NatsLimits {})?
+  let payload = repeat("x", 1000000).to_bytes()
+  var i = 0
+  while i < 40 {
+    publish(client, "bulk", payload)?
+    i = i + 1
+  }
+  assert client.losses.receive_within(5 seconds) == Some(1), "precondition: the backlog loses the connection"
+  let counts = stats(client)?
+  _ = go.send(1)
+  let per = encode_publish(NatsMessage { subject = "bulk", payload }).len()
+  let received = match counted.receive_within(5 seconds) {
+    Some(n) => n
+    None => -1
+  }
+  assert counts.sent * per == received, "sent {counts.sent} messages of {per} bytes, the writer wrote {received} bytes ({received / per} messages)"
+  assert counts.dropped > 0, "the loss dropped nothing"
+  let counted_once = counts.sent + counts.pending + counts.stale + counts.overflow + counts.refused + counts.dropped
+  assert counted_once == 40, "sent {counts.sent}, pending {counts.pending}, stale {counts.stale}, overflow {counts.overflow}, refused {counts.refused}, dropped {counts.dropped}: {counted_once} of 40"
+  shutdown(client)
+}
+
+// Publishes until the client refuses, then sends how many it published.
+test fn publisher(client: Nats<PipeStream>, done: Sender<Int>) -> IoResult<Unit> {
+  var n = 0
+  while message_of(publish(client, "a", b"x")) == "ok" {
+    n = n + 1
+  }
+  _ = done.send(n)
+  Ok(())
+}
+
+test "a publish racing shutdown returns" {
+  let client = piped(info_with(1048576), [b"PONG\r\n"], true)?
+  var i = 0
+  while i < 2000 {
+    _ = subscribe(client, "s.{i}")?
+    i = i + 1
+  }
+  let (done, ended) = Channel.bounded(8)
+  var k = 0
+  while k < 8 {
+    spawn publisher(client, done)
+    k = k + 1
+  }
+  _ = flush(client, 5 seconds)
+  shutdown(client)
+  var returned = 0
+  while returned < 8 && ended.receive_within(5 seconds) != None {
+    returned = returned + 1
+  }
+  assert returned == 8, "{8 - returned} of 8 publishers still wait in publish 5 s after shutdown returned"
+}
+
+// One connection of a server that runs the handshake and then reads
+// nothing until `stop` closes.
+test fn deaf_hold(stream: TcpStream, stop: Receiver<Int>, accepted: Sender<Int>) -> IoResult<Unit> {
+  stream.set_idle_timeout(5000)?
+  stream.write_all(info_with(1048576))?
+  var data = Bytes.empty()
+  while data.index_of(b"PING\r\n", 0) == None {
+    match stream.read(65536)? {
+      Data(more) => data.append(more)
+      Eof => return stream.close()
+    }
+  }
+  stream.write_all(b"PONG\r\n")?
+  _ = accepted.send(1)
+  _ = stop.receive()
+  stream.close()
+}
+
+test fn deaf_many(listener: TcpListener, n: Int, stop: Receiver<Int>, accepted: Sender<Int>) -> IoResult<Unit> {
+  var i = 0
+  while i < n {
+    let stream = listener.accept()?
+    spawn deaf_hold(stream, stop, accepted)
+    i = i + 1
+  }
+  Ok(())
+}
+
+// The substrate cannot end a write blocked on a peer that stopped reading
+// (docs/slice.md NN.3): each lost connection to such a server keeps its
+// writer and its reader. What the client bounds is their number.
+test "a reconnect loop against a server that stops reading keeps at most `lingering` lost connections running" {
+  let before = Runtime.census()
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let port = listener.local_port()
+  let (stopping, stop) = Channel.bounded(1)
+  let (accepted, accepts) = Channel.bounded(16)
+  spawn deaf_many(listener, 3, stop, accepted)
+  let client = connect_to(Endpoint { address = "127.0.0.1", port }, 2 seconds, NatsOptions {}, NatsLimits { backlog = 1 MiB, lingering = 2 })?
+  let payload = repeat("x", 1000000).to_bytes()
+  var counts = stats(client)?
+  var i = 0
+  while counts.lingering < 2 && i < 3000 {
+    _ = publish(client, "bulk", payload)
+    if i % 10 == 0 {
+      counts = stats(client)?
+    }
+    Clock.sleep(1 ms)
+    i = i + 1
+  }
+  assert counts.lingering == 2, "precondition: connections {counts.connections}, losses {counts.losses}, lingering {counts.lingering}"
+  // Past the first retry delays: a client without the cap dials again.
+  Clock.sleep(800 ms)
+  counts = stats(client)?
+  assert counts.connections == 2 && counts.lingering == 2 && !counts.connected, "connections {counts.connections}, lingering {counts.lingering}"
+  shutdown(client)
+  // What stays while the server lives: its accepting task and its two
+  // connections' tasks, and the reader and the writer of each lost
+  // connection.
+  let settled = Runtime.settle(before.tasks + 3 + 2 * 2, 5 seconds)
+  let now = Runtime.census()
+  stopping.close()
+  // The server's third accept waits; one connection ends it.
+  let poke = TcpStream.connect_within("127.0.0.1", port, 2 seconds)?
+  _ = poke.close()
+  assert Runtime.settle(before.tasks, 5 seconds), "the tasks did not end with the server"
+  assert settled, "after shutdown {now.tasks - before.tasks - 3} client tasks remain for 2 lost connections, {now.heap_bytes - before.heap_bytes} heap bytes"
+}
+
+// The take-back at a loss bounds what a blocked writer holds; that is
+// memory, which the counts above cannot see, so it is checked on the
+// client task's state itself.
+test "a lost connection's writer channel keeps no chunk, and its messages count as dropped" {
+  let (writer, chunks) = Channel.bounded(1)
+  let (commands, _) = Channel.bounded(4)
+  let (lost, _) = Channel.bounded(4)
+  let link: Link = Link { writer, chunks }
+  assert link.writer.try_send(b"PUB a 1\r\ny\r\nPUB a 1\r\nz\r\n")
+  let up: Session<PipeStream> = Session {
+    link,
+    unsent = b"PUB a 1\r\nx\r\n",
+    unsent_messages = 1,
+    handed_messages = 2,
+    running = [],
+    info = ServerInfo {},
+    options = NatsOptions {},
+    limits = NatsLimits {},
+    inbox = "_INBOX.t",
+    commands,
+    losses = lost,
+    next_ping = Clock.monotonic(),
+    counts = NatsStats { connected = true, connections = 1, sent = 3 }
+  }
+  let down: Session<PipeStream> = lose(up, "nats: test")
+  assert link.chunks.receive_within(0 ms) == None, "the chunk the writer had not taken is still in its channel"
+  assert link.chunks.closed()
+  let counts = counts_of(down)
+  assert counts.sent == 0 && counts.dropped == 3, "sent {counts.sent}, dropped {counts.dropped}"
+  assert down.unsent.len() == 0
+}
+
+test "an INFO update on the live connection is what publishing is checked against" {
+  var update = info_with(8)
+  update.append(b"PONG\r\n")
+  let client = piped(info_with(1048576), [b"PONG\r\n", update], true)?
+  flush(client, 5 seconds)?
+  assert message_of(publish(client, "a", b"123456789")) == "nats: a message of 9 bytes is larger than the limit of 8"
+  shutdown(client)
+}
+
+test fn requester(client: Nats<PipeStream>, done: Sender<Text>) -> IoResult<Unit> {
+  _ = done.send(message_of(request(client, "a", b"123456789", 2 seconds)))
+  Ok(())
+}
+
+test "a held request the new server refuses is answered with the refusal, its inbox not subscribed again" {
+  let client = piped(info_with(1048576), [b"PONG\r\n"], false)?
+  assert client.losses.receive_within(5 seconds) == Some(1)
+  let (done, answer) = Channel.bounded(1)
+  spawn requester(client, done)
+  var pending = 0
+  var i = 0
+  while pending == 0 && i < 5000 {
+    pending = stats(client)?.pending
+    Clock.sleep(1 ms)
+    i = i + 1
+  }
+  assert pending == 1, "precondition: the request is held"
+  // The new server takes the flush's PING first: a SUB for the inbox
+  // before it is a mismatch, answered with -ERR and the end.
+  let (second, far) = connected()?
+  spawn script(far, [(Bytes.empty(), info_with(8)), (hello(NatsOptions {}), b"PONG\r\n"), (b"PING\r\n", b"PONG\r\n")], true)
+  reconnect(client, second)?
+  let text = match answer.receive_within(5 seconds) {
+    Some(t) => t
+    None => "no answer"
+  }
+  assert stats(client)?.refused == 1, "precondition: the held request was refused"
+  assert text == "nats: a message of 9 bytes is larger than the limit of 8", text
+  flush(client, 5 seconds)?
+  let counts = stats(client)?
+  assert counts.errors == 0 && counts.connected, "{counts.last_error.debug()}"
+  shutdown(client)
+}
+
+// A healthy, quiet TCP connection whose server answers every PING.
+test fn answering(listener: TcpListener) -> IoResult<Unit> {
+  let stream = listener.accept()?
+  stream.set_idle_timeout(5000)?
+  stream.write_all(info_with(1048576))?
+  var data = Bytes.empty()
+  var at = 0
+  loop {
+    match data.index_of(b"PING\r\n", at) {
+      Some(i) => {
+        at = i + 6
+        stream.write_all(b"PONG\r\n")?
+      }
+      None => match stream.read(65536)? {
+        Data(more) => data.append(more)
+        Eof => return stream.close()
+      }
+    }
+  }
+}
+
+test "a quiet connection whose server answers every PING is kept" {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  spawn answering(listener)
+  let client = tcp_client(listener.local_port(), NatsOptions { ping_interval = 100 ms, max_pings_out = 1 }, NatsLimits {})?
+  assert client.losses.receive_within(1 seconds) == None
+  let counts = stats(client)?
+  assert counts.connected && counts.losses == 0, "losses {counts.losses}, {counts.last_error.debug()}"
+  shutdown(client)
+}
+
+test "quiet_limit saturates instead of overflowing, and a ping_interval of 0 is refused" {
+  let quiet = quiet_limit(NatsOptions { max_pings_out = 9223372036854775807 })
+  assert quiet >= 120 seconds
+  assert quiet_limit(NatsOptions { ping_interval = 1 ms, max_pings_out = 9223372036854775807 }) == QUIET_MOST
+  assert quiet_limit(NatsOptions { ping_interval = 100 ms, max_pings_out = 1 }) == 200 ms
+  assert quiet_limit(NatsOptions { max_pings_out = -5 }) == 120 seconds
+  let (near, far) = connected()?
+  assert message_of(connect(near, NatsOptions { ping_interval = 0 ms }, NatsLimits {})) == "nats: ping_interval must be more than 0 ms, not 0 ms"
+  _ = far.close()
 }
