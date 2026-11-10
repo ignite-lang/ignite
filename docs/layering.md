@@ -22,10 +22,11 @@ Rules, each a failure of the test that names the file, line and identifier or im
 3. No module outside `std.protocol.*` declares an item, owner, field, variant or role whose
    name contains a protocol name. Protocol names are read from std: each `protocol`
    declaration and each file name under `std/protocol/` (today `telnet`, `http`, `jsonrpc`,
-   `resp`). A name is contained when it occurs other than inside an English word the test
-   lists for that protocol (`ORDINARY_WORDS`: `respond`, `response` and `respects` for
-   `resp`); a word is a run of letters, so `RespValue` names `resp` and `respond` does not,
-   and a word not listed (`responses`) fails until it is added.
+   `resp`, `nats`). A name is contained when it occurs other than inside an English word the
+   test lists for that protocol (`ORDINARY_WORDS`: `respond`, `response` and `respects` for
+   `resp`; none for `nats`, which no word of the tree contains); a word is a run of letters,
+   so `RespValue` names `resp` and `respond` does not, and a word not listed (`responses`)
+   fails until it is added.
    Exempt: a catalogue `std.rfc.*` may declare names that contain the name of a protocol
    whose module imports it, because it quotes that protocol's specification (`JSONRPC_2`
    in `std.rfc.jsonrpc_2`, which `std.protocol.jsonrpc` imports). No other module is
@@ -43,7 +44,8 @@ Rules, each a failure of the test that names the file, line and identifier or im
 A component kind that speaks one protocol (a server, a client, a probe) lives in that
 protocol's module: `TelnetServer`, `TelnetClient` and `TelnetPrompt` are in
 `std.protocol.telnet`, `HttpServer` in `std.protocol.http`; the RESP client, its pub/sub
-subscription and its Sentinel discovery are in `std.protocol.resp`.
+subscription and its Sentinel discovery are in `std.protocol.resp`; the NATS client, its
+subscriptions, request/reply and reconnect are in `std.protocol.nats`.
 
 `crates/ignite-load` is exempt from rule 5. It is a load client of the example servers
 (terminal and todo), linked into neither the compiler nor a compiled program, and it has to speak Telnet and HTTP
