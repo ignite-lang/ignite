@@ -1050,8 +1050,12 @@ mod tests {
         let (used, uses) = channel();
         let (check, checks) = channel::<()>();
         let other = std::thread::spawn(move || {
-            used.send(read(handle)).unwrap();
+            let got = read(handle);
+            // Released before the main thread hears of the read: its
+            // release is then the last one, and its next read cannot block
+            // on an open socket.
             ignite_rt_tcp_release(handle);
+            used.send(got).unwrap();
             checks.recv().unwrap();
             read(handle)
         });
