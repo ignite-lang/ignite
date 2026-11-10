@@ -25,7 +25,7 @@ server (3.3, 3.7 to 3.9) are ratios against a plain-Rust implementation of the s
 measured on that host in the same run (`bench/native/`); a Go implementation is shown as a
 reference without a bar.
 
-Current values: run `run` on 2026-11-09, commit `fd6c9ad0`.
+Current values: run `v0.16.0` on 2026-11-10, commit `e009426f`.
 
 ## 1 Semantics: one meaning across the three consumers
 
@@ -33,18 +33,18 @@ Current values: run `run` on 2026-11-09, commit `fd6c9ad0`.
 |---|---|---|---|---|---|---|
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | eval | 4 | 4 | = |
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | llvm | 4 | 4 | = |
-| 1.2 | differential corpus size | ratchet | eval | 494 | 475 | = |
-| 1.2 | differential corpus size | ratchet | llvm | 856 | 762 | = |
-| 1.2 | differential corpus size | ratchet | rust | 856 | 762 | = |
-| 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/builtins | 112 | 146 | = |
+| 1.2 | differential corpus size | ratchet | eval | 494 | 494 | +19 better |
+| 1.2 | differential corpus size | ratchet | llvm | 856 | 856 | +94 better |
+| 1.2 | differential corpus size | ratchet | rust | 856 | 856 | +94 better |
+| 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/builtins | 112 | 149 | +3 worse |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/patterns | 13 | 13 | = |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | llvm/builtins | 12 | 13 | = |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | llvm/patterns | 30 | 46 | = |
-| 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | rust/builtins | 43 | 55 | = |
+| 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | rust/builtins | 43 | 57 | +2 worse |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | rust/patterns | 71 | 83 | = |
 | 1.4 | generated-code goldens changed without a `CODEGEN_REVISION` bump | gate | all | 0 | 0 | = |
 | 1.5 | random programs on which the consumers disagree | gate | | unmeasured: no program generator yet (out of scope of story:quality-ratchet) | | |
-| 1.6 | corpus units the evaluator cannot run | ratchet | eval | 362 | 287 | = |
+| 1.6 | corpus units the evaluator cannot run | ratchet | eval | 362 | 362 | +75 worse |
 | 1.7 | known differences marked intermittent | gate | all | 1 | 1 | = |
 
 ## 2 Front end: the checker refuses exactly the wrong programs
@@ -65,14 +65,14 @@ Current values: run `run` on 2026-11-09, commit `fd6c9ad0`.
 |---|---|---|---|---|---|---|
 | 3.1 | copies in the generated code of the golden corpus | ratchet | llvm | 90 | 90 | = |
 | 3.1 | copies in the generated code of the golden corpus | ratchet | rust | 166 | 166 | = |
-| 3.2 | binary size | ratchet | llvm/terminald/dev | 9144568 B | 9287176 B | +142608 |
-| 3.2 | binary size | ratchet | llvm/terminald/release | 1627008 B | 1627008 B | −615816 better |
-| 3.2 | binary size | ratchet | llvm/todod/dev | 9849080 B | 9910336 B | +61256 |
-| 3.2 | binary size | ratchet | llvm/todod/release | 2140192 B | 2140192 B | −697160 better |
-| 3.2 | binary size | ratchet | rust/terminald/dev | 7617776 B | 7617776 B | −2856 better |
-| 3.2 | binary size | ratchet | rust/terminald/release | 763184 B | 763184 B | −148152 better |
-| 3.2 | binary size | ratchet | rust/todod/dev | 8920888 B | 8920888 B | −3400 better |
-| 3.2 | binary size | ratchet | rust/todod/release | 1038712 B | 1038712 B | −180624 better |
+| 3.2 | binary size | ratchet | llvm/terminald/dev | 15560616 B | 15560616 B | +6416048 worse |
+| 3.2 | binary size | ratchet | llvm/terminald/release | 1627008 B | 1631808 B | −611016 better |
+| 3.2 | binary size | ratchet | llvm/todod/dev | 16272232 B | 16272232 B | +6423152 worse |
+| 3.2 | binary size | ratchet | llvm/todod/release | 2140192 B | 2227760 B | −609592 better |
+| 3.2 | binary size | ratchet | rust/terminald/dev | 7617776 B | 7598120 B | −22512 better |
+| 3.2 | binary size | ratchet | rust/terminald/release | 763184 B | 764880 B | −146456 better |
+| 3.2 | binary size | ratchet | rust/todod/dev | 8920888 B | 9080912 B | +156624 |
+| 3.2 | binary size | ratchet | rust/todod/release | 1038712 B | 1079336 B | −140000 better |
 | 3.3 | throughput against plain Rust | ratchet | llvm/terminal/connect-8 | 0.929× | 0.876× | ec2:c7i.metal-24xl, −53 |
 | 3.3 | throughput against plain Rust | ratchet | llvm/terminal/rr-1 | 0.987× | 0.987× | ec2:c7i.metal-24xl, +12 better |
 | 3.3 | throughput against plain Rust | ratchet | llvm/terminal/rr-64 | 0.859× | 0.859× | ec2:c7i.metal-24xl, −112 worse |
@@ -154,9 +154,9 @@ Current values: run `run` on 2026-11-09, commit `fd6c9ad0`.
 | 4.2 | gaps per claimed spec | ratchet | rust/rfc855 | 0 | 0 | = |
 | 4.2 | gaps per claimed spec | ratchet | rust/rfc9110 | 2 | 2 | = |
 | 4.2 | gaps per claimed spec | ratchet | rust/rfc9112 | 1 | 1 | = |
-| 4.3 | inline tests per target | ratchet | eval | 234 | 217 | = |
-| 4.3 | inline tests per target | ratchet | llvm | 452 | 375 | = |
-| 4.3 | inline tests per target | ratchet | rust | 452 | 375 | = |
+| 4.3 | inline tests per target | ratchet | eval | 234 | 234 | +17 better |
+| 4.3 | inline tests per target | ratchet | llvm | 452 | 452 | +77 better |
+| 4.3 | inline tests per target | ratchet | rust | 452 | 452 | +77 better |
 | 4.4 | std functions with no inline test | ratchet | | unmeasured: no instrument yet: needs the call graph of the test bodies | | |
 
 ## 5 Operations: run, apply, host
@@ -183,8 +183,8 @@ Current values: run `run` on 2026-11-09, commit `fd6c9ad0`.
 | # | metric | kind | target | bar | current | trend |
 |---|---|---|---|---|---|---|
 | 7.1 | flaky tests per gate | ratchet | | unmeasured: no instrument reads the gate logs; known: apply_transition::a_failed_start_first_replacement, slice10::executable_component_main | | |
-| 7.2 | ignored tests | ratchet | all | 27 | 24 | = |
-| 7.3 | source files over 3,000 lines | ratchet | all | 5 | 4 | = |
+| 7.2 | ignored tests | ratchet | all | 27 | 27 | +3 worse |
+| 7.3 | source files over 3,000 lines | ratchet | all | 5 | 5 | +1 worse |
 | 7.4 | language friction rows open | ratchet | all | 38 | 38 | = |
 | 7.5 | mutants that survive the suite on the compiler crates | ratchet | | unmeasured: no mutation testing yet (out of scope of story:quality-ratchet) | | |
 
