@@ -133,6 +133,7 @@
     "crates/ignite/tests/fixtures/tests/codespec_lists.ignite::Stderr is a stream of its own": "builtin `StdoutWriteAll` has no value at compile time",
     "crates/ignite/tests/fixtures/tests/fields.ignite::a field of a Store read": "builtin `StoreNew` has no value at compile time",
     "crates/ignite/tests/fixtures/tests/large_output.ignite::large streams": "builtin `StdoutWriteAll` has no value at compile time",
+    "crates/ignite/tests/fixtures/tests/resp_adversary.ignite::TYPE refused by the server is the server's error, as for every other helper": "builtin `PipePair` has no value at compile time",
     "crates/ignite/tests/fixtures/tests/slow.ignite::never ends": "exceeds the evaluator's fuel of 10000000 units",
     "crates/ignite/tests/fixtures/tests/store.ignite::an overflow in update ends its test": "builtin `StoreNew` has no value at compile time",
     "crates/ignite/tests/fixtures/tests/store.ignite::an overflow in update in a task leaves the store usable": "builtin `StoreNew` has no value at compile time",
@@ -249,6 +250,21 @@
     "std/protocol/jsonrpc.ignite::serve does not write a response to a notification": "builtin `PipePair` has no value at compile time",
     "std/protocol/jsonrpc.ignite::serve ends on a framing error": "builtin `PipePair` has no value at compile time",
     "std/protocol/jsonrpc.ignite::two messages back to back are read as two": "builtin `PipePair` has no value at compile time",
+    "std/protocol/resp.ignite::a +switch-master message names the new master, and next_master follows it": "builtin `PipePair` has no value at compile time",
+    "std/protocol/resp.ignite::a connection that ends before the reply is an error": "builtin `PipePair` has no value at compile time",
+    "std/protocol/resp.ignite::a pipeline sends its commands in one write and returns the replies in order": "builtin `PipePair` has no value at compile time",
+    "std/protocol/resp.ignite::a push before a reply is skipped, a reply nothing asked for and a cut reply are errors": "builtin `PipePair` has no value at compile time",
+    "std/protocol/resp.ignite::a refused subscription is the call's error": "builtin `PipePair` has no value at compile time",
+    "std/protocol/resp.ignite::a stream that ends inside a value is truncated": "builtin `PipePair` has no value at compile time",
+    "std/protocol/resp.ignite::a subscription whose connection ends closes its channel, and resubscribing resumes it": "builtin `PipePair` has no value at compile time",
+    "std/protocol/resp.ignite::a subscription yields its messages in order until every subscription is gone": "builtin `PipePair` has no value at compile time",
+    "std/protocol/resp.ignite::a value split over many small writes is read as one, the next kept": "builtin `PipePair` has no value at compile time",
+    "std/protocol/resp.ignite::attributes around a reply are seen through, and HELLO 3 reads the server's map": "builtin `PipePair` has no value at compile time",
+    "std/protocol/resp.ignite::master_at asks sentinels over TCP in order": "builtin `TcpListenerBind` has no value at compile time",
+    "std/protocol/resp.ignite::the hash, set, key and expiry commands read RESP2 and RESP3 replies alike": "builtin `PipePair` has no value at compile time",
+    "std/protocol/resp.ignite::the master comes from the first sentinel that names one": "builtin `PipePair` has no value at compile time",
+    "std/protocol/resp.ignite::the server's error is the command's value and the typed helper's IoError": "builtin `PipePair` has no value at compile time",
+    "std/protocol/resp.ignite::the string commands send their arguments and read their replies": "builtin `PipePair` has no value at compile time",
     "std/protocol/telnet.ignite::CR at the end of one delivery, LF in the next, is one line end": "builtin `PipePair` has no value at compile time",
     "std/protocol/telnet.ignite::Ctrl+D on a partial line sends it without a line end": "builtin `PipePair` has no value at compile time",
     "std/protocol/telnet.ignite::IAC IAC split across deliveries is one data byte": "builtin `PipePair` has no value at compile time",
@@ -378,13 +394,13 @@
       "area": "Semantics: one meaning across the three consumers",
       "bars": {
         "eval": {
-          "value": 475
+          "value": 485
         },
         "llvm": {
-          "value": 762
+          "value": 788
         },
         "rust": {
-          "value": 762
+          "value": 788
         }
       },
       "direction": "higher",
@@ -455,8 +471,8 @@
       "area": "Semantics: one meaning across the three consumers",
       "bars": {
         "eval": {
-          "decision": "story channel-release-on-close (2026-11-08), wave 8 unit leaks: the four G30 soaks now in std/sync.ignite read Runtime.census() or make a store, and the main of the case study's reproducer (crates/ignite/tests/fixtures/leak/repro.ignite) does IO, none with a value at compile time (docs/slice.md 33.4); the two soaks of the removed fixtures/leak/g30.ignite left the list; the six adversary cases of crates/ignite/tests/fixtures/leak/attack.ignite (25d418ae) start tasks, read Runtime.census() or make stores and channels, so 266; listed in eval_cannot_run; wave 8 integration (2026-11-09): the 16 adversary cases of crates/ignite/tests/fixtures/leak/attack2.ignite and the two store-end tests of std/sync.ignite (story infer-channel-ends) make stores, channels or read Runtime.census(), std/net.ignite's bind_kept test binds a listener (story drain-keeps-bound-listeners), and std/digest.ignite's two million-byte vectors exceed the evaluator's node limit (story std-digest), so 287; listed in eval_cannot_run",
-          "value": 287
+          "decision": "story channel-release-on-close (2026-11-08), wave 8 unit leaks: the four G30 soaks now in std/sync.ignite read Runtime.census() or make a store, and the main of the case study's reproducer (crates/ignite/tests/fixtures/leak/repro.ignite) does IO, none with a value at compile time (docs/slice.md 33.4); the two soaks of the removed fixtures/leak/g30.ignite left the list; the six adversary cases of crates/ignite/tests/fixtures/leak/attack.ignite (25d418ae) start tasks, read Runtime.census() or make stores and channels, so 266; listed in eval_cannot_run; wave 8 integration (2026-11-09): the 16 adversary cases of crates/ignite/tests/fixtures/leak/attack2.ignite and the two store-end tests of std/sync.ignite (story infer-channel-ends) make stores, channels or read Runtime.census(), std/net.ignite's bind_kept test binds a listener (story drain-keeps-bound-listeners), and std/digest.ignite's two million-byte vectors exceed the evaluator's node limit (story std-digest), so 287; listed in eval_cannot_run; wave 10 (2026-11-10): the 15 stream tests of std/protocol/resp.ignite (story std-resp-client) talk to a scripted server over Pipe.pair() or TcpListener.bind, and its adversary pass 1 case of crates/ignite/tests/fixtures/tests/resp_adversary.ignite (TYPE refused by the server) talks to one over Pipe.pair(), so 303; listed in eval_cannot_run",
+          "value": 303
         }
       },
       "direction": "lower",
@@ -916,13 +932,13 @@
       "area": "Standard library and protocols",
       "bars": {
         "eval": {
-          "value": 217
+          "value": 225
         },
         "llvm": {
-          "value": 375
+          "value": 398
         },
         "rust": {
-          "value": 375
+          "value": 398
         }
       },
       "direction": "higher",
@@ -1051,8 +1067,8 @@
       "area": "Engineering health",
       "bars": {
         "all": {
-          "decision": "wave 7 integration (2026-11-08): story bitwise-operators adds the ignored timing test bitwise::codecs_within_3x_of_hand_written_rust, a timing bound kept out of the loaded gate",
-          "value": 24
+          "decision": "wave 7 integration (2026-11-08): story bitwise-operators adds the ignored timing test bitwise::codecs_within_3x_of_hand_written_rust, a timing bound kept out of the loaded gate; wave 10 (2026-11-10): story std-resp-client adds resp::a_real_server_and_sentinel_on_both_targets, which needs redis-server and redis-sentinel and is ignored like image::",
+          "value": 25
         }
       },
       "direction": "lower",

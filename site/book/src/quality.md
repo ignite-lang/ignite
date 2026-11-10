@@ -33,9 +33,9 @@ Current values: run `run` on 2026-11-09, commit `fd6c9ad0`.
 |---|---|---|---|---|---|---|
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | eval | 4 | 4 | = |
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | llvm | 4 | 4 | = |
-| 1.2 | differential corpus size | ratchet | eval | 475 | 475 | = |
-| 1.2 | differential corpus size | ratchet | llvm | 762 | 762 | = |
-| 1.2 | differential corpus size | ratchet | rust | 762 | 762 | = |
+| 1.2 | differential corpus size | ratchet | eval | 485 | 475 | = |
+| 1.2 | differential corpus size | ratchet | llvm | 788 | 762 | = |
+| 1.2 | differential corpus size | ratchet | rust | 788 | 762 | = |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/builtins | 112 | 146 | = |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/patterns | 13 | 13 | = |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | llvm/builtins | 12 | 13 | = |
@@ -44,7 +44,7 @@ Current values: run `run` on 2026-11-09, commit `fd6c9ad0`.
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | rust/patterns | 71 | 83 | = |
 | 1.4 | generated-code goldens changed without a `CODEGEN_REVISION` bump | gate | all | 0 | 0 | = |
 | 1.5 | random programs on which the consumers disagree | gate | | unmeasured: no program generator yet (out of scope of story:quality-ratchet) | | |
-| 1.6 | corpus units the evaluator cannot run | ratchet | eval | 287 | 287 | = |
+| 1.6 | corpus units the evaluator cannot run | ratchet | eval | 303 | 287 | = |
 | 1.7 | known differences marked intermittent | gate | all | 1 | 1 | = |
 
 ## 2 Front end: the checker refuses exactly the wrong programs
@@ -154,9 +154,9 @@ Current values: run `run` on 2026-11-09, commit `fd6c9ad0`.
 | 4.2 | gaps per claimed spec | ratchet | rust/rfc855 | 0 | 0 | = |
 | 4.2 | gaps per claimed spec | ratchet | rust/rfc9110 | 2 | 2 | = |
 | 4.2 | gaps per claimed spec | ratchet | rust/rfc9112 | 1 | 1 | = |
-| 4.3 | inline tests per target | ratchet | eval | 217 | 217 | = |
-| 4.3 | inline tests per target | ratchet | llvm | 375 | 375 | = |
-| 4.3 | inline tests per target | ratchet | rust | 375 | 375 | = |
+| 4.3 | inline tests per target | ratchet | eval | 225 | 217 | = |
+| 4.3 | inline tests per target | ratchet | llvm | 398 | 375 | = |
+| 4.3 | inline tests per target | ratchet | rust | 398 | 375 | = |
 | 4.4 | std functions with no inline test | ratchet | | unmeasured: no instrument yet: needs the call graph of the test bodies | | |
 
 ## 5 Operations: run, apply, host
@@ -183,7 +183,7 @@ Current values: run `run` on 2026-11-09, commit `fd6c9ad0`.
 | # | metric | kind | target | bar | current | trend |
 |---|---|---|---|---|---|---|
 | 7.1 | flaky tests per gate | ratchet | | unmeasured: no instrument reads the gate logs; known: apply_transition::a_failed_start_first_replacement, slice10::executable_component_main | | |
-| 7.2 | ignored tests | ratchet | all | 24 | 24 | = |
+| 7.2 | ignored tests | ratchet | all | 25 | 24 | = |
 | 7.3 | source files over 3,000 lines | ratchet | all | 4 | 4 | = |
 | 7.4 | language friction rows open | ratchet | all | 38 | 38 | = |
 | 7.5 | mutants that survive the suite on the compiler crates | ratchet | | unmeasured: no mutation testing yet (out of scope of story:quality-ratchet) | | |
