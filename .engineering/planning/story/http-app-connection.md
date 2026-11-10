@@ -2,14 +2,15 @@
 format: aep.planning-md/3
 id: story:http-app-connection
 kind: story
-status: active
+status: implemented
 title: HttpApp sees its connection, holds, takes over and answers oversized bodies
 relations:
 - depends_on: story:channels-and-timers
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T03:32:56Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-10T01:15:22Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-10T19:39:19Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 # Story: http-app-connection
 
