@@ -66,3 +66,49 @@ fn the_terminal_calls_the_tcp_instances_of_the_telnet_roles() {
         "the console's fn value is a dyn Fn"
     );
 }
+
+/// TLS client sessions (`docs/slice.md`, section "TLS client sessions"):
+/// a program that names `Tls.client` or `TlsStream` turns on the substrate's
+/// feature `tls`; one that does not builds without rustls and ring.
+#[test]
+fn only_a_program_with_tls_turns_on_the_substrate_feature() {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("streams-tls-feature");
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("dial.ignite");
+    std::fs::write(
+        &file,
+        "import std.tls.{TlsOptions}\n\n\
+         fn dial(port: Int) -> Result<TlsStream, IoError> {\n  \
+         let stream = TcpStream.connect(\"127.0.0.1\", port)?\n  \
+         Tls.client(stream, \"localhost\", TlsOptions { alpn = [\"http/1.1\"] })\n}\n",
+    )
+    .unwrap();
+    let (program, std) =
+        common::lower_typed(&file, &common::repository_std(), Path::new("../ignite-io"));
+    assert!(
+        program.lib_rs.contains("::ignite_io::TlsStream::client("),
+        "{}",
+        program.lib_rs
+    );
+    assert!(
+        program
+            .cargo_toml
+            .contains("ignite-io = { path = \"../ignite-io\", features = [\"tls\"] }"),
+        "{}",
+        program.cargo_toml
+    );
+    assert!(!std.cargo_toml.contains("tls"), "{}", std.cargo_toml);
+
+    let terminal = common::workspace().join("examples/terminal/terminal.ignite");
+    let (program, std) = common::lower_typed(
+        &terminal,
+        &common::repository_std(),
+        Path::new("../ignite-io"),
+    );
+    assert!(
+        !program.cargo_toml.contains("tls"),
+        "{}",
+        program.cargo_toml
+    );
+    assert!(!std.cargo_toml.contains("tls"), "{}", std.cargo_toml);
+}

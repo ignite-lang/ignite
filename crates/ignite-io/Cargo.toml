@@ -9,9 +9,15 @@ autotests = false
 [dependencies]
 corosensei = "0.3.4"
 nix = { workspace = true, features = ["signal", "dir", "poll", "resource", "event", "feature", "socket"] }
+rustls = { workspace = true, optional = true }
+
+[dev-dependencies]
+ignite-io = { path = ".", features = ["tls"] }
+rcgen.workspace = true
 
 [features]
 runner = []
+tls = ["dep:rustls"]
 
 [[test]]
 name = "main"

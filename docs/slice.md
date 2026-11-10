@@ -5036,7 +5036,7 @@ takes 2 parameters (stream, application) or 3 (stream, limits, application), fou
 
 | code | rule | phase | fixture |
 |---|---|---|---|
-| E096 | A use instantiates a `ByteStream`-bounded type parameter with a type that does not implement `ByteStream` (18.3). The message is "`T` does not implement `ByteStream`, which `S` of `f` requires; pass a `TcpStream`, a `PipeStream` or a type parameter bounded by `ByteStream`" | types (`ignite-types`) | `crates/ignite-types/tests/fixtures/e096_bound_not_met`, with one case each: `Int`, a record, an unbounded type parameter passed on, a fn value of the generic fn, and a `spawn` |
+| E096 | A use instantiates a `ByteStream`-bounded type parameter with a type that does not implement `ByteStream` (18.3). The message is "`T` does not implement `ByteStream`, which `S` of `f` requires; pass a `TcpStream`, a `PipeStream`, a `TlsStream` or a type parameter bounded by `ByteStream`" | types (`ignite-types`) | `crates/ignite-types/tests/fixtures/e096_bound_not_met`, with one case each: `Int`, a record, an unbounded type parameter passed on, a fn value of the generic fn, and a `spawn` |
 | E099 | A bound naming an interface other than `ByteStream` ("unknown interface `X`; the only interface is `ByteStream`"). A bound naming two interfaces ("`S` has more than one bound; only `ByteStream` exists"). `ByteStream` in a type position ("`ByteStream` is an interface, not a type; declare a type parameter `<S: ByteStream>`") | check (`ignite-check`) | `crates/ignite-check/tests/fixtures/e099_malformed_bound`, one case per message |
 
 Further fixture obligations:
@@ -10775,3 +10775,105 @@ what finds a dead connection.
   `PATH`.
 - `layering::` reads `nats` as a protocol name from the file name; no word of the tree contains
   it, so `ORDINARY_WORDS` gets no entry.
+
+## NN TLS client sessions as a ByteStream
+
+**Status: implemented in `story:tls-client`.**
+
+Case-study gap G25: the service refuses https backend URLs at start. A program opens a TLS
+client session over a `TcpStream`, with the server's certificate verified against the system
+roots by default, and uses it wherever a `ByteStream` is taken, so a protocol role generic over
+its stream runs over TLS unchanged. The TLS engine is rustls in `crates/ignite-io` (`AGENTS.md`,
+layout rules: the substrate knows sockets and TLS sessions); the module `std.tls` holds the
+options record, the error test and the inline tests.
+
+### NN.1 Surface
+
+| item | meaning |
+|---|---|
+| `Tls.client(stream: TcpStream, server_name: Text, options: TlsOptions) -> Result<TlsStream, IoError>` | builtin static, effect `net.connect`: the client handshake on `stream`; `server_name` is sent as SNI and is the name (DNS name or IP address) the certificate must be valid for |
+| `TlsStream` | builtin handle type (`Ty::TlsStream`), visible in every module as `TcpStream` is; implements `ByteStream`, so E096 accepts it for a bounded parameter; a copy shares the session |
+| `read`, `write_all`, `close`, `set_idle_timeout`, `write_urgent`, `urgent_pending` | the six stream methods, resolved to the `Stream*` builtins with the receiver's effects of 18.3 (`read`: `<root>.read`, the rest `<root>.write`, `urgent_pending` `<root>.read`); each backend dispatches by the receiver's type as for a bounded parameter |
+| `session.alpn() -> Text` | builtin `TlsStreamAlpn`, pure: the protocol the server chose from `options.alpn`, empty for none |
+| `type TlsOptions` (`std.tls`) | `alpn: List<Text> = []` (offered, most preferred first), `authorities: Text = ""` (PEM certificates trusted instead of the system roots), `verify: Bool = true`, `handshake_timeout: Duration = 10 seconds` |
+| `certificate_refused(error: IoError) -> Bool` (`std.tls`) | whether the error is the refusal of the server's certificate |
+
+Behaviour:
+
+- The handshake reads with the time left before `handshake_timeout` as the stream's idle
+  timeout and restores the stream's own idle timeout when it returns. A timeout that is not
+  positive is refused before any IO.
+- System roots: `SSL_CERT_FILE`, else the first system bundle that exists
+  (`/etc/ssl/certs/ca-certificates.crt` and the other distributions' paths), else every file of
+  `SSL_CERT_DIR` or of `/etc/ssl/certs` and `/etc/pki/tls/certs`; read once per process.
+- `verify: false` takes any certificate for any name; the handshake signatures are still
+  checked.
+- `close` sends close_notify, then closes the write half of the TCP stream. A read returns
+  `Eof` after the server's close_notify and when the stream's idle timeout passes; a connection
+  closed without close_notify is an error, since the data may have been cut short. Dropping the
+  last handle closes the socket without close_notify.
+- `write_urgent` is refused and `urgent_pending` is false: TLS carries no urgent data.
+- A reader task and a writer task share one session: the rustls connection is behind a lock
+  never held across a wait; a read holds the session's read lock across its wait for
+  ciphertext, a write holds its write lock until its records are in the stream's send buffer.
+
+Errors, each an `IoError` whose message starts with `tls <server_name>: `:
+
+| case | message |
+|---|---|
+| a certificate the client does not accept | `tls <name>: certificate refused: <reason>`, `<reason>` one of `expired`, `not yet valid`, `not valid for <name>`, `unknown issuer`, `revoked`, or rustls' name of the error |
+| the deadline passed | `tls <name>: handshake timed out after <ms> ms` |
+| the timeout is not positive | `tls <name>: handshake timeout <ms> ms is not positive` |
+| no certificate in `authorities` | `tls <name>: no certificate in the authorities` |
+| a server name that is no DNS name or IP address | ``tls: invalid server name `<name>` `` |
+| an ALPN entry that is empty or over 255 bytes | ``tls <name>: ALPN protocol `<p>` is not 1 to 255 bytes`` |
+| the server closed during the handshake | `tls <name>: the server closed the connection during the handshake` |
+| anything else rustls refuses (a peer that speaks no TLS, an alert) | `tls <name>: <rustls' message>` |
+
+### NN.2 Lowering
+
+- Rust target: `::ignite_io::TlsStream::client(stream, name, ::ignite_io::TlsOptions { .. })`,
+  the record converted field by field; the stream methods as `<::ignite_io::TlsStream as
+  ::ignite_io::ByteStream>::read(..)`; `alpn` as the inherent method.
+- LLVM target: a session is a handle of the runtime's table (`Handle::Tls`), owned and
+  released as a stream is; `ignite_rt_tls_client(i64 stream, Text* name, TlsOptions* options,
+  i64* out, IoError* err)` with `TlsOptions` as its record layout (`IgniteTlsOptions`:
+  `alpn`, `authorities`, `verify` as `i8`, `handshake_timeout` in nanoseconds),
+  `ignite_rt_tls_alpn(Text* out, i64)`, and `ignite_rt_tls_<op>` for the six stream methods
+  with the signatures of the `pipe_<op>` entries. A `tls_*` entry given another handle fails
+  with "`<h>` is not a TLS stream".
+- Generation changes (two builtins, one type), so `CODEGEN_REVISION` is bumped at integration.
+
+### NN.3 Dependencies
+
+`rustls` 0.23 with the `ring` provider, `std` and `tls12` (no default features, so no
+`aws-lc-rs`), in `ignite-io`; its tree adds `ring`, `rustls-webpki`, `rustls-pki-types`,
+`untrusted`, `subtle`, `zeroize`, `once_cell` and `getrandom` 0.2. It sits behind the
+`ignite-io` feature `tls`: the runtime archive of the LLVM target turns it on, and the Rust
+target turns it on in a generated crate's `Cargo.toml` (program or `ignite-std`) whose source
+names `::ignite_io::Tls..`, so a program without TLS compiles neither rustls nor ring
+(`crates/ignite-rustgen/tests/streams.rs`,
+`only_a_program_with_tls_turns_on_the_substrate_feature`). Nothing is replaced: the workspace
+had no TLS. `rcgen` 0.14 is a dev-dependency of `ignite-io`
+and `ignite` only, for the authorities the tests generate. No crate reads the system roots for
+us (`rustls-native-certs` was not taken): the substrate reads the PEM bundle itself.
+
+### NN.4 Tests
+
+- `crates/ignite-io/tests/tls.rs` (`tls::`): a TLS server in the test with an authority
+  generated by `rcgen`, on the loopback interface: a verified session carries bytes both ways
+  as a `ByteStream`; a wrong host name, an expired certificate and the test authority under the
+  system roots are refused with their messages; `verify: false`; an IP address as the name;
+  ALPN; the handshake deadline against a silent server; a timeout that is not positive; a peer
+  that speaks no TLS; an invalid server name; authorities without a certificate; a reader thread
+  and a writer thread sharing a session over 1 MiB; urgent data.
+- `tls::rust::sessions_run` and `tls::llvm::sessions_run` (`crates/ignite/tests/tls.rs`): the
+  same servers started by the test, and `ignite test` of a program with the authority's PEM and
+  the ports filled in, on each target: a session as a `ByteStream` through a generic fn, ALPN,
+  a wrong host name (and `certificate_refused`), an expired certificate, verification against
+  the system roots by default, `verify: false`, and a reader task beside the writing task over
+  1,000,000 bytes.
+- `std/tls.ignite`, both targets, without a TLS server: the defaults, the handshake deadline
+  against a server that never answers, a timeout that is not positive, a peer that speaks no
+  TLS, an invalid server name, authorities without a certificate.
+- No network: every certificate is generated in the test.

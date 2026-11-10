@@ -600,6 +600,7 @@ fn decode(json: &Json, ty: &Ty, types: &TypedProgram, path: &str) -> Result<Valu
         | Ty::Capability(_)
         | Ty::TcpStream
         | Ty::PipeStream
+        | Ty::TlsStream
         | Ty::IoError
         | Ty::Store(_)
         | Ty::Sender(_)

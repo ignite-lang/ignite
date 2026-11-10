@@ -723,11 +723,11 @@ impl<'a> Typer<'a> {
     }
 
     /// Whether a value of `ty` has the methods of `ByteStream`: a
-    /// `TcpStream`, a `PipeStream` or a type parameter of the fn being
-    /// walked that is bounded by it (`docs/slice.md` 18.3).
+    /// `TcpStream`, a `PipeStream`, a `TlsStream` or a type parameter of
+    /// the fn being walked that is bounded by it (`docs/slice.md` 18.3).
     fn implements_stream(&self, ty: &Ty) -> bool {
         match ty {
-            Ty::TcpStream | Ty::PipeStream => true,
+            Ty::TcpStream | Ty::PipeStream | Ty::TlsStream => true,
             Ty::Param(name) => self.bounded.contains(name),
             _ => false,
         }
@@ -748,7 +748,7 @@ impl<'a> Typer<'a> {
                     "E096",
                     expr.span,
                     format!(
-                        "`{ty}` does not implement `{interface}`, which `{param}` of `{what}` requires; pass a `TcpStream`, a `PipeStream` or a type parameter bounded by `{interface}`"
+                        "`{ty}` does not implement `{interface}`, which `{param}` of `{what}` requires; pass a `TcpStream`, a `PipeStream`, a `TlsStream` or a type parameter bounded by `{interface}`"
                     ),
                 );
             }
@@ -1218,6 +1218,7 @@ impl<'a> Typer<'a> {
             "Environment" => Ty::Capability(Capability::Environment),
             "TcpStream" => Ty::TcpStream,
             "PipeStream" => Ty::PipeStream,
+            "TlsStream" => Ty::TlsStream,
             "IoError" => Ty::IoError,
             "Input" => Ty::Input,
             "List" => Ty::List(arg(0)),
@@ -1734,6 +1735,7 @@ impl<'a> Typer<'a> {
             | Ty::Capability(_)
             | Ty::TcpStream
             | Ty::PipeStream
+            | Ty::TlsStream
             | Ty::Store(_)
             | Ty::Sender(_)
             | Ty::Receiver(_)

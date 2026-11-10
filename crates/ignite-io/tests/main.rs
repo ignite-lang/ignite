@@ -12,5 +12,6 @@ mod scheduler_adversary;
 mod stdio;
 mod tcp;
 mod terminal;
+mod tls;
 mod urgent;
 mod waiter;

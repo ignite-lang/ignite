@@ -445,6 +445,7 @@ fn aggregate(ty: &Ty) -> bool {
             | Ty::TcpListener
             | Ty::TcpStream
             | Ty::PipeStream
+            | Ty::TlsStream
             | Ty::Store(_)
             | Ty::Sender(_)
             | Ty::Receiver(_)
@@ -464,6 +465,7 @@ fn handle(ty: &Ty) -> bool {
         Ty::TcpListener
             | Ty::TcpStream
             | Ty::PipeStream
+            | Ty::TlsStream
             | Ty::Store(_)
             | Ty::Sender(_)
             | Ty::Receiver(_)

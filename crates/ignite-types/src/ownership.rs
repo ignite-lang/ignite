@@ -208,7 +208,9 @@ pub fn change(builtin: Builtin) -> Option<Change> {
         | ReceiverReceive
         | ReceiverReceiveWithin
         | ReceiverClosed
-        | ReceiverClose => None,
+        | ReceiverClose
+        | TlsClient
+        | TlsStreamAlpn => None,
     }
 }
 

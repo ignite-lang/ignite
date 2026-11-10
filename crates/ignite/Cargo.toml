@@ -26,6 +26,8 @@ nix = { workspace = true, features = ["poll", "process", "signal"] }
 
 [dev-dependencies]
 ignite-rt = { workspace = true, features = ["runner"] }
+rustls.workspace = true
+rcgen.workspace = true
 
 [[test]]
 name = "main"

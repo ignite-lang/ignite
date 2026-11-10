@@ -1088,6 +1088,15 @@ mod stream;
 pub use pipe::{PIPE_CAPACITY, Pipe, PipeStream};
 pub use stream::ByteStream;
 
+// TLS client sessions (`docs/slice.md`, section "TLS client sessions"):
+// rustls over a `TcpStream`, the fourth `ByteStream`. Behind the feature
+// `tls`, so a generated program that names no TLS item builds without
+// rustls and ring; the runtime archive and such a program turn it on.
+#[cfg(feature = "tls")]
+mod tls;
+#[cfg(feature = "tls")]
+pub use tls::{HANDSHAKE_TIMEOUT, TlsOptions, TlsStream};
+
 // Slice 17 (`docs/slice.md` 21.8): the capabilities `Directory`,
 // `Launcher` with `ChildProcess`, `Entropy` and `Setting`, and the exit
 // hooks, after the tests for the same reason. Owner of the surface: U1;

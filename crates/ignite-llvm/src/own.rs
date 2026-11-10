@@ -152,6 +152,7 @@ fn creates(builtin: Builtin) -> bool {
             | TcpListenerAccept
             | TcpStreamConnect
             | TcpStreamConnectWithin
+            | TlsClient
             | PipePair
             | ChannelBounded
             | DirectoryTemporary
@@ -644,7 +645,7 @@ fn plain(ty: &Ty) -> bool {
 /// none.
 fn spawn_owns(ty: &Ty) -> bool {
     match ty {
-        Ty::TcpStream | Ty::PipeStream | Ty::Sender(_) | Ty::Receiver(_) => true,
+        Ty::TcpStream | Ty::PipeStream | Ty::TlsStream | Ty::Sender(_) | Ty::Receiver(_) => true,
         Ty::TcpListener | Ty::Capability(_) | Ty::Param(_) => false,
         Ty::List(_)
         | Ty::Option(_)
@@ -686,6 +687,7 @@ fn keeps_receiver(builtin: Builtin) -> bool {
             | StreamUrgentPending
             | TcpStreamPeer
             | TcpStreamTimedOut
+            | TlsStreamAlpn
             | TcpListenerAccept
             | TcpListenerLocalPort
             | SenderSend

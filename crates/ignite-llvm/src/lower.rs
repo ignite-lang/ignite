@@ -3988,41 +3988,53 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
 
     /// The runtime entry (without `ignite_rt_`) of the stream method `op`
     /// that builtin `b` calls (`docs/slice.md` 18.11, D11): `tcp_<op>` for
-    /// a `TcpStream`, `pipe_<op>` for a `PipeStream`. A `Stream*` builtin
-    /// of a `ByteStream`-bounded receiver takes the kind of the receiver's
-    /// substituted type, so each instance calls its own entries and no
-    /// dispatch is left for run time.
+    /// a `TcpStream`, `pipe_<op>` for a `PipeStream`, `tls_<op>` for a
+    /// `TlsStream`. A `Stream*` builtin of a `ByteStream`-bounded receiver
+    /// (and of a `TlsStream`, which has no builtins of its own for them)
+    /// takes the kind of the receiver's substituted type, so each instance
+    /// calls its own entries and no dispatch is left for run time.
     fn stream_entry(&mut self, b: Builtin, receiver: Option<&Expr>, op: &str) -> String {
         use Builtin::*;
-        let pipe = match b {
+        let kind = match b {
             TcpStreamRead
             | TcpStreamWriteAll
             | TcpStreamClose
             | TcpStreamSetIdleTimeout
             | TcpStreamWriteUrgent
-            | TcpStreamUrgentPending => false,
+            | TcpStreamUrgentPending => "tcp",
             PipeStreamRead
             | PipeStreamWriteAll
             | PipeStreamClose
             | PipeStreamSetIdleTimeout
             | PipeStreamWriteUrgent
-            | PipeStreamUrgentPending => true,
+            | PipeStreamUrgentPending => "pipe",
             _ => match self.ty(receiver.expect("a stream method has a receiver")) {
-                Ty::TcpStream => false,
-                Ty::PipeStream => true,
+                Ty::TcpStream => "tcp",
+                Ty::PipeStream => "pipe",
+                Ty::TlsStream => "tls",
                 other => panic!(
                     "`{b:?}` on a receiver of type {other:?}: an instance substitutes \
-                     `TcpStream` or `PipeStream` for a `ByteStream` bound"
+                     `TcpStream`, `PipeStream` or `TlsStream` for a `ByteStream` bound"
                 ),
             },
         };
-        if pipe {
-            let entry = format!("pipe_{op}");
-            self.m.declare_pipe(&format!("ignite_rt_{entry}"));
-            entry
-        } else {
-            format!("tcp_{op}")
+        let entry = format!("{kind}_{op}");
+        match kind {
+            "pipe" => self.m.declare_pipe(&format!("ignite_rt_{entry}")),
+            "tls" => {
+                let params: &[&str] = match op {
+                    "read" => &["i64", "i64", "ptr", "ptr"],
+                    "set_idle_timeout" => &["i64", "i64", "ptr"],
+                    "close" => &["i64", "ptr"],
+                    _ => &["i64", "ptr", "ptr"],
+                };
+                let params: Vec<String> = params.iter().map(|p| p.to_string()).collect();
+                self.m
+                    .declare(&format!("ignite_rt_{entry}"), "i32", &params);
+            }
+            _ => {}
         }
+        entry
     }
 
     /// A runtime call `void ignite_rt_<name>(ptr out, args..)` producing `ty`.
@@ -4978,6 +4990,37 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                     Ty::TcpStream,
                 )
             }
+            TlsClient => {
+                let ptr = "ptr".to_string();
+                let i64 = "i64".to_string();
+                self.m.declare(
+                    "ignite_rt_tls_client",
+                    "i32",
+                    &[i64, ptr.clone(), ptr.clone(), ptr.clone(), ptr],
+                );
+                let stream = self.scalar_arg(&args[0]);
+                let name = self.read_arg(&args[1]);
+                let options = self.read_arg(&args[2]);
+                self.rt_result(
+                    "tls_client",
+                    &[
+                        format!("i64 {stream}"),
+                        format!("ptr {name}"),
+                        format!("ptr {options}"),
+                    ],
+                    Ty::TlsStream,
+                )
+            }
+            TlsStreamAlpn => {
+                self.m.declare(
+                    "ignite_rt_tls_alpn",
+                    "void",
+                    &["ptr".to_string(), "i64".to_string()],
+                );
+                let r = recv(self);
+                let s = self.scalar(&r);
+                self.rt_out("tls_alpn", &Ty::Text, &[format!("i64 {s}")])
+            }
             TcpStreamPeer => {
                 self.m.declare(
                     "ignite_rt_tcp_peer",
@@ -5872,12 +5915,12 @@ fn instance_linkage(
 }
 
 /// Whether `ty` is a stream handle that a task owns when it is moved to
-/// it: a `TcpStream`, a `PipeStream` end or a channel end (`ignite_rt_tcp_own` and
+/// it: a `TcpStream`, a `PipeStream` end, a `TlsStream` or a channel end (`ignite_rt_tcp_own` and
 /// `ignite_rt_tcp_release` take any handle, `docs/slice.md` 18.9).
 fn is_stream(ty: &Ty) -> bool {
     matches!(
         ty,
-        Ty::TcpStream | Ty::PipeStream | Ty::Sender(_) | Ty::Receiver(_)
+        Ty::TcpStream | Ty::PipeStream | Ty::TlsStream | Ty::Sender(_) | Ty::Receiver(_)
     )
 }
 

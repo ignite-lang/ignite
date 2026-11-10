@@ -282,6 +282,15 @@ pub use channel::{
     ignite_rt_channel_try_send,
 };
 
+// TLS client sessions (`docs/slice.md`, section "TLS client sessions"):
+// the entries of `crate::tls`, after the tests for the same reason.
+mod tls;
+pub use tls::{
+    IgniteTlsOptions, ignite_rt_tls_alpn, ignite_rt_tls_client, ignite_rt_tls_close,
+    ignite_rt_tls_read, ignite_rt_tls_set_idle_timeout, ignite_rt_tls_urgent_pending,
+    ignite_rt_tls_write_all, ignite_rt_tls_write_urgent,
+};
+
 // Panic containment at the C ABI (`crate::contain`), after the tests for
 // the same reason.
 mod contain;

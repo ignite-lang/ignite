@@ -10,7 +10,7 @@ autotests = false
 crate-type = ["staticlib", "rlib"]
 
 [dependencies]
-ignite-io.workspace = true
+ignite-io = { workspace = true, features = ["tls"] }
 nix = { workspace = true, features = ["signal", "mman"] }
 
 [features]

@@ -97,6 +97,7 @@ fn builtin_effect(builtin: Builtin) -> Option<(Effect, &'static str)> {
         EnvironmentGet => (Effect::Receiver("variable"), "get"),
         TcpStreamTimedOut => (Effect::Receiver("read"), "timed_out"),
         TcpStreamConnectWithin => (Effect::Ambient("net.connect"), "TcpStream.connect_within"),
+        TlsClient => (Effect::Ambient("net.connect"), "Tls.client"),
         ChannelBounded => (Effect::Ambient("channel.new"), "Channel.bounded"),
         SenderSend => (Effect::Receiver("send"), "send"),
         SenderTrySend => (Effect::Receiver("send"), "try_send"),

@@ -34,7 +34,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use ignite_io::{
     ChildProcess, CommandLine, Directory, Entropy, Environment, IoError, Launcher, PipeStream,
-    Setting, TcpListener, TcpStream,
+    Setting, TcpListener, TcpStream, TlsStream,
 };
 
 use crate::{IgniteInput, IgniteIoError, IgniteList, arena, bytes, status};
@@ -144,6 +144,8 @@ pub(crate) enum Handle {
     Stream(TcpStream),
     /// An end of an in-memory pipe (`crate::pipe`).
     Pipe(PipeStream),
+    /// A TLS client session (`crate::tls`).
+    Tls(TlsStream),
     /// A root directory (`crate::fs`, `docs/slice.md` 21.4).
     Directory(Directory),
     /// The authority to start children (`crate::child`, 21.5).
@@ -425,6 +427,12 @@ fn listener(handle: i64) -> Result<TcpListener, IoError> {
         Handle::Listener(listener) => Ok(listener),
         _ => Err(IoError::new(format!("{handle} is not a TCP listener"))),
     }
+}
+
+/// The TCP stream `handle` names; any other handle is "`<h>` is not a TCP
+/// stream".
+pub(crate) fn tcp_stream(handle: i64) -> Result<TcpStream, IoError> {
+    stream(handle)
 }
 
 fn stream(handle: i64) -> Result<TcpStream, IoError> {

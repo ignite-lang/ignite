@@ -1,8 +1,8 @@
-e096_adv_more_uses.ignite:19:23: error[E096]: `Int` does not implement `ByteStream`, which `S` of `same` requires; pass a `TcpStream`, a `PipeStream` or a type parameter bounded by `ByteStream`
-e096_adv_more_uses.ignite:21:53: error[E096]: `Int` does not implement `ByteStream`, which `S` of `Relay.serve` requires; pass a `TcpStream`, a `PipeStream` or a type parameter bounded by `ByteStream`
-e096_adv_more_uses.ignite:24:9: error[E096]: `Int` does not implement `ByteStream`, which `S` of `Relay.serve` requires; pass a `TcpStream`, a `PipeStream` or a type parameter bounded by `ByteStream`
-e096_adv_more_uses.ignite:28:29: error[E096]: `Int` does not implement `ByteStream`, which `S` of `Config.open` requires; pass a `TcpStream`, a `PipeStream` or a type parameter bounded by `ByteStream`
-e096_adv_more_uses.ignite:30:25: error[E096]: `Int` does not implement `ByteStream`, which `S` of `boxed` requires; pass a `TcpStream`, a `PipeStream` or a type parameter bounded by `ByteStream`
-e096_adv_more_uses.ignite:32:35: error[E096]: `Int` does not implement `ByteStream`, which `S` of `make` requires; pass a `TcpStream`, a `PipeStream` or a type parameter bounded by `ByteStream`
-e096_adv_more_uses.ignite:35:23: error[E096]: `T` does not implement `ByteStream`, which `S` of `same` requires; pass a `TcpStream`, a `PipeStream` or a type parameter bounded by `ByteStream`
-e096_adv_more_uses.ignite:39:24: error[E096]: `Text` does not implement `ByteStream`, which `S` of `same` requires; pass a `TcpStream`, a `PipeStream` or a type parameter bounded by `ByteStream`
+e096_adv_more_uses.ignite:19:23: error[E096]: `Int` does not implement `ByteStream`, which `S` of `same` requires; pass a `TcpStream`, a `PipeStream`, a `TlsStream` or a type parameter bounded by `ByteStream`
+e096_adv_more_uses.ignite:21:53: error[E096]: `Int` does not implement `ByteStream`, which `S` of `Relay.serve` requires; pass a `TcpStream`, a `PipeStream`, a `TlsStream` or a type parameter bounded by `ByteStream`
+e096_adv_more_uses.ignite:24:9: error[E096]: `Int` does not implement `ByteStream`, which `S` of `Relay.serve` requires; pass a `TcpStream`, a `PipeStream`, a `TlsStream` or a type parameter bounded by `ByteStream`
+e096_adv_more_uses.ignite:28:29: error[E096]: `Int` does not implement `ByteStream`, which `S` of `Config.open` requires; pass a `TcpStream`, a `PipeStream`, a `TlsStream` or a type parameter bounded by `ByteStream`
+e096_adv_more_uses.ignite:30:25: error[E096]: `Int` does not implement `ByteStream`, which `S` of `boxed` requires; pass a `TcpStream`, a `PipeStream`, a `TlsStream` or a type parameter bounded by `ByteStream`
+e096_adv_more_uses.ignite:32:35: error[E096]: `Int` does not implement `ByteStream`, which `S` of `make` requires; pass a `TcpStream`, a `PipeStream`, a `TlsStream` or a type parameter bounded by `ByteStream`
+e096_adv_more_uses.ignite:35:23: error[E096]: `T` does not implement `ByteStream`, which `S` of `same` requires; pass a `TcpStream`, a `PipeStream`, a `TlsStream` or a type parameter bounded by `ByteStream`
+e096_adv_more_uses.ignite:39:24: error[E096]: `Text` does not implement `ByteStream`, which `S` of `same` requires; pass a `TcpStream`, a `PipeStream`, a `TlsStream` or a type parameter bounded by `ByteStream`

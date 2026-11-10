@@ -341,6 +341,7 @@ impl TypeEnv {
             | Ty::TcpListener
             | Ty::TcpStream
             | Ty::PipeStream
+            | Ty::TlsStream
             | Ty::Sender(_)
             | Ty::Receiver(_)
             | Ty::Store(_)
@@ -486,6 +487,7 @@ impl TypeEnv {
             Ty::TcpListener
             | Ty::TcpStream
             | Ty::PipeStream
+            | Ty::TlsStream
             | Ty::Sender(_)
             | Ty::Receiver(_)
             | Ty::Capability(_) => true,
@@ -624,6 +626,7 @@ pub fn scalar_type(ty: &Ty) -> Option<&'static str> {
         | Ty::TcpListener
         | Ty::TcpStream
         | Ty::PipeStream
+        | Ty::TlsStream
         | Ty::Sender(_)
         | Ty::Receiver(_)
         | Ty::Capability(_) => Some("i64"),
@@ -660,6 +663,7 @@ pub fn mangle(ty: &Ty) -> String {
         Ty::TcpListener => "TcpListener".into(),
         Ty::TcpStream => "TcpStream".into(),
         Ty::PipeStream => "PipeStream".into(),
+        Ty::TlsStream => "TlsStream".into(),
         Ty::Capability(kind) => kind.name().into(),
         Ty::IoError => "IoError".into(),
         Ty::Input => "Input".into(),
