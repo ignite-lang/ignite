@@ -780,13 +780,14 @@ fn child_clients() {
 /// A short read does not show that a socket is empty: what came in the
 /// same readiness edge as the bytes it returned is still there, with no
 /// edge of its own to come. The peer's end of stream behind the bytes is
-/// read at once, not at the idle timeout; so is the urgent byte a read
+/// read at once, not at the idle timeout; so is the reset behind them
+/// (the peer closed with a zero linger), and the urgent byte a read
 /// stopped before. One worker, the reader parked in the reactor (another
 /// task keeps it from waiting alone), and the peer writing on the same
 /// worker, so both arrive before the worker looks at its reactor.
 #[test]
 fn what_a_short_read_left_behind_is_read_at_once() {
-    for case in ["end", "urgent"] {
+    for case in ["end", "reset", "urgent"] {
         passed(&child(
             "scheduler::child_short_read",
             &[("IGNITE_WORKERS", "1"), ("SCHEDULER_CASE", case)],
@@ -796,12 +797,23 @@ fn what_a_short_read_left_behind_is_read_at_once() {
 
 #[test]
 fn child_short_read() {
+    use std::io::Write;
     if !in_child() {
         return;
     }
-    let urgent = std::env::var("SCHEDULER_CASE").as_deref() == Ok("urgent");
+    let case = std::env::var("SCHEDULER_CASE").unwrap();
     let listener = TcpListener::bind(LOCALHOST.to_string(), 0).unwrap();
-    let peer = TcpStream::connect(LOCALHOST.to_string(), listener.local_port()).unwrap();
+    let port = listener.local_port();
+    // The reset needs a zero linger, which only a plain socket sets.
+    let (peer, plain) = if case == "reset" {
+        let plain = std::net::TcpStream::connect((LOCALHOST, port as u16)).unwrap();
+        (None, Some(plain))
+    } else {
+        (
+            Some(TcpStream::connect(LOCALHOST.to_string(), port).unwrap()),
+            None,
+        )
+    };
     let stream = listener.accept().unwrap();
     let (keep, kept) = Channel::bounded::<bool>(1);
     spawn(move || {
@@ -810,29 +822,134 @@ fn child_short_read() {
     let (report, reports) = mpsc::channel();
     spawn(move || {
         stream.set_idle_timeout(2_000).unwrap();
-        let first = stream.read(4096).unwrap();
-        let second = stream.read(4096).unwrap();
+        let read = || match stream.read(4096) {
+            Ok(input) => format!("{input:?}"),
+            Err(_) => String::from("Err"),
+        };
+        let first = read();
+        let second = read();
         report
-            .send(format!("{first:?} {second:?} {}", stream.timed_out()))
+            .send(format!("{first} {second} {}", stream.timed_out()))
             .unwrap();
     });
+    let expected = match case.as_str() {
+        "urgent" => "Data([112, 105, 110, 103, 255]) Data([242]) false",
+        "reset" => "Data([112, 105, 110, 103]) Err false",
+        _ => "Data([112, 105, 110, 103]) Eof false",
+    };
     spawn(move || {
         // Parked on a timer until the reader parks in its first read.
         ignite_io::wait::sleep(Duration::from_millis(100));
-        peer.write_all(b"ping".to_vec()).unwrap();
-        if urgent {
-            peer.write_urgent(vec![255, 242]).unwrap();
-        } else {
-            peer.close().unwrap();
+        match (peer, plain) {
+            (Some(peer), _) if case == "urgent" => {
+                peer.write_all(b"ping".to_vec()).unwrap();
+                peer.write_urgent(vec![255, 242]).unwrap();
+            }
+            (Some(peer), _) => {
+                peer.write_all(b"ping".to_vec()).unwrap();
+                peer.close().unwrap();
+            }
+            (None, Some(mut plain)) => {
+                plain.write_all(b"ping").unwrap();
+                let linger = nix::libc::linger {
+                    l_onoff: 1,
+                    l_linger: 0,
+                };
+                nix::sys::socket::setsockopt(&plain, nix::sys::socket::sockopt::Linger, &linger)
+                    .unwrap();
+                drop(plain);
+            }
+            (None, None) => unreachable!("a peer"),
         }
     });
     let read = reports.recv_timeout(LIMIT).expect("the reader ended");
-    let expected = if urgent {
-        "Data([112, 105, 110, 103, 255]) Data([242]) false"
-    } else {
-        "Data([112, 105, 110, 103]) Eof false"
-    };
     assert_eq!(read, expected);
     drop(keep);
     wait_for_tasks();
+}
+
+/// A task's waits send what that task wrote, not what another task on its
+/// worker wrote (`docs/slice.md` section 7: "the writing task's next
+/// flush"). A writer task leaves one byte in its stream's send buffer,
+/// spawns a reader of the same stream, then writes 10 MiB in 100 KiB
+/// pieces to an echo server and parks for room while it holds the write
+/// lock. The reader's read must not wait for that lock to send the
+/// writer's byte: the writer waits for the echo server, which waits for
+/// the reader. Before, the pending list was the worker thread's, so the
+/// reader's flush waited for the writer's lock and neither moved.
+#[test]
+fn a_read_does_not_wait_for_another_task_s_write_lock() {
+    for workers in ["1", "2"] {
+        passed(&child(
+            "scheduler::child_writer_with_a_reader_it_spawned",
+            &[("IGNITE_WORKERS", workers)],
+        ));
+    }
+}
+
+#[test]
+fn child_writer_with_a_reader_it_spawned() {
+    use std::io::{Read, Write};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
+    if !in_child() {
+        return;
+    }
+    const TOTAL: usize = 10 * 1024 * 1024;
+    let echo = std::net::TcpListener::bind((LOCALHOST, 0)).unwrap();
+    let port = i64::from(echo.local_addr().unwrap().port());
+    std::thread::spawn(move || {
+        let (mut socket, _) = echo.accept().unwrap();
+        let mut buffer = vec![0u8; 64 * 1024];
+        loop {
+            match socket.read(&mut buffer) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    if socket.write_all(&buffer[..n]).is_err() {
+                        return;
+                    }
+                }
+            }
+        }
+        let _ = socket.shutdown(std::net::Shutdown::Write);
+    });
+    let written = Arc::new(AtomicUsize::new(0));
+    let read = Arc::new(AtomicUsize::new(0));
+    let (done, outcome) = mpsc::channel::<String>();
+    {
+        let (written, read) = (written.clone(), read.clone());
+        spawn(move || {
+            let stream = TcpStream::connect(LOCALHOST.to_string(), port).unwrap();
+            stream.write_all(vec![0u8]).unwrap();
+            let reader = stream.clone();
+            spawn(move || {
+                let end = loop {
+                    match reader.read(64 * 1024) {
+                        Ok(Input::Data(bytes)) => {
+                            read.fetch_add(bytes.len(), SeqCst);
+                        }
+                        Ok(Input::Eof) => break Ok(()),
+                        Err(e) => break Err(e.message),
+                    }
+                };
+                let _ = done.send(format!("{} bytes, end {end:?}", read.load(SeqCst)));
+            });
+            let block: Vec<u8> = (0..=250u8).cycle().take(TOTAL).collect();
+            for piece in block.chunks(100 * 1024) {
+                if stream.write_all(piece.to_vec()).is_err() {
+                    return;
+                }
+                written.fetch_add(piece.len(), SeqCst);
+            }
+            let _ = stream.close();
+        });
+    }
+    let outcome = outcome.recv_timeout(LIMIT).unwrap_or_else(|_| {
+        format!(
+            "no outcome within {LIMIT:?}: written {} of {TOTAL}, read {}",
+            written.load(SeqCst),
+            read.load(SeqCst)
+        )
+    });
+    assert_eq!(outcome, format!("{} bytes, end Ok(())", TOTAL + 1));
 }
