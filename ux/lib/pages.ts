@@ -8,12 +8,18 @@ export const REPO = path.resolve(UX_DIR, "..");
 
 type PageList = { root: string; exclude: string[] };
 
+// A stub mdBook writes for `[output.html.redirect]`: it navigates away
+// as it loads, so it has no layout of its own to measure.
+function redirect(file: string): boolean {
+  return fs.readFileSync(file, "utf8").includes('<meta http-equiv="refresh"');
+}
+
 function walk(dir: string, base: string, out: string[]) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       walk(full, base, out);
-    } else if (entry.name.endsWith(".html")) {
+    } else if (entry.name.endsWith(".html") && !redirect(full)) {
       out.push(path.relative(base, full).split(path.sep).join("/"));
     }
   }
