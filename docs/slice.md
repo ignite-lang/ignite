@@ -10572,3 +10572,109 @@ are the last record and were taken over the same SHA-1 rounds.
   empty message and a million `a`; `Digest` fed in pieces of 1, 3, 55, 56, 63, 64, 65, 128 and
   300 bytes gives the one-shot digest of a 300-byte message for both algorithms.
 - `layering::` with the two new rows; `bitwise::` over the rewritten fixture.
+
+## NN std.protocol.resp: RESP3 client with pub/sub and Sentinel
+
+**Status: implemented in `story:std-resp-client`.**
+
+Case-study gap G9: no Redis or Sentinel client in std. `std.protocol.resp` is a client of the
+Redis serialization protocol, RESP2 and RESP3, generic over `T: ByteStream`, written in Ignite on
+the existing stream, channel and spawn builtins; no builtin and no substrate code is added, so the
+compiler and both backends are unchanged and no generated code changes.
+
+### NN.1 Values and limits
+
+| item | meaning |
+|---|---|
+| `enum RespValue` | `Simple(Text)`, `Error(Text)`, `Integer(Int)`, `Blob(Bytes)`, `Null`, `Double(Text)`, `Boolean(Bool)`, `BlobError(Bytes)`, `Verbatim(Text, Bytes)`, `BigNumber(Text)`, `Array`, `Map` (pairs), `Set`, `Push`, `Attributed(pairs, value)`: every RESP3 type; `Double` and `BigNumber` keep the exact text, as `std.json`'s `Decimal` |
+| `type RespLimits` | `line` 64 KiB (one line's text), `bulk` 16 MiB (one bulk string, blob error or verbatim string; a streamed string in total), `elements` 1,048,576 (items of one aggregate, a map's pairs), `depth` 32 (aggregates inside aggregates; the value an attribute annotates is one level deeper), `reply` 64 MiB (the encoded bytes of one value) |
+| `enum RespError` | `UnknownType(Byte)`, `Malformed(Text)`, `LineTooLong`, `BulkTooLarge`, `TooManyElements`, `TooDeep`, `ReplyTooLarge`, `Truncated`; `describe` |
+| `encode(value) -> Bytes` | the RESP3 form; a line type's text must hold no CR or LF |
+| `encode_command(args)`, `words(parts)` | a command as an array of bulk strings |
+| `decode(data, limits) -> Split` | `Complete(value, rest)`, `Partial`, `Invalid(error)`, without reading |
+| `read_value(stream, limits, buffer) -> IoResult<Read>` | `Got(value, rest)`, `Closed`, `Failed(error)` |
+
+The decoder reads RESP2's `$-1` and `*-1` as `Null`, a leading `+` on an integer, and RESP3's
+streamed strings (`$?`, `;` parts, `;0`) and streamed aggregates (`*?`, `~?`, `%?`, ended by `.`)
+as the value they spell. It refuses a line holding a CR or LF of its own, a length or integer that
+is no number, a negative length other than RESP2's nulls, and every limit one past it. A value
+that is still incomplete is decoded again from its start when more bytes arrive; a bulk string's
+length is checked before its bytes are, so only aggregates of many small items pay for the
+repeated parse.
+
+### NN.2 Commands
+
+`type Client<T> { stream: T, limits: RespLimits = RespLimits {} }`; `connect(endpoint, timeout)`
+is one over TCP whose reads also give up after `timeout`. `command(client, args)` returns the
+reply as a value, the server's error included; `pipeline(client, commands)` writes every command
+in one write and returns one reply per command in order. A push frame on a command connection is
+skipped, before the replies and after them; anything else after the last reply is the `IoError`
+`resp: a reply no command asked for`. So under RESP3 a `SUBSCRIBE` sent with `command` or
+`pipeline` waits until the stream's idle timeout, its confirmation being a push; `subscribe`
+(NN.3) is the way to subscribe. A client serves one task at a time.
+
+The typed helpers, called as plain fns (`get(client, key)`; the method form is E042 on a
+generic record receiver): `ping`, `hello`, `auth`; strings `get`, `set`, `set_for` (`PX`),
+`set_if_absent` (`NX`), `mget`, `incr`, `incr_by`; hashes `hget`, `hset`, `hgetall`, `hdel`,
+`hexists`; sets `sadd`, `srem`, `smembers`, `sismember`, `scard`; keys `del`, `exists`,
+`rename`, `key_type`; expiry `expire` (`PEXPIRE`), `persist`, `ttl` (`PTTL` as `Expiry`:
+`Missing`, `Persistent`, `Remaining(Duration)`); `publish`. Keys, fields and channels are
+`Text`, values `Bytes`. Each reads RESP2 and RESP3 replies alike (a map or a flat array for
+`HGETALL`, a set or an array for `SMEMBERS`, attributes seen through); the server's error is an
+`IoError` whose message is the error line, a reply of another type the `IoError`
+`resp: unexpected reply to <NAME>: <debug text>`.
+
+### NN.3 Pub/sub
+
+`subscribe(stream, topics: Topics, limits) -> IoResult<Subscription<T>>` sends `SUBSCRIBE` and
+`PSUBSCRIBE` for `Topics { channels, patterns }` and reads the first confirmation, so a refusal
+(`-NOAUTH`) is its error. Then a spawned task reads the connection and sends every `Message
+{ channel, pattern, payload }` (`message`, `pmessage`, `smessage`, RESP2 arrays or RESP3 pushes)
+on `Subscription.messages`, a bounded channel of 1,024, until an unsubscribe confirmation leaves
+no subscription, the connection ends or sends bytes that are no value, or the receiver is
+closed; then the channel closes and `receive()` gives `None`. `unsubscribe(subscription)` ends
+every subscription. The connection is closed, not reused, after a subscription.
+
+Reconnecting is the caller's: `retry_delay(attempt)` (100 ms doubled per attempt, at most 10 s)
+and `resubscribe(stream, ended, limits)` (a new subscription to the ended one's topics); the
+module's comment shows the loop. Messages published while no connection was subscribed are lost,
+as pub/sub keeps none.
+
+### NN.4 Sentinel
+
+`ask_master(stream, name, limits)` is `SENTINEL get-master-addr-by-name`: `Some(Endpoint)`, or
+`None` for a name the sentinel does not monitor. `master_from(sentinels: List<T>, ..)` and
+`master_at(sentinels: List<Endpoint>, name, timeout, limits)` (connect, ask, close) ask a list in
+order and return the first master named; a sentinel that fails, cannot be reached or knows no
+such master is skipped, and the error names each. `watch_master(stream, limits)` subscribes to
+`+switch-master`, `switched_master(message, name)` reads `<name> <old address> <old port> <new
+address> <new port>`, and `next_master(subscription, name)` waits for the next switch of `name`.
+
+### NN.5 Layering
+
+A file under `std/protocol/` is a protocol name for `layering::` (`docs/layering.md` rules 3 and
+5), and `resp` begins `response`, `respond` and `respects`, which the compiler crates and
+`std.console` use. The rules now read a name as contained unless it lies inside an English word
+listed for that protocol (`ORDINARY_WORDS` in `crates/ignite-check/tests/layering.rs`); a word is
+a run of letters, so `RespValue` and `HttpResponse` still name it. Matching for the other
+protocols is unchanged.
+
+### NN.6 Tests
+
+- `std/protocol/resp.ignite`, both targets, 23 tests over `Pipe.pair()` with a scripted server
+  (`script`: reads each expected request byte-exact, writes its reply): every RESP3 type encodes
+  as the specification writes it and decodes back with the following bytes kept; every proper
+  prefix of each is `Partial`; RESP2 nulls and streamed values; each refusal and each limit;
+  a value split over five deliveries; truncation; the typed helpers with RESP2 and RESP3
+  replies; a pipeline in one delivery; server errors, pushes, extra and cut replies; a
+  subscription over channels and a pattern ended by `unsubscribe`, a refused one, one whose
+  connection ends and its `resubscribe`; `retry_delay`; `master_from` over four sentinels,
+  `master_at` over TCP; `+switch-master` followed.
+- `resp::a_real_server_and_sentinel_on_both_targets` in `crates/ignite/tests/resp.rs`,
+  `#[ignore]` like `image::`, since neither server is installed where the gate runs: per target,
+  a master, a replica and a sentinel on free loopback ports, then commands,
+  a pipeline, `HELLO 3`, a subscription, `master_at` past a dead port, a forced `SENTINEL
+  failover` and `next_master` to the replica. Run with
+  `cargo test -p ignite --test main resp:: -- --ignored` where `redis-server` and
+  `redis-sentinel` are on `PATH`.
+- `layering::` with `ordinary_words_are_no_mention_and_every_other_occurrence_is`.

@@ -1,0 +1,53 @@
+package resp_adversary
+
+import std.net.{Pipe, PipeStream}
+import std.io.IoError
+import std.protocol.resp.{decode, RespLimits, RespValue, RespError, Split, Client, key_type, encode_command, words}
+
+// `count` empty RESP3 attributes, each annotating the next, then `:1`.
+test fn attribute_chain(count: Int) -> Bytes {
+  var data = Bytes.empty()
+  var i = 0
+  while i < count {
+    data.append(b"|0\r\n")
+    i = i + 1
+  }
+  data.append(b":1\r\n")
+  data
+}
+
+// Reads `request` from `server`, writes `reply`, closes.
+test fn answer(server: PipeStream, request: Bytes, reply: Bytes) -> Result<Unit, IoError> {
+  var data = Bytes.empty()
+  while data.len() < request.len() {
+    match server.read(65536)? {
+      Data(more) => data.append(more)
+      Eof => return server.close()
+    }
+  }
+  server.write_all(reply)?
+  server.close()
+}
+
+test "a chain of attributes is held to the depth limit" {
+  assert decode(attribute_chain(3), RespLimits { depth = 2 }) == Invalid(TooDeep)
+}
+
+test "a long chain of empty attributes within the default limits is refused, not recursed into" {
+  assert decode(attribute_chain(200000), RespLimits {}) == Invalid(TooDeep)
+}
+
+test "TYPE refused by the server is the server's error, as for every other helper" {
+  let (client, server) = Pipe.pair()
+  client.set_idle_timeout(5000)?
+  server.set_idle_timeout(5000)?
+  spawn answer(server, encode_command(words(["TYPE", "k"])), b"-NOAUTH Authentication required.\r\n")
+  match key_type(Client { stream = client }, "k") {
+    Err(error) => {
+      assert error.message == "NOAUTH Authentication required."
+    }
+    Ok(_) => {
+      assert false, "an error reply fails TYPE"
+    }
+  }
+}

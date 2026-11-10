@@ -21,7 +21,11 @@ Rules, each a failure of the test that names the file, line and identifier or im
 2. No module outside `std.protocol.*` imports a protocol module.
 3. No module outside `std.protocol.*` declares an item, owner, field, variant or role whose
    name contains a protocol name. Protocol names are read from std: each `protocol`
-   declaration and each file name under `std/protocol/` (today `telnet`, `http`, `jsonrpc`).
+   declaration and each file name under `std/protocol/` (today `telnet`, `http`, `jsonrpc`,
+   `resp`). A name is contained when it occurs other than inside an English word the test
+   lists for that protocol (`ORDINARY_WORDS`: `respond`, `response` and `respects` for
+   `resp`); a word is a run of letters, so `RespValue` names `resp` and `respond` does not,
+   and a word not listed (`responses`) fails until it is added.
    Exempt: a catalogue `std.rfc.*` may declare names that contain the name of a protocol
    whose module imports it, because it quotes that protocol's specification (`JSONRPC_2`
    in `std.rfc.jsonrpc_2`, which `std.protocol.jsonrpc` imports). No other module is
@@ -29,7 +33,7 @@ Rules, each a failure of the test that names the file, line and identifier or im
 4. Every std module outside the prefixes `std.protocol.` and `std.rfc` (`std.rfc` itself and
    every `std.rfc.*`) has a row in the table above.
 5. No file under `crates/*/src` contains a protocol name, in code or in comments, except
-   `crates/ignite-load` (below).
+   `crates/ignite-load` (below); contained as in rule 3.
 6. No string literal in the code of a file under `crates/*/src` names a std module or an item
    of one (`std.` and a lowercase segment, as `"std.sli"` or `"std.control.Machine"`) unless
    the table "Std names in the crates" below lists that name for that file. Comments are not
@@ -38,7 +42,8 @@ Rules, each a failure of the test that names the file, line and identifier or im
 
 A component kind that speaks one protocol (a server, a client, a probe) lives in that
 protocol's module: `TelnetServer`, `TelnetClient` and `TelnetPrompt` are in
-`std.protocol.telnet`, `HttpServer` in `std.protocol.http`.
+`std.protocol.telnet`, `HttpServer` in `std.protocol.http`; the RESP client, its pub/sub
+subscription and its Sentinel discovery are in `std.protocol.resp`.
 
 `crates/ignite-load` is exempt from rule 5. It is a load client of the example servers
 (terminal and todo), linked into neither the compiler nor a compiled program, and it has to speak Telnet and HTTP
