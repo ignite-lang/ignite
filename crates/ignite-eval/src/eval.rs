@@ -1510,6 +1510,7 @@ impl<'p> Evaluator<'p> {
                 | Builtin::CommandLineArguments
                 | Builtin::EnvironmentGet
                 | Builtin::TcpStreamPeer
+                | Builtin::TcpStreamLocal
                 | Builtin::TcpStreamTimedOut
                 | Builtin::SenderSend
                 | Builtin::SenderTrySend

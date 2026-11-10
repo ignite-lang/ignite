@@ -1,14 +1,14 @@
 # std.net
 
 The network part of the substrate: TCP listeners and streams, in-process pipes for tests, the
-`ByteStream` interface that both kinds of stream implement, and the `Endpoint` record. Except
-for `Endpoint`, these names are builtins implemented in the substrate, the Rust crate
+`ByteStream` interface that both kinds of stream implement, and the `Endpoint` and `Connection` records. Except
+for those two, these names are builtins implemented in the substrate, the Rust crate
 `ignite-io`, with the same code on every target. They are visible in every module without an
 import.
 
 - Layer: base (substrate).
 - Source: [`std/net.ignite`](https://github.com/ignite-lang/ignite/blob/main/std/net.ignite)
-  declares only `Endpoint`. The builtins are specified in
+  declares only `Endpoint` and `Connection`. The builtins are specified in
   [`docs/slice.md`](https://github.com/ignite-lang/ignite/blob/main/docs/slice.md) sections 7,
   14.4, 16.9 and 18.3 to 18.4.
 - Import: none needed. `import std.net.{TcpStream, ByteStream, Pipe, PipeStream}` is accepted
@@ -94,11 +94,15 @@ fn close(stream: TcpStream) -> Result<Unit, IoError>
 fn set_idle_timeout(stream: TcpStream, ms: Int) -> Result<Unit, IoError>
 fn write_urgent(stream: TcpStream, data: Bytes) -> Result<Unit, IoError>
 fn urgent_pending(stream: TcpStream) -> Result<Bool, IoError>
+fn peer(stream: TcpStream) -> Endpoint
+fn local(stream: TcpStream) -> Endpoint
 ```
 
 | operation | what it does |
 |---|---|
 | `TcpStream.connect` | open a connection |
+| `peer` | the other end's address and port (`10.0.0.7`, `::1`); no effect, kept after `close` |
+| `local` | this end's address and port: where an accepted connection arrived, where a connected one left from; no effect, kept after `close` |
 | `read` | one read of up to `maximum` bytes: `Data(bytes)`, or `Eof` at the end of the stream |
 | `write_all` | append `data` to the stream's send buffer |
 | `close` | send the buffer and shut down the write half |
@@ -214,6 +218,25 @@ resource name where an `Endpoint` is expected gives that listener's address and 
 through the process arguments `--ref <path>=<address>:<port>` that the driver passes to a
 probe. Outside a run it fails with `no binding for <path>`. The Telnet probe `TelnetPrompt`
 uses it to find its target.
+
+## Connection
+
+```ignite,fragment
+type Connection {
+  peer: Endpoint
+  local: Endpoint
+  tls: Bool = false
+}
+
+fn Connection.unknown() -> Connection
+fn Connection.of(stream: TcpStream) -> Connection
+```
+
+What a server knows of one connection, the view a protocol hands its application:
+`request.connection` in [std.protocol.http](http.md). `Connection.of(stream)` is the view of
+a plain TCP stream, `peer()` and `local()`. `Connection.unknown()` is the view of a stream
+without addresses, such as a pipe end: both ends empty, port 0. `tls` is false until a TLS
+layer exists. Import it with `import std.net.Connection`.
 
 ## Examples
 

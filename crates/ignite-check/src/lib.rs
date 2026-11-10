@@ -257,6 +257,7 @@ pub const BUILTIN_METHODS: &[&str] = &[
     "write_urgent",
     "urgent_pending",
     "peer",
+    "local",
     "timed_out",
 ];
 
@@ -4480,7 +4481,7 @@ pub fn builtin_applies(ty: &Type, method: &str) -> bool {
             "next_id" | "get" | "put" | "remove" | "values" | "update" | "upsert"
         ),
         "TcpListener" => matches!(method, "accept" | "local_port"),
-        "TcpStream" => is_stream_method(method) || matches!(method, "peer" | "timed_out"),
+        "TcpStream" => is_stream_method(method) || matches!(method, "peer" | "local" | "timed_out"),
         "PipeStream" => is_stream_method(method) || method == "received_batches",
         "Map" => matches!(
             method,

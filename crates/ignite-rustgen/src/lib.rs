@@ -4978,6 +4978,13 @@ impl<'a> Generator<'a> {
                     "{{ let (address, port) = {r}.peer(); {endpoint} {{ address, port }} }}"
                 );
             }
+            Some(Callee::Builtin(Builtin::TcpStreamLocal)) => {
+                let endpoint = self.enum_name(&ignite_types::endpoint_name());
+                let r = self.receiver(receiver);
+                return format!(
+                    "{{ let (address, port) = {r}.local(); {endpoint} {{ address, port }} }}"
+                );
+            }
             _ => {}
         }
         if let Some(owner) = self.qualifier(receiver)
