@@ -24,6 +24,20 @@
     "crates/ignite/tests/fixtures/conformance/adversary_std_telnet.ignite::adversary: replies and the prompt after a reply are NVT data": "builtin `PipePair` has no value at compile time",
     "crates/ignite/tests/fixtures/conformance/adversary_two_specs/main.ignite::padding exits with seven": "builtin `ProcessExit` has no value at compile time",
     "crates/ignite/tests/fixtures/conformance/signal.ignite::never ends": "exceeds the evaluator's fuel of 10000000 units",
+    "crates/ignite/tests/fixtures/http_app_adversary.ignite::adv: a body at the limit is handled, one byte over is on_oversized's, and the next request starts right after the discarded body": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/http_app_adversary.ignite::adv: a body over the limit announced with Expect: 100-continue and never sent does not swallow the next request": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/http_app_adversary.ignite::adv: a dual-stack listener shows an IPv4 peer and local end as IPv4": "builtin `TcpListenerBind` has no value at compile time",
+    "crates/ignite/tests/fixtures/http_app_adversary.ignite::adv: a held request whose sender is gone is answered at once with on_timeout": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/http_app_adversary.ignite::adv: a request held after the drain is answered at once": "builtin `ChannelBounded` has no value at compile time",
+    "crates/ignite/tests/fixtures/http_app_adversary.ignite::adv: a takeover that fails ends the connection and the server writes nothing more": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/http_app_adversary.ignite::adv: an upgrade answered 200 with a body is framed by its length, then taken over": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/http_app_adversary.ignite::adv: an upgrade asked with a body over the limit goes to on_oversized and nothing takes over": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/http_app_adversary.ignite::adv: discarding a body that never comes ends at the idle timeout": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/http_app_adversary.ignite::adv: forwarding headers do not change the peer an allow list sees": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/http_app_adversary.ignite::adv: takeover gets exactly the bytes after the request: after a body, after a chunked body, none, and pipelined requests": "builtin `PipePair` has no value at compile time",
+    "crates/ignite/tests/fixtures/http_app_adversary.ignite::adv: the local end stays known after the peer closed and after this end closed": "builtin `TcpListenerBind` has no value at compile time",
+    "crates/ignite/tests/fixtures/http_app_adversary.ignite::adv: the register of held requests ends at the drain while a copy of its holds lives": "builtin `RuntimeCensus` has no value at compile time",
+    "crates/ignite/tests/fixtures/http_app_adversary.ignite::adv: two messages to a held request answer it once, and pipelined requests behind it, HEAD among them, keep their order": "builtin `StoreNew` has no value at compile time",
     "crates/ignite/tests/fixtures/leak/attack.ignite::a broadcast over stored senders is released (G30)": "builtin `StoreNew` has no value at compile time",
     "crates/ignite/tests/fixtures/leak/attack.ignite::a record field stays usable after its end was handed to a task": "builtin `RuntimeCensus` has no value at compile time",
     "crates/ignite/tests/fixtures/leak/attack.ignite::a stored end read back and dropped stays the store's": "builtin `StoreNew` has no value at compile time",
@@ -157,6 +171,7 @@
     "std/net.ignite::a listener bound kept accepts as one bound plainly": "builtin `TcpListenerBindKept` has no value at compile time",
     "std/net.ignite::a read the idle timeout ended is told from a close": "builtin `TcpListenerBind` has no value at compile time",
     "std/net.ignite::connect_within gives up within its timeout": "builtin `ClockMonotonic` has no value at compile time",
+    "std/net.ignite::the local end of a stream is this end, in both families": "builtin `TcpListenerBind` has no value at compile time",
     "std/net.ignite::the peer of a stream is the other end, in both families": "builtin `TcpListenerBind` has no value at compile time",
     "std/process.ignite::a child over its timeout is killed with its group": "builtin `LauncherNew` has no value at compile time",
     "std/process.ignite::a child reads its input on stdin, and the null device without one": "builtin `LauncherNew` has no value at compile time",
@@ -199,6 +214,9 @@
     "std/protocol/http.ignite::a head of exactly HttpLimits.head is served, one byte more is 431": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::a head over 8 KiB is 431": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::a head split across deliveries at its blank line": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a held request does not block another connection": "builtin `StoreNew` has no value at compile time",
+    "std/protocol/http.ignite::a held request is answered by its message and the connection goes on": "builtin `StoreNew` has no value at compile time",
+    "std/protocol/http.ignite::a held request is answered on_timeout at its deadline": "builtin `StoreNew` has no value at compile time",
     "std/protocol/http.ignite::a malformed head or Content-Length is 400": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::a pipe client gets 400, 413 and 431": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::a pipelined request over the head limit after two within it": "builtin `PipePair` has no value at compile time",
@@ -209,6 +227,7 @@
     "std/protocol/http.ignite::a streamed 304 is the head only and the connection goes on": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::a streamed 3xx answer to CONNECT is chunked": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::a streamed response is sent in chunks as its pieces come": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::a thousand requests held over TCP are each answered by their message": "builtin `TcpListenerBind` has no value at compile time",
     "std/protocol/http.ignite::adversary: a chunk read whole but for its LF keeps less than three reads of input and the line": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::adversary: the body limit in one-byte chunks is decoded in under 8 s": "exceeds the evaluator's limit Nodes(1000000)",
     "std/protocol/http.ignite::an HTTP/1.1 request has exactly one valid Host or is 400": "builtin `PipePair` has no value at compile time",
@@ -218,16 +237,22 @@
     "std/protocol/http.ignite::an empty write delivers nothing and the closed connection gets no answer": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::an error of piece ends a chunked body before its last chunk and the connection with it": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::an unterminated chunk-size line or trailer over the head limit is 431, not read until the peer closes": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::an upgrade whose response is refused is 500 and nothing takes over": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::an upgrade writes its response and hands takeover the stream and the bytes after the request": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::chunk extensions are ignored": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::every status of RFC 9110 has its reason phrase": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::next_request ends on a connection closed before a whole request": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::next_request reads a head, its body and keeps the rest": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::next_request takes a pipelined request from the buffer": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::on_oversized answers a body over the limit, which is discarded, and the connection goes on": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::on_oversized closes the connection when its answer or the request asks to, or the body is chunked": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::one chunk of the whole body limit is decoded holding at most one read besides the body": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::pipelined bodies whose total crosses the body limit are each within it": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::pipelined heads whose total crosses the head limit are each within it": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::the HTTP idle timeout alone ends a pipe connection": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::the default head of exactly 8192 bytes is served, 8193 is 431": "builtin `PipePair` has no value at compile time",
+    "std/protocol/http.ignite::the drain answers every held request at once with its on_timeout": "builtin `StoreNew` has no value at compile time",
+    "std/protocol/http.ignite::the handler sees its connection and an allow list refuses a peer with 403": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::the limits record bounds the body": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::the server answers a rejected request and closes": "builtin `PipePair` has no value at compile time",
     "std/protocol/http.ignite::the server answers pipelined requests until one asks to close": "builtin `PipePair` has no value at compile time",
@@ -342,7 +367,12 @@
     "std/text.ignite::Int.parse reads bytes from any receiver and leaves them as they were": "builtin `StoreNew` has no value at compile time",
     "std/text.ignite::List.map takes a fn with the effects of its caller": "builtin `StoreNew` has no value at compile time",
     "std/text.ignite::List.map takes a local holding an effectful fn": "builtin `StoreNew` has no value at compile time",
-    "std/text.ignite::a slice that is kept, stored or put does not see later changes of its receiver": "builtin `StoreNew` has no value at compile time"
+    "std/text.ignite::a slice that is kept, stored or put does not see later changes of its receiver": "builtin `StoreNew` has no value at compile time",
+    "std/tls.ignite::a handshake timeout that is not positive is refused": "builtin `TcpListenerBind` has no value at compile time",
+    "std/tls.ignite::a peer that speaks no TLS fails with an IoError": "builtin `TcpListenerBind` has no value at compile time",
+    "std/tls.ignite::an invalid server name is refused before the handshake": "builtin `TcpListenerBind` has no value at compile time",
+    "std/tls.ignite::authorities without a certificate are refused": "builtin `TcpListenerBind` has no value at compile time",
+    "std/tls.ignite::the handshake deadline bounds a server that never answers": "builtin `TcpListenerBind` has no value at compile time"
   },
   "eval_slow": {
     "crates/ignite/tests/fixtures/slice16/moves_scale.ignite::200000 steps through a call": "value-semantics copies make the evaluator quadratic here (50,000 steps measured 185 s); story:quality-ratchet, 2026-11-07: run by task quality only, with the 60 s limit",
@@ -423,13 +453,13 @@
       "area": "Semantics: one meaning across the three consumers",
       "bars": {
         "eval": {
-          "value": 493
+          "value": 494
         },
         "llvm": {
-          "value": 825
+          "value": 856
         },
         "rust": {
-          "value": 825
+          "value": 856
         }
       },
       "direction": "higher",
@@ -500,8 +530,8 @@
       "area": "Semantics: one meaning across the three consumers",
       "bars": {
         "eval": {
-          "decision": "story channel-release-on-close (2026-11-08), wave 8 unit leaks: the four G30 soaks now in std/sync.ignite read Runtime.census() or make a store, and the main of the case study's reproducer (crates/ignite/tests/fixtures/leak/repro.ignite) does IO, none with a value at compile time (docs/slice.md 33.4); the two soaks of the removed fixtures/leak/g30.ignite left the list; the six adversary cases of crates/ignite/tests/fixtures/leak/attack.ignite (25d418ae) start tasks, read Runtime.census() or make stores and channels, so 266; listed in eval_cannot_run; wave 8 integration (2026-11-09): the 16 adversary cases of crates/ignite/tests/fixtures/leak/attack2.ignite and the two store-end tests of std/sync.ignite (story infer-channel-ends) make stores, channels or read Runtime.census(), std/net.ignite's bind_kept test binds a listener (story drain-keeps-bound-listeners), and std/digest.ignite's two million-byte vectors exceed the evaluator's node limit (story std-digest), so 287; listed in eval_cannot_run; wave 10 (2026-11-10): the 15 stream tests of std/protocol/resp.ignite (story std-resp-client) talk to a scripted server over Pipe.pair() or TcpListener.bind, and its adversary pass 1 case of crates/ignite/tests/fixtures/tests/resp_adversary.ignite (TYPE refused by the server) talks to one over Pipe.pair(), so 303; listed in eval_cannot_run; wave 10 (2026-11-10): 29 tests of std/protocol/nats.ignite (story std-nats-client): 27 talk to a scripted server over Pipe.pair() or TcpListener.bind, one reads Runtime.census() and one makes a channel, so 332; listed in eval_cannot_run",
-          "value": 332
+          "decision": "story channel-release-on-close (2026-11-08), wave 8 unit leaks: the four G30 soaks now in std/sync.ignite read Runtime.census() or make a store, and the main of the case study's reproducer (crates/ignite/tests/fixtures/leak/repro.ignite) does IO, none with a value at compile time (docs/slice.md 33.4); the two soaks of the removed fixtures/leak/g30.ignite left the list; the six adversary cases of crates/ignite/tests/fixtures/leak/attack.ignite (25d418ae) start tasks, read Runtime.census() or make stores and channels, so 266; listed in eval_cannot_run; wave 8 integration (2026-11-09): the 16 adversary cases of crates/ignite/tests/fixtures/leak/attack2.ignite and the two store-end tests of std/sync.ignite (story infer-channel-ends) make stores, channels or read Runtime.census(), std/net.ignite's bind_kept test binds a listener (story drain-keeps-bound-listeners), and std/digest.ignite's two million-byte vectors exceed the evaluator's node limit (story std-digest), so 287; listed in eval_cannot_run; wave 10 (2026-11-10): the 15 stream tests of std/protocol/resp.ignite (story std-resp-client) talk to a scripted server over Pipe.pair() or TcpListener.bind, and its adversary pass 1 case of crates/ignite/tests/fixtures/tests/resp_adversary.ignite (TYPE refused by the server) talks to one over Pipe.pair(), so 303; listed in eval_cannot_run; wave 10 (2026-11-10): 29 tests of std/protocol/nats.ignite (story std-nats-client): 27 talk to a scripted server over Pipe.pair() or TcpListener.bind, one reads Runtime.census() and one makes a channel, so 332; listed in eval_cannot_run; wave 10 integration (2026-11-10): 30 tests of story http-app-connection and story tls-client: the 10 new tests of std/protocol/http.ignite (held requests, upgrades, on_oversized, the connection an allow list reads) and the 14 adversary cases of crates/ignite/tests/fixtures/http_app_adversary.ignite talk to a server over Pipe.pair() or TcpListener.bind or make a store, a channel or read Runtime.census(), std/net.ignite's local-end test binds a listener, and 5 of the 6 tests of std/tls.ignite bind a listener for the TcpStream Tls.client takes, so 362; listed in eval_cannot_run",
+          "value": 362
         }
       },
       "direction": "lower",
@@ -961,13 +991,13 @@
       "area": "Standard library and protocols",
       "bars": {
         "eval": {
-          "value": 233
+          "value": 234
         },
         "llvm": {
-          "value": 435
+          "value": 452
         },
         "rust": {
-          "value": 435
+          "value": 452
         }
       },
       "direction": "higher",
@@ -1096,8 +1126,8 @@
       "area": "Engineering health",
       "bars": {
         "all": {
-          "decision": "wave 7 integration (2026-11-08): story bitwise-operators adds the ignored timing test bitwise::codecs_within_3x_of_hand_written_rust, a timing bound kept out of the loaded gate; wave 10 (2026-11-10): story std-resp-client adds resp::a_real_server_and_sentinel_on_both_targets, which needs redis-server and redis-sentinel and is ignored like image::; story std-nats-client adds nats::a_real_server_on_both_targets, which needs nats-server and is ignored like image::",
-          "value": 26
+          "decision": "wave 7 integration (2026-11-08): story bitwise-operators adds the ignored timing test bitwise::codecs_within_3x_of_hand_written_rust, a timing bound kept out of the loaded gate; wave 10 (2026-11-10): story std-resp-client adds resp::a_real_server_and_sentinel_on_both_targets, which needs redis-server and redis-sentinel and is ignored like image::; story std-nats-client adds nats::a_real_server_on_both_targets, which needs nats-server and is ignored like image::; wave 10 integration (2026-11-10): story http-app-connection's adversary pass adds adversary_http_app::a_record_literal_before_the_argument_that_binds_its_parameter, a typer gap (a record literal before the argument that binds its type parameter) asserted red and ignored until it is fixed",
+          "value": 27
         }
       },
       "direction": "lower",
@@ -1112,7 +1142,8 @@
       "area": "Engineering health",
       "bars": {
         "all": {
-          "value": 4
+          "decision": "wave 10 integration (2026-11-10): story http-app-connection grows std/protocol/http.ignite from 2,518 to 3,125 lines (HttpApp.reply with Hold and Upgrade, on_oversized, Connection, and their inline tests); splitting the module is left to a later story",
+          "value": 5
         }
       },
       "direction": "lower",
