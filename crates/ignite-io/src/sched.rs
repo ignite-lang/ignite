@@ -784,6 +784,9 @@ struct Local {
     coroutine: Option<Coroutine<(), (), (), DefaultStack>>,
     yielder: *const Yielder<(), ()>,
     locals: Option<Box<dyn TaskLocals>>,
+    /// The streams the task wrote to and has not flushed, while it does
+    /// not run ([`crate::net::swap_pending`]).
+    pending: crate::net::Pending,
     guard: (usize, usize),
 }
 
@@ -852,6 +855,7 @@ impl Worker {
             coroutine: Some(coroutine),
             yielder: std::ptr::null(),
             locals: LOCALS.get().map(|make| make()),
+            pending: crate::net::Pending::default(),
             guard,
         });
         self.live += 1;
@@ -889,11 +893,13 @@ impl Worker {
         task.state.store(RUNNING, Ordering::Relaxed);
         YIELDER.with(|cell| cell.set(local.yielder));
         GUARD.with(|cell| cell.set(local.guard));
+        crate::net::swap_pending(&mut local.pending);
         RUNNING_TASK.with(|running| *running.borrow_mut() = Some(waiter.clone()));
         let result = coroutine.resume(());
         RUNNING_TASK.with(|running| *running.borrow_mut() = None);
         GUARD.with(|cell| cell.set((0, 0)));
         let local = self.slots[slot].as_mut().expect("the resumed task's slot");
+        crate::net::swap_pending(&mut local.pending);
         local.yielder = YIELDER.with(|cell| cell.replace(std::ptr::null()));
         match result {
             CoroutineResult::Yield(()) => {

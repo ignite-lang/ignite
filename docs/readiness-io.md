@@ -222,10 +222,15 @@ in R1.
   storage into the task's control block. The thread-local keeps one pointer, the running task's
   block, set at each switch. Generated code that caches the state's address is then right after
   a migration, because the address is the task's, not the thread's.
-- The other substrate thread-locals are per worker and never live across a park: pending writes
-  (`net.rs`; a task already flushes before it waits, slice §30.1, so they are empty at every
-  switch), the read scratch buffer, report and callback guards. A park inside a `with` closure
-  of a thread-local is a bug; `debug_assertions` builds check that none is borrowed at `park`.
+- The pending writes (`PENDING` in `net.rs`, the streams a task wrote to and has not flushed)
+  are per task: the worker swaps the task's list into the thread-local when it resumes the task
+  and out when the task parks or ends. They are not empty at every switch (a task parks for
+  room inside its own send, with its stream listed), and a list per worker let one task's read
+  flush another task's stream and wait for that task's write lock, a deadlock when the writer
+  waits for a peer that waits for the reader.
+- The other substrate thread-locals are per worker and never live across a park: the read
+  scratch buffer, report and callback guards. A park inside a `with` closure of a thread-local
+  is a bug; `debug_assertions` builds check that none is borrowed at `park`.
 - glibc's per-thread malloc arenas stay correct under migration (they are a cache).
 
 ### 4.6 Stacks

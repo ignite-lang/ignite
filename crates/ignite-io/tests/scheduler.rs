@@ -867,3 +867,89 @@ fn child_short_read() {
     drop(keep);
     wait_for_tasks();
 }
+
+/// A task's waits send what that task wrote, not what another task on its
+/// worker wrote (`docs/slice.md` section 7: "the writing task's next
+/// flush"). A writer task leaves one byte in its stream's send buffer,
+/// spawns a reader of the same stream, then writes 10 MiB in 100 KiB
+/// pieces to an echo server and parks for room while it holds the write
+/// lock. The reader's read must not wait for that lock to send the
+/// writer's byte: the writer waits for the echo server, which waits for
+/// the reader. Before, the pending list was the worker thread's, so the
+/// reader's flush waited for the writer's lock and neither moved.
+#[test]
+fn a_read_does_not_wait_for_another_task_s_write_lock() {
+    for workers in ["1", "2"] {
+        passed(&child(
+            "scheduler::child_writer_with_a_reader_it_spawned",
+            &[("IGNITE_WORKERS", workers)],
+        ));
+    }
+}
+
+#[test]
+fn child_writer_with_a_reader_it_spawned() {
+    use std::io::{Read, Write};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering::SeqCst};
+    if !in_child() {
+        return;
+    }
+    const TOTAL: usize = 10 * 1024 * 1024;
+    let echo = std::net::TcpListener::bind((LOCALHOST, 0)).unwrap();
+    let port = i64::from(echo.local_addr().unwrap().port());
+    std::thread::spawn(move || {
+        let (mut socket, _) = echo.accept().unwrap();
+        let mut buffer = vec![0u8; 64 * 1024];
+        loop {
+            match socket.read(&mut buffer) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    if socket.write_all(&buffer[..n]).is_err() {
+                        return;
+                    }
+                }
+            }
+        }
+        let _ = socket.shutdown(std::net::Shutdown::Write);
+    });
+    let written = Arc::new(AtomicUsize::new(0));
+    let read = Arc::new(AtomicUsize::new(0));
+    let (done, outcome) = mpsc::channel::<String>();
+    {
+        let (written, read) = (written.clone(), read.clone());
+        spawn(move || {
+            let stream = TcpStream::connect(LOCALHOST.to_string(), port).unwrap();
+            stream.write_all(vec![0u8]).unwrap();
+            let reader = stream.clone();
+            spawn(move || {
+                let end = loop {
+                    match reader.read(64 * 1024) {
+                        Ok(Input::Data(bytes)) => {
+                            read.fetch_add(bytes.len(), SeqCst);
+                        }
+                        Ok(Input::Eof) => break Ok(()),
+                        Err(e) => break Err(e.message),
+                    }
+                };
+                let _ = done.send(format!("{} bytes, end {end:?}", read.load(SeqCst)));
+            });
+            let block: Vec<u8> = (0..=250u8).cycle().take(TOTAL).collect();
+            for piece in block.chunks(100 * 1024) {
+                if stream.write_all(piece.to_vec()).is_err() {
+                    return;
+                }
+                written.fetch_add(piece.len(), SeqCst);
+            }
+            let _ = stream.close();
+        });
+    }
+    let outcome = outcome.recv_timeout(LIMIT).unwrap_or_else(|_| {
+        format!(
+            "no outcome within {LIMIT:?}: written {} of {TOTAL}, read {}",
+            written.load(SeqCst),
+            read.load(SeqCst)
+        )
+    });
+    assert_eq!(outcome, format!("{} bytes, end Ok(())", TOTAL + 1));
+}
