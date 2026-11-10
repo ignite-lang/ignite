@@ -63,6 +63,7 @@ mod stream_ownership;
 mod syntax;
 mod terminal;
 mod tls;
+mod tls_adversary;
 mod todo;
 mod typed_json;
 mod version_adversary;

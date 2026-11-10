@@ -13,5 +13,6 @@ mod stdio;
 mod tcp;
 mod terminal;
 mod tls;
+mod tls_adversary;
 mod urgent;
 mod waiter;

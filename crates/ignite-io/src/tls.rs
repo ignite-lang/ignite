@@ -330,10 +330,7 @@ impl Session {
     fn take_pending(&self, state: &mut State) -> Result<(), IoError> {
         while !state.pending.is_empty() {
             let mut rest = &state.pending[..];
-            let taken = match state.connection.read_tls(&mut rest) {
-                Ok(taken) => taken,
-                Err(_) => 0,
-            };
+            let taken = state.connection.read_tls(&mut rest).unwrap_or_default();
             state.pending.drain(..taken);
             state
                 .connection
@@ -347,7 +344,13 @@ impl Session {
     }
 
     /// Send the records the connection has to send (an alert, a key
-    /// update, a handshake message).
+    /// update, a handshake message) now, not at the task's next flush:
+    /// nobody wrote them, so nothing else would flush them, and a stream
+    /// left on the worker's flush list makes another task's flush wait for
+    /// the write lock of a writer parked on a full socket (the client's
+    /// Finished left there deadlocked a reader task against its writer
+    /// task under readiness). The flush runs under `writing`, so no writer
+    /// of this session holds the stream's write lock meanwhile.
     fn send_pending(&self) -> Result<(), IoError> {
         let _writing = self.writing.lock();
         let mut records = Vec::new();
@@ -357,7 +360,10 @@ impl Session {
         }
         self.stream
             .write_from(&records)
-            .map_err(|e| self.error(&e.message))
+            .map_err(|e| self.error(&e.message))?;
+        // A failed send is kept with the stream for its next operation.
+        crate::flush();
+        Ok(())
     }
 
     /// The handshake, reading with the time left before `deadline` as the
@@ -394,7 +400,6 @@ impl Session {
             };
             if let Err(error) = processed {
                 let _ = self.send_pending();
-                crate::flush();
                 return Err(error);
             }
         }

@@ -11077,6 +11077,11 @@ Behaviour:
 - A reader task and a writer task share one session: the rustls connection is behind a lock
   never held across a wait; a read holds the session's read lock across its wait for
   ciphertext, a write holds its write lock until its records are in the stream's send buffer.
+- Records nobody wrote (the handshake's, an alert, a key update) are sent before the call
+  returns: the session flushes right after queuing them, holding its write lock. Left in the
+  stream's send buffer, the client's Finished kept the stream on the worker's flush list, and a
+  reader task's flush then waited for the write lock of its writer task parked on a full socket,
+  a deadlock on the Rust target under `readiness` (adversary pass 1).
 
 Errors, each an `IoError` whose message starts with `tls <server_name>: `:
 
@@ -11126,14 +11131,21 @@ us (`rustls-native-certs` was not taken): the substrate reads the PEM bundle its
   as a `ByteStream`; a wrong host name, an expired certificate and the test authority under the
   system roots are refused with their messages; `verify: false`; an IP address as the name;
   ALPN; the handshake deadline against a silent server; a timeout that is not positive; a peer
-  that speaks no TLS; an invalid server name; authorities without a certificate; a reader thread
-  and a writer thread sharing a session over 1 MiB; urgent data.
+  that speaks no TLS; an invalid server name; authorities without a certificate; a handshake
+  read waits only for the time left; `verify: false` still checks the handshake signature;
+  urgent data.
+- `crates/ignite-io/tests/tls_adversary.rs` (adversary pass 1): names, wildcards, chains,
+  TLS 1.2, a trickling or hanging-up server, truncation, and a reader and a writer on one
+  session over 10 MiB, as threads and as tasks under both IO modes.
 - `tls::rust::sessions_run` and `tls::llvm::sessions_run` (`crates/ignite/tests/tls.rs`): the
   same servers started by the test, and `ignite test` of a program with the authority's PEM and
   the ports filled in, on each target: a session as a `ByteStream` through a generic fn, ALPN,
   a wrong host name (and `certificate_refused`), an expired certificate, verification against
-  the system roots by default, `verify: false`, and a reader task beside the writing task over
-  1,000,000 bytes.
+  the system roots by default, `verify: false`.
+- `tls_adversary::rust::adversary_cases_run` and `tls_adversary::llvm::adversary_cases_run`
+  (`crates/ignite/tests/tls_adversary.rs`), each under both IO modes: among them a writer task
+  and the reader task it spawns carrying 10 MiB on one session, more than the socket buffers
+  hold.
 - `std/tls.ignite`, both targets, without a TLS server: the defaults, the handshake deadline
   against a server that never answers, a timeout that is not positive, a peer that speaks no
   TLS, an invalid server name, authorities without a certificate.

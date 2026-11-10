@@ -7,7 +7,6 @@
 
 use std::io::{Read, Write};
 use std::sync::Arc;
-use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use ignite_io::{ByteStream, Input, IoError, TcpStream, TlsOptions, TlsStream};
@@ -74,6 +73,9 @@ enum Behaviour {
     Silent,
     /// Answer the ClientHello with plain HTTP.
     Plain,
+    /// Send the first byte of a handshake record 1.6 s after accepting,
+    /// then nothing.
+    LateByte,
 }
 
 /// A server on `127.0.0.1` for one connection; its port.
@@ -96,6 +98,11 @@ fn serve(identity: Identity, alpn: &[&str], behaviour: Behaviour) -> i64 {
                 let mut hello = [0u8; 512];
                 let _ = socket.read(&mut hello);
                 let _ = socket.write_all(b"HTTP/1.1 400 Bad Request\r\n\r\n");
+            }
+            Behaviour::LateByte => {
+                std::thread::sleep(Duration::from_millis(1600));
+                let _ = socket.write_all(&[0x16]);
+                std::thread::sleep(LIMIT);
             }
             Behaviour::Echo => {
                 let connection = rustls::ServerConnection::new(config).unwrap();
@@ -335,31 +342,81 @@ fn authorities_without_a_certificate_are_refused() {
     );
 }
 
-/// A reader on one thread and a writer on another share the session: a
-/// read that waits for the server does not hold up the writes, and a
-/// megabyte comes back intact.
+/// Each handshake read waits for the time left before the deadline, not
+/// the whole timeout again: a server that sends one byte of a record at
+/// 1.6 s of a 2 s timeout, then nothing, is cut at about 2 s, where a
+/// fresh 2 s wait after that byte would end at about 3.6 s.
 #[test]
-fn a_reader_and_a_writer_share_one_session() {
+fn a_handshake_read_waits_only_for_the_time_left() {
     let authority = Authority::new();
     let port = serve(
         authority.server(&["localhost"], false),
         &[],
-        Behaviour::Echo,
+        Behaviour::LateByte,
     );
-    let tls = TlsStream::client(connect(port), "localhost".into(), trusting(&authority)).unwrap();
-    let reader = tls.clone();
-    let (done, got) = mpsc::channel();
-    std::thread::spawn(move || {
-        let _ = done.send(read_to_end(&reader));
-    });
-    let block: Vec<u8> = (0..=255u8).cycle().take(1024 * 1024).collect();
-    for chunk in block.chunks(10_000) {
-        tls.write_all(chunk.to_vec()).unwrap();
+    let options = TlsOptions {
+        handshake_timeout: 2_000_000_000,
+        ..trusting(&authority)
+    };
+    let started = Instant::now();
+    let refused = TlsStream::client(connect(port), "localhost".into(), options);
+    let waited = started.elapsed();
+    assert_eq!(
+        message(refused),
+        "tls localhost: handshake timed out after 2000 ms"
+    );
+    assert!(waited >= Duration::from_millis(1900), "{waited:?}");
+    assert!(waited < Duration::from_millis(2900), "{waited:?}");
+}
+
+/// Signs with a key that is not the certificate's: the handshake
+/// signature (TLS 1.3 CertificateVerify) does not match the certificate.
+#[derive(Debug)]
+struct WrongKey(Arc<rustls::sign::CertifiedKey>);
+
+impl rustls::server::ResolvesServerCert for WrongKey {
+    fn resolve(
+        &self,
+        _hello: rustls::server::ClientHello<'_>,
+    ) -> Option<Arc<rustls::sign::CertifiedKey>> {
+        Some(self.0.clone())
     }
-    tls.close().unwrap();
-    let echoed = got.recv_timeout(LIMIT).expect("the reader ends");
-    assert_eq!(echoed.len(), block.len());
-    assert!(echoed == block, "the echo differs");
+}
+
+/// `verify: false` takes any certificate, but the server must still prove
+/// it holds the certificate's key: a handshake signature made with
+/// another key is refused.
+#[test]
+fn without_verification_the_handshake_signature_is_still_checked() {
+    let authority = Authority::new();
+    let identity = authority.server(&["localhost"], false);
+    let other = authority.server(&["localhost"], false);
+    let signer = rustls::crypto::ring::sign::any_supported_type(&other.key).unwrap();
+    let resolver = WrongKey(Arc::new(rustls::sign::CertifiedKey::new(
+        identity.chain,
+        signer,
+    )));
+    let config = rustls::ServerConfig::builder()
+        .with_no_client_auth()
+        .with_cert_resolver(Arc::new(resolver));
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = i64::from(listener.local_addr().unwrap().port());
+    std::thread::spawn(move || {
+        let (socket, _) = listener.accept().unwrap();
+        let connection = rustls::ServerConnection::new(Arc::new(config)).unwrap();
+        let mut tls = rustls::StreamOwned::new(connection, socket);
+        let _ = tls.read(&mut [0u8; 64]);
+    });
+    let options = TlsOptions {
+        verify: false,
+        ..TlsOptions::default()
+    };
+    let refused = message(TlsStream::client(
+        connect(port),
+        "localhost".into(),
+        options,
+    ));
+    assert_eq!(refused, "tls localhost: certificate refused: BadSignature");
 }
 
 #[test]

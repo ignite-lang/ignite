@@ -91,33 +91,13 @@ test "without verification an expired certificate is taken" {
   let tls = open(EXPIRED, "other.test", TlsOptions { verify = false })?
   assert exchange(tls, b"x")? == b"x"
 }
-
-test fn count_echo(stream: TlsStream, done: Sender<Int>) -> Result<Unit, IoError> {
-  let all = read_all(stream)?
-  done.send(all.len())
-  Ok(())
-}
-
-test "a reader task and the writing task share one session" {
-  let tls = open(ECHO, "localhost", trusted())?
-  let (done, finished) = Channel.bounded(1)
-  spawn count_echo(tls.copy(), done)
-  var chunk = Bytes.empty()
-  while chunk.len() < 10000 {
-    chunk.push(b'x')
-  }
-  var i = 0
-  while i < 100 {
-    tls.write_all(chunk.copy())?
-    i = i + 1
-  }
-  tls.close()?
-  assert finished.receive_within(20 seconds) == Some(1000000)
-}
 "##;
 
-/// The number of inline tests in [`SESSIONS`].
-const CASES: usize = 7;
+/// The number of inline tests in [`SESSIONS`]. A reader task beside a
+/// writer task on one session, with more bytes than the socket buffers
+/// hold, is `crates/ignite/tests/tls_adversary.rs`'s, on both targets and
+/// in both IO modes.
+const CASES: usize = 6;
 
 /// A certificate authority made for one run.
 struct Authority {
