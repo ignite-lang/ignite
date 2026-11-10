@@ -10930,7 +10930,7 @@ handle that is no stream gives `Endpoint { address = "", port = 0 }` on the LLVM
 | evaluator | no value at compile time |
 
 The generated code of a program that does not call `local` is unchanged; one that calls it
-needs the new builtin, so `CODEGEN_REVISION` is the coordinator's to bump.
+needs the new builtin: `CODEGEN_REVISION` is `ignite-codegen/0.1.0-49` (wave 10, one bump with 38).
 
 ### 37.3 Holding a request
 
@@ -11108,7 +11108,7 @@ Errors, each an `IoError` whose message starts with `tls <server_name>: `:
   `ignite_rt_tls_alpn(Text* out, i64)`, and `ignite_rt_tls_<op>` for the six stream methods
   with the signatures of the `pipe_<op>` entries. A `tls_*` entry given another handle fails
   with "`<h>` is not a TLS stream".
-- Generation changes (two builtins, one type), so `CODEGEN_REVISION` is bumped at integration.
+- Generation changes (two builtins, one type), so `CODEGEN_REVISION` is `ignite-codegen/0.1.0-49` (wave 10, one bump with 37).
 
 ### 38.3 Dependencies
 
