@@ -10952,7 +10952,11 @@ A thousand held requests over TCP with the clients in the same process (the last
 first lost answers under the default IO mode `readiness`, and so did fifty in-process clients
 of an in-process echo server with no HTTP at all: a short read hid an end of stream behind it in
 the substrate. With that fixed (`fix(io): a short read no longer hides an end of stream behind
-it`) every request is answered in both IO modes.
+it`) every request is answered in both IO modes. The test starts its clients a hundred at a
+time, each hundred once the ones before are held: `TcpStream.connect` is a blocking `connect`
+on the task's worker and the listener's backlog is 128, so a thousand connects at once overflowed
+the listener's queue, each dropped SYN blocked its worker until the retransmit, and once every
+worker was blocked so, the accepting task's among them, nothing was accepted for minutes.
 
 The drain (16.13). `serve_listener` keeps one `Holds` for all its connections,
 `Holds.start()`: a bounded channel of `HoldEvent`s to a register task, `keep_holds`. Each held

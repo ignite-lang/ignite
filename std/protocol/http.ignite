@@ -3105,12 +3105,20 @@ test "a thousand requests held over TCP are each answered by their message" {
   let waiters: Store<Sender<Response>> = Store.new()
   spawn accept_count(listener, count + 1, HttpApp { state = waiters, reply = Some(poll) }, Holds.start())
   let (results, reported) = Channel.bounded(count)
+  // The clients start a hundred at a time, each hundred once the ones
+  // before are held, so the listener's queue (backlog 128) never fills: a
+  // connect to a full queue blocks its worker through SYN retransmits, and
+  // once every worker is blocked so, the accepting task among them, no
+  // connection is accepted for minutes.
   var started = 0
   while started < count {
-    spawn long_poll(port, started, results)
-    started = started + 1
+    let batch = started + 100
+    while started < batch {
+      spawn long_poll(port, started, results)
+      started = started + 1
+    }
+    assert held(waiters, started, 40 seconds), "{waiters.values().len()} of {started} requests held"
   }
-  assert held(waiters, count, 40 seconds), "{waiters.values().len()} of {count} requests held"
   let other = TcpStream.connect("127.0.0.1", port)?
   other.set_idle_timeout(30000)?
   other.write_all(b"GET /now HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n")?
