@@ -10587,7 +10587,7 @@ compiler and both backends are unchanged and no generated code changes.
 | item | meaning |
 |---|---|
 | `enum RespValue` | `Simple(Text)`, `Error(Text)`, `Integer(Int)`, `Blob(Bytes)`, `Null`, `Double(Text)`, `Boolean(Bool)`, `BlobError(Bytes)`, `Verbatim(Text, Bytes)`, `BigNumber(Text)`, `Array`, `Map` (pairs), `Set`, `Push`, `Attributed(pairs, value)`: every RESP3 type; `Double` and `BigNumber` keep the exact text, as `std.json`'s `Decimal` |
-| `type RespLimits` | `line` 64 KiB (one line's text), `bulk` 16 MiB (one bulk string, blob error or verbatim string; a streamed string in total), `elements` 1,048,576 (items of one aggregate, a map's pairs), `depth` 32 (aggregates inside aggregates), `reply` 64 MiB (the encoded bytes of one value) |
+| `type RespLimits` | `line` 64 KiB (one line's text), `bulk` 16 MiB (one bulk string, blob error or verbatim string; a streamed string in total), `elements` 1,048,576 (items of one aggregate, a map's pairs), `depth` 32 (aggregates inside aggregates; the value an attribute annotates is one level deeper), `reply` 64 MiB (the encoded bytes of one value) |
 | `enum RespError` | `UnknownType(Byte)`, `Malformed(Text)`, `LineTooLong`, `BulkTooLarge`, `TooManyElements`, `TooDeep`, `ReplyTooLarge`, `Truncated`; `describe` |
 | `encode(value) -> Bytes` | the RESP3 form; a line type's text must hold no CR or LF |
 | `encode_command(args)`, `words(parts)` | a command as an array of bulk strings |
@@ -10609,7 +10609,9 @@ is one over TCP whose reads also give up after `timeout`. `command(client, args)
 reply as a value, the server's error included; `pipeline(client, commands)` writes every command
 in one write and returns one reply per command in order. A push frame on a command connection is
 skipped, before the replies and after them; anything else after the last reply is the `IoError`
-`resp: a reply no command asked for`. A client serves one task at a time.
+`resp: a reply no command asked for`. So under RESP3 a `SUBSCRIBE` sent with `command` or
+`pipeline` waits until the stream's idle timeout, its confirmation being a push; `subscribe`
+(NN.3) is the way to subscribe. A client serves one task at a time.
 
 The typed helpers, called as plain fns (`get(client, key)`; the method form is E042 on a
 generic record receiver): `ping`, `hello`, `auth`; strings `get`, `set`, `set_for` (`PX`),

@@ -17,7 +17,9 @@ import std.text.{bytes_find_from, is_digit, split, to_lower}
 //   write and returns their replies in order. The typed helpers below
 //   cover strings, hashes, sets, keys, expiry and publishing; a reply of
 //   the wrong type, or the server's error, is an `IoError`. A push frame
-//   (RESP3 out-of-band data) on a command connection is skipped. The
+//   (RESP3 out-of-band data) on a command connection is skipped, so under
+//   RESP3 a SUBSCRIBE sent with `command` or `pipeline` waits until the
+//   stream's idle timeout: its confirmation is a push. Use `subscribe`. The
 //   helpers are called as plain fns, `get(client, key)`: the method form
 //   on a binding of type `Client<T>` is E042.
 // - Pub/sub: `subscribe` confirms the first channel, then a task reads the
@@ -64,7 +66,8 @@ enum RespValue {
 // What one value read may hold. `line`: the text of one line, without
 // its type byte and CR LF. `bulk`: one bulk string, blob error or verbatim
 // string, a streamed string in total. `elements`: the items of one
-// aggregate, a map's pairs. `depth`: aggregates inside aggregates.
+// aggregate, a map's pairs. `depth`: aggregates inside aggregates, the
+// value an attribute annotates one level below the attribute.
 // `reply`: the encoded bytes of one value, everything in it included.
 type RespLimits {
   line: ByteSize = 64 KiB
@@ -362,12 +365,13 @@ fn paired(items: List<RespValue>) -> List<(RespValue, RespValue)> {
 fn pairs_kind(kind: Byte) -> Bool = kind == b'%' || kind == b'|'
 
 // The aggregate of `kind` over `items`, which ends at `at`; an attribute
-// is followed by the value it annotates, at the same depth.
+// is followed by the value it annotates, one level deeper, so a chain of
+// attributes is held to `RespLimits.depth` as nesting is.
 fn aggregate(data: Bytes, kind: Byte, items: List<RespValue>, at: Int, depth: Int, limits: RespLimits) -> Parse<RespValue> = match kind {
   b'%' => Ok(Some((Map(paired(items)), at)))
   b'~' => Ok(Some((Set(items), at)))
   b'>' => Ok(Some((Push(items), at)))
-  b'|' => match value_at(data, at, depth, limits)? {
+  b'|' => match value_at(data, at, depth + 1, limits)? {
     Some((inner, end)) => Ok(Some((Attributed(paired(items), inner), end)))
     None => Ok(None)
   }
@@ -817,9 +821,12 @@ fn exists<T: ByteStream>(client: Client<T>, keys: List<Text>) -> IoResult<Int> =
 fn rename<T: ByteStream>(client: Client<T>, from: Text, to: Text) -> IoResult<Unit> = ok_of("RENAME", command(client, words(["RENAME", from, to]))?)
 
 // TYPE: the type of the value of `key`, `none` when it has none.
-fn key_type<T: ByteStream>(client: Client<T>, key: Text) -> IoResult<Text> = match text_of(command(client, words(["TYPE", key]))?) {
-  Some(name) => Ok(name)
-  None => Err(IoError.new("resp: unexpected reply to TYPE"))
+fn key_type<T: ByteStream>(client: Client<T>, key: Text) -> IoResult<Text> {
+  let reply = command(client, words(["TYPE", key]))?
+  match text_of(reply) {
+    Some(name) => Ok(name)
+    None => Err(failure("TYPE", plain(reply)))
+  }
 }
 
 // -- expiry --
