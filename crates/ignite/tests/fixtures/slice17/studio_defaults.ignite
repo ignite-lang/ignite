@@ -34,7 +34,7 @@ fn handle(state: Bench, request: Request) -> Response = match (request.method, r
 
 type Workbench {
   listener: TcpListener
-  application: HttpApp<Bench>
+  application: HttpApp<Bench, TcpStream>
   executable: Text
 }
 

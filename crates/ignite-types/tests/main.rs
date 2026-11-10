@@ -4,6 +4,7 @@
 //! `<file>::<test>`.
 
 mod adversary_bounds;
+mod adversary_http_app;
 mod audit;
 mod builtin_tables;
 mod clone;

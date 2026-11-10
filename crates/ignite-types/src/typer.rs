@@ -610,7 +610,12 @@ impl<'a> Typer<'a> {
                     self.check(arg, &param);
                     continue;
                 }
-                let given = matches!(arg.kind, ExprKind::Closure(_)).then_some(&param);
+                // A closure and a record literal are typed against the
+                // parameter as far as it is known: a record literal binds
+                // a type parameter of its own that only the call gives
+                // (a std record's stream type from the call's stream).
+                let given = matches!(arg.kind, ExprKind::Closure(_) | ExprKind::Record { .. })
+                    .then_some(&param);
                 let Some(found) = self.expr(arg, Mode::Value(given)) else {
                     continue;
                 };

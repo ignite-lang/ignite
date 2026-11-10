@@ -4988,6 +4988,20 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 let s = self.scalar(&r);
                 self.rt_out("tcp_peer", &ignite_types::endpoint(), &[format!("i64 {s}")])
             }
+            TcpStreamLocal => {
+                self.m.declare(
+                    "ignite_rt_tcp_local",
+                    "void",
+                    &["ptr".to_string(), "i64".to_string()],
+                );
+                let r = recv(self);
+                let s = self.scalar(&r);
+                self.rt_out(
+                    "tcp_local",
+                    &ignite_types::endpoint(),
+                    &[format!("i64 {s}")],
+                )
+            }
             TcpStreamTimedOut => {
                 self.m
                     .declare("ignite_rt_tcp_timed_out", "i8", &["i64".to_string()]);

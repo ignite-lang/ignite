@@ -15,7 +15,7 @@ fn handle(state: Text, request: Request) -> Response = Response.plain(200, state
 type Pair {
   first: TcpListener
   second: TcpListener
-  application: HttpApp<Text>
+  application: HttpApp<Text, TcpStream>
   executable: Text
 }
 
