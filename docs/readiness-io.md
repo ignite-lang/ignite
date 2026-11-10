@@ -349,5 +349,12 @@ not beside it.
 - K3. Stack RSS per idle task (8 to 32 KiB, inferred) is about 50 times a stackless frame. At
   10,000 idle sessions that is 80 to 320 MiB. Vision's 10,000 idle actors would be measured
   against this before actors P5.
-- K4. Edge-triggered epoll loses a wakeup if a call stops reading before `EAGAIN`. Mitigation:
-  a stream keeps a `maybe_readable` flag, cleared only by `EAGAIN`.
+- K4. Edge-triggered epoll loses a wakeup if a call stops reading before `EAGAIN`. As landed:
+  a call waits for readiness only after `EAGAIN`, against an event count taken before the
+  attempt, with one exception: a read that returned fewer bytes than it asked for counts as
+  having emptied the socket, so the next read waits before its first `recv`
+  (`Stream::emptied`). It does not count so on a socket that ever reported hang-up, error or
+  urgent data (`Readiness::short_read_may_leave_input`): an end of stream or a reset behind
+  the bytes, or the bytes behind the urgent mark the read stopped at, arrive in the same edge
+  as the bytes and raise none of their own (`5e6f5847`; before it, in-process clients that
+  shared a worker with their server waited for their idle timeout).
