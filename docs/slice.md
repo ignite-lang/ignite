@@ -10690,7 +10690,7 @@ backends are unchanged and no generated code changes.
 
 | item | meaning |
 |---|---|
-| `type NatsLimits` | `line` 64 KiB (one control line from the server, INFO included), `payload` 1 MiB (one message, its header block included; publishing is also bounded by the server's `max_payload`), `headers` 64 KiB (one header block), `pending` 4,096 and `pending_bytes` 8 MiB (the messages held while no connection is up), `pending_age` 1 s (a message older than this is dropped, not sent), `subscription` 1,024 (one subscription's channel) |
+| `type NatsLimits` | `line` 64 KiB (one control line from the server, INFO included), `payload` 1 MiB (one message, its header block included; publishing is also bounded by the server's `max_payload`), `headers` 64 KiB (one header block), `pending` 4,096 and `pending_bytes` 8 MiB (the messages held while no connection is up, each counted with its header block), `pending_age` 1 s (a message older than this is dropped, not sent), `subscription` 1,024 (one subscription's channel), `backlog` 8 MiB (the bytes a connection may leave unwritten; past it the connection is lost) |
 | `enum NatsAuth`, `type NatsOptions` | `Anonymous`, `UserPassword(user, password)`, `Token(token)`; `name`, `verbose`, `pedantic`, `echo`, `ping_interval` 120 s, `max_pings_out` 2, `inbox_prefix` (`_INBOX.<token>` when empty) |
 | `type ServerInfo` | the INFO fields a client reads: `server_id`, `server_name`, `version`, `proto`, `max_payload`, `headers`, `auth_required`, `client_id`; a missing member keeps its default |
 | `type NatsMessage` | `subject`, `reply`, `headers` (`(name, value)` pairs in order), `status` (the code of `NATS/1.0 503`), `payload` |
@@ -10712,20 +10712,23 @@ colon, a status that is not three digits, an INFO that is no JSON object and a P
 `connect(stream, options, limits)` reads INFO, writes CONNECT and PING, and returns when the
 PONG arrives, answering the server's PING and reading `+OK` and INFO updates meanwhile; a
 `-ERR` (`Authorization Violation`) is its error `nats: <reason>`. It is bounded by the stream's
-idle timeout, which the caller sets. Two tasks then run the connection: a reader that decodes
-the server's operations and a client task that owns every write and all state, fed by one
-bounded channel of commands (1,024). The fns are plain fns over `Nats<T>`, as the method form
-on a generic record receiver is E042:
+idle timeout, which the caller sets. Then per connection a reader decodes the server's
+operations and a writer writes the stream, and a client task owns all state, fed by one
+bounded channel of commands (1,024). The client task never writes the stream: it hands bytes
+to the writer through a channel of one chunk and holds the rest itself, up to
+`limits.backlog`, past which the connection is lost. A server that stops reading blocks only
+the writer, so the keepalive still finds it. The fns are plain fns over `Nats<T>`, as the
+method form on a generic record receiver is E042:
 
 | fn | what it does |
 |---|---|
-| `publish(client, subject, payload)`, `publish_message(client, message)` | checks the subject, the reply subject, header names and values, headers against the server's `headers`, and the size against the smaller of `limits.payload` and `max_payload`; then queues the message with the time it was queued and returns |
+| `publish(client, subject, payload)`, `publish_message(client, message)` | checks the subject, the reply subject, header names and values; the client task then checks headers against the newest connection's INFO `headers`, and the size, header block included, against the smaller of `limits.payload` and its `max_payload`, and answers; then the message is queued with the time it was queued |
 | `subscribe(client, filter)`, `queue_subscribe(client, filter, queue)` | a `Subscription { sid, subject, queue, messages }` whose bounded channel gets each delivery in order; a full channel drops and counts it (`slow`) |
 | `unsubscribe`, `unsubscribe_after(client, subscription, max)` | UNSUB at once or after `max` messages in all; the channel closes after the last |
-| `request(client, subject, payload, timeout)`, `request_message` | SUB to `<inbox prefix>.<sid>`, UNSUB after one, PUB with it as the reply subject, then `receive_within(timeout)` on the reply channel (`docs/slice.md` 30); at the deadline UNSUB and the error `nats: no reply to <subject> within <ms> ms`; a reply with status 503 is `nats: no responders for <subject>` |
+| `request(client, subject, payload, timeout)`, `request_message` | SUB to `<inbox prefix>.<sid>`, UNSUB after one, PUB with it as the reply subject, then `receive_within(timeout)` on the reply channel (`docs/slice.md` 30); at the deadline UNSUB and the error `nats: no reply to <subject> within <ms> ms`; a reply with status 503 is `nats: no responders for <subject>`. The one reply closes the channel, so a channel found closed at the deadline is read once more before it counts as shut down; `flush` does the same |
 | `respond(client, message, payload)` | PUB to the message's reply subject |
 | `flush(client, timeout)` | PING after everything queued before it, and waits for its PONG |
-| `stats(client) -> NatsStats` | `connected`, `connections`, `losses`, `sent`, `received`, `pending`, `stale`, `overflow`, `slow`, `errors`, `last_error` |
+| `stats(client) -> NatsStats` | `connected`, `connections`, `losses`, `sent` (handed to the writer), `received`, `pending`, `stale`, `overflow`, `slow`, `refused`, `errors`, `last_error` |
 | `shutdown(client)` | after the commands queued before it, closes the connection and every subscription's channel; every later call is `nats: the client is shut down` |
 
 The client task sends PING every `ping_interval` and loses a connection that left
@@ -10734,25 +10737,36 @@ not end the connection (a permissions violation) is counted in `errors` and `las
 
 ### NN.3 Reconnect and the outgoing buffer
 
-A lost connection (the server closed it, a write failed, bytes that are no operation, or the
-keepalive) sends the number of losses so far on `Nats.losses`. While no connection is up the
-client task holds each published message, up to `pending` messages and `pending_bytes` bytes;
-one past either is dropped and counted (`overflow`). A message is stale when more than
+A lost connection (the connection ended, a write failed, bytes that are no operation, the
+backlog, or the keepalive) sends the number of losses so far on `Nats.losses`. Delivery is at
+most once: bytes the lost connection had not written are dropped, not sent again. While no
+connection is up the client task holds each published message, up to `pending` messages and
+`pending_bytes` bytes, header blocks included; one past either is dropped and counted
+(`overflow`). A message is stale when more than
 `pending_age` (1 s, the case study's rule) passed since it was queued: a stale one is dropped and
 counted (`stale`) instead of written, whether it waited in the buffer or in the command channel,
 so a reconnect never replays a stale message. `reconnect(client, stream)` runs the handshake on
 a new stream in the caller's task and hands it over; the client task closes the old connection
 if one is up, subscribes again to every live subscription (UNSUB with the messages left for one
-with a limit), writes the held messages that are still fresh, and starts a reader for the new
-connection; the reader of an old one is ignored. `connect_to(endpoint, timeout, options, limits)`
-is a client over TCP that reconnects itself: a task reads `losses` and dials again, waiting
-`retry_delay(attempt)` (100 ms doubled per attempt, at most 10 s) before each attempt; connect
-and handshake give up after `timeout`, and its reads have no idle timeout, the keepalive being
-what finds a dead connection.
+with a limit), writes the held messages that are still fresh and that the new server's INFO
+takes (the others are counted in `refused`), and starts a reader and a writer for the new
+connection; the reader and writer of an old one are ignored. From then on publishing is
+checked against the new INFO, and against each INFO update the server sends.
+`connect_to(endpoint, timeout, options, limits)` is a client over TCP that reconnects itself:
+a task reads `losses` and dials again, waiting `retry_delay(attempt)` (100 ms doubled per
+attempt, at most 10 s) before each attempt; connect and handshake give up after `timeout`.
+
+The substrate's `close` ends a stream's write half only (a TCP `shutdown(Write)`), and a read
+or write blocked on a silent peer is not woken by it. So `dial` sets the stream's idle timeout,
+after the handshake, to `quiet_limit(options)`, `ping_interval` times `max_pings_out + 1`: a live
+server answers a PING within it, and the reader of a dead connection ends. A writer blocked on
+a server that stopped reading stays blocked until the server or the kernel ends the connection;
+its task and socket are held so long. The client is not: it lost the connection by the
+keepalive or the backlog and goes on.
 
 ### NN.4 Tests
 
-- `std/protocol/nats.ignite`, both targets, 20 tests, all but one over `Pipe.pair()`, with a
+- `std/protocol/nats.ignite`, both targets, 28 tests, all but four over `Pipe.pair()`, with a
   scripted server (`script`: reads each expected request byte-exact, writes its reply, and with
   `hold` keeps the connection open until the client closes it): every client operation encodes
   as the protocol writes it; every server operation decodes with the following bytes kept, and
@@ -10765,7 +10779,14 @@ what finds a dead connection.
   `unsubscribe`; a lost connection that drops a message stale when published and one gone
   stale while held, and sends the fresh one and the subscription on `reconnect`; the bounded
   outgoing buffer; `connect_to` over TCP, which reconnects by itself and subscribes again; a
-  keepalive that loses a silent connection; a shut-down client; `retry_delay`.
+  keepalive that loses a silent connection; a shut-down client; `retry_delay`. The adversary's
+  cases, moved in: a TCP server that stops reading during a burst of forty 1 MB publishes is
+  lost by the keepalive within 3 s, and without the burst too; one is lost by a 1 MiB backlog
+  with the keepalive at 120 s; the buffer's byte bound counts the header block; after a
+  reconnect publishing and requests are checked against the new server's `max_payload`, and a
+  held message it refuses is counted, not sent; `unsubscribe_after` sends the messages left on
+  the new connection; a reply after a request's deadline reaches nobody; MSG, HMSG and PING
+  written one byte per read are read whole.
 - `nats::a_real_server_on_both_targets` in `crates/ignite/tests/nats.rs`, `#[ignore]` like
   `image::`, since `nats-server` is not installed where the gate runs: per target, a server with
   a user and a password, then `connect_to` with them, wildcards, a queue group, headers, a
