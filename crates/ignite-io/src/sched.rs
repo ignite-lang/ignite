@@ -1202,6 +1202,9 @@ pub(crate) struct Descriptor {
     read_events: AtomicU64,
     /// Readiness events for writing (room, hang-up, error).
     write_events: AtomicU64,
+    /// Hang-up, error and urgent data, as any event reported them; never
+    /// cleared ([`Readiness::short_read_may_leave_input`]).
+    lasting: AtomicU8,
     waiting: Mutex<Waiting>,
     /// The workers the descriptor is registered with, and its token there.
     registered: Mutex<Vec<(Arc<Shared>, Token)>>,
@@ -1243,6 +1246,12 @@ impl Descriptor {
     /// tasks waiting for its direction.
     pub(crate) fn ready(&self, ready: Interest) {
         let (read, write) = (reads(ready), writes(ready));
+        // SeqCst, before the count: a reader whose mark already counts
+        // this event sees these bits after its read.
+        let lasting = ready.bits() & (Interest::HANGUP | Interest::ERROR | Interest::URGENT).bits();
+        if lasting != 0 {
+            self.lasting.fetch_or(lasting, Ordering::SeqCst);
+        }
         if read {
             self.read_events.fetch_add(1, Ordering::SeqCst);
         }
@@ -1273,6 +1282,7 @@ impl Readiness {
             waiter: Waiter::for_descriptor(Descriptor {
                 read_events: AtomicU64::new(0),
                 write_events: AtomicU64::new(0),
+                lasting: AtomicU8::new(0),
                 waiting: Mutex::new(Waiting::default()),
                 registered: Mutex::new(Vec::new()),
                 home: AtomicPtr::new(std::ptr::null_mut()),
@@ -1289,6 +1299,17 @@ impl Readiness {
     /// to pass to [`Readiness::wait`] after it.
     pub(crate) fn mark(&self, interest: Interest) -> u64 {
         self.descriptor().events(interest).load(Ordering::SeqCst)
+    }
+
+    /// Whether a read that returned fewer bytes than it asked for may have
+    /// left something to read that no later readiness event announces:
+    /// an event reported the peer's end of stream, an error, or urgent
+    /// data (a read stops before the urgent byte). Such an event raises
+    /// one edge with the bytes before it, which the mark of that read
+    /// already counts. Once true, it stays true. Read after the read whose
+    /// mark was taken before it.
+    pub(crate) fn short_read_may_leave_input(&self) -> bool {
+        self.descriptor().lasting.load(Ordering::SeqCst) != 0
     }
 
     /// Wait until `descriptor` may be ready for `interest`, after an

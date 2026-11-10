@@ -196,7 +196,10 @@ struct Stream {
     /// readiness against it before its first `recv`, since a `recv` right
     /// away would find nothing (a request-reply peer has not answered
     /// yet). A read that filled its buffer leaves it unset, so the next
-    /// read tries at once. Only with `blocking` false.
+    /// read tries at once; so does a short read once the readiness
+    /// reported an end of stream, an error or urgent data
+    /// (`Readiness::short_read_may_leave_input`). Only with `blocking`
+    /// false.
     emptied: AtomicU64,
     /// The idle timeout in milliseconds; 0 is none (`crate::idle`).
     idle: AtomicI64,
@@ -769,7 +772,14 @@ impl TcpStream {
             let blocked = blocking.take().is_some();
             match attempted {
                 Ok(value) => {
-                    if !self.inner.blocking && emptied.get() {
+                    // A short read after an end of stream, an error or
+                    // urgent data was reported may have left them behind,
+                    // with no edge to come for them: the next read tries
+                    // at once.
+                    if !self.inner.blocking
+                        && emptied.get()
+                        && !self.inner.readiness.short_read_may_leave_input()
+                    {
                         self.inner.emptied.store(mark, Ordering::Relaxed);
                     }
                     ended(false);
