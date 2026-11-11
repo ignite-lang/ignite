@@ -1,0 +1,1268 @@
+package std.protocol.mysql
+
+import std.net.{ByteStream, Pipe, PipeStream, TcpStream, Endpoint}
+import std.io.IoError
+import std.digest.{sha1, sha256}
+import std.encoding.{hex}
+import std.result.{map_err}
+import std.text.{contains}
+import std.tls.{TlsOptions}
+
+// A client of the MySQL wire protocol (protocol 41, handshake version 10)
+// over any `ByteStream`: a `TcpStream` or a `TlsStream` in programs, a
+// `PipeStream` in tests.
+
+type Outcome<T> = Result<T, MysqlError>
+
+// ---- limits and errors ------------------------------------------------------
+
+// What one reply may hold. `packet`: the payload of one packet, its 16 MiB
+// frames joined. `row`: the packet of one row. `rows`: the rows of one
+// result set. `columns`: its columns.
+type MysqlLimits {
+  packet: ByteSize = 64 MiB
+  row: ByteSize = 16 MiB
+  rows: Int = 1000000
+  columns: Int = 4096
+}
+
+// The server's error packet: its code, the five characters of its SQL
+// state (empty when the server sent none) and its message. The message is
+// the server's text and may quote the statement or name the account, so
+// `describe` leaves it out.
+type ServerError {
+  code: Int
+  sql_state: Text
+  message: Text
+}
+
+// Why a call failed.
+//
+// - `Server`: the server answered with an error packet; the connection
+//   stays usable.
+// - `Io`: the stream failed, with the substrate's message.
+// - `Closed`: the stream ended, or its idle timeout passed, before or
+//   inside a packet.
+// - `OutOfOrder(expected, got)`: a packet with another sequence number than
+//   the next one.
+// - `PacketTooLarge`, `RowTooLarge`, `TooManyRows`, `TooManyColumns`: one
+//   past a limit of `MysqlLimits`.
+// - `Malformed`: bytes that are no packet of the protocol, with the reason.
+// - `Unsupported`: a part of the protocol this client does not speak.
+// - `UnsupportedPlugin`: the server asked for an authentication plugin
+//   other than `mysql_native_password` and `caching_sha2_password`, named.
+// - `FullAuthenticationNeedsTls`: `caching_sha2_password` asked for the
+//   password itself on a stream that is not TLS.
+// - `TlsNotOffered`: the server's handshake offers no TLS.
+// - `WrongParameterCount(expected, got)`: `execute` with another number of
+//   parameters than the statement has.
+// - `NoConnection`: a pool had no connection within its wait.
+enum MysqlError {
+  Server(ServerError),
+  Io(Text),
+  Closed,
+  OutOfOrder(Int, Int),
+  PacketTooLarge,
+  RowTooLarge,
+  TooManyRows,
+  TooManyColumns,
+  Malformed(Text),
+  Unsupported(Text),
+  UnsupportedPlugin(Text),
+  FullAuthenticationNeedsTls,
+  TlsNotOffered,
+  WrongParameterCount(Int, Int),
+  NoConnection
+}
+
+// ---- the session ------------------------------------------------------------
+
+// The account, the session and the transport of one connection.
+type MysqlOptions {
+  user: Text
+  password: Text = ""
+  database: Text = ""
+  read_only: Bool = false
+  charset: Int = 45
+  limits: MysqlLimits = MysqlLimits {}
+  connect_timeout: Duration = 10 seconds
+  read_timeout: Duration = 30 seconds
+  server_name: Text = ""
+  tls: TlsOptions = TlsOptions {}
+}
+
+// The server's first packet.
+type Greeting {
+  version: Text
+  connection: Int
+  capabilities: Int
+  charset: Int
+  status: Int
+  scramble: Bytes
+  plugin: Text
+}
+
+// An authenticated connection.
+type Client<T> {
+  stream: T
+  limits: MysqlLimits = MysqlLimits {}
+  version: Text = ""
+  connection: Int = 0
+  secure: Bool = false
+}
+
+// What a statement without a result set reports.
+type Done {
+  affected: Int
+  last_insert_id: Int
+  status: Int
+  warnings: Int
+}
+
+const MAX_FRAME: Int = 16777215
+const READ_SIZE: Int = 65536
+
+const CLIENT_LONG_PASSWORD: Int = 1
+const CLIENT_LONG_FLAG: Int = 4
+const CLIENT_CONNECT_WITH_DB: Int = 8
+const CLIENT_PROTOCOL_41: Int = 512
+const CLIENT_SSL: Int = 2048
+const CLIENT_TRANSACTIONS: Int = 8192
+const CLIENT_SECURE_CONNECTION: Int = 32768
+const CLIENT_PLUGIN_AUTH: Int = 524288
+const CLIENT_PLUGIN_AUTH_LENENC: Int = 2097152
+
+const NATIVE: Text = "mysql_native_password"
+const CACHING_SHA2: Text = "caching_sha2_password"
+const READ_ONLY: Text = "SET SESSION TRANSACTION READ ONLY"
+
+const SHORT: Text = "a packet shorter than its fields"
+const TRAILING: Text = "bytes after the reply"
+
+// What `error` is, in words that hold neither a statement nor a
+// credential: of the server's error the code and the SQL state only.
+fn describe(error: MysqlError) -> Text = match error {
+  Server(failed) => if failed.sql_state == "" { "server error {failed.code}" } else { "server error {failed.code} ({failed.sql_state})" }
+  Io(message) => message
+  Closed => "the connection ended or its read timed out"
+  OutOfOrder(expected, got) => "packet {got} where packet {expected} was expected"
+  PacketTooLarge => "a packet larger than the limit"
+  RowTooLarge => "a row larger than the limit"
+  TooManyRows => "a result set with more rows than the limit"
+  TooManyColumns => "a result set with more columns than the limit"
+  Malformed(what) => what
+  Unsupported(what) => "{what} is not supported"
+  UnsupportedPlugin(plugin) => "authentication plugin {plugin} is not supported"
+  FullAuthenticationNeedsTls => "the server asks for the password itself (caching_sha2_password full authentication), which is sent over TLS only"
+  TlsNotOffered => "the server offers no TLS"
+  WrongParameterCount(expected, got) => "{got} parameters for a statement with {expected}"
+  NoConnection => "no connection of the pool was free in time"
+}
+
+// `error` for a caller whose errors are `IoError`s: `mysql: ` and its
+// description.
+fn io_error(error: MysqlError) -> IoError = IoError.new("mysql: {describe(error)}")
+
+fn io(error: IoError) -> MysqlError = Io(error.message)
+
+// Whether the connection is in step after `error`: the server refused a
+// command, or the client refused a call before it sent anything.
+fn reusable(error: MysqlError) -> Bool = match error {
+  Server(_) => true
+  WrongParameterCount(_, _) => true
+  _ => false
+}
+
+// ---- integers and strings ---------------------------------------------------
+
+// `out` with the low `width` bytes of `value`, least significant first.
+fn put_int(out: Bytes, value: Int, width: Int) -> Bytes {
+  var buffer = out
+  var i = 0
+  while i < width {
+    buffer.push((value >> i * 8 & 255).wrap_byte())
+    i = i + 1
+  }
+  buffer
+}
+
+// The `width` bytes of `data` at `at` as an integer, least significant
+// first; eight bytes are the two's complement of an `Int`.
+fn int_at(data: Bytes, at: Int, width: Int) -> Int {
+  var value = 0
+  var i = 0
+  while i < width {
+    value = value | data[at + i].to_int() << i * 8
+    i = i + 1
+  }
+  value
+}
+
+// `out` with `n` as a length-encoded integer.
+fn put_lenenc(out: Bytes, n: Int) -> Bytes {
+  var buffer = out
+  if n < 251 {
+    buffer.push(n.wrap_byte())
+    return buffer
+  }
+  if n < 65536 {
+    buffer.push(252)
+    return put_int(buffer, n, 2)
+  }
+  if n < 16777216 {
+    buffer.push(253)
+    return put_int(buffer, n, 3)
+  }
+  buffer.push(254)
+  put_int(buffer, n, 8)
+}
+
+// `out` with `bytes` behind their length.
+fn put_lenenc_bytes(out: Bytes, bytes: Bytes) -> Bytes {
+  var buffer = put_lenenc(out, bytes.len())
+  buffer.append(bytes)
+  buffer
+}
+
+// The integer of `width` bytes at `at` and the offset after it.
+fn take_int(data: Bytes, at: Int, width: Int) -> Outcome<(Int, Int)> =
+  if width > data.len() - at { Err(Malformed(SHORT)) } else { Ok((int_at(data, at, width), at + width)) }
+
+// The `count` bytes at `at` and the offset after them.
+fn take_bytes(data: Bytes, at: Int, count: Int) -> Outcome<(Bytes, Int)> =
+  if count < 0 || count > data.len() - at { Err(Malformed(SHORT)) } else { Ok((data.slice(at, at + count), at + count)) }
+
+// The length-encoded integer at `at`, `None` for the NULL mark 0xFB, and
+// the offset after it.
+fn take_lenenc(data: Bytes, at: Int) -> Outcome<(Option<Int>, Int)> {
+  if at >= data.len() {
+    return Err(Malformed(SHORT))
+  }
+  let first = data[at].to_int()
+  if first < 251 {
+    return Ok((Some(first), at + 1))
+  }
+  if first == 251 {
+    return Ok((None, at + 1))
+  }
+  if first == 255 {
+    return Err(Malformed("a length that starts with 0xFF"))
+  }
+  let width = if first == 252 { 2 } else if first == 253 { 3 } else { 8 }
+  let (value, end) = take_int(data, at + 1, width)?
+  if value < 0 {
+    return Err(Malformed("a length above the largest integer"))
+  }
+  Ok((Some(value), end))
+}
+
+// A length-encoded integer that may not be NULL.
+fn take_count(data: Bytes, at: Int) -> Outcome<(Int, Int)> = match take_lenenc(data, at)? {
+  (Some(n), end) => Ok((n, end))
+  (None, _) => Err(Malformed("a NULL where a number is expected"))
+}
+
+// The length-encoded bytes at `at`, `None` for NULL, and the offset after
+// them.
+fn take_lenenc_bytes(data: Bytes, at: Int) -> Outcome<(Option<Bytes>, Int)> = match take_lenenc(data, at)? {
+  (Some(n), start) => {
+    let (bytes, end) = take_bytes(data, start, n)?
+    Ok((Some(bytes), end))
+  }
+  (None, end) => Ok((None, end))
+}
+
+// Length-encoded bytes that may not be NULL, as text.
+fn take_text(data: Bytes, at: Int) -> Outcome<(Text, Int)> = match take_lenenc_bytes(data, at)? {
+  (Some(bytes), end) => Ok((bytes.to_text(), end))
+  (None, _) => Err(Malformed("a NULL where a name is expected"))
+}
+
+// The bytes from `at` up to a NUL, or to the end when there is none, and
+// the offset after the NUL.
+fn take_nul(data: Bytes, at: Int) -> Outcome<(Bytes, Int)> {
+  if at > data.len() {
+    return Err(Malformed(SHORT))
+  }
+  match data.index_of(b"\x00", at) {
+    Some(end) => Ok((data.slice(at, end), end + 1))
+    None => Ok((data.slice(at, data.len()), data.len()))
+  }
+}
+
+// ---- packets ----------------------------------------------------------------
+
+// `payload` as one packet whose first frame has the sequence number
+// `sequence`: frames of at most 16 MiB - 1 bytes, each with its length and
+// its sequence number modulo 256. A payload that fills its last frame is
+// followed by an empty one.
+fn frames(payload: Bytes, sequence: Int) -> Bytes {
+  var out = Bytes.with_capacity(payload.len() + 4)
+  var at = 0
+  var number = sequence
+  loop {
+    let left = payload.len() - at
+    let size = if left > MAX_FRAME { MAX_FRAME } else { left }
+    out = put_int(out, size, 3)
+    out.push((number & 255).wrap_byte())
+    out.append(payload.slice(at, at + size))
+    at = at + size
+    number = number + 1
+    if size < MAX_FRAME {
+      break
+    }
+  }
+  out
+}
+
+// `buffer` from `at` on with at least `need` bytes, read from `stream`,
+// and the offset its first byte now has. Bytes before `at` are dropped
+// when more are read.
+fn fill<T: ByteStream>(stream: T, buffer: Bytes, at: Int, need: Int) -> Outcome<(Bytes, Int)> {
+  var data = buffer
+  var start = at
+  while data.len() - start < need {
+    match stream.read(READ_SIZE).map_err(io)? {
+      Eof => return Err(Closed)
+      Data(more) => {
+        if start > 0 {
+          data = data.slice(start, data.len())
+          start = 0
+        }
+        data.append(more)
+      }
+    }
+  }
+  Ok((data, start))
+}
+
+// The next packet from `stream`, starting with the bytes of `buffer` from
+// `at` on: its payload (the frames of a packet of 16 MiB - 1 bytes or more
+// joined), the bytes read so far, the offset after the packet and the
+// sequence number after its last frame. Its first frame must carry
+// `sequence`; a payload above `maximum` is refused when its frame header
+// is read, before its bytes are.
+fn read_packet<T: ByteStream>(stream: T, maximum: Int, buffer: Bytes, at: Int, sequence: Int) -> Outcome<(Bytes, Bytes, Int, Int)> {
+  var data = buffer
+  var start = at
+  var number = sequence
+  var joined = Bytes.empty()
+  loop {
+    let (header, from) = fill(stream, data, start, 4)?
+    let size = int_at(header, from, 3)
+    let got = header[from + 3].to_int()
+    if got != number & 255 {
+      return Err(OutOfOrder(number & 255, got))
+    }
+    if size > maximum - joined.len() {
+      return Err(PacketTooLarge)
+    }
+    let (whole, begin) = fill(stream, header, from, size + 4)?
+    data = whole
+    start = begin + size + 4
+    number = number + 1
+    if size < MAX_FRAME && joined.is_empty() {
+      return Ok((data.slice(begin + 4, start), data, start, number))
+    }
+    joined.append(data.slice(begin + 4, start))
+    if size < MAX_FRAME {
+      return Ok((joined, data, start, number))
+    }
+  }
+}
+
+// The server's error packet `payload` as an error.
+fn server_error(payload: Bytes) -> MysqlError {
+  if payload.len() < 3 {
+    return Malformed("an error packet shorter than its code")
+  }
+  let code = int_at(payload, 1, 2)
+  if payload.len() >= 9 && payload[3] == b'#' {
+    return Server(ServerError { code, sql_state = payload.slice(4, 9).to_text(), message = payload.slice(9, payload.len()).to_text() })
+  }
+  Server(ServerError { code, sql_state = "", message = payload.slice(3, payload.len()).to_text() })
+}
+
+// The OK packet `payload`.
+fn parse_done(payload: Bytes) -> Outcome<Done> {
+  let (affected, a) = take_count(payload, 1)?
+  let (last_insert_id, b) = take_count(payload, a)?
+  let (status, c) = take_int(payload, b, 2)?
+  let (warnings, _) = take_int(payload, c, 2)?
+  Ok(Done { affected, last_insert_id, status, warnings })
+}
+
+// ---- handshake and authentication -------------------------------------------
+
+// The server's handshake packet `payload` (version 10): an error packet in
+// its place is the server's error.
+fn parse_greeting(payload: Bytes) -> Outcome<Greeting> {
+  if payload.is_empty() {
+    return Err(Malformed(SHORT))
+  }
+  let marker = payload[0].to_int()
+  if marker == 255 {
+    return Err(server_error(payload))
+  }
+  if marker != 10 {
+    return Err(Unsupported("protocol version {marker}"))
+  }
+  let (version, a) = take_nul(payload, 1)?
+  let (connection, b) = take_int(payload, a, 4)?
+  let (first, c) = take_bytes(payload, b, 8)?
+  let (lower, d) = take_int(payload, c + 1, 2)?
+  if d >= payload.len() {
+    return Err(Unsupported("a server without protocol 41"))
+  }
+  let (charset, e) = take_int(payload, d, 1)?
+  let (status, f) = take_int(payload, e, 2)?
+  let (upper, g) = take_int(payload, f, 2)?
+  let (length, h) = take_int(payload, g, 1)?
+  let capabilities = lower | upper << 16
+  if capabilities & CLIENT_PROTOCOL_41 == 0 || capabilities & CLIENT_SECURE_CONNECTION == 0 || capabilities & CLIENT_PLUGIN_AUTH == 0 {
+    return Err(Unsupported("a server without protocol 41 and authentication plugins"))
+  }
+  let rest = if length > 21 { length - 8 } else { 13 }
+  let (second, i) = take_bytes(payload, h + 10, rest)?
+  var scramble = first
+  scramble.append(second)
+  if scramble[scramble.len() - 1] == 0 {
+    scramble = scramble.slice(0, scramble.len() - 1)
+  }
+  let (plugin, _) = take_nul(payload, i)?
+  Ok(Greeting { version = version.to_text(), connection, capabilities, charset, status, scramble, plugin = plugin.to_text() })
+}
+
+// `a` with each byte exclusive-ored with the byte of `b` at its place.
+fn xor(a: Bytes, b: Bytes) -> Bytes {
+  var out = Bytes.with_capacity(a.len())
+  var i = 0
+  while i < a.len() {
+    out.push((a[i].to_int() ^ b[i].to_int()).wrap_byte())
+    i = i + 1
+  }
+  out
+}
+
+// The answer of `mysql_native_password`: SHA1(password) xor
+// SHA1(scramble, SHA1(SHA1(password))); nothing for an empty password.
+fn native_scramble(password: Text, scramble: Bytes) -> Bytes {
+  if password == "" {
+    return Bytes.empty()
+  }
+  let once = sha1(password.to_bytes())
+  var salted = scramble
+  salted.append(sha1(once))
+  xor(once, sha1(salted))
+}
+
+// The answer of `caching_sha2_password`: SHA256(password) xor
+// SHA256(SHA256(SHA256(password)), scramble); nothing for an empty
+// password.
+fn sha2_scramble(password: Text, scramble: Bytes) -> Bytes {
+  if password == "" {
+    return Bytes.empty()
+  }
+  let once = sha256(password.to_bytes())
+  var salted = sha256(once)
+  salted.append(scramble)
+  xor(once, sha256(salted))
+}
+
+// The answer `plugin` gives to `scramble`; any plugin but the two is
+// refused by name.
+fn answer(plugin: Text, password: Text, scramble: Bytes) -> Outcome<Bytes> = if plugin == NATIVE {
+  Ok(native_scramble(password, scramble))
+} else if plugin == CACHING_SHA2 {
+  Ok(sha2_scramble(password, scramble))
+} else {
+  Err(UnsupportedPlugin(plugin))
+}
+
+// The capabilities this client asks for: protocol 41, plugin
+// authentication, a database when one is named, TLS when `secure`. It asks
+// for no multi-statements, no multi-results, no local files and no
+// compression.
+fn client_capabilities(options: MysqlOptions, secure: Bool) -> Int {
+  var flags = CLIENT_LONG_PASSWORD | CLIENT_LONG_FLAG | CLIENT_PROTOCOL_41 | CLIENT_TRANSACTIONS | CLIENT_SECURE_CONNECTION | CLIENT_PLUGIN_AUTH | CLIENT_PLUGIN_AUTH_LENENC
+  if options.database != "" {
+    flags = flags | CLIENT_CONNECT_WITH_DB
+  }
+  if secure {
+    flags = flags | CLIENT_SSL
+  }
+  flags
+}
+
+// The 32 bytes the SSLRequest is and the handshake response starts with:
+// capabilities, the largest packet, the character set, 23 zero bytes.
+fn preamble(options: MysqlOptions, secure: Bool) -> Bytes {
+  var out = put_int(Bytes.with_capacity(128), client_capabilities(options, secure), 4)
+  out = put_int(out, MAX_FRAME + 1, 4)
+  out.push(options.charset.wrap_byte())
+  while out.len() < 32 {
+    out.push(0)
+  }
+  out
+}
+
+// The SSLRequest packet: the client's capabilities with TLS, sent before
+// the TLS handshake.
+fn ssl_request(options: MysqlOptions) -> Bytes = preamble(options, true)
+
+// The handshake response (`HandshakeResponse41`): the user, `reply` as the
+// answer of `plugin`, the database when one is named, the plugin.
+fn handshake_response(options: MysqlOptions, plugin: Text, reply: Bytes, secure: Bool) -> Bytes {
+  var out = preamble(options, secure)
+  out.append(options.user.to_bytes())
+  out.push(0)
+  out = put_lenenc_bytes(out, reply)
+  if options.database != "" {
+    out.append(options.database.to_bytes())
+    out.push(0)
+  }
+  out.append(plugin.to_bytes())
+  out.push(0)
+  out
+}
+
+// `outcome`; a failure closes `stream` first.
+fn closing<T: ByteStream, R>(stream: T, outcome: Outcome<R>) -> Outcome<R> = match outcome {
+  Ok(value) => Ok(value)
+  Err(error) => {
+    _ = stream.close()
+    Err(error)
+  }
+}
+
+// Reads the server's handshake from a stream just connected.
+fn greet<T: ByteStream>(stream: T, limits: MysqlLimits) -> Outcome<Greeting> {
+  let (payload, data, at, _) = read_packet(stream, limits.packet.to_int(), Bytes.empty(), 0, 0)?
+  if at != data.len() {
+    return Err(Malformed("bytes after the server's handshake"))
+  }
+  parse_greeting(payload)
+}
+
+// Asks the server of `greeting` for TLS: the SSLRequest packet, after
+// which the TLS handshake starts on the same stream. Refused when the
+// server offers no TLS.
+fn request_tls<T: ByteStream>(stream: T, greeting: Greeting, options: MysqlOptions) -> Outcome<Unit> {
+  if greeting.capabilities & CLIENT_SSL == 0 {
+    return Err(TlsNotOffered)
+  }
+  stream.write_all(frames(ssl_request(options), 1)).map_err(io)
+}
+
+// Answers `greeting` on `stream` and follows the server through its
+// plugin: the handshake response goes out as packet `sequence` (1 on a
+// plain stream, 2 after an SSLRequest), `secure` says that the stream is
+// TLS. An authentication switch is answered with the new plugin's
+// scramble. `caching_sha2_password` ends after the scramble when the
+// server has the account cached; when it asks for full authentication the
+// password is sent on a `secure` stream and the call fails with
+// `FullAuthenticationNeedsTls` on any other. With `options.read_only` the
+// session's transactions are set read only before the client is returned.
+fn authenticate<T: ByteStream>(stream: T, greeting: Greeting, options: MysqlOptions, sequence: Int, secure: Bool) -> Outcome<Client<T>> {
+  if options.user.to_bytes().index_of(b"\x00", 0) != None || options.database.to_bytes().index_of(b"\x00", 0) != None {
+    return Err(Unsupported("a NUL in the user or the database name"))
+  }
+  var plugin = greeting.plugin
+  let first = answer(plugin, options.password, greeting.scramble)?
+  stream.write_all(frames(handshake_response(options, plugin, first, secure), sequence)).map_err(io)?
+  let maximum = options.limits.packet.to_int()
+  var number = sequence + 1
+  var data = Bytes.empty()
+  var at = 0
+  var packets = 0
+  loop {
+    packets = packets + 1
+    if packets > 8 {
+      return Err(Malformed("an authentication of more than 8 packets"))
+    }
+    let (payload, rest, end, next) = read_packet(stream, maximum, data, at, number)?
+    data = rest
+    at = end
+    number = next
+    if payload.is_empty() {
+      return Err(Malformed(SHORT))
+    }
+    let kind = payload[0].to_int()
+    if kind == 0 {
+      break
+    }
+    if kind == 255 {
+      return Err(server_error(payload))
+    }
+    if kind == 254 {
+      if payload.len() == 1 {
+        return Err(UnsupportedPlugin("mysql_old_password"))
+      }
+      let (name, after) = take_nul(payload, 1)?
+      plugin = name.to_text()
+      var scramble = payload.slice(after, payload.len())
+      if !scramble.is_empty() && scramble[scramble.len() - 1] == 0 {
+        scramble = scramble.slice(0, scramble.len() - 1)
+      }
+      let reply = answer(plugin, options.password, scramble)?
+      stream.write_all(frames(reply, number)).map_err(io)?
+      number = number + 1
+    } else if kind == 1 && plugin == CACHING_SHA2 && payload.len() == 2 && payload[1] == 3 {
+      // Fast authentication succeeded: the OK packet follows.
+    } else if kind == 1 && plugin == CACHING_SHA2 && payload.len() == 2 && payload[1] == 4 {
+      if !secure {
+        return Err(FullAuthenticationNeedsTls)
+      }
+      var clear = options.password.to_bytes()
+      clear.push(0)
+      stream.write_all(frames(clear, number)).map_err(io)?
+      number = number + 1
+    } else if kind == 1 {
+      return Err(Malformed("authentication data no plugin asked for"))
+    } else {
+      return Err(Malformed("a packet that is no step of the authentication"))
+    }
+  }
+  if at != data.len() {
+    return Err(Malformed("bytes after the authentication"))
+  }
+  let client = Client { stream, limits = options.limits, version = greeting.version, connection = greeting.connection, secure }
+  if options.read_only {
+    var body = b"\x03"
+    body.append(READ_ONLY.to_bytes())
+    _ = simple(client, body)?
+  }
+  Ok(client)
+}
+
+// A client on a stream just connected to a server: reads the handshake and
+// authenticates as `options` says, without TLS. A failure closes the
+// stream.
+fn start<T: ByteStream>(stream: T, options: MysqlOptions) -> Outcome<Client<T>> = closing(stream, open(stream, options))
+
+fn open<T: ByteStream>(stream: T, options: MysqlOptions) -> Outcome<Client<T>> {
+  let greeting = greet(stream, options.limits)?
+  authenticate(stream, greeting, options, 1, false)
+}
+
+// A TCP connection to `endpoint` that gives up after
+// `options.connect_timeout`, its reads after `options.read_timeout`.
+fn dial(endpoint: Endpoint, options: MysqlOptions) -> Outcome<TcpStream> {
+  let stream = TcpStream.connect_within(endpoint.address, endpoint.port, options.connect_timeout).map_err(io)?
+  closing(stream, stream.set_idle_timeout(options.read_timeout.to_ms()).map_err(io))?
+  Ok(stream)
+}
+
+// A client of the server at `endpoint` over plain TCP.
+fn connect(endpoint: Endpoint, options: MysqlOptions) -> Outcome<Client<TcpStream>> {
+  let stream = dial(endpoint, options)?
+  start(stream, options)
+}
+
+// A client of the server at `endpoint` over TLS: the server's handshake is
+// read on the TCP stream, the SSLRequest sent, the TLS session opened
+// with `options.tls` for `options.server_name` (the endpoint's address
+// when empty), and the account authenticated inside it. Refused with
+// `TlsNotOffered` when the server offers no TLS.
+fn connect_tls(endpoint: Endpoint, options: MysqlOptions) -> Outcome<Client<TlsStream>> {
+  let stream = dial(endpoint, options)?
+  let greeting = closing(stream, greet(stream, options.limits))?
+  closing(stream, request_tls(stream, greeting, options))?
+  let name = if options.server_name == "" { endpoint.address } else { options.server_name }
+  let secure = closing(stream, Tls.client(stream, name, options.tls).map_err(io))?
+  closing(secure, authenticate(secure, greeting, options, 2, true))
+}
+
+// ---- commands ---------------------------------------------------------------
+
+// `outcome`; a failure after which the connection is out of step closes
+// the stream, so the connection is not used again.
+fn settle<T: ByteStream, R>(client: Client<T>, outcome: Outcome<R>) -> Outcome<R> = match outcome {
+  Ok(value) => Ok(value)
+  Err(error) => {
+    if !reusable(error) {
+      _ = client.stream.close()
+    }
+    Err(error)
+  }
+}
+
+// Sends `body` as a command: packet 0 of a new exchange.
+fn send<T: ByteStream>(client: Client<T>, body: Bytes) -> Outcome<Unit> = client.stream.write_all(frames(body, 0)).map_err(io)
+
+// Sends `body` and reads the one packet that answers it: OK or the
+// server's error.
+fn simple<T: ByteStream>(client: Client<T>, body: Bytes) -> Outcome<Done> {
+  send(client, body)?
+  let (payload, data, at, _) = read_packet(client.stream, client.limits.packet.to_int(), Bytes.empty(), 0, 1)?
+  if at != data.len() {
+    return Err(Malformed(TRAILING))
+  }
+  if payload.is_empty() {
+    return Err(Malformed(SHORT))
+  }
+  let kind = payload[0].to_int()
+  if kind == 0 {
+    return parse_done(payload)
+  }
+  if kind == 255 {
+    return Err(server_error(payload))
+  }
+  Err(Malformed("a reply that is neither OK nor an error"))
+}
+
+// Whether the server answers: `COM_PING`.
+fn ping<T: ByteStream>(client: Client<T>) -> Outcome<Unit> {
+  _ = settle(client, simple(client, b"\x0e"))?
+  Ok(())
+}
+
+// Ends the session: `COM_QUIT`, then the stream is closed.
+fn quit<T: ByteStream>(client: Client<T>) -> Outcome<Unit> {
+  let sent = send(client, b"\x01")
+  _ = client.stream.close()
+  sent
+}
+
+// ---- tests ------------------------------------------------------------------
+
+// A connected pair of pipe ends; each gives up on a peer silent for 5 s,
+// so a read that never completes fails the test instead of hanging it.
+test fn connected() -> Result<(PipeStream, PipeStream), IoError> {
+  let (client, server) = Pipe.pair()
+  client.set_idle_timeout(5000)?
+  server.set_idle_timeout(5000)?
+  Ok((client, server))
+}
+
+// Flushes the task's pending writes as their own delivery and waits 50 ms,
+// so the next write is a separate delivery the reader reads on its own.
+test fn pause() -> Result<Unit, IoError> {
+  let (a, b) = Pipe.pair()
+  a.set_idle_timeout(50)?
+  _ = a.read(1)?
+  _ = b.close()
+  Ok(())
+}
+
+// The requests of `exchanges` read byte for byte and each answered with
+// its reply; an empty request writes the reply at once. A request that
+// differs, or a client that stops early, is logged in hex and ends the
+// script. Returns the bytes read beyond the script.
+test fn play<S: ByteStream>(server: S, exchanges: List<(Bytes, Bytes)>) -> Result<Option<Bytes>, IoError> {
+  var data = Bytes.empty()
+  for exchange in exchanges {
+    let request = exchange.0
+    while data.len() < request.len() {
+      match server.read(READ_SIZE)? {
+        Data(more) => data.append(more)
+        Eof => {
+          log("script: the client stopped after {hex(data)}, expected {hex(request)}")
+          return Ok(None)
+        }
+      }
+    }
+    let got = data.slice(0, request.len())
+    if got != request {
+      log("script: expected {hex(request)}, got {hex(got)}")
+      return Ok(None)
+    }
+    data = data.slice(request.len(), data.len())
+    server.write_all(exchange.1)?
+  }
+  Ok(Some(data))
+}
+
+// A scripted server that closes the stream after its last reply.
+test fn script<S: ByteStream>(server: S, exchanges: List<(Bytes, Bytes)>) -> Result<Unit, IoError> {
+  _ = play(server, exchanges)?
+  server.close()
+}
+
+// A scripted server that, after its last reply, reads until the client
+// closes and sends the number of bytes the client sent beyond the script
+// on `extra`; -1 when the script was not followed.
+test fn script_counting<S: ByteStream>(server: S, exchanges: List<(Bytes, Bytes)>, extra: Sender<Int>) -> Result<Unit, IoError> {
+  match play(server, exchanges)? {
+    None => {
+      extra.send(0 - 1)
+    }
+    Some(rest) => {
+      var count = rest.len()
+      var open = true
+      while open {
+        match server.read(READ_SIZE)? {
+          Data(more) => {
+            count = count + more.len()
+          }
+          Eof => {
+            open = false
+          }
+        }
+      }
+      extra.send(count)
+    }
+  }
+  server.close()
+}
+
+// The client end of a pipe whose other end runs `exchanges`.
+test fn scripted(exchanges: List<(Bytes, Bytes)>) -> Result<PipeStream, IoError> {
+  let (client, server) = connected()?
+  spawn script(server, exchanges)
+  Ok(client)
+}
+
+// As `scripted`, with the count of bytes sent beyond the script.
+test fn counted(exchanges: List<(Bytes, Bytes)>) -> Result<(PipeStream, Receiver<Int>), IoError> {
+  let (client, server) = connected()?
+  let (extra, counts) = Channel.bounded(1)
+  spawn script_counting(server, exchanges, extra)
+  Ok((client, counts))
+}
+
+test fn nibble(b: Byte) -> Int = if b >= b'a' { (b - b'a').to_int() + 10 } else { (b - b'0').to_int() }
+
+// The bytes lowercase hex `text` spells.
+test fn unhex(text: Text) -> Bytes {
+  let digits = text.to_bytes()
+  var out = Bytes.empty()
+  var i = 0
+  while i + 1 < digits.len() {
+    out.push((nibble(digits[i]) * 16 + nibble(digits[i + 1])).wrap_byte())
+    i = i + 2
+  }
+  out
+}
+
+test fn zeros(count: Int) -> Bytes {
+  var out = Bytes.with_capacity(count)
+  while out.len() < count {
+    out.push(0)
+  }
+  out
+}
+
+// `count` bytes that are not all alike, built by doubling.
+test fn filled(count: Int) -> Bytes {
+  var out = b"0123456789abcdef"
+  while out.len() < count {
+    let more = out
+    out.append(more)
+  }
+  out.slice(0, count)
+}
+
+test fn ok_packet(sequence: Int) -> Bytes = frames(b"\x00\x00\x00\x02\x00\x00\x00", sequence)
+
+test fn eof_packet(sequence: Int) -> Bytes = frames(b"\xfe\x00\x00\x02\x00", sequence)
+
+test fn err_payload(code: Int, state: Text, message: Text) -> Bytes {
+  var payload = put_int(b"\xff", code, 2)
+  if state != "" {
+    payload.push(b'#')
+    payload.append(state.to_bytes())
+  }
+  payload.append(message.to_bytes())
+  payload
+}
+
+test fn err_packet(sequence: Int, code: Int, state: Text, message: Text) -> Bytes = frames(err_payload(code, state, message), sequence)
+
+// The scramble every scripted handshake sends: the bytes 1 to 20.
+test fn nonce() -> Bytes = unhex("0102030405060708090a0b0c0d0e0f1011121314")
+
+// The capabilities of a MySQL 8.0 server, with and without TLS.
+test fn with_tls() -> Int = 0xDFFFFFFF
+test fn without_tls() -> Int = 0xDFFFF7FF
+
+// The handshake packet of a server "8.0.36", connection 77, whose default
+// plugin is `plugin` and whose scramble is `salt`, written field by field
+// as the protocol documents it.
+test fn greeting_with(plugin: Text, salt: Bytes, capabilities: Int) -> Bytes {
+  var payload = b"\x0a8.0.36\x00"
+  payload = put_int(payload, 77, 4)
+  payload.append(salt.slice(0, 8))
+  payload.push(0)
+  payload = put_int(payload, capabilities & 65535, 2)
+  payload.push(255)
+  payload = put_int(payload, 2, 2)
+  payload = put_int(payload, capabilities >> 16, 2)
+  payload.push(21)
+  payload.append(zeros(10))
+  payload.append(salt.slice(8, 20))
+  payload.push(0)
+  payload.append(plugin.to_bytes())
+  payload.push(0)
+  payload
+}
+
+test fn hello(plugin: Text) -> (Bytes, Bytes) = (Bytes.empty(), frames(greeting_with(plugin, nonce(), with_tls()), 0))
+
+// The handshake response a client sends, assembled by hand: the capability
+// bytes, 16 MiB as the largest packet, character set 45, 23 zero bytes, the
+// user, the answer with its length, the database when given, the plugin.
+test fn response(flags: Bytes, user: Text, reply: Bytes, database: Text, plugin: Text) -> Bytes {
+  var payload = flags
+  payload.append(b"\x00\x00\x00\x01\x2d")
+  payload.append(zeros(23))
+  payload.append(user.to_bytes())
+  payload.push(0)
+  payload.push(reply.len().wrap_byte())
+  payload.append(reply)
+  if database != "" {
+    payload.append(database.to_bytes())
+    payload.push(0)
+  }
+  payload.append(plugin.to_bytes())
+  payload.push(0)
+  payload
+}
+
+// The capability bytes of a response on a plain stream without a database.
+test fn plain_flags() -> Bytes = b"\x05\xa2\x28\x00"
+
+test fn account() -> MysqlOptions = MysqlOptions { user = "app", password = "secret" }
+
+// The answers to `nonce()` for the password "secret", computed outside
+// this module from the plugins' definitions.
+test fn native_answer() -> Bytes = unhex("b32bb3a583e1340c0a1108d58b1be49781ad8c2f")
+test fn sha2_answer() -> Bytes = unhex("746ebe205d56a0707acb3e796e834e0dd7b1d61743b26bd5202c7a623230c7c9")
+
+test fn native_response() -> Bytes = frames(response(plain_flags(), "app", native_answer(), "", NATIVE), 1)
+test fn sha2_response() -> Bytes = frames(response(plain_flags(), "app", sha2_answer(), "", CACHING_SHA2), 1)
+
+// The error of a handshake that must not succeed.
+test fn refusal<T>(outcome: Outcome<Client<T>>) -> Option<MysqlError> = match outcome {
+  Ok(_) => None
+  Err(error) => Some(error)
+}
+
+test "integers are little-endian at every width, and a length takes its shortest form" {
+  assert put_int(Bytes.empty(), 0x030201, 3) == b"\x01\x02\x03"
+  assert put_int(Bytes.empty(), -2, 8) == b"\xfe\xff\xff\xff\xff\xff\xff\xff"
+  assert int_at(b"\x00\x01\x02\x03\x04", 1, 4) == 0x04030201
+  assert int_at(b"\xfe\xff\xff\xff\xff\xff\xff\xff", 0, 8) == -2
+  assert put_lenenc(Bytes.empty(), 0) == b"\x00"
+  assert put_lenenc(Bytes.empty(), 250) == b"\xfa"
+  assert put_lenenc(Bytes.empty(), 251) == b"\xfc\xfb\x00"
+  assert put_lenenc(Bytes.empty(), 65535) == b"\xfc\xff\xff"
+  assert put_lenenc(Bytes.empty(), 65536) == b"\xfd\x00\x00\x01"
+  assert put_lenenc(Bytes.empty(), 16777215) == b"\xfd\xff\xff\xff"
+  assert put_lenenc(Bytes.empty(), 16777216) == b"\xfe\x00\x00\x00\x01\x00\x00\x00\x00"
+  for n in [0, 250, 251, 65535, 65536, 16777215, 16777216, 9223372036854775807] {
+    var bytes = put_lenenc(Bytes.empty(), n)
+    bytes.push(7)
+    assert take_lenenc(bytes, 0) == Ok((Some(n), bytes.len() - 1))
+  }
+}
+
+test "a length-encoded field is read within its packet, NULL told from empty" {
+  assert take_lenenc(b"\xfb", 0) == Ok((None, 1))
+  assert take_lenenc(b"\xff", 0) == Err(Malformed("a length that starts with 0xFF"))
+  assert take_lenenc(b"\xfc\x01", 0) == Err(Malformed(SHORT))
+  assert take_lenenc(Bytes.empty(), 0) == Err(Malformed(SHORT))
+  assert take_lenenc(b"\xfe\xff\xff\xff\xff\xff\xff\xff\xff", 0) == Err(Malformed("a length above the largest integer"))
+  assert take_lenenc_bytes(b"\x03abcd", 0) == Ok((Some(b"abc"), 4))
+  assert take_lenenc_bytes(b"\x00", 0) == Ok((Some(Bytes.empty()), 1))
+  assert take_lenenc_bytes(b"\xfbx", 0) == Ok((None, 1))
+  assert take_lenenc_bytes(b"\x05abc", 0) == Err(Malformed(SHORT))
+  assert take_lenenc_bytes(b"\xfe\xff\xff\xff\xff\xff\xff\xff\x7f", 0) == Err(Malformed(SHORT))
+  assert take_nul(b"abc\x00def", 0) == Ok((b"abc", 4))
+  assert take_nul(b"abc", 1) == Ok((b"bc", 3))
+  assert take_int(b"\x01\x02", 1, 2) == Err(Malformed(SHORT))
+  assert take_bytes(b"\x01\x02", 1, 1) == Ok((b"\x02", 2))
+}
+
+test "a packet is its length, its sequence number and its payload" {
+  assert frames(b"\x0e", 0) == b"\x01\x00\x00\x00\x0e"
+  assert frames(Bytes.empty(), 3) == b"\x00\x00\x00\x03"
+  assert frames(b"abc", 255) == b"\x03\x00\x00\xffabc"
+  assert frames(b"abc", 256) == b"\x03\x00\x00\x00abc"
+  let (client, server) = connected()?
+  server.write_all(b"\x03\x00\x00\xffabc\x00\x00\x00\x00\x01\x00\x00\x01z")?
+  let (first, one, at, second) = read_packet(client, 1024, Bytes.empty(), 0, 255)?
+  assert first == b"abc" && second == 256
+  let (empty, two, after, third) = read_packet(client, 1024, one, at, second)?
+  assert empty == Bytes.empty() && third == 257
+  let (last, rest, end, fourth) = read_packet(client, 1024, two, after, third)?
+  assert last == b"z" && fourth == 258 && end == rest.len()
+}
+
+test "a packet split over many small writes is read as one, the next kept" {
+  let (client, server) = connected()?
+  let parts = [b"\x05\x00", b"\x00\x01he", b"llo\x01", b"\x00\x00\x02", b"!"]
+  for part in parts {
+    server.write_all(part)?
+    pause()?
+  }
+  let (first, data, at, next) = read_packet(client, 1024, Bytes.empty(), 0, 1)?
+  assert first == b"hello"
+  let (second, rest, end, after) = read_packet(client, 1024, data, at, next)?
+  assert second == b"!" && after == 3 && end == rest.len()
+  assert client.received_batches() == 5
+}
+
+// A pipe holds 16 MiB of unread bytes, so `wire` goes over it in two
+// halves: the first is read into the buffer before the second is written.
+test fn read_halves(client: PipeStream, server: PipeStream, wire: Bytes, maximum: Int, sequence: Int) -> Outcome<(Bytes, Int)> {
+  let half = wire.len() / 2
+  server.write_all(wire.slice(0, half)).map_err(io)?
+  let (begun, start) = fill(client, Bytes.empty(), 0, half)?
+  server.write_all(wire.slice(half, wire.len())).map_err(io)?
+  server.close().map_err(io)?
+  let (payload, data, at, next) = read_packet(client, maximum, begun, start, sequence)?
+  if at == data.len() { Ok((payload, next)) } else { Err(Malformed(TRAILING)) }
+}
+
+// What reading one packet of at most `maximum` bytes from `wire` gives.
+test fn read_back(wire: Bytes, maximum: Int, sequence: Int) -> Result<Outcome<(Bytes, Int)>, IoError> {
+  let (client, server) = connected()?
+  let got = read_halves(client, server, wire, maximum, sequence)
+  _ = client.close()
+  Ok(got)
+}
+
+// Whether `got` is `payload` and the sequence number `next`: a failed
+// comparison of 16 MiB is not printed.
+test fn carries(got: Outcome<(Bytes, Int)>, payload: Bytes, next: Int) -> Bool = got == Ok((payload, next))
+
+test "a payload of 16 MiB - 1 is followed by an empty frame, and its frames are joined when read" {
+  let full = filled(MAX_FRAME)
+  let wire = frames(full, 0)
+  assert wire.len() == MAX_FRAME + 8
+  assert wire.slice(0, 4) == b"\xff\xff\xff\x00"
+  assert wire.slice(4, 20) == b"0123456789abcdef"
+  assert wire.slice(MAX_FRAME + 4, MAX_FRAME + 8) == b"\x00\x00\x00\x01"
+  assert carries(read_back(wire, 67108864, 0)?, full, 2)
+  var longer = full
+  longer.append(b"tail!")
+  let two = frames(longer, 7)
+  assert two.len() == MAX_FRAME + 13
+  assert two.slice(0, 4) == b"\xff\xff\xff\x07"
+  assert two.slice(MAX_FRAME + 4, MAX_FRAME + 13) == b"\x05\x00\x00\x08tail!"
+  assert carries(read_back(two, 67108864, 7)?, longer, 9)
+  assert frames(filled(MAX_FRAME - 1), 0).len() == MAX_FRAME + 3
+  assert carries(read_back(two, MAX_FRAME + 5, 7)?, longer, 9)
+  assert read_back(two, MAX_FRAME + 4, 7)? == Err(PacketTooLarge)
+  var skipped = wire
+  skipped[MAX_FRAME + 7] = 2
+  assert read_back(skipped, 67108864, 0)? == Err(OutOfOrder(1, 2))
+}
+
+test "a frame out of sequence is refused, naming the number expected and the one read" {
+  assert read_back(b"\x01\x00\x00\x02a", 1024, 1)? == Err(OutOfOrder(1, 2))
+  assert read_back(b"\x01\x00\x00\x00a", 1024, 1)? == Err(OutOfOrder(1, 0))
+  assert read_back(b"\x01\x00\x00\x00a", 1024, 256)? == Ok((b"a", 257))
+  assert read_back(b"\x01\x00\x00\x01a", 1024, 256)? == Err(OutOfOrder(0, 1))
+}
+
+test "a packet above the limit is refused before its payload is read, and a cut one is closed" {
+  let (client, server) = connected()?
+  server.write_all(b"\x01\x04\x00\x00")?
+  assert read_packet(client, 1024, Bytes.empty(), 0, 0) == Err(PacketTooLarge)
+  assert read_back(b"\x03\x00\x00\x00abc", 3, 0)? == Ok((b"abc", 1))
+  assert read_back(b"\x03\x00\x00\x00ab", 1024, 0)? == Err(Closed)
+  assert read_back(b"\x03\x00", 1024, 0)? == Err(Closed)
+  assert read_back(Bytes.empty(), 1024, 0)? == Err(Closed)
+}
+
+test "the limits default to 64 MiB packets, 16 MiB rows, a million rows and 4,096 columns" {
+  let limits = MysqlLimits {}
+  assert limits.packet.to_int() == 67108864
+  assert limits.row.to_int() == 16777216
+  assert limits.rows == 1000000
+  assert limits.columns == 4096
+}
+
+test "an error packet is the server's code, SQL state and message" {
+  assert server_error(err_payload(1064, "42000", "You have an error in your SQL syntax")) == Server(ServerError { code = 1064, sql_state = "42000", message = "You have an error in your SQL syntax" })
+  assert server_error(err_payload(1040, "", "Too many connections")) == Server(ServerError { code = 1040, sql_state = "", message = "Too many connections" })
+  assert server_error(b"\xff\x01") == Malformed("an error packet shorter than its code")
+  assert parse_done(b"\x00\x03\xfc\x10\x27\x02\x00\x01\x00") == Ok(Done { affected = 3, last_insert_id = 10000, status = 2, warnings = 1 })
+  assert parse_done(b"\x00\x03") == Err(Malformed(SHORT))
+}
+
+test "no description of an error holds the server's message, and each names its cause" {
+  let secret = "SELECT secret FROM vault"
+  let failed = Server(ServerError { code = 1064, sql_state = "42000", message = "near '{secret}' for user 'app'" })
+  assert describe(failed) == "server error 1064 (42000)"
+  assert !describe(failed).contains("secret")
+  assert io_error(failed).message == "mysql: server error 1064 (42000)"
+  assert describe(Server(ServerError { code = 1040, sql_state = "", message = "Too many connections" })) == "server error 1040"
+  assert describe(OutOfOrder(1, 2)) == "packet 2 where packet 1 was expected"
+  assert describe(FullAuthenticationNeedsTls).contains("TLS")
+  assert describe(UnsupportedPlugin("sha256_password")) == "authentication plugin sha256_password is not supported"
+  assert describe(WrongParameterCount(2, 1)) == "1 parameters for a statement with 2"
+  assert describe(Io("connect 127.0.0.1:1: connection refused")) == "connect 127.0.0.1:1: connection refused"
+}
+
+test "the server's handshake gives its version, connection, capabilities, scramble and plugin" {
+  let packet = greeting_with(CACHING_SHA2, nonce(), with_tls())
+  assert parse_greeting(packet) == Ok(Greeting {
+    version = "8.0.36", connection = 77, capabilities = with_tls(), charset = 255, status = 2, scramble = nonce(), plugin = CACHING_SHA2
+  })
+  assert parse_greeting(b"\x09" + packet.slice(1, packet.len())) == Err(Unsupported("protocol version 9"))
+  assert parse_greeting(err_payload(1040, "08004", "Too many connections")) == Err(Server(ServerError { code = 1040, sql_state = "08004", message = "Too many connections" }))
+  assert parse_greeting(greeting_with(NATIVE, nonce(), with_tls() - CLIENT_PLUGIN_AUTH)) == Err(Unsupported("a server without protocol 41 and authentication plugins"))
+  assert parse_greeting(packet.slice(0, 23)) == Err(Unsupported("a server without protocol 41"))
+  assert parse_greeting(packet.slice(0, 30)) == Err(Malformed(SHORT))
+  assert parse_greeting(Bytes.empty()) == Err(Malformed(SHORT))
+}
+
+test "both scrambles give the known answers, and an empty password gives none" {
+  assert hex(native_scramble("secret", nonce())) == "b32bb3a583e1340c0a1108d58b1be49781ad8c2f"
+  assert hex(native_scramble("päss word", nonce())) == "2ef1b5e4183eb62e11383e61f20705a7a3eda4c0"
+  assert hex(native_scramble("secret", b"abcdefghijklmnopqrst")) == "8817c50fa779daef010ee7577825b0847df9842e"
+  assert hex(sha2_scramble("secret", nonce())) == "746ebe205d56a0707acb3e796e834e0dd7b1d61743b26bd5202c7a623230c7c9"
+  assert hex(sha2_scramble("päss word", nonce())) == "97af830f32e8b1f74036bd08fd7c807ec43c055b056f31af2ab700d696566d39"
+  assert hex(sha2_scramble("secret", b"abcdefghijklmnopqrst")) == "c76e2898612a4cf042c77fa8c4702c4c64c0c2c557c53c4d75595aaa6abae809"
+  assert native_scramble("", nonce()) == Bytes.empty()
+  assert sha2_scramble("", nonce()) == Bytes.empty()
+  assert answer("mysql_clear_password", "secret", nonce()) == Err(UnsupportedPlugin("mysql_clear_password"))
+}
+
+test "the handshake response is the capabilities, the user, the answer, the database and the plugin" {
+  let options = MysqlOptions { user = "app", password = "secret", database = "shop" }
+  var expected = b"\x0d\xa2\x28\x00\x00\x00\x00\x01\x2d"
+  expected.append(zeros(23))
+  expected.append(b"app\x00\x14\xb3\x2b\xb3\xa5\x83\xe1\x34\x0c\x0a\x11\x08\xd5\x8b\x1b\xe4\x97\x81\xad\x8c\x2f")
+  expected.append(b"shop\x00mysql_native_password\x00")
+  assert handshake_response(options, NATIVE, native_answer(), false) == expected
+  assert handshake_response(account(), CACHING_SHA2, sha2_answer(), false) == response(plain_flags(), "app", sha2_answer(), "", CACHING_SHA2)
+  assert handshake_response(account(), CACHING_SHA2, sha2_answer(), true) == response(b"\x05\xaa\x28\x00", "app", sha2_answer(), "", CACHING_SHA2)
+  assert handshake_response(MysqlOptions { user = "app" }, NATIVE, Bytes.empty(), false) == response(plain_flags(), "app", Bytes.empty(), "", NATIVE)
+  var request = b"\x0d\xaa\x28\x00\x00\x00\x00\x01\x2d"
+  request.append(zeros(23))
+  assert ssl_request(options) == request
+}
+
+test "mysql_native_password: the SHA-1 scramble answers the handshake" {
+  let stream = scripted([hello(NATIVE), (native_response(), ok_packet(2))])?
+  let client = start(stream, account())?
+  assert client.version == "8.0.36"
+  assert client.connection == 77
+  assert !client.secure
+}
+
+test "caching_sha2_password: the SHA-256 scramble and the fast path" {
+  let stream = scripted([hello(CACHING_SHA2), (sha2_response(), frames(b"\x01\x03", 2) + ok_packet(3))])?
+  let client = start(stream, account())?
+  assert client.connection == 77
+}
+
+test "caching_sha2_password: full authentication on a plain stream is the typed error that names TLS, and no password is sent" {
+  let (stream, counts) = counted([hello(CACHING_SHA2), (sha2_response(), frames(b"\x01\x04", 2))])?
+  assert refusal(start(stream, account())) == Some(FullAuthenticationNeedsTls)
+  assert counts.receive() == Some(0)
+  assert describe(FullAuthenticationNeedsTls) == "the server asks for the password itself (caching_sha2_password full authentication), which is sent over TLS only"
+}
+
+test "the TLS request is the SSLRequest packet, refused when the server offers no TLS" {
+  let options = MysqlOptions { user = "app", password = "secret", database = "shop" }
+  let (stream, counts) = counted([(frames(ssl_request(options), 1), Bytes.empty())])?
+  let offered = parse_greeting(greeting_with(CACHING_SHA2, nonce(), with_tls()))?
+  assert request_tls(stream, offered, options) == Ok(())
+  _ = stream.close()
+  assert counts.receive() == Some(0)
+  let (other, none) = counted([])?
+  let plain = parse_greeting(greeting_with(CACHING_SHA2, nonce(), without_tls()))?
+  assert request_tls(other, plain, options) == Err(TlsNotOffered)
+  _ = other.close()
+  assert none.receive() == Some(0)
+}
+
+test "caching_sha2_password: full authentication after the TLS request sends the password, at sequence 2" {
+  let reply = frames(response(b"\x05\xaa\x28\x00", "app", sha2_answer(), "", CACHING_SHA2), 2)
+  let stream = scripted([
+    (reply, frames(b"\x01\x04", 3)),
+    (frames(b"secret\x00", 4), ok_packet(5))
+  ])?
+  let greeting = parse_greeting(greeting_with(CACHING_SHA2, nonce(), with_tls()))?
+  let client = authenticate(stream, greeting, account(), 2, true)?
+  assert client.secure
+}
+
+test "an authentication switch is answered in either direction with the new scramble" {
+  let salt = b"abcdefghijklmnopqrst"
+  var to_native = b"\xfemysql_native_password\x00"
+  to_native.append(salt)
+  to_native.push(0)
+  let first = scripted([
+    hello(CACHING_SHA2),
+    (sha2_response(), frames(to_native, 2)),
+    (frames(unhex("8817c50fa779daef010ee7577825b0847df9842e"), 3), ok_packet(4))
+  ])?
+  assert refusal(start(first, account())) == None
+  var to_sha2 = b"\xfecaching_sha2_password\x00"
+  to_sha2.append(salt)
+  to_sha2.push(0)
+  let second = scripted([
+    hello(NATIVE),
+    (native_response(), frames(to_sha2, 2)),
+    (frames(unhex("c76e2898612a4cf042c77fa8c4702c4c64c0c2c557c53c4d75595aaa6abae809"), 3), frames(b"\x01\x03", 4) + ok_packet(5))
+  ])?
+  assert refusal(start(second, account())) == None
+}
+
+test "any other plugin is refused by name, in the handshake and in a switch, and gets no answer" {
+  let (first, none) = counted([hello("sha256_password")])?
+  assert refusal(start(first, account())) == Some(UnsupportedPlugin("sha256_password"))
+  assert none.receive() == Some(0)
+  let (second, after) = counted([hello(NATIVE), (native_response(), frames(b"\xfemysql_clear_password\x00", 2))])?
+  assert refusal(start(second, account())) == Some(UnsupportedPlugin("mysql_clear_password"))
+  assert after.receive() == Some(0)
+  let (third, old) = counted([hello(NATIVE), (native_response(), frames(b"\xfe", 2))])?
+  assert refusal(start(third, account())) == Some(UnsupportedPlugin("mysql_old_password"))
+  assert old.receive() == Some(0)
+}
+
+test "a refused account is the server's error, and a handshake that never ends is cut" {
+  let denied = scripted([hello(NATIVE), (native_response(), err_packet(2, 1045, "28000", "Access denied for user 'app'@'localhost' (using password: YES)"))])?
+  let error = refusal(start(denied, account()))?
+  assert error == Server(ServerError { code = 1045, sql_state = "28000", message = "Access denied for user 'app'@'localhost' (using password: YES)" })
+  assert describe(error) == "server error 1045 (28000)"
+  let odd = scripted([hello(NATIVE), (native_response(), frames(b"\x01\x03", 2))])?
+  assert refusal(start(odd, account())) == Some(Malformed("authentication data no plugin asked for"))
+  let wrong = scripted([hello(NATIVE), (native_response(), ok_packet(3))])?
+  assert refusal(start(wrong, account())) == Some(OutOfOrder(2, 3))
+  let silent = scripted([hello(NATIVE), (native_response(), Bytes.empty())])?
+  assert refusal(start(silent, account())) == Some(Closed)
+  let named = start(scripted([hello(NATIVE)])?, MysqlOptions { user = "a\x00b" })
+  assert refusal(named) == Some(Unsupported("a NUL in the user or the database name"))
+}
+
+test "a read-only session sets its transactions read only before it is returned, and no other session sends a statement" {
+  var set = b"\x03"
+  set.append(READ_ONLY.to_bytes())
+  assert READ_ONLY == "SET SESSION TRANSACTION READ ONLY"
+  let (stream, counts) = counted([hello(NATIVE), (native_response(), ok_packet(2)), (frames(set, 0), ok_packet(1))])?
+  let client = start(stream, MysqlOptions { user = "app", password = "secret", read_only = true })?
+  _ = client.stream.close()
+  assert counts.receive() == Some(0)
+  let (plain, none) = counted([hello(NATIVE), (native_response(), ok_packet(2))])?
+  let other = start(plain, account())?
+  _ = other.stream.close()
+  assert none.receive() == Some(0)
+  let refused = scripted([hello(NATIVE), (native_response(), ok_packet(2)), (frames(set, 0), err_packet(1, 1227, "42000", "Access denied"))])?
+  assert refusal(start(refused, MysqlOptions { user = "app", password = "secret", read_only = true })) == Some(Server(ServerError { code = 1227, sql_state = "42000", message = "Access denied" }))
+}
+
+test "ping is answered with OK, and quit sends COM_QUIT and closes" {
+  let (stream, counts) = counted([(b"\x01\x00\x00\x00\x0e", ok_packet(1)), (b"\x01\x00\x00\x00\x0e", err_packet(1, 1053, "08S01", "Server shutdown in progress")), (b"\x01\x00\x00\x00\x01", Bytes.empty())])?
+  let client = Client { stream }
+  assert ping(client) == Ok(())
+  assert ping(client) == Err(Server(ServerError { code = 1053, sql_state = "08S01", message = "Server shutdown in progress" }))
+  assert quit(client) == Ok(())
+  assert counts.receive() == Some(0)
+}
+
+test "a reply that is no reply ends the connection: it is closed, not reused" {
+  let (stream, counts) = counted([(b"\x01\x00\x00\x00\x0e", frames(b"\x07", 1))])?
+  let client = Client { stream }
+  assert ping(client) == Err(Malformed("a reply that is neither OK nor an error"))
+  assert counts.receive() == Some(0)
+  let (late, more) = counted([(b"\x01\x00\x00\x00\x0e", ok_packet(1) + ok_packet(2))])?
+  assert ping(Client { stream = late }) == Err(Malformed(TRAILING))
+  assert more.receive() == Some(0)
+}
