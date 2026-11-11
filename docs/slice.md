@@ -795,8 +795,9 @@ line per built executable: `built TARGET/debug/<executable>`. Exit status: 0 bui
 diagnostics (in any file, rendered with that file's path), 2 cargo failed (its output passed
 through), 3 a file could not be read or written.
 
-A release build on Linux (`--release`) writes two more files and links the executables with
-the first (`story:rust-peak-memory-at-one-connection`, row 3.8 of `docs/quality.md`):
+A release build on Linux (`--release`) of a program with an executable writes two more files
+and links the executables with the first (`story:rust-peak-memory-at-one-connection`, row 3.8
+of `docs/quality.md`); a program without an executable gets none of the three additions:
 
 ```
 DIR/layout.ld           a linker script added to the linker's own layout (`INSERT`): in `.text`, the functions of the
@@ -816,10 +817,17 @@ no `rustflags`, so they reach the executables' links only and replace nothing th
 configured. The build script is for a `cargo build --release` by hand in `DIR`. The script
 changes no instruction; the size of an executable changes by the padding between its
 functions (tens of bytes, either way). The LLVM linker (rustc's on x86-64) and GNU ld read
-it. A linker that does not (gold, which has no `INSERT`) fails the link: the build then prints a note, writes
-the project without the three additions, builds again and leaves `TARGET/ignite-no-release-layout`,
-so later release builds into `TARGET` do not try. A dev build's manifest has neither key, so
-`cargo build` of it compiles nothing more.
+it. A linker that does not (gold, which has no `INSERT`) fails the link. When a release build
+with the script fails, the driver asks the linker: in `TARGET/ignite-layout-probe` it builds a
+program of one empty `main` with the script and, if that fails, without it, by the same cargo
+in the same environment and for the same target, showing no output of the two. Only when the
+first fails and the second builds does the driver print a note, leave
+`TARGET/ignite-no-release-layout` (later release builds into `TARGET` do not try the script),
+write the manifest without the two keys and build again. A build that failed for any other
+reason fails once, with cargo's output as it is, and leaves the layout on. A manifest without
+the two keys (after that fallback, and a dev build's) names neither file: `layout.ld` and
+`layout.rs` of an earlier release build stay in `DIR` unused, and `cargo build` of it compiles
+nothing more.
 
 ## 7 Substrate `ignite-io`
 

@@ -1470,11 +1470,54 @@ const LAYOUT_BUILD_RS: &str = "fn main() {
 /// project with [`RELEASE_LAYOUT`] as `layout.ld`, linked into its
 /// executables. The manifest names the script's link arguments by a
 /// `links` key with a build script; a dev build's manifest has neither,
-/// so `cargo build` of it compiles nothing more.
-pub fn write_release_project(project: &GeneratedProject, out: &Path) -> io::Result<()> {
+/// so `cargo build` of it compiles nothing more. `false` for a program
+/// without an executable, which is written as [`write_project`] writes it:
+/// nothing of it is linked with the script, and cargo refuses link
+/// arguments for executables from the build script of a package that has
+/// none.
+pub fn write_release_project(project: &GeneratedProject, out: &Path) -> io::Result<bool> {
+    if project.executables.is_empty() {
+        write_project(project, out)?;
+        return Ok(false);
+    }
     write_with_manifest(project, &release_manifest(&project.cargo_toml), out)?;
+    write_layout_files(out)?;
+    Ok(true)
+}
+
+/// [`RELEASE_LAYOUT`] and the build script that names it, in the project
+/// directory `out`.
+fn write_layout_files(out: &Path) -> io::Result<()> {
     write_if_changed(out.join(LAYOUT_SCRIPT), RELEASE_LAYOUT)?;
     write_if_changed(out.join(LAYOUT_BUILD), LAYOUT_BUILD_RS)
+}
+
+/// The manifest of [`write_layout_probe`]'s project without the layout.
+const PROBE_MANIFEST: &str = "[package]
+name = \"ignite-layout-probe\"
+version = \"0.0.0\"
+edition = \"2024\"
+
+[workspace]
+";
+
+/// The project that asks a linker whether it reads [`RELEASE_LAYOUT`],
+/// written to `out`: one executable with an empty `main` and no
+/// dependency. With `layout` its manifest names the script as a release
+/// project's does ([`write_release_project`], [`release_layout_config`]);
+/// without, it is the same program linked as the linker lays it out
+/// itself. A release build that failed with the script builds the two to
+/// tell a linker that refuses the script from any other failure.
+pub fn write_layout_probe(out: &Path, layout: bool) -> io::Result<()> {
+    fs::create_dir_all(out.join("src"))?;
+    let manifest = if layout {
+        release_manifest(PROBE_MANIFEST)
+    } else {
+        PROBE_MANIFEST.to_string()
+    };
+    write_if_changed(out.join("Cargo.toml"), &manifest)?;
+    write_if_changed(out.join("src").join("main.rs"), "fn main() {}\n")?;
+    write_layout_files(out)
 }
 
 /// The manifest `manifest` with the `links` key and the build script of a

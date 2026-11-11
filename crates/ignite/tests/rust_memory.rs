@@ -42,10 +42,20 @@ fn workspace() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
+/// The directory the servers are built in: the test's own, emptied before
+/// its first build, so nothing an earlier run left in the cargo target
+/// directory (a build that turned the layout off for it) decides what
+/// this run links.
+fn servers() -> PathBuf {
+    Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join("rust-memory")
+        .join("servers")
+}
+
 /// The release executable `executable` of the example at `source` on the
-/// Rust target, built into this test's own directory.
+/// Rust target, built into [`servers`].
 fn release_executable(source: &str, executable: &str) -> PathBuf {
-    let scratch = Path::new(env!("CARGO_TARGET_TMPDIR")).join("rust-memory");
+    let scratch = servers();
     let options = ignite::BuildOptions {
         target: ignite::Target::Rust,
         release: true,
@@ -229,31 +239,50 @@ fn resident(pid: u32, pages: &[u64]) -> Vec<bool> {
         .collect()
 }
 
+/// The words of the driver's note when it builds again without the layout.
+const NOTE: &str = "building without it";
+
+/// The file a build leaves in its cargo target directory when the linker
+/// refused the script.
+const MARKER: &str = "ignite-no-release-layout";
+
 /// `ignite build --release` of the fixture `backtrace.ignite` into `dir`
-/// with `RUSTFLAGS` choosing the linker gold: whether it succeeded, and
-/// what it wrote to stderr.
-fn build_with_gold(dir: &Path) -> (bool, String) {
-    let output = Command::new(env!("CARGO_BIN_EXE_ignite"))
+/// with `rustflags` as `RUSTFLAGS` (none: unset): its exit status and what
+/// it wrote to stderr.
+fn build_with(dir: &Path, rustflags: Option<&str>) -> (Option<i32>, String) {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_ignite"));
+    command
         .arg("build")
         .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/backtrace.ignite"))
         .args(["--target", "rust", "--release", "--out"])
         .arg(dir.join("out"))
         .arg("--target-dir")
         .arg(dir.join("cargo"))
-        .env("RUSTFLAGS", "-C link-arg=-fuse-ld=gold")
-        .env_remove("CARGO_ENCODED_RUSTFLAGS")
-        .output()
-        .expect("run ignite build");
+        .env_remove("RUSTFLAGS")
+        .env_remove("CARGO_ENCODED_RUSTFLAGS");
+    if let Some(rustflags) = rustflags {
+        command.env("RUSTFLAGS", rustflags);
+    }
+    let output = command.output().expect("run ignite build");
     (
-        output.status.success(),
+        output.status.code(),
         String::from_utf8_lossy(&output.stderr).into_owned(),
     )
 }
 
+/// An emptied directory `name` of this file's own under the test directory.
+fn emptied(name: &str) -> PathBuf {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join("rust-memory")
+        .join(name);
+    let _ = std::fs::remove_dir_all(&dir);
+    dir
+}
+
 /// A linker that does not read the release layout's script fails the link
-/// with it (gold, which has no `INSERT`). The
-/// release build then builds again without the script and says so, and
-/// the next build into the same target directory does not try the script.
+/// with it (gold, which has no `INSERT`). The release build then asks the
+/// linker, builds again without the script and says so, and the next build
+/// into the same target directory does not try the script.
 /// Skipped, with a line on stderr, where gold is not installed.
 #[test]
 fn a_release_build_links_without_the_layout_where_the_linker_reads_no_script() {
@@ -261,18 +290,49 @@ fn a_release_build_links_without_the_layout_where_the_linker_reads_no_script() {
         eprintln!("skipped: no ld.gold on this host");
         return;
     }
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
-        .join("rust-memory")
-        .join("gold");
-    let _ = std::fs::remove_dir_all(&dir);
-    let note = "building without it";
-    let (built, stderr) = build_with_gold(&dir);
-    assert!(built, "{stderr}");
-    assert!(stderr.contains(note), "no `{note}` in:\n{stderr}");
+    let dir = emptied("gold");
+    let gold = Some("-C link-arg=-fuse-ld=gold");
+    let (status, stderr) = build_with(&dir, gold);
+    assert_eq!(status, Some(0), "{stderr}");
+    assert!(stderr.contains(NOTE), "no `{NOTE}` in:\n{stderr}");
     assert!(dir.join("cargo/release/overflow").is_file(), "{stderr}");
-    let (built, stderr) = build_with_gold(&dir);
-    assert!(built, "{stderr}");
-    assert!(!stderr.contains(note), "tried the script again:\n{stderr}");
+    assert!(dir.join("cargo").join(MARKER).is_file(), "{stderr}");
+    let (status, stderr) = build_with(&dir, gold);
+    assert_eq!(status, Some(0), "{stderr}");
+    assert!(!stderr.contains(NOTE), "tried the script again:\n{stderr}");
+}
+
+/// A release build whose link fails for a reason of its own (here: a
+/// library that does not exist, with a linker that reads the script) is
+/// not the linker refusing the script: the build fails once, with exit
+/// status 2 and the linker's error, says nothing of building without the
+/// layout and does not turn it off, so the next build into the same target
+/// directory, with nothing failing, links with the layout.
+#[test]
+fn a_release_build_whose_link_fails_for_another_reason_keeps_the_layout() {
+    let dir = emptied("missing-library");
+    let (status, stderr) = build_with(&dir, Some("-C link-arg=-lignite_no_such_library"));
+    assert_eq!(status, Some(2), "{stderr}");
+    assert!(stderr.contains("ignite_no_such_library"), "{stderr}");
+    assert!(!stderr.contains(NOTE), "{stderr}");
+    assert!(!dir.join("cargo").join(MARKER).exists(), "{stderr}");
+    let (status, stderr) = build_with(&dir, None);
+    assert_eq!(status, Some(0), "{stderr}");
+    let functions = functions(&dir.join("cargo/release/overflow"));
+    let end = functions
+        .iter()
+        .filter(|f| f.symbolizer())
+        .map(|f| f.start + f.size)
+        .max()
+        .expect("functions of the symbolizer by name");
+    let others = functions
+        .iter()
+        .filter(|f| !f.symbolizer() && f.start < end)
+        .count();
+    assert_eq!(
+        others, 0,
+        "functions that are not the symbolizer's before or among it:\n{stderr}"
+    );
 }
 
 /// Row 3.8, `rust/todo/get-1` and `rust/terminal/rr-1`: in a Rust release
@@ -282,6 +342,7 @@ fn a_release_build_links_without_the_layout_where_the_linker_reads_no_script() {
 /// [`BESIDE`] of the pages that hold only such functions are resident.
 #[test]
 fn a_rust_release_server_keeps_the_backtrace_symbolizer_out_of_its_resident_code() {
+    let _ = std::fs::remove_dir_all(servers());
     for (source, executable) in [
         ("examples/todo/todo.ignite", "todod"),
         ("examples/terminal/terminal.ignite", "terminald"),

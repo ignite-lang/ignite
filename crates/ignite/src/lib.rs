@@ -2060,8 +2060,10 @@ pub fn build(file: &Path, options: &BuildOptions) -> Result<BuildOutput, Error> 
     let emitted = generate(parsed, &library, substrate.clone())?;
     let project = emitted.program;
     let target_dir = target_dir_of(&out);
-    let layout = if options.release && release_layout(&target_dir) {
-        ignite_rustgen::write_release_project(&project, &out).map_err(io_error(&out))?;
+    let laid_out = options.release
+        && release_layout(&target_dir)
+        && ignite_rustgen::write_release_project(&project, &out).map_err(io_error(&out))?;
+    let layout = if laid_out {
         let triple = triple.clone().unwrap_or_else(host_triple);
         Some(ignite_rustgen::release_layout_config(&triple, &out).map_err(io_error(&out))?)
     } else {
@@ -2089,14 +2091,20 @@ pub fn build(file: &Path, options: &BuildOptions) -> Result<BuildOutput, Error> 
         )
     };
     match cargo(layout.as_deref()) {
-        Err(Error::Cargo { .. }) if layout.is_some() => {
+        // A failed build with the layout: only when the linker itself
+        // refuses the script is it built again without. Any other failure
+        // is the build's, reported once, and leaves the layout on.
+        Err(Error::Cargo { .. })
+            if layout.is_some()
+                && linker_refuses_layout(&target_dir, triple.as_deref(), options.offline) =>
+        {
             eprintln!(
-                "note: the release build failed with the linker script of the release layout; building without it, which a linker that reads no such script needs"
+                "note: the linker does not read the linker script of the release layout; building without it"
             );
-            ignite_rustgen::write_project(&project, &out).map_err(io_error(&out))?;
-            cargo(None)?;
             let marker = target_dir.join(NO_RELEASE_LAYOUT);
             std::fs::write(&marker, "").map_err(io_error(&marker))?;
+            ignite_rustgen::write_project(&project, &out).map_err(io_error(&out))?;
+            cargo(None)?;
         }
         built => built?,
     }
@@ -2119,20 +2127,59 @@ pub fn build(file: &Path, options: &BuildOptions) -> Result<BuildOutput, Error> 
 }
 
 /// The file in a cargo target directory that says a release build into it
-/// links without the release layout: the linker of an earlier build did
-/// not read its script.
+/// links without the release layout: the linker of an earlier build
+/// refused its script ([`linker_refuses_layout`]).
 const NO_RELEASE_LAYOUT: &str = "ignite-no-release-layout";
 
 /// Whether a release build into `target_dir` links its executables with
 /// the release layout (`ignite_rustgen::RELEASE_LAYOUT`, row 3.8 of
-/// `docs/quality.md`): on Linux, whose linkers read the script, unless a
-/// build into the directory failed with it. The LLVM linker, which rustc
-/// links with on x86-64, and GNU ld read it; a linker that does not (gold,
-/// which has no `INSERT`) fails the link, and `build` then builds again
-/// without it and leaves [`NO_RELEASE_LAYOUT`], so the next build does not
-/// try.
+/// `docs/quality.md`): on Linux, whose linkers read the script, unless the
+/// linker of a build into the directory refused it. The LLVM linker, which
+/// rustc links with on x86-64, and GNU ld read it; a linker that does not
+/// (gold, which has no `INSERT`) fails the link, and `build` then asks it
+/// ([`linker_refuses_layout`]), builds again without the script and leaves
+/// [`NO_RELEASE_LAYOUT`], so the next build does not try.
 fn release_layout(target_dir: &Path) -> bool {
     cfg!(target_os = "linux") && !target_dir.join(NO_RELEASE_LAYOUT).exists()
+}
+
+/// The directory in a cargo target directory where the linker is asked
+/// about the release layout: `project` and its own `target`.
+const LAYOUT_PROBE: &str = "ignite-layout-probe";
+
+/// Whether the linker of a release build into `target_dir` refuses the
+/// release layout's script, asked after such a build failed: a program of
+/// one empty `main` (`ignite_rustgen::write_layout_probe`) does not build
+/// with the script and builds without it, by the same cargo, in the same
+/// environment and directory (so with the same configured linker and
+/// `rustflags`) and for the same target as the build. Its output is not
+/// shown. `false` for every other outcome, so a build that failed for
+/// another reason (a compiler that was killed, a dependency that cannot be
+/// read, a full disk, a link error of the program's own) is not built
+/// again and does not turn the layout off.
+fn linker_refuses_layout(target_dir: &Path, triple: Option<&str>, offline: bool) -> bool {
+    let probe = target_dir.join(LAYOUT_PROBE);
+    let project = probe.join("project");
+    let builds = |layout: bool| -> Option<bool> {
+        ignite_rustgen::write_layout_probe(&project, layout).ok()?;
+        let config = if layout {
+            let triple = triple.map_or_else(host_triple, str::to_string);
+            Some(ignite_rustgen::release_layout_config(&triple, &project).ok()?)
+        } else {
+            None
+        };
+        let (_, mut command) = cargo_command(
+            &project,
+            &probe.join("target"),
+            true,
+            triple,
+            true,
+            offline,
+            config.as_deref(),
+        );
+        Some(command.output().ok()?.status.success())
+    };
+    builds(true) == Some(false) && builds(false) == Some(true)
 }
 
 /// The target triple of a build without `--target`, by which cargo reads
@@ -2277,6 +2324,30 @@ fn cargo_build(
     offline: bool,
     layout: Option<&str>,
 ) -> Result<(), Error> {
+    let (cargo, mut command) =
+        cargo_command(out, target_dir, release, triple, quiet, offline, layout);
+    let status = command.status().map_err(|error| Error::Io {
+        path: PathBuf::from(&cargo),
+        error,
+    })?;
+    if !status.success() {
+        return Err(Error::Cargo {
+            status: status.code().unwrap_or(-1),
+        });
+    }
+    Ok(())
+}
+
+/// The cargo of [`cargo_build`] and its command, not yet run.
+fn cargo_command(
+    out: &Path,
+    target_dir: &Path,
+    release: bool,
+    triple: Option<&str>,
+    quiet: bool,
+    offline: bool,
+    layout: Option<&str>,
+) -> (std::ffi::OsString, Command) {
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let mut command = Command::new(&cargo);
     without_c_debug_information(&mut command);
@@ -2305,16 +2376,7 @@ fn cargo_build(
     if offline {
         command.arg("--offline");
     }
-    let status = command.status().map_err(|error| Error::Io {
-        path: PathBuf::from(&cargo),
-        error,
-    })?;
-    if !status.success() {
-        return Err(Error::Cargo {
-            status: status.code().unwrap_or(-1),
-        });
-    }
-    Ok(())
+    (cargo, command)
 }
 
 /// Where the runtime archive is looked for, in order, for an executable at

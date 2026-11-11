@@ -1868,9 +1868,16 @@ fn write_project_creates_layout() {
 /// leaves a manifest that names neither, as a dev build has it.
 #[test]
 fn write_release_project_adds_the_layout_script_and_its_link_arguments() {
-    let project = try_generate(user_decls()).unwrap();
+    let project = GeneratedProject {
+        executables: vec![ignite_rustgen::Executable {
+            name: "served".to_string(),
+            source: "fn main() {}\n".to_string(),
+        }],
+        ..try_generate(user_decls()).unwrap()
+    };
     let out = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("units-release-project");
-    ignite_rustgen::write_release_project(&project, &out).unwrap();
+    let _ = std::fs::remove_dir_all(&out);
+    assert!(ignite_rustgen::write_release_project(&project, &out).unwrap());
     let manifest = std::fs::read_to_string(out.join("Cargo.toml")).unwrap();
     assert!(
         manifest
@@ -1899,6 +1906,56 @@ fn write_release_project_adds_the_layout_script_and_its_link_arguments() {
     assert_eq!(
         std::fs::read_to_string(out.join("Cargo.toml")).unwrap(),
         project.cargo_toml
+    );
+}
+
+/// A program without an executable has nothing the script is linked into,
+/// and cargo refuses the build script's link arguments for executables in
+/// a package that has none: its release project is the project
+/// `write_project` writes, with no script and no build script.
+#[test]
+fn write_release_project_of_a_program_without_an_executable_adds_nothing() {
+    let project = try_generate(user_decls()).unwrap();
+    assert!(project.executables.is_empty());
+    let out = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("units-release-library");
+    let _ = std::fs::remove_dir_all(&out);
+    assert!(!ignite_rustgen::write_release_project(&project, &out).unwrap());
+    assert_eq!(
+        std::fs::read_to_string(out.join("Cargo.toml")).unwrap(),
+        project.cargo_toml
+    );
+    assert!(!out.join("layout.ld").exists());
+    assert!(!out.join("layout.rs").exists());
+}
+
+/// The project that asks a linker about the release layout: one empty
+/// `main` and no dependency; with the layout its manifest names the script
+/// as a release project's does, without it the same manifest less the two
+/// keys.
+#[test]
+fn write_layout_probe_is_an_empty_program_with_or_without_the_layout() {
+    let out = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("units-layout-probe");
+    let _ = std::fs::remove_dir_all(&out);
+    ignite_rustgen::write_layout_probe(&out, true).unwrap();
+    let with = std::fs::read_to_string(out.join("Cargo.toml")).unwrap();
+    assert!(
+        with.starts_with("[package]\nlinks = \"ignite-layout\"\nbuild = \"layout.rs\"\nname = "),
+        "{with}"
+    );
+    assert!(!with.contains("[dependencies]"), "{with}");
+    assert_eq!(
+        std::fs::read_to_string(out.join("src/main.rs")).unwrap(),
+        "fn main() {}\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(out.join("layout.ld")).unwrap(),
+        ignite_rustgen::RELEASE_LAYOUT
+    );
+    assert!(out.join("layout.rs").is_file());
+    ignite_rustgen::write_layout_probe(&out, false).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(out.join("Cargo.toml")).unwrap(),
+        with.replacen("links = \"ignite-layout\"\nbuild = \"layout.rs\"\n", "", 1)
     );
 }
 
