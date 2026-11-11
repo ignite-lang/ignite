@@ -126,7 +126,9 @@ Rules of the layout:
 | check a catalogue against its source | `target/debug/ignite rfc check CATALOGUE [SOURCE]` (exit 0 silent when the digests match, 1 when they differ; without SOURCE prints `<CATALOGUE>: unchecked`) |
 | print a conformance matrix | `target/debug/ignite conformance FILE [--target llvm\|rust] [the build flags of ignite test]` (`docs/slice.md` 19.10: runs FILE's tests once, one block per protocol and spec, a claim line each; exit 0 every claim holds, 1 one does not, 2 a diagnostic or no conforming protocol, 3 a test build or run failure) |
 
-`task` is go-task. Rust toolchain: stable, edition 2024, `rustfmt` defaults. Every cargo
+`task` is go-task. `strace`, with ptrace allowed on a child, is a prerequisite of `task gate`:
+`scheduler::a_connection_costs_no_more_system_calls_than_at_v0_15_0` in `crates/ignite-io`
+counts the connection path with it and fails, naming it, without it. Rust toolchain: stable, edition 2024, `rustfmt` defaults. Every cargo
 invocation in automation sets `CARGO_INCREMENTAL=0`. `task test-ignite` honours
 `CARGO_TARGET_DIR` (binary, runtime and outputs under it); `task compile-llvm` and
 `task compile-todo-llvm` build and pass the runtime under it too, and write their programs to

@@ -618,7 +618,7 @@ meaning. The generator emits exactly the Rust on the right.
 | `t.to_bytes()` | `t.clone().into_bytes()`; `t.into_bytes()` when `t` is a fresh text nothing else owns (a literal, a `+` chain or interpolation, `to_text` of Int, Byte or Bool, `concat`, `trim`) | `t.as_bytes()` to a lent bytes parameter and in the other borrowed forms of 20.3.7 |
 | `b.to_text()` | `String::from_utf8_lossy(&b).into_owned()` | |
 | `b.slice(i, j).to_text()` | `String::from_utf8_lossy(::ignite_io::checked::slice_ref(&b, i, j, <site>)).into_owned()`: the slice is borrowed, not copied, with the failure of `checked::slice` | Bytes |
-| `b.index_of(n, i) -> Option<Int>` | `::ignite_io::text::index_of(&b, &n, i)`: the offset of the first `n` at or after `i` (a negative `i` reads as 0; `None` when `i` is past the end, also for an empty `n`), by `memchr` or `memmem`; `t.to_bytes()` and a checked `slice` are borrowed, not copied. The LLVM runtime's `bytes_index_of` calls the same function (-1 for `None`). Story `text-fast-search` | Bytes |
+| `b.index_of(n, i) -> Option<Int>` | `::ignite_io::text::index_of(&b, &n, i)`: the offset of the first `n` at or after `i` (a negative `i` reads as 0; `None` when `i` is past the end, also for an empty `n`), by a scan for the first byte of `n` and a compare of the rest (story `unsafe-sites-back`; before, `memchr` or `memmem`); `t.to_bytes()` and a checked `slice` are borrowed, not copied. The LLVM runtime's `bytes_index_of` calls the same function (-1 for `None`). Story `text-fast-search` | Bytes |
 | `t.pieces(s) -> List<Text>` | `::ignite_io::text::pieces(&t, &s)`: the texts between the separators, empty pieces kept, `[t]` for an empty `s`; no piece is checked for UTF-8 again, since valid text cut at a valid separator stays valid. `std.text.split` is this builtin. The LLVM runtime's `text_pieces` uses the same search. Story `text-fast-search` | Text |
 | `b.at(i)` | `b[(i) as usize]`, then `.clone()` when the element is not `Int`, `Byte` or `Bool` (also `l[i]`) | Bytes, List |
 | `l.map(f)` | `l.iter().cloned().map(f).collect::<Vec<_>>()` | List; `l.iter().map(..)` without the copy in the cases of 20.3.7 |
@@ -916,27 +916,39 @@ pub fn set_task_locals(make: fn() -> Box<dyn TaskLocals>);   // each new task ge
   counts as busy: placement passes it, and only when every worker is busy and none can start
   does a task go to it, to run when the read returns. A task stays on its worker (no
   stealing, no migration). A worker without a task waits up to
-  `LINGER` for one, then ends, so an idle server runs no worker. A wait of a task (a read, a
+  `LINGER` from the end of its last task for one, then ends, so an idle server runs no worker. A wait of a task (a read, a
   write that finds the socket buffer full, `accept`, a channel, a pipe, a timer, a child,
   standard input) parks the task and lets its worker run another. Sockets block, as in
   `threads` mode (an accepted one from a single `accept4` with `SOCK_CLOEXEC`); a task's
-  `recv` and `send` pass `MSG_DONTWAIT`, and a socket is registered edge-triggered with the
-  worker's epoll on its first wait. A read that left the socket empty (it read
-  less than it asked for, or nothing) makes the next read of the stream wait for readiness
-  before its first `recv`. A read that filled its buffer lets the next one try at once. A worker creates
-  its epoll and eventfd when a task first waits for a descriptor, so tasks that wait only for
-  each other cost no descriptor; a worker that cannot create them (the process is out of
+  `recv` and `send` pass `MSG_DONTWAIT`. A listener has `TCP_NODELAY` and `SO_OOBINLINE`,
+  which the sockets it accepts inherit. A socket is registered edge-triggered with the
+  worker's epoll by its first wait there that parks its task, for input, urgent data and
+  hang-up, and for room to write only from the first wait for room on; the drop of its last
+  handle forgets the registration, and the close removes it from epoll. A read that left the
+  socket empty (it read less than it asked for, or nothing) makes the next read of the stream
+  wait for readiness before its first `recv`; so does the first read of a stream that sent
+  first. A read that filled its buffer lets the next one try at once. A worker creates
+  its epoll and eventfd when a task first waits for a descriptor through them, so tasks that
+  wait only for each other, or only alone on a worker they may block, cost no descriptor; a
+  worker that cannot create them (the process is out of
   descriptors) looks at the descriptor every 10 ms instead, until it can. A worker runs at
   most 128 tasks in a row before it polls for descriptors without waiting. The only task of a
   worker with nothing else to run waits for its descriptor with one `poll` on the worker's
-  thread, as a blocked thread would, and a hand-over to the worker ends that wait. A read
-  without a deadline of its own by such a task, on a worker with no hand-over pending, is one
+  thread, as a blocked thread would, registered or not, and a hand-over to the worker ends
+  that wait and parks the task. A read after a read that emptied the socket, without a
+  deadline of its own, by such a task, on a worker with no hand-over pending, is one
   blocking `recv` instead, while fewer tasks live than `worker_limit()` (never with one
   worker), so a spawn meanwhile finds an idle worker or starts one; the worker counts as busy
-  for that read. Each wait reads the clock once.
+  for that read. On a worker without epoll, the `poll` of its only task blocks the worker
+  in the same way and under the same bounds, until as many tasks live as `worker_limit()`:
+  from then on every such `poll` ends and waits through the worker's epoll. The first read of
+  a stream never blocks its worker in `recv`, so connections opened before their first
+  request spread over the workers. `accept` off a worker (the main
+  thread's accept loop) waits for a connection before its `accept4`. Each wait reads the
+  clock once.
   `connect`, name resolution, `Directory`, `Launcher` and stdout run inline on the worker. The
-  idle timeout (26.2) is `SO_RCVTIMEO` for a blocking `recv` and the deadline of the read's
-  wait otherwise. A panic in a task ends the task, not
+  idle timeout (26.2) is `SO_RCVTIMEO` for a blocking `recv`, set before the first such
+  `recv`, and the deadline of the read's wait otherwise. A panic in a task ends the task, not
   its worker, as `task ended with error: <report>`; a stack overflow writes `thread 'worker'
   has overflowed its stack` and aborts the process, as Rust does on a thread. Thread-locals
   are the worker's: a runtime that keeps per-task state in thread-locals registers
@@ -7845,8 +7857,15 @@ once and act on the last component relative to it (the root's own descriptor whe
 the root). When that call fails for any reason the operation walks as above, which either
 succeeds (the path changed in between) or gives the error this section words, naming the
 component; the walk is also the whole resolution once `openat2` answered `ENOSYS` or `EPERM` (a
-kernel before 5.6, a seccomp filter). A listing reads the directory with `getdents64` itself.
-Every behaviour above, its errors included, is the same in both resolutions; the substrate's
+kernel before 5.6, a seccomp filter). A listing reads the directory with `readdir` through
+`nix::dir::Dir` (story `unsafe-sites-back`). The calls of a listing, as `strace` shows them:
+an `fstat`, an `fcntl(F_GETFL)` and an `fcntl(F_SETFD, FD_CLOEXEC)` (`fdopendir`), the
+`getdents64` calls, an `lseek` back to the start (the end of the iteration) and the `close` of
+the descriptor. `remove_tree` lists each level through that level's own descriptor. A level it
+descends from then duplicates the descriptor (`fcntl(F_DUPFD_CLOEXEC)`) and closes the listing
+before it goes deeper. The deepest level keeps its listing until it is emptied. So the walk
+holds one descriptor per level and one listing at a time. Level `k` holds `k + 1` descriptors
+while it makes its duplicate, and a tree 256 levels deep needs 256 descriptors. Every behaviour above, its errors included, is the same in both resolutions; the substrate's
 tests run on both (`fs::tests`, `Scratch::both`). Measured with `strace -c` on the todo example's
 patch workload (16 connections on one todo, LLVM, release): 108.5 syscalls per reply before,
 45.8 after, the plain-Rust reference 16.0. Of the 45.8, 8.1 are failed `remove`s of versions a
