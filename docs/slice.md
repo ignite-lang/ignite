@@ -11393,9 +11393,7 @@ of each step are in the commits.
   position each task slot records: the entry of a task that ends is taken out at once, so the
   worker never wakes for it, and one armed earlier moves up in place (`sched::tests` in
   `crates/ignite-io/src/sched.rs`,
-  `timer_adversary::a_worker_does_not_wake_for_the_timer_of_a_session_that_ended`). The epoll
-  reactor holds its registrations in a slab whose tokens carry a generation and whose free
-  slots form a list in the slab (`reactor::*::a_reused_registration_has_a_token_of_its_own`).
+  `timer_adversary::a_worker_does_not_wake_for_the_timer_of_a_session_that_ended`).
   `IGNITE_IO=threads` stays.
 - Opt-levels. The generated manifest builds `nix` and `corosensei` at `opt-level = "s"`: the
   start about 200 instructions shorter, the stripped executable about 570 bytes larger
@@ -11432,4 +11430,7 @@ of each step are in the commits.
   stay); `opt-level = "s"` for `ignite-rt`, `ignite-io` and `ignite-std` (5 to 7 % more
   instructions per request); a worker limit of its own from the affinity mask and the cgroup
   quota (about 16,000 more instructions at the first connection than
-  `std::thread::available_parallelism`).
+  `std::thread::available_parallelism`); the epoll reactor's registrations in a slab instead of
+  a `HashMap` (about 6 KB smaller and a shorter start, but about 150 more instructions per six
+  requests on the LLVM target; `reactor::*::a_reused_registration_has_a_token_of_its_own`
+  stays).

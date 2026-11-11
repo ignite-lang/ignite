@@ -31,6 +31,7 @@
 //! number only to compare at the deregistration, [`PollReactor`] keeps a
 //! duplicate of its own until then.
 
+use std::collections::HashMap;
 use std::fmt;
 use std::io;
 use std::ops::BitOr;
@@ -305,89 +306,6 @@ struct Entry {
     waiter: Waiter,
 }
 
-/// The registrations of an [`EpollReactor`] by token: one slot per
-/// registration, reused after it ends. A token holds the slot's index plus
-/// one in its low half (so never [`WAKE`]) and the slot's generation, which
-/// each registration in it raises, in its high half: the token of an
-/// earlier registration of a reused slot finds nothing (an event the kernel
-/// reported for it, a late deregistration). A `HashMap` here was 6 KB of
-/// code with its hasher and the random seed it reads (story
-/// `binary-size-back`).
-struct Entries {
-    slots: Vec<Slot>,
-    /// The index plus one of the first free slot, 0 for none; each free
-    /// slot names the next in [`Slot::next`]. A list in the slots, not a
-    /// vector of its own: a worker's reactor is new with the worker, and
-    /// with a second vector a connection that a new worker served took
-    /// about 145 instructions more, in `malloc`.
-    free: u32,
-}
-
-/// A slot of [`Entries`].
-struct Slot {
-    generation: u32,
-    /// While the slot is free: the index plus one of the next free slot.
-    next: u32,
-    entry: Option<Entry>,
-}
-
-impl Entries {
-    const fn new() -> Entries {
-        Entries {
-            slots: Vec::new(),
-            free: 0,
-        }
-    }
-
-    /// Hold `entry`; its token.
-    fn insert(&mut self, entry: Entry) -> u64 {
-        let index = match self.free.checked_sub(1) {
-            Some(index) => {
-                let index = index as usize;
-                self.free = self.slots[index].next;
-                index
-            }
-            None => {
-                self.slots.push(Slot {
-                    generation: 0,
-                    next: 0,
-                    entry: None,
-                });
-                self.slots.len() - 1
-            }
-        };
-        let slot = &mut self.slots[index];
-        slot.generation = slot.generation.wrapping_add(1);
-        slot.entry = Some(entry);
-        (u64::from(slot.generation) << 32) | (index as u64 + 1)
-    }
-
-    /// The index of the slot `token` names, while it holds that
-    /// registration.
-    fn index(&self, token: u64) -> Option<usize> {
-        let index = (token & 0xffff_ffff).checked_sub(1)? as usize;
-        let slot = self.slots.get(index)?;
-        (u64::from(slot.generation) == token >> 32 && slot.entry.is_some()).then_some(index)
-    }
-
-    fn get(&self, token: u64) -> Option<&Entry> {
-        self.slots[self.index(token)?].entry.as_ref()
-    }
-
-    fn get_mut(&mut self, token: u64) -> Option<&mut Entry> {
-        let index = self.index(token)?;
-        self.slots[index].entry.as_mut()
-    }
-
-    fn remove(&mut self, token: u64) -> Option<Entry> {
-        let index = self.index(token)?;
-        let slot = &mut self.slots[index];
-        slot.next = self.free;
-        self.free = index as u32 + 1;
-        slot.entry.take()
-    }
-}
-
 /// One descriptor registered with a [`PollReactor`]: a duplicate the
 /// reactor owns, so it is open at every `poll` until it is deregistered,
 /// and the number of the one it was lent, to compare at
@@ -425,7 +343,8 @@ pub struct EpollReactor {
     /// ([`EpollReactor::poll_one`]) would end at once for a wake already
     /// taken ([`EpollReactor::forget_wakes`]).
     unread: AtomicBool,
-    entries: Mutex<Entries>,
+    entries: Mutex<HashMap<u64, Entry>>,
+    next: AtomicU64,
 }
 
 impl EpollReactor {
@@ -444,7 +363,8 @@ impl EpollReactor {
             epoll,
             wakes,
             unread: AtomicBool::new(false),
-            entries: Mutex::new(Entries::new()),
+            entries: Mutex::new(HashMap::new()),
+            next: AtomicU64::new(WAKE + 1),
         })
     }
 }
@@ -491,10 +411,10 @@ impl EpollReactor {
     /// Drop the entry of `token` without a system call, for a descriptor
     /// that closes right after: the close takes it out of the epoll
     /// instance. An event the kernel reports for it until then names a
-    /// token without an entry, which [`Reactor::wait`] skips: a token is not
-    /// reused ([`Entries`]).
+    /// token without an entry, which [`Reactor::wait`] skips; tokens are
+    /// never reused.
     pub(crate) fn forget(&self, token: Token) {
-        lock(&self.entries).remove(token.0);
+        lock(&self.entries).remove(&token.0);
     }
 
     /// Register `descriptor`, the one `token` was registered for, for
@@ -508,7 +428,7 @@ impl EpollReactor {
         interest: Interest,
     ) -> io::Result<()> {
         let mut entries = lock(&self.entries);
-        let Some(entry) = entries.get_mut(token.0) else {
+        let Some(entry) = entries.get_mut(&token.0) else {
             return Ok(());
         };
         let flags = interest.epoll() | EpollFlags::EPOLLET;
@@ -534,22 +454,23 @@ impl Reactor for EpollReactor {
         interest: Interest,
         waiter: Waiter,
     ) -> io::Result<Token> {
+        let token = self.next.fetch_add(1, Ordering::Relaxed);
         let mut entries = lock(&self.entries);
-        let token = entries.insert(Entry {
-            descriptor: descriptor.as_raw_fd(),
-            interest,
-            waiter,
-        });
         let flags = interest.epoll() | EpollFlags::EPOLLET;
-        if let Err(error) = self.epoll.add(descriptor, EpollEvent::new(flags, token)) {
-            entries.remove(token);
-            return Err(error.into());
-        }
+        self.epoll.add(descriptor, EpollEvent::new(flags, token))?;
+        entries.insert(
+            token,
+            Entry {
+                descriptor: descriptor.as_raw_fd(),
+                interest,
+                waiter,
+            },
+        );
         Ok(Token(token))
     }
 
     fn deregister(&self, token: Token, descriptor: BorrowedFd<'_>) -> io::Result<()> {
-        let Some(entry) = lock(&self.entries).remove(token.0) else {
+        let Some(entry) = lock(&self.entries).remove(&token.0) else {
             return Ok(());
         };
         if entry.descriptor != descriptor.as_raw_fd() {
@@ -573,7 +494,7 @@ impl Reactor for EpollReactor {
             if event.data() == WAKE {
                 continue;
             }
-            if let Some(entry) = entries.get(event.data()) {
+            if let Some(entry) = entries.get(&event.data()) {
                 events.push(Event {
                     token: Token(event.data()),
                     waiter: entry.waiter.clone(),
