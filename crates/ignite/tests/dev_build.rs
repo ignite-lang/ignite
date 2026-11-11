@@ -445,6 +445,7 @@ const AHEAD: &[&str] = &[
     "memoffset",
     "autocfg",
     "scopeguard",
+    "termios",
 ];
 
 /// The packages of the `<verb> <name> v<version>` lines of a verbose
@@ -470,7 +471,8 @@ fn rust_build_verbose(source: &Path, out: &Path, target: &Path) -> String {
 /// Row 6.2 rust (story `build-time-back`): while the driver parses, types
 /// and generates, cargo builds the dependencies of `ignite-io` into the
 /// build's target directory; the program's build then compiles none of
-/// them, with or without TLS (whose crates it compiles itself). A rebuild
+/// them, with or without TLS (whose crates it compiles itself) and child
+/// processes (`ignite-io`'s features `tls` and `process`). A rebuild
 /// builds nothing ahead.
 #[test]
 fn dependencies_built_ahead_are_fresh_in_the_programs_build() {
@@ -478,10 +480,13 @@ fn dependencies_built_ahead_are_fresh_in_the_programs_build() {
     let tls = dir.join("tls.ignite");
     std::fs::write(
         &tls,
-        "package ahead_tls\n\nimport std.tls.{TlsOptions}\n\n\
+        "package ahead_tls\n\nimport std.tls.{TlsOptions}\n\
+         import std.process.{ChildExit, Invocation}\n\n\
          fn open(port: Int) -> Result<TlsStream, IoError> {\n  \
          let stream = TcpStream.connect(\"127.0.0.1\", port)?\n  \
-         Tls.client(stream, \"localhost\", TlsOptions {})\n}\n",
+         Tls.client(stream, \"localhost\", TlsOptions {})\n}\n\n\
+         fn check(tools: Launcher) -> Result<ChildExit, IoError> =\n  \
+         tools.execute(Invocation { program = \"/bin/true\" })\n",
     )
     .unwrap();
     let plain = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/backtrace.ignite");
@@ -506,6 +511,11 @@ fn dependencies_built_ahead_are_fresh_in_the_programs_build() {
         assert!(compiled.contains(&"ignite-io"), "{name}:\n{stderr}");
         if name == "tls" {
             assert!(compiled.contains(&"rustls"), "{name}:\n{stderr}");
+            let manifest = std::fs::read_to_string(out.join("Cargo.toml")).unwrap();
+            assert!(
+                manifest.contains("features = [\"process\", \"tls\"]"),
+                "{manifest}"
+            );
         }
         let ahead = target.join("ignite-prebuild");
         assert!(

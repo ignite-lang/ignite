@@ -4,9 +4,11 @@
 //! so each instance dispatches statically to the inherent method of its
 //! stream type.
 
+#[cfg(feature = "process")]
+use crate::PipeStream;
 #[cfg(feature = "tls")]
 use crate::TlsStream;
-use crate::{Input, IoError, PipeStream, TcpStream};
+use crate::{Input, IoError, TcpStream};
 
 /// A byte stream: [`TcpStream`], [`PipeStream`] and, with the feature
 /// `tls`, `TlsStream`. Each method is the inherent method of the same name.
@@ -52,6 +54,7 @@ impl ByteStream for TcpStream {
     }
 }
 
+#[cfg(feature = "process")]
 impl ByteStream for PipeStream {
     fn read(&self, maximum: i64) -> Result<Input, IoError> {
         PipeStream::read(self, maximum)

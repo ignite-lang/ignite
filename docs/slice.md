@@ -11257,15 +11257,26 @@ and for a configured `debug` alike.
 - Dependencies ahead (Rust target). Before it parses (after, when `--out` is not given), the
   driver writes a crate that depends on `ignite-io` with the generated project's profiles into
   `<target-dir>/ignite-prebuild/`, with the project's lock or else the substrate workspace's,
-  and starts `cargo build --quiet --offline -p corosensei -p nix` from it into the build's
-  target directory, its output discarded: the crates `ignite-io` builds on, which the
-  program's build then finds fresh, with or without `tls`
-  (`dev_build::dependencies_built_ahead_are_fresh_in_the_programs_build`). The program's build
+  and starts `cargo build --quiet --offline -p corosensei -p nix -p termios` from it into the
+  build's target directory, its output discarded: the crates `ignite-io` builds on, which the
+  program's build then finds fresh whatever features of `ignite-io` it turns on (`process` and
+  `tls` change none of them; `units::only_tls_changes_a_dependency_of_ignite_io`,
+  `dev_build::dependencies_built_ahead_are_fresh_in_the_programs_build`). The program's build
   starts after that cargo has ended. A target directory that has built `nix` for the profile
   builds nothing ahead, and neither does a `--static` build. A load, type or generation error
   stops that cargo and every process under it before the driver reports the error
   (`dev_build::a_type_error_stops_the_build_ahead`). Row 6.2 rust: the driver's own work then
   runs beside the longest chain of the dependency build (`libc`, `nix`) instead of before it.
+- Substrate. `nix` is built without `term`: standard input's raw mode reads and sets the
+  terminal attributes through the `termios` crate (`tcgetattr`, `tcsetattr`: one `ioctl` each,
+  as through `nix`), and only the tests that open a pty turn `term` on
+  (`units::ignite_io_builds_nix_without_term`); `term` cost 938 M of `nix`'s 6,038 M
+  instructions before its metadata. `ignite-io`'s `child` and `pipe` modules are behind its
+  feature `process`, which the generated manifest turns on when the program or its
+  `ignite-std` names a launcher, a child process or a pipe, and `runner` and the runtime archive
+  turn on (`streams::only_a_program_with_processes_or_pipes_turns_on_the_substrate_feature`);
+  without it `ignite-io` takes 383 M fewer before its metadata. A program without it does not
+  reset SIGCHLD at start: it starts no child.
 - Loader. The dependencies of each module (`module_dependencies`) are computed once per load
   and kept with the parsed module (`dependency_scan_tests::check_and_plan_scan_each_module_once`
   in `crates/ignite/src/lib.rs`); `plan.json` of the terminal design is unchanged
@@ -11278,8 +11289,16 @@ and for a configured `debug` alike.
   `CARGO_INCREMENTAL=0` already, so row 6.2 would not see it, and a user's rebuild would lose
   it); `nix` without its `socket` feature: `recv` with `MSG_DONTWAIT` into an initialised
   buffer has no safe call in `std` or `socket2` (their flagged receives take
-  `[MaybeUninit<u8>]`), and a non-blocking socket would add a `poll` to every read that blocks
-  its worker (row 3.6, and the system calls per request).
+  `[MaybeUninit<u8>]`), and a socket made non-blocking at creation cannot block: the read of a
+  worker's only task in a request-reply rhythm (`sched::block_alone`), one blocking `recv` per
+  request now, would wait in `poll` first (`todod` 2 to 3 calls per keep-alive request), and
+  `connect` would return `EINPROGRESS` and wait in `poll` (one call more per outgoing
+  connection); whether a read may block is decided per read, so no socket can be given the
+  right mode at creation. Building `ignite-io` ahead as well: the program's build would wait for
+  its code generation instead of `nix`'s (worse in the model); one cargo for the dependencies and
+  the program: cargo fixes its units when it starts, before the driver has generated the
+  program. `nix` without `dir` (48 M) or `resource` (71 M, and `std` has no `setrlimit`), and
+  `entropy` and `environment` behind features (70 M together).
 
 ## NN An HTTP reply allocates no more than at v0.15.0, and a server without held requests starts no task for them
 

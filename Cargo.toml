@@ -31,7 +31,7 @@ ignite-rt = { path = "crates/ignite-rt" }
 ignite-llvm = { path = "crates/ignite-llvm" }
 ignite-eval = { path = "crates/ignite-eval" }
 clap ={ version = "4.6", features = ["derive"] }
-nix = { version = "0.31", features = ["term", "fs"] }
+nix = { version = "0.31", features = ["fs"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 rcgen = "0.14"
 

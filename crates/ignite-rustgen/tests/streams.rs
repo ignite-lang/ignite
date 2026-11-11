@@ -112,3 +112,60 @@ fn only_a_program_with_tls_turns_on_the_substrate_feature() {
     );
     assert!(!std.cargo_toml.contains("tls"), "{}", std.cargo_toml);
 }
+
+/// Child processes and pipes (`docs/slice.md` 21, story `build-time-back`):
+/// a program that names a `Launcher`, a `ChildProcess` or a pipe turns on
+/// the substrate's feature `process`; one that does not builds
+/// `ignite-io` without its `child` and `pipe` modules.
+#[test]
+fn only_a_program_with_processes_or_pipes_turns_on_the_substrate_feature() {
+    let process = "ignite-io = { path = \"../ignite-io\", features = [\"process\"] }";
+    let orphans = common::workspace().join("crates/ignite/tests/fixtures/slice17/orphans.ignite");
+    let (program, std) = common::lower_typed(
+        &orphans,
+        &common::repository_std(),
+        Path::new("../ignite-io"),
+    );
+    assert!(
+        program.cargo_toml.contains(process),
+        "{}",
+        program.cargo_toml
+    );
+    assert!(!std.cargo_toml.contains("process"), "{}", std.cargo_toml);
+
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("streams-process-feature");
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("pair.ignite");
+    std::fs::write(
+        &file,
+        "import std.net.{PipeStream}\n\n\
+         fn end(stream: PipeStream) -> Result<Unit, IoError> = stream.close()\n",
+    )
+    .unwrap();
+    let (program, _) =
+        common::lower_typed(&file, &common::repository_std(), Path::new("../ignite-io"));
+    assert!(
+        program.cargo_toml.contains(process),
+        "{}",
+        program.cargo_toml
+    );
+
+    for example in ["todo/todo", "terminal/terminal"] {
+        let source = common::workspace().join(format!("examples/{example}.ignite"));
+        let (program, std) = common::lower_typed(
+            &source,
+            &common::repository_std(),
+            Path::new("../ignite-io"),
+        );
+        assert!(
+            !program.cargo_toml.contains("process"),
+            "{example}: {}",
+            program.cargo_toml
+        );
+        assert!(
+            !std.cargo_toml.contains("process"),
+            "{example}: {}",
+            std.cargo_toml
+        );
+    }
+}

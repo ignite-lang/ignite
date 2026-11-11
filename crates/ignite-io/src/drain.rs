@@ -56,13 +56,15 @@ pub(crate) fn register(slot: &Arc<Slot>) {
     listeners.push(Arc::downgrade(slot));
 }
 
-/// Reset SIGCHLD to its default action (`crate::child::default_sigchld`),
+/// Reset SIGCHLD to its default action (`crate::child::default_sigchld`;
+/// with the feature `process` only: a program without it starts no child),
 /// block SIGTERM in the calling thread (and so in every thread it starts
 /// from now on) and start the signal thread, once per process. A later
 /// call does nothing. Called by [`crate::run`] and by the LLVM runtime's
 /// `init`, before any task thread exists.
 pub fn install() {
     INSTALL.call_once(|| {
+        #[cfg(feature = "process")]
         crate::child::default_sigchld();
         let mut set = SigSet::empty();
         set.add(Signal::SIGTERM);

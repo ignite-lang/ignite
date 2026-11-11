@@ -7358,7 +7358,7 @@ fn dev_member_profile(package: &str) -> String {
 
 /// The packages `ignite-io` depends on, its optional ones aside: what
 /// [`prebuild_manifest`] lets the driver build while it generates.
-pub const SUBSTRATE_DEPENDENCIES: &[&str] = &["corosensei", "nix"];
+pub const SUBSTRATE_DEPENDENCIES: &[&str] = &["corosensei", "nix", "termios"];
 
 /// The manifest of a crate that depends on `ignite-io` at `substrate` with
 /// the generated project's profiles. A `cargo build -p` of
@@ -7462,17 +7462,40 @@ fn std_cargo_toml(substrate: &Path, lib_rs: &str) -> String {
     out
 }
 
+/// The items of `ignite-io`'s feature `process` (its `child` and `pipe`
+/// modules) as generated code names them.
+const PROCESS_ITEMS: &[&str] = &[
+    "::ignite_io::Launcher",
+    "::ignite_io::ChildProcess",
+    "::ignite_io::ChildExit",
+    "::ignite_io::Invocation",
+    "::ignite_io::Pipe",
+    "::ignite_io::child::",
+];
+
 /// The optional `ignite-io` features a crate of Rust `sources` needs:
-/// `tls` when one names a TLS item of the substrate (`::ignite_io::Tls..`),
-/// so a program without TLS builds without rustls and ring. Cargo unifies
-/// features, so the crate (program or `ignite-std`) that names one turns it
-/// on for the build.
+/// `process` when one names a child process or pipe item
+/// ([`PROCESS_ITEMS`]), so a program without either builds `ignite-io`
+/// without those modules (story `build-time-back`); `tls` when one names
+/// a TLS item of the substrate (`::ignite_io::Tls..`), so a program
+/// without TLS builds without rustls and ring. Cargo unifies features, so
+/// the crate (program or `ignite-std`) that names one turns it on for the
+/// build. Neither feature changes a dependency of `ignite-io` but rustls,
+/// so the packages built ahead ([`prebuild_manifest`]) are the same.
 fn substrate_features(sources: &[&str]) -> Vec<&'static str> {
-    if sources.iter().any(|s| s.contains("::ignite_io::Tls")) {
-        vec!["tls"]
-    } else {
-        Vec::new()
+    let names = |items: &[&str]| {
+        sources
+            .iter()
+            .any(|source| items.iter().any(|item| source.contains(item)))
+    };
+    let mut features = Vec::new();
+    if names(PROCESS_ITEMS) {
+        features.push("process");
     }
+    if names(&["::ignite_io::Tls"]) {
+        features.push("tls");
+    }
+    features
 }
 
 /// The `ignite-io` dependency line, with `features` enabled.

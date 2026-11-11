@@ -1359,6 +1359,65 @@ fn substrate_dependencies_are_ignite_ios_own() {
     assert_eq!(names, listed);
 }
 
+/// The features of `ignite-io` the driver sets from the generated sources
+/// (`process`, `tls`) or for tests (`runner`): only `tls` reaches a
+/// dependency, an optional one, so the packages built ahead
+/// ([`ignite_rustgen::prebuild_manifest`], which turns on none) are the
+/// ones the program's build finds fresh whatever it turns on.
+#[test]
+fn only_tls_changes_a_dependency_of_ignite_io() {
+    let manifest = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../ignite-io/Cargo.toml"),
+    )
+    .unwrap();
+    let features = table(&manifest, "features");
+    assert_eq!(
+        features,
+        [
+            "process = []",
+            "runner = [\"process\"]",
+            "tls = [\"dep:rustls\"]"
+        ]
+    );
+}
+
+/// The `features = [..]` of the `nix` line in `lines`.
+fn nix_features<'a>(lines: &[&'a str]) -> Vec<&'a str> {
+    let line = lines
+        .iter()
+        .find(|line| line.starts_with("nix "))
+        .unwrap_or_else(|| panic!("a nix line in {lines:?}"));
+    line.split("features = [")
+        .nth(1)
+        .and_then(|rest| rest.split(']').next())
+        .map(|list| {
+            list.split(',')
+                .map(|name| name.trim().trim_matches('"'))
+                .filter(|name| !name.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The `nix` features every generated project compiles (story
+/// `build-time-back`, row 6.2 rust): `ignite-io`'s own and the workspace's.
+/// Not `term`, whose termios types cost a fifth of `nix` before its
+/// metadata, on the path of every build: raw mode is the `termios` crate's.
+#[test]
+fn ignite_io_builds_nix_without_term() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let workspace = std::fs::read_to_string(root.join("Cargo.toml")).unwrap();
+    let manifest = std::fs::read_to_string(root.join("crates/ignite-io/Cargo.toml")).unwrap();
+    let mut features = nix_features(&table(&workspace, "workspace.dependencies"));
+    features.extend(nix_features(&table(&manifest, "dependencies")));
+    features.sort_unstable();
+    features.dedup();
+    assert_eq!(
+        features,
+        ["dir", "event", "fs", "poll", "resource", "signal", "socket"]
+    );
+}
+
 #[test]
 fn no_system_is_a_library_without_executables() {
     let project = try_generate(vec![]).expect("generates");
