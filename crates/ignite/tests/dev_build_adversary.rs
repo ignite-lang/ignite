@@ -2,7 +2,9 @@
 //! `docs/quality.md`): the dependency build the driver starts ahead
 //! (`crates/ignite/src/prebuild.rs`) is stopped when the driver fails, "so
 //! none outlives the driver". A driver that is ended by a signal fails
-//! nothing and drops nothing: this pins what is left running then.
+//! nothing and drops nothing: this pins what is left running then. And the
+//! debug information of the TLS engine's C code in a dev executable of the
+//! Rust target, for a program built outside the repository.
 
 use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
@@ -122,5 +124,78 @@ fn a_driver_ended_by_sigterm_leaves_no_build_ahead() {
         left.is_empty(),
         "{} processes of the build ahead still ran a second after the driver was gone: {left:#?}",
         left.len()
+    );
+}
+
+/// The names of the compile units of `file` that lie in a cargo registry
+/// or a git checkout (`readelf --debug-dump=info`, units only).
+fn third_party_units(file: &Path) -> Vec<String> {
+    let dump = Command::new("readelf")
+        .args(["--wide", "--debug-dump=info", "--dwarf-depth=1"])
+        .arg(file)
+        .output()
+        .unwrap();
+    assert!(dump.status.success(), "readelf {}", file.display());
+    String::from_utf8_lossy(&dump.stdout)
+        .lines()
+        .filter(|line| line.contains("DW_AT_name"))
+        .filter(|line| line.contains("/registry/src/") || line.contains("/git/checkouts/"))
+        .map(|line| line.rsplit(": ").next().unwrap_or(line).trim().to_string())
+        .collect()
+}
+
+/// The story's acceptance for the Rust target: the generated project
+/// builds its dependencies without debug information in the dev profile.
+/// The C and assembly of the TLS engine get theirs switched off by the
+/// repository's `.cargo/config.toml` (`CFLAGS = "-g0"`), which cargo reads
+/// only when it runs inside the repository. A program is built where its
+/// author keeps it: the driver runs in `/` here, the output lies where
+/// every test's does.
+#[test]
+fn a_tls_program_built_outside_the_repository_holds_no_third_party_debug_information() {
+    let dir = tmp("tls-outside");
+    let source = dir.join("dial.ignite");
+    std::fs::write(
+        &source,
+        "package dial\n\nimport std.tls.{TlsOptions}\n\n\
+         fn open(port: Int) -> Result<TlsStream, IoError> {\n  \
+         let stream = TcpStream.connect(\"127.0.0.1\", port)?\n  \
+         Tls.client(stream, \"localhost\", TlsOptions {})\n}\n\n\
+         type Dial {\n  executable: Text\n}\n\n\
+         fn Dial.main(self: Dial) -> Result<Unit, IoError> {\n  \
+         let session = open(9)?\n  session.close()\n}\n\n\
+         system Dialer {\n  component dial: Dial { executable = \"dial\" }\n}\n",
+    )
+    .unwrap();
+    let target = dir.join("cargo");
+    let output = Command::new(env!("CARGO_BIN_EXE_ignite"))
+        .arg("build")
+        .arg(&source)
+        .args(["--target", "rust"])
+        .arg("--out")
+        .arg(dir.join("out"))
+        .arg("--target-dir")
+        .arg(&target)
+        .current_dir("/")
+        // `cargo test` gives this process the repository's `[env]`, the
+        // `CFLAGS` in question; a build outside the repository has none.
+        .env_remove("CFLAGS")
+        .env("RUSTC_WRAPPER", "")
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let dial = target.join("debug/dial");
+    let third = third_party_units(&dial);
+    assert!(
+        third.is_empty(),
+        "{} compile units of third-party crates in {}, e.g. {:?}",
+        third.len(),
+        dial.display(),
+        &third[..third.len().min(4)]
     );
 }
