@@ -13,6 +13,8 @@
 //! are P3's, `resolve.rs` and `validate.rs` P1's. Still linked by no
 //! backend and no compiled program. Slice 15 (19.7): `claims.rs` is the
 //! claim model and E090 to E092, computed first by [`Model::check`].
+//! `substrate.rs` is the model of the substrate a test runs over
+//! (`docs/slice.md` 33.5), active only in [`Evaluator::run_test`].
 
 use std::collections::BTreeMap;
 
@@ -25,6 +27,7 @@ mod eval;
 mod explain;
 mod model;
 mod resolve;
+mod substrate;
 mod validate;
 mod value;
 
@@ -41,6 +44,7 @@ pub use model::{
     observations, parse_type_name, type_name, value_json,
 };
 pub use resolve::{ResolutionEntry, resolve};
+pub use substrate::{Handle, HandleKind};
 pub use validate::{validate, validate_system};
 pub use value::{DecodeError, Value};
 

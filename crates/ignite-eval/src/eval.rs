@@ -25,6 +25,7 @@ use ignite_types::{
     TCP_LISTENER_DEFAULT_BACKLOG, TCP_LISTENER_DEFAULT_EXPOSURE, Ty, TypedProgram, field_default,
 };
 
+use crate::substrate::{Call, HandleKind, Job, Over, Read, Wait, World};
 use crate::{Module, Modules, Value};
 
 /// The limits of one property expression's evaluation (`docs/slice.md`
@@ -206,6 +207,10 @@ pub struct Evaluator<'p> {
     time_limit: Option<std::time::Duration>,
     /// When the current evaluation passes its time limit.
     deadline: Option<std::time::Instant>,
+    /// The model of the substrate while a test runs ([`Evaluator::run_test`],
+    /// `docs/slice.md` 33.5), as this evaluator's task sees it; `None`
+    /// at compile time, where its builtins have no value.
+    world: Option<World>,
 }
 
 impl<'p> Evaluator<'p> {
@@ -228,6 +233,7 @@ impl<'p> Evaluator<'p> {
             on_stack: false,
             time_limit: None,
             deadline: None,
+            world: None,
         }
     }
 
@@ -319,8 +325,98 @@ impl<'p> Evaluator<'p> {
             module: m,
             system: None,
         };
-        self.run(move |ev| ev.block_body(&cx, &test.body).map(|_| Value::Unit))
+        self.run(move |ev| ev.in_world(move |ev| ev.block_body(&cx, &test.body)))
             .map(|_| ())
+    }
+
+    /// Run `body`, a test's, as task 0 of a fresh model of the substrate
+    /// (`docs/slice.md` 33.5): its value is `Unit` when the body ended
+    /// without failing, and the outcome is the body's, or the reason the
+    /// evaluator cannot run a task, or the model's deadlock. Every task
+    /// runs on a thread of its own and only the one holding the turn runs;
+    /// this thread supervises: it starts the thread of each spawned task
+    /// and returns when every task's thread has ended.
+    fn in_world(&mut self, body: impl FnOnce(&mut Self) -> Eval<Value> + Send) -> Eval<Value> {
+        let world = World::new(self.units_left);
+        let modules = self.modules;
+        let fuel = self.fuel;
+        let (time_limit, deadline) = (self.time_limit, self.deadline);
+        let (outcome, units) = std::thread::scope(|scope| {
+            let supervisor = world.clone();
+            scope.spawn(move || {
+                while let Some(spawned) = supervisor.next_spawns() {
+                    for (id, job) in spawned {
+                        let task = supervisor.task(id);
+                        let started = std::thread::Builder::new()
+                            .name("ignite-eval-task".to_string())
+                            .stack_size(Evaluator::STACK_BYTES)
+                            .spawn_scoped(scope, move || {
+                                let mut ev = Evaluator::new(modules, fuel);
+                                ev.time_limit = time_limit;
+                                ev.deadline = deadline;
+                                ev.on_stack = true;
+                                ev.run_task(task, job);
+                            });
+                        if let Err(error) = started {
+                            supervisor.end_with(EvalError::Failed {
+                                report: format!("evaluation failed: a task cannot start: {error}"),
+                            });
+                        }
+                    }
+                }
+            });
+            self.world = Some(world.clone());
+            let result = body(self);
+            self.world = None;
+            let ended = match result {
+                Ok(_) | Err(Flow::Return(_)) => Ok(()),
+                Err(Flow::Error(error)) => Err(error),
+                Err(Flow::Break | Flow::Continue) => Err(EvalError::Failed {
+                    report: "evaluation failed: `break` or `continue` outside a loop".to_string(),
+                }),
+            };
+            world.end(ended, self.units_left);
+            world.outcome()
+        });
+        self.units_left = units;
+        match outcome {
+            Some(Ok(())) => Ok(Value::Unit),
+            Some(Err(error)) => Err(Flow::Error(error)),
+            None => Err(internal("the test ended without an outcome")),
+        }
+    }
+
+    /// Run the spawned task of `world` that calls `job`, once it holds the
+    /// turn. A failure ends only the task, as on the targets; a limit or
+    /// an operation the evaluator has no rule for ends the test.
+    fn run_task(&mut self, world: World, job: Job) {
+        let Ok(units) = world.begin() else {
+            return;
+        };
+        self.units_left = units;
+        self.world = Some(world.clone());
+        self.frames.push(Frame::default());
+        let result = match job.call {
+            Call::Fn(q) => self.call_fn(&q, job.args),
+            Call::Role { protocol, role } => self.call_role(&protocol, &role, job.args),
+            Call::Value(f) => self.apply(f, job.args),
+        };
+        self.frames.clear();
+        self.stack.clear();
+        self.world = None;
+        let ended = match result {
+            Ok(_) | Err(Flow::Return(_)) => Ok(()),
+            Err(Flow::Error(EvalError::Failed { report }))
+                if !report.starts_with("evaluation failed: ") =>
+            {
+                Ok(())
+            }
+            Err(Flow::Error(error)) => Err(error),
+            Err(Flow::Break | Flow::Continue) => Err(EvalError::Failed {
+                report: "evaluation failed: `break` or `continue` outside a loop".to_string(),
+            }),
+        };
+        world.end(ended, self.units_left);
     }
 
     /// One evaluation: fresh budgets on the evaluation stack, flows
@@ -398,16 +494,20 @@ impl<'p> Evaluator<'p> {
     }
 
     /// `nodes` new nodes were built. Past the node limit the live values are
-    /// counted exactly and compared with it.
+    /// counted exactly and compared with it: the locals and, under a test,
+    /// what the model of the substrate holds (stored and queued values,
+    /// pipe bytes).
     fn alloc(&mut self, nodes: u64) -> Eval<()> {
         self.allocated = self.allocated.saturating_add(nodes);
         if self.allocated > self.fuel.nodes {
-            let live: u64 = self
-                .frames
-                .iter()
-                .flat_map(|frame| &frame.locals)
-                .map(|(_, value)| value.nodes())
-                .sum();
+            let held = self.world.as_ref().map_or(0, World::nodes);
+            let live: u64 = held
+                + self
+                    .frames
+                    .iter()
+                    .flat_map(|frame| &frame.locals)
+                    .map(|(_, value)| value.nodes())
+                    .sum::<u64>();
             if live > self.fuel.nodes {
                 return Err(self.limit(Limit::Nodes(self.fuel.nodes)));
             }
@@ -559,6 +659,55 @@ impl<'p> Evaluator<'p> {
         };
         let result = self.expr(&cx, &closure.body);
         self.frames.pop();
+        match result {
+            Ok(value) | Err(Flow::Return(value)) => Ok(value),
+            Err(other) => Err(other),
+        }
+    }
+
+    /// Call the role `role` of the protocol `protocol` with `args` by
+    /// position: the body of the role's fn in the protocol declaration.
+    fn call_role(&mut self, protocol: &QualName, role: &str, args: Vec<Value>) -> Eval<Value> {
+        let module = self
+            .modules
+            .get(&protocol.module)
+            .ok_or_else(|| internal(format!("module `{}` is not loaded", protocol.module)))?;
+        let decl = module
+            .program
+            .decls
+            .iter()
+            .find_map(|decl| match decl {
+                Decl::Protocol(p) if p.name.name == protocol.name => {
+                    p.fns.iter().find(|f| f.name.name == role)
+                }
+                _ => None,
+            })
+            .ok_or_else(|| internal(format!("role `{protocol}.{role}` is not declared")))?;
+        if decl.params.len() != args.len() {
+            return Err(internal(format!(
+                "role `{protocol}.{role}` takes {} arguments, {} given",
+                decl.params.len(),
+                args.len()
+            )));
+        }
+        self.tick()?;
+        self.enter()?;
+        self.stack.push(QualName::new(
+            protocol.module.clone(),
+            format!("{}.{role}", protocol.name),
+        ));
+        let mut frame = Frame::default();
+        for (param, value) in decl.params.iter().zip(args) {
+            frame.locals.push((param.name.name.clone(), value));
+        }
+        self.frames.push(frame);
+        let cx = Cx {
+            module,
+            system: None,
+        };
+        let result = self.block_body(&cx, &decl.body);
+        self.frames.pop();
+        self.stack.pop();
         match result {
             Ok(value) | Err(Flow::Return(value)) => Ok(value),
             Err(other) => Err(other),
@@ -1133,6 +1282,11 @@ impl<'p> Evaluator<'p> {
         builtin: Builtin,
         args: Vec<Value>,
     ) -> Eval<Value> {
+        if let Some(world) = self.world.clone()
+            && is_model_static(builtin)
+        {
+            return self.model_static(&world, builtin, args);
+        }
         let mut args = args.into_iter();
         let mut next = || args.next().ok_or_else(|| internal("missing argument"));
         match builtin {
@@ -1192,6 +1346,13 @@ impl<'p> Evaluator<'p> {
         if is_static(builtin) {
             let values = self.exprs(cx, args)?;
             return self.builtin_static(cx, e, builtin, values);
+        }
+        if let Some(world) = self.world.clone()
+            && is_model_method(builtin)
+        {
+            let values = self.exprs(cx, args)?;
+            let receiver = self.expr(cx, receiver)?;
+            return self.model_method(&world, builtin, receiver, values);
         }
         match builtin {
             Builtin::ListPush
@@ -2322,6 +2483,143 @@ impl<'p> Evaluator<'p> {
         })
     }
 
+    // ---- the model of the substrate (docs/slice.md 33.5) ----------------
+
+    /// A static builtin of the model under a test.
+    fn model_static(&mut self, world: &World, builtin: Builtin, args: Vec<Value>) -> Eval<Value> {
+        match builtin {
+            Builtin::StoreNew => {
+                let store = world.store_new().map_err(over)?;
+                Ok(Value::Handle(store))
+            }
+            Builtin::SettingOf => {
+                let setting = world
+                    .capability(HandleKind::Setting, Value::Tuple(args))
+                    .map_err(over)?;
+                Ok(Value::Handle(setting))
+            }
+            Builtin::CommandLineOf | Builtin::EnvironmentOf => {
+                let kind = if builtin == Builtin::CommandLineOf {
+                    HandleKind::CommandLine
+                } else {
+                    HandleKind::Environment
+                };
+                let value = args
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| internal("missing argument"))?;
+                Ok(Value::Handle(world.capability(kind, value).map_err(over)?))
+            }
+            other => Err(internal(format!(
+                "builtin `{other:?}` has no value at compile time"
+            ))),
+        }
+    }
+
+    /// A method of a handle of the model under a test, on the evaluated
+    /// `receiver` with the evaluated `args`.
+    fn model_method(
+        &mut self,
+        world: &World,
+        builtin: Builtin,
+        receiver: Value,
+        args: Vec<Value>,
+    ) -> Eval<Value> {
+        let handle = match &receiver {
+            Value::Handle(handle) => handle.clone(),
+            other => {
+                return Err(internal(format!(
+                    "builtin `{builtin:?}` on `{}` has no value in the model",
+                    other.debug_text()
+                )));
+            }
+        };
+        let mut args = args.into_iter();
+        let mut next = || args.next().ok_or_else(|| internal("missing argument"));
+        let int = |value: Value| match value {
+            Value::Int(n) => Ok(n),
+            other => Err(internal(format!("`{}` is not an Int", other.debug_text()))),
+        };
+        let id = handle.id();
+        match (builtin, handle.kind()) {
+            (Builtin::StoreNextId, HandleKind::Store) => {
+                Ok(Value::Int(world.store_next_id(id).map_err(over)?))
+            }
+            (Builtin::StoreGet, HandleKind::Store) => {
+                let key = int(next()?)?;
+                let found = world.store_get(id, key).map_err(over)?;
+                self.alloc(found.as_ref().map_or(0, Value::nodes) + 1)?;
+                Ok(Value::option(found))
+            }
+            (Builtin::StorePut, HandleKind::Store) => {
+                let key = int(next()?)?;
+                world.store_put(id, key, next()?).map_err(over)?;
+                Ok(Value::Unit)
+            }
+            (Builtin::StoreRemove, HandleKind::Store) => {
+                let key = int(next()?)?;
+                Ok(Value::option(world.store_remove(id, key).map_err(over)?))
+            }
+            (Builtin::StoreValues, HandleKind::Store) => {
+                let values = world.store_values(id).map_err(over)?;
+                self.alloc(values.iter().map(Value::nodes).sum::<u64>() + 1)?;
+                Ok(Value::List(values))
+            }
+            (Builtin::StoreUpdate, HandleKind::Store) => {
+                let key = int(next()?)?;
+                let f = next()?;
+                match world.store_get(id, key).map_err(over)? {
+                    None => Ok(Value::none()),
+                    Some(old) => {
+                        let new = self.apply(f, vec![old])?;
+                        world.store_put(id, key, new.clone()).map_err(over)?;
+                        Ok(Value::some(new))
+                    }
+                }
+            }
+            (Builtin::StoreUpsert, HandleKind::Store) => {
+                let key = int(next()?)?;
+                let f = next()?;
+                let old = world.store_get(id, key).map_err(over)?;
+                let new = self.apply(f, vec![Value::option(old)])?;
+                world.store_put(id, key, new.clone()).map_err(over)?;
+                Ok(new)
+            }
+            (Builtin::SettingValue, HandleKind::Setting) => {
+                match world.capability_value(id).map_err(over)? {
+                    Value::Tuple(mut items) if items.len() == 2 => Ok(items.remove(1)),
+                    _ => Err(internal("a setting without its value")),
+                }
+            }
+            (Builtin::CommandLineArguments, HandleKind::CommandLine) => {
+                let arguments = world.capability_value(id).map_err(over)?;
+                self.alloc(arguments.nodes())?;
+                Ok(arguments)
+            }
+            (Builtin::EnvironmentGet, HandleKind::Environment) => {
+                let (Value::List(entries), Value::Text(name)) =
+                    (world.capability_value(id).map_err(over)?, next()?)
+                else {
+                    return Err(internal("an environment without its entries"));
+                };
+                // `Environment.of`: split at the first `=`, the last entry
+                // of a name winning, one without `=` or a name skipped.
+                let found = entries.iter().rev().find_map(|entry| match entry {
+                    Value::Text(entry) => entry
+                        .split_once('=')
+                        .filter(|(key, _)| !key.is_empty() && *key == name)
+                        .map(|(_, value)| Value::Text(value.to_string())),
+                    _ => None,
+                });
+                Ok(Value::option(found))
+            }
+            (builtin, kind) => Err(internal(format!(
+                "builtin `{builtin:?}` on a `{}` has no value in the model",
+                kind.name()
+            ))),
+        }
+    }
+
     // ---- failure reports (14.8) -----------------------------------------
 
     /// The E117 flow of the failure site of `e` (its recorded operation and
@@ -2365,6 +2663,36 @@ fn member_of<'p>(cx: &Cx<'p>, name: &str) -> Option<(&'p str, &'p MemberInfo)> {
         .find(|s| s.name == system)?
         .member(name)?;
     Some((system, info))
+}
+
+/// The model's flow of a test that is over: the task unwinds.
+fn over(_: Over) -> Flow {
+    internal("the test is over")
+}
+
+/// The statics that have a value in the model of a test (33.5).
+fn is_model_static(builtin: Builtin) -> bool {
+    matches!(
+        builtin,
+        Builtin::StoreNew | Builtin::SettingOf | Builtin::CommandLineOf | Builtin::EnvironmentOf
+    )
+}
+
+/// The handle methods that have a value in the model of a test (33.5).
+fn is_model_method(builtin: Builtin) -> bool {
+    matches!(
+        builtin,
+        Builtin::StoreNextId
+            | Builtin::StoreGet
+            | Builtin::StorePut
+            | Builtin::StoreRemove
+            | Builtin::StoreValues
+            | Builtin::StoreUpdate
+            | Builtin::StoreUpsert
+            | Builtin::SettingValue
+            | Builtin::CommandLineArguments
+            | Builtin::EnvironmentGet
+    )
 }
 
 /// Builtin statics and free fns: the receiver of such a method call is the
