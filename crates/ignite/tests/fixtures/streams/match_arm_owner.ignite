@@ -1,0 +1,114 @@
+package tests.streams
+
+// Run on both targets by tests/stream_ownership.rs (story
+// llvm-http-connection-closes-its-socket): a `match` on `accept` whose
+// `Ok` arm binds the accepted stream, reads its `Connection.of` (a record
+// that holds no handle) and whose `Err` arm lets the error out, the accept
+// loop of `std.protocol.http.serve_listener`. The block of
+// the `match` owns the stream `accept` made, as the block of a `let` does:
+// the connection ends when the task it was spawned with, or the arm that
+// only used it, is done, and the client reads the end of the stream. An
+// arm that returns the stream gives it to the caller, open: the block
+// owns nothing then. (Who closes a stream returned through an arm is not
+// decided here; on the LLVM target its descriptor stays until the process
+// ends, `docs/llvm.md` section 4.)
+
+import std.net.{TcpListener, TcpStream, Connection}
+import std.io.IoError
+
+type IoResult<T> = Result<T, IoError>
+
+fn greet(stream: TcpStream, connection: Connection) -> IoResult<Unit> requires [stream.write] {
+  assert connection.peer.port > 0
+  stream.write_all(b"hi")
+}
+
+// What `client` reads until the other end is closed. A read that waits
+// 2 s ends it too: `ended` then tells the leak from the close.
+test fn rest(client: TcpStream) -> IoResult<Bytes> {
+  client.set_idle_timeout(2000)?
+  var out = Bytes.empty()
+  loop {
+    match client.read(4096)? {
+      Eof => return Ok(out)
+      Data(bytes) => out.append(bytes)
+    }
+  }
+}
+
+// Whether the last read of `client` saw the end of the stream, not the
+// idle timeout.
+test fn ended(client: TcpStream) -> Bool = !client.timed_out()
+
+// Accepts `count` connections and gives each to a task of its own.
+test fn spawn_each(listener: TcpListener, count: Int) -> IoResult<Unit> {
+  var served = 0
+  while served < count {
+    match listener.accept() {
+      Ok(stream) => {
+        let connection = Connection.of(stream)
+        spawn greet(stream, connection)
+      }
+      Err(error) => {
+        return Err(error)
+      }
+    }
+    served = served + 1
+  }
+  Ok(())
+}
+
+// Accepts one connection, greets it in the arm and drops it.
+test fn greet_in_the_arm(listener: TcpListener) -> IoResult<Unit> {
+  match listener.accept() {
+    Ok(stream) => {
+      _ = stream.write_all(b"hi")
+    }
+    Err(error) => return Err(error)
+  }
+  Ok(())
+}
+
+// Accepts one connection and returns it.
+test fn accepted(listener: TcpListener) -> IoResult<TcpStream> {
+  match listener.accept() {
+    Ok(stream) => Ok(stream)
+    Err(error) => Err(error)
+  }
+}
+
+test "a stream bound in a match arm and spawned is closed when its task ends" {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let first = TcpStream.connect("127.0.0.1", listener.local_port())?
+  let second = TcpStream.connect("127.0.0.1", listener.local_port())?
+  spawn_each(listener, 2)?
+  assert rest(first)? == b"hi"
+  assert ended(first)
+  assert rest(second)? == b"hi"
+  assert ended(second)
+}
+
+test "a stream bound in a match arm and dropped is closed when the match is left" {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let client = TcpStream.connect("127.0.0.1", listener.local_port())?
+  greet_in_the_arm(listener)?
+  assert rest(client)? == b"hi"
+  assert ended(client)
+}
+
+test "a stream bound in a match arm and returned reaches the caller open" {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let client = TcpStream.connect("127.0.0.1", listener.local_port())?
+  let server = accepted(listener)?
+  server.set_idle_timeout(2000)?
+  client.write_all(b"ho")?
+  let heard = match server.read(4096)? {
+    Eof => Bytes.empty()
+    Data(bytes) => bytes
+  }
+  assert heard == b"ho"
+  server.write_all(b"hi")?
+  _ = server.close()
+  assert rest(client)? == b"hi"
+  assert ended(client)
+}

@@ -45,6 +45,87 @@ fn plain() -> Int {
   log(rx.closed().to_text())
   return 0
 }
+
+fn tagged() -> (Sender<Int>, Int) {
+  let (tx, rx) = ends()
+  (tx, 7)
+}
+
+fn tag_returned() -> Int {
+  match tagged() {
+    (tx, tag) => {
+      tx.send(1)
+      return tag
+    }
+  }
+}
+
+fn tag_captured() -> fn() -> Int {
+  match tagged() {
+    (tx, tag) => {
+      tx.send(1)
+      return || tag
+    }
+  }
+}
+
+fn sender_returned() -> Sender<Int> {
+  match tagged() {
+    (tx, tag) => {
+      log(tag.to_text())
+      return tx
+    }
+  }
+}
+
+fn tags(senders: Store<(Sender<Int>, Int)>) -> List<Int> {
+  var out: List<Int> = []
+  for (tx, tag) in senders.values() {
+    let sender: Sender<Int> = tx
+    sender.send(1)
+    out.push(tag)
+  }
+  out
+}
+
+type Seen { by: Tag, count: Int }
+
+enum Tag { Named(Text), Unnamed }
+
+type Holder { tx: Sender<Int> }
+
+fn seen(tx: Sender<Int>) -> Seen = Seen { by = Unnamed, count = 1 }
+
+fn holder(tx: Sender<Int>) -> Holder = Holder { tx = tx }
+
+fn seen_in_an_arm() -> Seen {
+  match tagged() {
+    (tx, tag) => {
+      let view = seen(tx)
+      tx.send(tag)
+      return view
+    }
+  }
+}
+
+fn held_in_an_arm() -> Holder {
+  match tagged() {
+    (tx, tag) => {
+      let kept = holder(tx)
+      log(tag.to_text())
+      return kept
+    }
+  }
+}
+
+fn kept_senders(senders: Store<(Sender<Int>, Int)>) -> List<Sender<Int>> {
+  var out: List<Sender<Int>> = []
+  for (tx, tag) in senders.values() {
+    log(tag.to_text())
+    out.push(tx)
+  }
+  out
+}
 ";
 
 /// `program.ll` of [`PROGRAM`].
@@ -101,6 +182,56 @@ fn a_match_whose_second_binding_escapes_owns_no_handle() {
     assert!(
         both_kept.contains("ignite_rt_own_release"),
         "both_kept does not release its scrutinee:\n{both_kept}"
+    );
+}
+
+/// A name a pattern binds to a value without handles escapes with nothing
+/// to release (story `llvm-http-connection-closes-its-socket`: the accept
+/// loop of `std.protocol.http`, `Err(error) => return Err(error)` beside
+/// `Ok(stream) => spawn ..`, left every accepted socket open): returned or
+/// captured by a closure in a `match` arm, or pushed to a list in a `for`
+/// body, it leaves the block the owner of the scrutinee or the iterated
+/// value. The handle beside it still decides: where that one escapes, the
+/// block owns nothing.
+#[test]
+fn a_binding_without_handles_that_escapes_leaves_the_block_the_owner() {
+    let ir = lower();
+    let releases = |name: &str| body(&ir, name).contains("ignite_rt_own_release");
+    for owner in ["tag_returned", "tag_captured", "tags"] {
+        assert!(
+            releases(owner),
+            "{owner} does not release the handle beside the value it lets out:\n{}",
+            body(&ir, owner)
+        );
+    }
+    for passes_on in ["sender_returned", "kept_senders"] {
+        assert!(
+            !releases(passes_on),
+            "{passes_on} releases a handle it lets out:\n{}",
+            body(&ir, passes_on)
+        );
+    }
+}
+
+/// A call whose result is a record or an enum without a handle inside
+/// cannot hand its argument's handle back, so the argument stays the
+/// block's (the other half of the same story: `let connection =
+/// Connection.of(stream)` before the spawn, a record of two endpoints and
+/// a flag). A record with the handle in a field can: the block then owns
+/// nothing.
+#[test]
+fn a_call_that_returns_a_record_without_handles_keeps_its_argument() {
+    let ir = lower();
+    let releases = |name: &str| body(&ir, name).contains("ignite_rt_own_release");
+    assert!(
+        releases("seen_in_an_arm"),
+        "seen_in_an_arm does not release the sender it only showed to `seen`:\n{}",
+        body(&ir, "seen_in_an_arm")
+    );
+    assert!(
+        !releases("held_in_an_arm"),
+        "held_in_an_arm releases a handle its result holds:\n{}",
+        body(&ir, "held_in_an_arm")
     );
 }
 
