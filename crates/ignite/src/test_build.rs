@@ -444,6 +444,7 @@ fn build_group(
                 triple.as_deref(),
                 true,
                 build.offline,
+                None,
             )?;
             let file = format!(
                 "{}{}",

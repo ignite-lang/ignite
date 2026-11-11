@@ -1413,8 +1413,139 @@ pub fn generate_tests(
 /// build whose executable is gone is removed, and `src/bin` with it when no
 /// executable is left, so cargo does not find a stale binary.
 pub fn write_project(project: &GeneratedProject, out: &Path) -> io::Result<()> {
+    write_with_manifest(project, &project.cargo_toml, out)
+}
+
+/// The linker script of a release executable (row 3.8 of
+/// `docs/quality.md`, story `rust-peak-memory-at-one-connection`): the
+/// functions of the standard library's backtrace symbolizer
+/// (`std::backtrace_rs` and the crates it reads debug information with)
+/// in one run at the start of the code, before every other function.
+/// They are about 170 kB that run only to print a backtrace, and fat LTO
+/// leaves them between functions of the standard library a server runs
+/// at its start. The kernel maps the pages of a file around every page a
+/// process touches (64 KiB by default), so there they were resident
+/// memory of every process; in one run only its end is next to code that
+/// runs. `.init` follows the code, as the LLVM linker orders the two
+/// itself, so the run starts the mapping under that linker; under GNU ld
+/// only the procedure linkage table is before it. The script adds to the
+/// linker's own layout (`INSERT`), which those two read; it changes no
+/// instruction and adds no section.
+pub const RELEASE_LAYOUT: &str = "SECTIONS
+{
+  .text : {
+    *(.text.*12backtrace_rs* .text.*5gimli* .text.*9addr2line* .text.*14rustc_demangle* .text.*11miniz_oxide*)
+    *(.text .text.*)
+  }
+  .init : { KEEP (*(SORT_NONE(.init))) }
+} INSERT BEFORE .fini;
+";
+
+/// The name the package of a release build `links` to: the key by which
+/// the driver gives cargo the link arguments ([`release_layout_config`]).
+const LAYOUT_LINKS: &str = "ignite-layout";
+
+/// The file of [`RELEASE_LAYOUT`] in the project directory.
+const LAYOUT_SCRIPT: &str = "layout.ld";
+
+/// The build script of a release project, in the project directory.
+const LAYOUT_BUILD: &str = "layout.rs";
+
+/// The build script of a release project: the link arguments of
+/// [`release_layout_config`], for a cargo run that was not given them (a
+/// `cargo build --release` by hand, or a host whose target triple the
+/// driver did not name). The driver's own run overrides it, so cargo
+/// neither compiles nor runs it.
+const LAYOUT_BUILD_RS: &str = "fn main() {
+    println!(\"cargo::rerun-if-changed=layout.ld\");
+    println!(\"cargo::rustc-link-arg-bins=-T\");
+    println!(
+        \"cargo::rustc-link-arg-bins={}/layout.ld\",
+        env!(\"CARGO_MANIFEST_DIR\")
+    );
+}
+";
+
+/// [`write_project`] for the release build of a program on Linux: the
+/// project with [`RELEASE_LAYOUT`] as `layout.ld`, linked into its
+/// executables. The manifest names the script's link arguments by a
+/// `links` key with a build script; a dev build's manifest has neither,
+/// so `cargo build` of it compiles nothing more. `false` for a program
+/// without an executable, which is written as [`write_project`] writes it:
+/// nothing of it is linked with the script, and cargo refuses link
+/// arguments for executables from the build script of a package that has
+/// none.
+pub fn write_release_project(project: &GeneratedProject, out: &Path) -> io::Result<bool> {
+    if project.executables.is_empty() {
+        write_project(project, out)?;
+        return Ok(false);
+    }
+    write_with_manifest(project, &release_manifest(&project.cargo_toml), out)?;
+    write_layout_files(out)?;
+    Ok(true)
+}
+
+/// [`RELEASE_LAYOUT`] and the build script that names it, in the project
+/// directory `out`.
+fn write_layout_files(out: &Path) -> io::Result<()> {
+    write_if_changed(out.join(LAYOUT_SCRIPT), RELEASE_LAYOUT)?;
+    write_if_changed(out.join(LAYOUT_BUILD), LAYOUT_BUILD_RS)
+}
+
+/// The manifest of [`write_layout_probe`]'s project without the layout.
+const PROBE_MANIFEST: &str = "[package]
+name = \"ignite-layout-probe\"
+version = \"0.0.0\"
+edition = \"2024\"
+
+[workspace]
+";
+
+/// The project that asks a linker whether it reads [`RELEASE_LAYOUT`],
+/// written to `out`: one executable with an empty `main` and no
+/// dependency. With `layout` its manifest names the script as a release
+/// project's does ([`write_release_project`], [`release_layout_config`]);
+/// without, it is the same program linked as the linker lays it out
+/// itself. A release build that failed with the script builds the two to
+/// tell a linker that refuses the script from any other failure.
+pub fn write_layout_probe(out: &Path, layout: bool) -> io::Result<()> {
     fs::create_dir_all(out.join("src"))?;
-    write_if_changed(out.join("Cargo.toml"), &project.cargo_toml)?;
+    let manifest = if layout {
+        release_manifest(PROBE_MANIFEST)
+    } else {
+        PROBE_MANIFEST.to_string()
+    };
+    write_if_changed(out.join("Cargo.toml"), &manifest)?;
+    write_if_changed(out.join("src").join("main.rs"), "fn main() {}\n")?;
+    write_layout_files(out)
+}
+
+/// The manifest `manifest` with the `links` key and the build script of a
+/// release project in its `[package]` table, which starts it.
+fn release_manifest(manifest: &str) -> String {
+    manifest.replacen(
+        "[package]\n",
+        &format!("[package]\nlinks = \"{LAYOUT_LINKS}\"\nbuild = \"{LAYOUT_BUILD}\"\n"),
+        1,
+    )
+}
+
+/// The value of `--config` that gives cargo the link arguments of the
+/// release project at `out` ([`write_release_project`]) for the target
+/// `triple`: `-T` and the linker script, for the executables only. With it
+/// cargo does not compile the project's build script.
+pub fn release_layout_config(triple: &str, out: &Path) -> io::Result<String> {
+    let script = std::path::absolute(out.join(LAYOUT_SCRIPT))?;
+    Ok(format!(
+        "target.{triple}.{LAYOUT_LINKS}.rustc-link-arg-bins=[\"-T\", {}]",
+        toml_string(&script.to_string_lossy())
+    ))
+}
+
+/// [`write_project`] with `manifest` as `Cargo.toml`.
+fn write_with_manifest(project: &GeneratedProject, manifest: &str, out: &Path) -> io::Result<()> {
+    fs::create_dir_all(out.join("src"))?;
+    write_if_changed(out.join("Cargo.toml"), manifest)?;
     write_if_changed(out.join("src").join("lib.rs"), &project.lib_rs)?;
     let bin = out.join("src").join("bin");
     let names: Vec<String> = project
