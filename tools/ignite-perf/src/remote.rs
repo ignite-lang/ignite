@@ -28,14 +28,15 @@
 //! `--run vX.Y.Z` the run is a release: a row whose HEAD median is worse than BASE's (the last
 //! release, measured on the same host in the same run) beyond the metric's tolerance in
 //! `quality/baseline.json`, or worse in every pass than every pass of BASE, refuses it, and the
-//! records are labelled `run`. A cell of the size row (3.9) that is worse is held by a
-//! `decision` on its bar and printed instead ([`judge`]).
+//! records are labelled `run`. A cell of the size row (3.9) that is worse is held by a new
+//! `decision` on its bar, one `quality/baseline.json` at BASE does not hold, and printed instead
+//! ([`judge`]).
 //!
 //! `--dry-run` makes the read-only calls, makes every call that creates with EC2's
 //! `--dry-run` (the answer `DryRunOperation` is success) and prints the rest without making
 //! them.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
@@ -1609,9 +1610,10 @@ pub fn shown(value: i64, unit: &str) -> String {
 /// every HEAD sample is worse than every BASE sample (a row of one sample each: any worse value).
 /// The tolerance is a bound on noise only: where the samples overlap the difference is not
 /// shown and the tolerance decides; where they do not, the row is worse. No `decision` holds a
-/// row for a release, the size row excepted ([`judge`]).
+/// row for a release, the size row excepted ([`judge`]); without BASE's baseline, which this
+/// takes none of, a worse cell of the size row is refused too.
 pub fn refusals(baseline: &Json, rows: &[Row]) -> R<Vec<String>> {
-    Ok(judge(baseline, rows)?.refused)
+    Ok(judge(baseline, None, rows)?.refused)
 }
 
 /// What a release run found: every reason the release is refused, and every grown cell of the
@@ -1630,10 +1632,14 @@ pub const SIZE_ROW: &str = "3.9";
 /// The rows of a release run judged against `baseline` ([`refusals`]). A cell of the size row
 /// (`"release_growth": "decision"` on its metric; `AGENTS.md` § Releases: a binary may grow when
 /// a release adds code) that would be refused is listed in `grown` instead when its bar in the
-/// baseline carries a `decision`, which names the code that added the bytes; without one it is
-/// refused and the refusal says the decision is missing. Another value of the mark, or the mark
-/// on a row other than [`SIZE_ROW`], is an error.
-pub fn judge(baseline: &Json, rows: &[Row]) -> R<Judged> {
+/// baseline carries a new `decision`, which names the code that added the bytes; without one it
+/// is refused and the refusal says the decision is missing. A decision is new when
+/// `base_baseline`, `quality/baseline.json` at BASE ([`baseline_at`]), does not hold it, on that
+/// bar or anywhere else, trimmed: one it holds named the last release's code and does not let a
+/// cell grow again, and the refusal asks for a new one. With no `base_baseline` (it could not
+/// be read) a grown cell with a decision is refused, since the decision is not known to be new.
+/// Another value of the mark, or the mark on a row other than [`SIZE_ROW`], is an error.
+pub fn judge(baseline: &Json, base_baseline: Option<&Json>, rows: &[Row]) -> R<Judged> {
     let mut out = Judged::default();
     for row in rows {
         let metric = baseline.field("metrics").field(&row.metric);
@@ -1711,15 +1717,42 @@ pub fn judge(baseline: &Json, rows: &[Row]) -> R<Judged> {
                 .as_str()
                 .map(str::trim)
                 .filter(|decision| !decision.is_empty());
-            match decision {
-                Some(decision) => out.grown.push(format!("{values}; decision: {decision}")),
-                None => out.refused.push(format!(
+            let Some(decision) = decision else {
+                out.refused.push(format!(
                     "{values} {judged}; a size row grows at a release only by a `decision` on the bar of the grown cell, and a `decision` naming the added code is missing"
+                ));
+                continue;
+            };
+            match base_baseline.map(decisions_of) {
+                None => out.refused.push(format!(
+                    "{values} {judged}; quality/baseline.json at the base could not be read, so the decision `{decision}` is not known to be new"
                 )),
+                Some(held) if held.contains(decision) => out.refused.push(format!(
+                    "{values} {judged}; the decision `{decision}` is the last release's (quality/baseline.json at the base holds it), and a new `decision` naming the added code is needed"
+                )),
+                Some(_) => out.grown.push(format!("{values}; decision: {decision}")),
             }
         }
     }
     Ok(out)
+}
+
+/// Every decision `baseline` holds, trimmed: on a bar, on a tolerance, for a slow unit, for an
+/// intermittent difference (as `quality::decisions_of` of the gate reads them).
+fn decisions_of(baseline: &Json) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    for (_, metric) in baseline.field("metrics").as_obj() {
+        for (_, bar) in metric.field("bars").as_obj() {
+            out.extend(bar.field("decision").as_str());
+        }
+        out.extend(metric.field("tolerance_decision").as_str());
+    }
+    for key in ["eval_slow", "intermittent_decisions"] {
+        for (_, decision) in baseline.field(key).as_obj() {
+            out.extend(decision.as_str());
+        }
+    }
+    out.into_iter().map(|d| d.trim().to_string()).collect()
 }
 
 /// `machine` of the records: the instance type, what the host reported, and the cost.
@@ -1772,6 +1805,24 @@ fn git_commit(repo: &Path, rev: &str) -> R<String> {
         return Err(format!("{rev}: not a commit of {}", repo.display()));
     }
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+/// `quality/baseline.json` at the revision `rev` of `repo`, read on the caller's side (`git
+/// show <rev>:quality/baseline.json`): the committed file of that revision, whatever the working
+/// tree holds. [`judge`] reads from BASE's which decisions are the last release's.
+pub fn baseline_at(repo: &Path, rev: &str) -> R<Json> {
+    let file = format!("{rev}:quality/baseline.json");
+    let out = Command::new("git")
+        .args(["-C", &path_str(repo), "show", &file])
+        .output()
+        .map_err(io_err("git"))?;
+    if !out.status.success() {
+        return Err(format!(
+            "git show {file}: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    Json::parse(&String::from_utf8_lossy(&out.stdout)).map_err(|e| format!("{file}: {e}"))
 }
 
 /// The fewest passes of each tree a release run takes, for the timing rows and the benchmark
@@ -1903,7 +1954,17 @@ pub fn main(args: &RemoteArgs) -> R<i32> {
     }
     let baseline = crate::perf::read_json(&args.repo.join("quality/baseline.json"))?;
     let Judged { refused, grown } = if args.run.starts_with('v') {
-        judge(&baseline, &rows)?
+        let base_baseline = match baseline_at(&args.repo, &base) {
+            Ok(read) => Some(read),
+            Err(why) => {
+                eprintln!(
+                    "release {}: quality/baseline.json at the base could not be read ({why}); a grown cell of the size row is refused",
+                    args.run
+                );
+                None
+            }
+        };
+        judge(&baseline, base_baseline.as_ref(), &rows)?
     } else {
         Judged::default()
     };

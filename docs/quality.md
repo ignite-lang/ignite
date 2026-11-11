@@ -118,11 +118,23 @@ baseline is read, and `quality::the_size_rows_are_marked_and_no_other_row_is` ho
 to it). For a release the field means:
 
 - A cell of a size row above the last release is not refused when the bar of that cell carries
-  a `decision`. The decision names the code that added the bytes; the check reads that it is
-  there, a person reads what it says. The cell is listed: `quality::record` prints, for each, the
-  cell, its value at the last release, its value now and the decision text (on stderr, under
-  `release vX.Y.Z: N cells of the size rows above the last release`), whether the release is
-  refused on another row or not.
+  a new `decision`. The decision names the code that added the bytes; the check reads that it is
+  there and new, a person reads what it says. The cell is listed: `quality::record` prints, for
+  each, the cell, its value at the last release, its value now and the decision text (on stderr,
+  under `release vX.Y.Z: N cells of the size rows above the last release`), whether the release
+  is refused on another row or not.
+- A decision is new when the baseline at the last release does not hold it: `git show
+  <tag>:quality/baseline.json` for 3.2, the same file at BASE for 3.9. Held is held anywhere in
+  that baseline, compared trimmed (on the same bar, on another bar, on another row, on a
+  tolerance, for a slow unit, for an intermittent difference), as a merge's `decision` of its
+  own is read against `main`. A decision the last release already held named that release's
+  code, so it does not let a cell grow again: the cell is refused, and the refusal says the
+  decision is the last release's and a new one naming the added code is needed. A bar without a
+  decision at the last release, or with another, makes the decision new.
+- When the baseline at the last release cannot be read (the tag's for 3.2, BASE's for 3.9), a
+  grown cell with a decision is refused, not passed, and the refusal says the baseline could not
+  be read. Before the first release (no `v*` tag, the `bar` run the reference) there is no
+  decision to carry over.
 - A cell above the last release whose bar has no `decision`, or a blank one, or that has no bar,
   is refused by any amount, and the refusal says that a `decision` naming the added code is
   missing. A release does not grow by accident.
@@ -188,8 +200,8 @@ Timing on the shared workstation is not comparable between runs, so the timing r
   second run gets one third run under the same rule; a release candidate has at most three runs,
   and after the third every row refused in it stands. This is an operator procedure: no code
   enforces it. A release run takes at least 5 passes (`--passes`, `--bench-passes`; fewer is an error before
-  anything starts). No `decision` holds a row, the size row 3.9 excepted ("Against plain
-  Rust", Releases). A refused run's records are labelled `run`, and
+  anything starts). No `decision` holds a row, the size row 3.9 by a new decision excepted
+  ("Against plain Rust", Releases). A refused run's records are labelled `run`, and
   the mode exits 1. Both trees are measured on the same host in the same run, so the refusal
   does not compare across machines.
 - **Cost.** The first run (BASE = HEAD, an A/A run) took 0.23 instance-hours from launch to
@@ -243,10 +255,15 @@ behaviour (`bench/native/`, rows 3.3, 3.7, 3.8 and 3.9), after the timing rows
   the metric's tolerance (3.3 10 %, 3.7 20 %, 3.8 10 %, 3.9 5 %), or worse in every pass than
   every pass of BASE, refuses the release, as a timing row does. Row 3.9 is a size row
   (`"release_growth": "decision"`, section "`task quality` and releases"): a cell of it that
-  would be refused is held when its bar in `quality/baseline.json` carries a `decision`, and the
-  run prints it on stdout (`release vX.Y.Z: the size row above the base`: the cell, BASE's ratio,
-  HEAD's ratio, the decision text); without a decision on its bar it is refused, and the refusal
-  says that a `decision` naming the added code is missing. The run refuses to judge a baseline
+  would be refused is held when its bar in `quality/baseline.json` carries a new `decision`, and
+  the run prints it on stdout (`release vX.Y.Z: the size row above the base`: the cell, BASE's
+  ratio, HEAD's ratio, the decision text); without a decision on its bar it is refused, and the
+  refusal says that a `decision` naming the added code is missing. New is: not held by
+  `quality/baseline.json` at BASE, which the run reads on the caller's side from the repository
+  (`git show <BASE commit>:quality/baseline.json`, `remote::baseline_at`), not from the host. A
+  cell held only by a decision BASE's baseline holds is refused, and the refusal says the
+  decision is the last release's and a new one naming the added code is needed; when BASE's
+  baseline cannot be read the run says why on stderr and refuses the grown cell. The run refuses to judge a baseline
   that marks another of its rows or gives the field another value (`remote::judge`).
 - **First run.** BASE = HEAD (an A/A run, 2026-11-08, 5 benchmark passes), 0.65 instance-hours on
   spot, 0.63 USD, timing rows and benchmark together; its ratios are the bars (`quality/trend.md`,

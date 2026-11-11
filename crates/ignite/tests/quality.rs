@@ -156,8 +156,9 @@ pub struct Metric {
     pub unmeasured: Option<String>,
     /// `"release_growth": "decision"` in the baseline: a binary-size row
     /// ([`SIZE`]). A release may leave a cell of it above the last release
-    /// when the cell's bar carries a `decision` naming the code that added
-    /// the bytes ([`release_judged_against`]); a merge reads nothing from it.
+    /// when the cell's bar carries a new `decision` naming the code that
+    /// added the bytes, one the baseline at the last release does not hold
+    /// ([`release_judged_against`]); a merge reads nothing from it.
     pub grows_by_decision: bool,
     pub bars: BTreeMap<String, Bar>,
 }
@@ -2102,9 +2103,10 @@ reference without a bar.\n\n",
         out.push_str(&format!(
             "The binary-size rows ({}) are the one exception for a release, marked `release_growth` in\n\
 `quality/baseline.json`: a release that adds code may leave a cell of them above the release before\n\
-it when the cell's bar carries a decision naming the code that added the bytes, and the release run\n\
-lists every such cell. Without that decision the release is refused. A merge holds these rows to\n\
-their bars like any other, and bytes are never bought with time.\n\n",
+it when the cell's bar carries a new decision naming the code that added the bytes, and the release\n\
+run lists every such cell. Without that decision, or with one the release before it already held,\n\
+the release is refused. A merge holds these rows to their bars like any other, and bytes are never\n\
+bought with time.\n\n",
             sizes.join(", ")
         ));
     }
@@ -2256,10 +2258,17 @@ fn civil_date(secs: u64) -> String {
 /// The size rows are the one exception (`"release_growth": "decision"` in
 /// the baseline, [`SIZE`]; `AGENTS.md` § Releases, 2026-11-11: a binary may
 /// grow when a release adds code). A cell of one above the reference is not
-/// refused when its bar carries a `decision`, which names the code that
+/// refused when its bar carries a new `decision`, which names the code that
 /// added the bytes: it is listed ([`Release::grown`], [`grown_section`]).
 /// Without a decision on its bar it is refused, and the refusal says the
-/// decision is missing. The two checks of a bar a decision moved worse skip
+/// decision is missing. A decision is new when the baseline at the last
+/// release's tag does not hold it, on that bar or anywhere else
+/// ([`decisions_of`], trimmed): one it holds named the last release's code
+/// and does not let a cell grow again, and the refusal asks for a new one.
+/// A tag whose baseline cannot be read refuses the grown cell, since its
+/// decision is not known to be new; before the first release (the `bar`
+/// run the reference) there is none to carry over. The two checks of a bar
+/// a decision moved worse skip
 /// these rows.
 pub fn release_refusals(
     baseline: &Baseline,
@@ -2413,8 +2422,32 @@ pub fn release_judged_against(
                 .and_then(|bar| bar.decision.as_deref())
                 .map(str::trim)
                 .filter(|decision| !decision.is_empty());
-            match decision {
-                Some(decision) => grown.push(Grown {
+            let cell = format!(
+                "{} {}: {} at the last release, {} now ({}, any worse value)",
+                v.metric,
+                v.target,
+                then,
+                v.value,
+                metric.direction.word()
+            );
+            let Some(decision) = decision else {
+                refused.push(format!(
+                    "{cell}; a size row grows at a release only by a `decision` on the bar of the grown cell, and a `decision` naming the added code is missing"
+                ));
+                continue;
+            };
+            match (&last_release, at_tag) {
+                (LastRelease::Tag(tag), None) => refused.push(format!(
+                    "{cell}; the baseline at the last release {tag} could not be read, so the decision `{decision}` is not known to be new: run `git fetch --tags`"
+                )),
+                (LastRelease::Tag(tag), Some(at_tag))
+                    if decisions_of(at_tag).contains(decision) =>
+                {
+                    refused.push(format!(
+                        "{cell}; the decision `{decision}` is the last release's (the baseline at {tag} holds it), and a new `decision` naming the added code is needed"
+                    ))
+                }
+                _ => grown.push(Grown {
                     metric: v.metric.clone(),
                     target: v.target.clone(),
                     then: *then,
@@ -2422,14 +2455,6 @@ pub fn release_judged_against(
                     unit: metric.unit.clone(),
                     decision: decision.to_string(),
                 }),
-                None => refused.push(format!(
-                    "{} {}: {} at the last release, {} now ({}, any worse value); a size row grows at a release only by a `decision` on the bar of the grown cell, and a `decision` naming the added code is missing",
-                    v.metric,
-                    v.target,
-                    then,
-                    v.value,
-                    metric.direction.word()
-                )),
             }
             continue;
         }
@@ -3196,16 +3221,37 @@ fn size_now(value: i64) -> Value {
 /// `AGENTS.md` § Releases (2026-11-11): time comes before bytes, and a
 /// binary may grow when a release adds code. A cell of a size row
 /// (`"release_growth": "decision"`) above the last release is not refused
-/// when its bar carries a `decision`; it is listed with the value at the
-/// last release, the value now and the decision, and the release run's
-/// section holds the same.
+/// when its bar carries a new `decision`, one the baseline at the last
+/// release's tag does not hold (its bar there had none, or another); it is
+/// listed with the value at the last release, the value now and the
+/// decision, and the release run's section holds the same.
 #[test]
 fn a_grown_cell_of_a_size_row_passes_by_a_decision_and_is_listed() {
     let decision = "story:x (2026-11-11): the TLS client session adds 40 B";
     let baseline = baseline_of(&[("3.2", size_row(true, 1040, Some(decision)))]);
+    let earlier = baseline_of(&[(
+        "3.2",
+        size_row(
+            true,
+            1000,
+            Some("story:w (2026-11-08): the scheduler's bytes"),
+        ),
+    )]);
+    let passed = release_refusals_against(
+        &baseline,
+        Some(&earlier),
+        &size_at_the_last_release(1000),
+        &[size_now(1040)],
+        Some("v0.15.0"),
+    );
+    assert!(
+        passed.is_empty(),
+        "a new decision on a bar that held another at the last release was refused: {passed:?}"
+    );
+    let at_tag = baseline_of(&[("3.2", size_row(true, 1000, None))]);
     let judged = release_judged_against(
         &baseline,
-        None,
+        Some(&at_tag),
         &size_at_the_last_release(1000),
         &[size_now(1040)],
         Some("v0.15.0"),
@@ -3230,7 +3276,7 @@ fn a_grown_cell_of_a_size_row_passes_by_a_decision_and_is_listed() {
     assert!(
         release_refusals_against(
             &baseline,
-            None,
+            Some(&at_tag),
             &size_at_the_last_release(1000),
             &[size_now(1001)],
             Some("v0.15.0"),
@@ -3249,6 +3295,124 @@ fn a_grown_cell_of_a_size_row_passes_by_a_decision_and_is_listed() {
         grown_section("v0.16.0", &[]),
         "",
         "a release without a grown cell prints a section"
+    );
+}
+
+/// A decision is taken for the code one release adds. One the baseline at
+/// the last release's tag already holds names that release's code, so it
+/// does not let a cell grow again: the cell is refused, and the refusal
+/// says the decision is the last release's and a new one naming the added
+/// code is needed. Held is held anywhere in that baseline, trimmed, as a
+/// merge's `decision` of its own is ([`new_decision`]): on the same bar, on
+/// another bar of the row, on another row.
+#[test]
+fn a_grown_cell_held_by_the_last_releases_decision_is_refused() {
+    let decision = "story:w (2026-11-08): the scheduler's bytes";
+    let same_bar = baseline_of(&[("3.2", size_row(true, 1000, Some(decision)))]);
+    let mut other_bar = size_row(true, 1000, None);
+    other_bar.bars.insert(
+        "llvm/todod/release".to_string(),
+        Bar {
+            value: 2000,
+            decision: Some(decision.to_string()),
+        },
+    );
+    let other_bar = baseline_of(&[("3.2", other_bar)]);
+    let mut gaps_row = metric(Direction::Lower, Tolerance::Count(0), &[("rust", 2)]);
+    gaps_row.bars.get_mut("rust").unwrap().decision = Some(decision.to_string());
+    let other_row = baseline_of(&[("3.2", size_row(true, 1000, None)), ("4.2", gaps_row)]);
+    for (at_tag, now_decision) in [
+        (&same_bar, decision.to_string()),
+        (&same_bar, format!("{decision} ")),
+        (&other_bar, decision.to_string()),
+        (&other_row, decision.to_string()),
+    ] {
+        let baseline = baseline_of(&[("3.2", size_row(true, 1040, Some(&now_decision)))]);
+        let judged = release_judged_against(
+            &baseline,
+            Some(at_tag),
+            &size_at_the_last_release(1000),
+            &[size_now(1040)],
+            Some("v0.15.0"),
+        );
+        assert!(
+            judged.refused.len() == 1
+                && judged.refused[0]
+                    .starts_with("3.2 rust/todod/release: 1000 at the last release, 1040 now")
+                && judged.refused[0].contains(decision)
+                && judged.refused[0].contains("is the last release's")
+                && judged.refused[0].contains("v0.15.0")
+                && judged.refused[0].contains("a new `decision` naming the added code is needed"),
+            "decision {now_decision:?} carried over from the last release: {:?}",
+            judged.refused
+        );
+        assert!(judged.grown.is_empty(), "{:?}", judged.grown);
+    }
+}
+
+/// Whether a decision is new is read from the baseline at the last
+/// release's tag. When that cannot be read, a grown cell is refused, not
+/// passed, and the refusal says so and names `git fetch --tags`. Before the
+/// first release (no tag, the `bar` run the reference) there is no release
+/// whose decision could be carried over, and the cell passes.
+#[test]
+fn a_grown_cell_is_refused_when_the_baseline_at_the_tag_cannot_be_read() {
+    let decision = "story:x (2026-11-11): the TLS client session adds 40 B";
+    let baseline = baseline_of(&[("3.2", size_row(true, 1040, Some(decision)))]);
+    let judged = release_judged_against(
+        &baseline,
+        None,
+        &size_at_the_last_release(1000),
+        &[size_now(1040)],
+        Some("v0.15.0"),
+    );
+    assert!(
+        judged.refused.len() == 1
+            && judged.refused[0]
+                .starts_with("3.2 rust/todod/release: 1000 at the last release, 1040 now")
+            && judged.refused[0]
+                .contains("the baseline at the last release v0.15.0 could not be read")
+            && judged.refused[0].contains(decision)
+            && judged.refused[0].contains("git fetch --tags"),
+        "the tag's baseline unread: {:?}",
+        judged.refused
+    );
+    assert!(judged.grown.is_empty(), "{:?}", judged.grown);
+
+    let mut first = size_at_the_last_release(1000);
+    first[0].run = "bar".to_string();
+    let judged = release_judged_against(
+        &baseline,
+        None,
+        &first,
+        &[size_now(1040)],
+        LastRelease::NoTag,
+    );
+    assert!(
+        judged.refused.is_empty() && judged.grown.len() == 1,
+        "before the first release: {judged:?}"
+    );
+}
+
+/// The release check reads the baseline at the last release's tag with the
+/// reader of this tree, and a baseline it cannot read refuses every grown
+/// cell of a size row. Where the tag and its baseline are in the clone, the
+/// reader reads it; a clone without the tag has nothing to read here.
+#[test]
+fn the_baseline_at_the_last_release_is_one_this_reader_reads() {
+    let LastRelease::Tag(tag) = last_release_tag("the candidate") else {
+        return;
+    };
+    let Some(text) = baseline_text_at(&tag) else {
+        return;
+    };
+    let read = Json::parse(&text)
+        .map_err(|e| e.to_string())
+        .and_then(|json| read_baseline(&json));
+    assert!(
+        read.is_ok(),
+        "quality/baseline.json at {tag} is not read by this tree's reader, so a release would refuse every grown size cell: {:?}",
+        read.err()
     );
 }
 

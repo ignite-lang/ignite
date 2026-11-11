@@ -497,29 +497,239 @@ fn size_baseline(decision: Option<&str>) -> Json {
 
 /// `AGENTS.md` § Releases (2026-11-11): a binary may grow when a release adds code. A cell of
 /// the size row 3.9 worse than BASE is not refused when its bar in `quality/baseline.json`
-/// carries a `decision`; the run lists it with BASE's value, HEAD's and the decision.
+/// carries a new `decision`, one BASE's baseline does not hold (its bar there had none, or
+/// another); the run lists it with BASE's value, HEAD's and the decision.
 #[test]
 fn a_grown_cell_of_the_size_row_passes_by_a_decision_and_is_listed() {
     let decision = "story:x (2026-11-11): the TLS client session adds the bytes";
     let baseline = size_baseline(Some(decision));
     let grown = row("3.9", "rust/todo", &[723], &[864]);
-    assert_eq!(
-        remote::refusals(&baseline, std::slice::from_ref(&grown)).unwrap(),
-        Vec::<String>::new(),
-        "a size row grown by a decision was refused"
-    );
-    let judged = remote::judge(&baseline, &[grown]).unwrap();
-    assert_eq!(
-        judged.grown,
-        [format!(
-            "3.9 rust/todo: 0.723× at the base, 0.864× now; decision: {decision}"
-        )],
-        "the grown cell is not listed"
-    );
-    let one_more = remote::judge(&baseline, &[row("3.9", "rust/todo", &[723], &[724])]).unwrap();
+    for base in [
+        size_baseline(None),
+        size_baseline(Some("story:w (2026-11-08): the scheduler's bytes")),
+    ] {
+        let judged = remote::judge(&baseline, Some(&base), std::slice::from_ref(&grown)).unwrap();
+        assert_eq!(
+            judged.refused,
+            Vec::<String>::new(),
+            "a size row grown by a new decision was refused"
+        );
+        assert_eq!(
+            judged.grown,
+            [format!(
+                "3.9 rust/todo: 0.723× at the base, 0.864× now; decision: {decision}"
+            )],
+            "the grown cell is not listed"
+        );
+    }
+    let one_more = remote::judge(
+        &baseline,
+        Some(&size_baseline(None)),
+        &[row("3.9", "rust/todo", &[723], &[724])],
+    )
+    .unwrap();
     assert!(
         one_more.refused.is_empty() && one_more.grown.len() == 1,
         "{one_more:?}"
+    );
+}
+
+/// A decision is taken for the code one release adds. One BASE's baseline already holds names
+/// the last release's code, so it does not let a cell grow again: the cell is refused, and the
+/// refusal says the decision is the last release's and a new one naming the added code is
+/// needed. Held is held anywhere in BASE's baseline, trimmed: on the same bar, on another bar of
+/// the row, on another row, on a tolerance, for a slow unit, for an intermittent difference.
+#[test]
+fn a_grown_cell_held_by_the_bases_decision_is_refused() {
+    let decision = "story:w (2026-11-08): the scheduler's bytes";
+    let held = |place: &str| {
+        Json::parse(&format!(
+            r#"{{"metrics": {{"3.9": {{"direction": "lower", "tolerance": "5%", "unit": "permille",
+                "release_growth": "decision", "bars": {{"rust/todo": {{"value": 723}}}}}}}}, {place}}}"#
+        ))
+        .unwrap()
+    };
+    let other_bar = Json::parse(&format!(
+        r#"{{"metrics": {{"3.9": {{"direction": "lower", "tolerance": "5%", "unit": "permille",
+            "release_growth": "decision",
+            "bars": {{"rust/todo": {{"value": 723}}, "llvm/todo": {{"decision": "{decision}", "value": 869}}}}}}}}}}"#
+    ))
+    .unwrap();
+    let holds_none = held(r#""eval_slow": {}, "intermittent_decisions": {}"#);
+    assert!(
+        remote::judge(
+            &size_baseline(Some(decision)),
+            Some(&holds_none),
+            &[row("3.9", "rust/todo", &[723], &[864])]
+        )
+        .unwrap()
+        .refused
+        .is_empty(),
+        "a base that holds no decision refused a new one"
+    );
+    let on_a_tolerance = Json::parse(&format!(
+        r#"{{"metrics": {{"4.2": {{"direction": "lower", "tolerance": 1, "tolerance_decision": "{decision}"}}}}}}"#
+    ))
+    .unwrap();
+    for (place, base, now) in [
+        (
+            "the same bar",
+            size_baseline(Some(decision)),
+            decision.to_string(),
+        ),
+        (
+            "the same bar, a space added",
+            size_baseline(Some(decision)),
+            format!("{decision} "),
+        ),
+        (
+            "the same bar, padded at the base",
+            size_baseline(Some(&format!(" {decision} "))),
+            decision.to_string(),
+        ),
+        ("another bar of the row", other_bar, decision.to_string()),
+        (
+            "a tolerance of another row",
+            on_a_tolerance,
+            decision.to_string(),
+        ),
+        (
+            "a slow unit",
+            held(&format!(
+                r#""eval_slow": {{"std/x.ignite::a test": "{decision}"}}"#
+            )),
+            decision.to_string(),
+        ),
+        (
+            "an intermittent difference",
+            held(&format!(
+                r#""intermittent_decisions": {{"std/x.ignite::a test": "{decision}"}}"#
+            )),
+            decision.to_string(),
+        ),
+    ] {
+        let baseline = size_baseline(Some(&now));
+        let judged = remote::judge(
+            &baseline,
+            Some(&base),
+            &[row("3.9", "rust/todo", &[723], &[864])],
+        )
+        .unwrap();
+        assert!(
+            judged.refused.len() == 1
+                && judged.refused[0].starts_with("3.9 rust/todo: 0.723× at the base, 0.864× now")
+                && judged.refused[0].contains(decision)
+                && judged.refused[0].contains("is the last release's")
+                && judged.refused[0].contains("a new `decision` naming the added code is needed"),
+            "decision carried over from the base on {place}: {:?}",
+            judged.refused
+        );
+        assert!(judged.grown.is_empty(), "{place}: {:?}", judged.grown);
+    }
+}
+
+/// Whether a decision is new is read from BASE's baseline. Without it (it could not be read) a
+/// grown cell is refused, not passed, and the refusal says so; a cell that did not grow, and a
+/// grown one without a decision, are judged as with it.
+#[test]
+fn a_grown_cell_is_refused_when_the_bases_baseline_cannot_be_read() {
+    let decision = "story:x (2026-11-11): the TLS client session adds the bytes";
+    let baseline = size_baseline(Some(decision));
+    let grown = row("3.9", "rust/todo", &[723], &[864]);
+    let judged = remote::judge(&baseline, None, std::slice::from_ref(&grown)).unwrap();
+    assert!(
+        judged.refused.len() == 1
+            && judged.refused[0].starts_with("3.9 rust/todo: 0.723× at the base, 0.864× now")
+            && judged.refused[0].contains("quality/baseline.json at the base could not be read")
+            && judged.refused[0].contains(decision),
+        "the base's baseline unread: {:?}",
+        judged.refused
+    );
+    assert!(judged.grown.is_empty(), "{:?}", judged.grown);
+    assert_eq!(
+        remote::refusals(&baseline, std::slice::from_ref(&grown)).unwrap(),
+        judged.refused,
+        "`refusals` has no baseline of the base and passed a grown cell"
+    );
+    assert_eq!(
+        remote::judge(&baseline, None, &[row("3.9", "rust/todo", &[723], &[723])]).unwrap(),
+        remote::Judged::default(),
+        "a cell that did not grow needs no baseline of the base"
+    );
+    let undecided = remote::judge(&baseline, None, &[row("3.9", "llvm/todo", &[720], &[869])])
+        .unwrap()
+        .refused;
+    assert!(
+        undecided.len() == 1
+            && undecided[0].contains("a `decision` naming the added code is missing"),
+        "{undecided:?}"
+    );
+}
+
+/// A repository under the test target with `quality/baseline.json` holding `text` committed
+/// (none when `text` is `None`); its root.
+fn repository_with_baseline(name: &str, text: Option<&str>) -> PathBuf {
+    let root = scratch(name);
+    std::fs::create_dir_all(root.join("quality")).unwrap();
+    std::fs::write(root.join("README.md"), "t\n").unwrap();
+    if let Some(text) = text {
+        std::fs::write(root.join("quality/baseline.json"), text).unwrap();
+    }
+    for args in [
+        &["init", "-q"][..],
+        &["add", "-A"],
+        &[
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@example.invalid",
+            "commit",
+            "-q",
+            "-m",
+            "t",
+        ],
+    ] {
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(args)
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {args:?}");
+    }
+    root
+}
+
+/// BASE's baseline reaches the judge from the caller's repository, `git show
+/// BASE:quality/baseline.json`: the committed file of that revision, not the working tree's.
+/// A revision without the file, an unknown revision and a file that is no JSON are errors, so
+/// the run passes no baseline and a grown cell is refused.
+#[test]
+fn the_bases_baseline_is_read_from_the_revision() {
+    let committed = r#"{"metrics": {"3.9": {"bars": {"rust/todo": {"decision": "story:w: the bytes", "value": 723}}}}}"#;
+    let root = repository_with_baseline("base-baseline", Some(committed));
+    std::fs::write(root.join("quality/baseline.json"), r#"{"metrics": {}}"#).unwrap();
+    assert_eq!(
+        remote::baseline_at(&root, "HEAD").unwrap(),
+        Json::parse(committed).unwrap(),
+        "not the committed baseline of the revision"
+    );
+    let unknown = remote::baseline_at(&root, "v0.0.0").unwrap_err();
+    assert!(
+        unknown.contains("v0.0.0:quality/baseline.json"),
+        "an unknown revision: {unknown}"
+    );
+    let without = repository_with_baseline("base-without-baseline", None);
+    let missing = remote::baseline_at(&without, "HEAD").unwrap_err();
+    assert!(
+        missing.contains("HEAD:quality/baseline.json"),
+        "a revision without the file: {missing}"
+    );
+    let broken = repository_with_baseline("base-broken-baseline", Some("{"));
+    let unparsed = remote::baseline_at(&broken, "HEAD").unwrap_err();
+    assert!(
+        unparsed.contains("HEAD:quality/baseline.json"),
+        "a baseline that is no JSON: {unparsed}"
     );
 }
 
@@ -534,7 +744,12 @@ fn a_grown_cell_of_the_size_row_without_a_decision_is_refused() {
         (size_baseline(None), "rust/todo"),
         (size_baseline(Some("story:x: the bytes")), "rust/terminal"),
     ] {
-        let judged = remote::judge(&baseline, &[row("3.9", target, &[720], &[869])]).unwrap();
+        let judged = remote::judge(
+            &baseline,
+            Some(&size_baseline(None)),
+            &[row("3.9", target, &[720], &[869])],
+        )
+        .unwrap();
         assert!(
             judged.refused.len() == 1
                 && judged.refused[0]
@@ -556,7 +771,7 @@ fn a_row_that_is_no_size_row_is_refused_with_a_decision_as_before() {
         row("3.8", "rust/todo/get-1", &[800], &[900]),
         row("6.2", "rust", &[2000], &[2300]),
     ];
-    let judged = remote::judge(&baseline, &rows).unwrap();
+    let judged = remote::judge(&baseline, Some(&size_baseline(None)), &rows).unwrap();
     assert_eq!(
         judged.refused,
         [
@@ -572,7 +787,12 @@ fn a_row_that_is_no_size_row_is_refused_with_a_decision_as_before() {
 fn a_size_row_that_shrank_needs_no_decision() {
     let baseline = size_baseline(None);
     for head in [700, 723] {
-        let judged = remote::judge(&baseline, &[row("3.9", "rust/todo", &[723], &[head])]).unwrap();
+        let judged = remote::judge(
+            &baseline,
+            Some(&size_baseline(None)),
+            &[row("3.9", "rust/todo", &[723], &[head])],
+        )
+        .unwrap();
         assert_eq!(judged, remote::Judged::default(), "0.723× to {head}");
     }
 }
@@ -592,6 +812,7 @@ fn the_size_mark_is_validated_by_the_run() {
     for mark in [r#""always""#, r#""""#, "true", "null"] {
         let error = remote::judge(
             &marked("3.9", mark),
+            None,
             &[row("3.9", "rust/todo", &[723], &[723])],
         )
         .unwrap_err();
@@ -603,6 +824,7 @@ fn the_size_mark_is_validated_by_the_run() {
     for id in ["5.3", "6.1", "6.2", "3.3", "3.7", "3.8"] {
         let error = remote::judge(
             &marked(id, r#""decision""#),
+            None,
             &[row(id, "rust/todo", &[723], &[864])],
         )
         .unwrap_err();

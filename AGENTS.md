@@ -558,11 +558,15 @@ without waiting for a person.
   metrics `quality/baseline.json` marks `"release_growth": "decision"` (3.2 and 3.9, no other
   row; `docs/quality.md` "`task quality` and releases"). `task quality RUN=vX.Y.Z` (3.2, against
   the last release's record) and `task quality-remote` (3.9, HEAD against BASE in the run) do
-  not refuse a cell of them above the last release when the bar of that cell carries a
+  not refuse a cell of them above the last release when the bar of that cell carries a new
   `decision` naming the code that added the bytes, and each run prints every such cell with its
-  value at the last release, its value now and the decision. A grown cell whose bar has no
-  `decision` is refused, and the refusal says the decision is missing, so a release does not
-  grow by accident. A merge is judged as before: a size is held against its bar, and a bar
+  value at the last release, its value now and the decision. A decision is new when
+  `quality/baseline.json` at the last release (its tag for 3.2, BASE for 3.9) does not hold it:
+  one carried over from the last release named that release's code and does not let a cell grow
+  again. A grown cell whose bar has no `decision`, or the last release's, is refused, and the
+  refusal says a decision is missing or a new one is needed, so a release does not grow by
+  accident; so is a grown cell when the last release's baseline cannot be read. A merge is
+  judged as before: a size is held against its bar, and a bar
   moves worse against `main` only with a `decision` of its own. The cells a run prints are
   reported to Timo with the code that added the bytes before the release is cut.
 - Timing and benchmark rows (5.3, 6.1, 6.2, 3.3, 3.7, 3.8, 3.9) are judged only on the records
