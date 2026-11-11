@@ -271,20 +271,32 @@ fn the_build_ahead_blocks_no_signal_and_ends_on_sigterm() {
             .filter(|(id, _)| *id != driver)
             .collect()
     };
-    // The compile of `libc`, the longest unit of the build ahead.
-    let project = dir.join("out/Cargo.toml");
+    // The compile of `libc`, the longest unit of the build ahead. The
+    // program's build waits for the cargo of the build ahead, so until
+    // that cargo is gone every process that names the target directory is
+    // one of the build ahead, also after the driver wrote the project
+    // (which, on a loaded machine, it does before `libc` is reached).
     let mut compiling = false;
+    let mut started = false;
     for _ in 0..4000 {
-        if project.exists() || driver.try_wait().unwrap().is_some() {
+        if driver.try_wait().unwrap().is_some() {
             break;
         }
-        if ahead(driver.id())
+        let running = ahead(driver.id());
+        if running
             .iter()
             .any(|(_, command)| command.contains("--crate-name libc "))
         {
             compiling = true;
             break;
         }
+        let cargo = running
+            .iter()
+            .any(|(_, command)| command.contains("ignite-prebuild"));
+        if started && !cargo {
+            break;
+        }
+        started |= cargo;
         std::thread::sleep(Duration::from_millis(5));
     }
     // A process between `vfork` and `exec` blocks every signal for that
