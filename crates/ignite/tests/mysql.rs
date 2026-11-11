@@ -75,6 +75,12 @@ CREATE TABLE shop.things (
 ) CHARACTER SET utf8mb4;
 INSERT INTO shop.things VALUES (1, 1, -128, 255, -32768, -8388608, -2147483648, 9223372036854775807, 18446744073709551615, 2024, -1234.50, 1.5, 0.1, 'Zoë', 'ab', 'long text', x'00ff', x'0102', b'1', b'101001011010', '{"a": 1}', '2024-02-29', '2024-02-29 23:59:58.123456', '2024-02-29 23:59:58', '-34:11:12', 'glad', 'a,b');
 INSERT INTO shop.things (id) VALUES (2);
+CREATE TABLE shop.flags (
+  id INT PRIMARY KEY,
+  flag TINYINT(1),
+  yes BOOLEAN
+);
+INSERT INTO shop.flags VALUES (1, 0, TRUE), (2, 1, TRUE), (3, 2, TRUE), (4, -1, TRUE);
 "#;
 
 /// The Ignite tests; `@SHA2@`, `@NATIVE@` and `@DEAD@` are replaced by
@@ -179,7 +185,7 @@ test "every column type decodes alike from query and from execute" {
   let texts = query(client, "SELECT * FROM things ORDER BY id")?
   let binaries = execute_once(client, "SELECT * FROM things ORDER BY id", [])?
   let expected = [
-    Some(Int(1)), Some(Bool(true)), Some(Int(-128)), Some(Int(255)), Some(Int(-32768)), Some(Int(-8388608)), Some(Int(-2147483648)),
+    Some(Int(1)), Some(Int(1)), Some(Int(-128)), Some(Int(255)), Some(Int(-32768)), Some(Int(-8388608)), Some(Int(-2147483648)),
     Some(Int(9223372036854775807)), Some(Decimal("18446744073709551615")), Some(Int(2024)), Some(Decimal("-1234.50")),
     Some(Decimal("1.5")), Some(Decimal("0.1")), Some(Text("Zoë")), Some(Text("ab")), Some(Text("long text")),
     Some(Bytes(b"\x00\xff")), Some(Bytes(b"\x01\x02")), Some(Bool(true)), Some(Bytes(b"\x0a\x5a")), Some(Text(r#"{"a": 1}"#)),
@@ -203,6 +209,24 @@ test "every column type decodes alike from query and from execute" {
   let wide = "SELECT CAST(16777216 AS FLOAT)"
   assert query(client, wide)?.rows == [[Some(Decimal("16777200"))]]
   assert execute_once(client, wide, [])?.rows == [[Some(Decimal("16777216"))]]
+  quit(client)?
+}
+
+test "a TINYINT(1) and a BOOLEAN are integers from query and from execute" {
+  let client = connect(at(SHA2), legacy())?
+  let sql = "SELECT flag, yes FROM flags ORDER BY id"
+  let expected = [
+    [Some(Int(0)), Some(Int(1))], [Some(Int(1)), Some(Int(1))], [Some(Int(2)), Some(Int(1))], [Some(Int(-1)), Some(Int(1))]
+  ]
+  let texts = query(client, sql)?
+  // The server describes both columns as a TINYINT of display width 1.
+  assert texts.columns[0].kind == 1 && texts.columns[0].length == 1
+  assert texts.columns[1].kind == 1 && texts.columns[1].length == 1
+  assert texts.rows == expected, "query"
+  let binaries = execute_once(client, sql, [])?
+  assert binaries.columns[0].length == 1 && binaries.columns[1].length == 1
+  assert binaries.rows == expected, "execute"
+  assert execute_once(client, "SELECT id FROM flags WHERE flag = ?", [Some(Int(2))])?.rows == [[Some(Int(3))]]
   quit(client)?
 }
 
@@ -272,7 +296,7 @@ test "a statement that does not answer within the read timeout ends the connecti
 "##;
 
 /// The number of tests in [`PROGRAM`].
-const CASES: usize = 9;
+const CASES: usize = 10;
 
 fn docker(args: &[&str]) -> Output {
     Command::new("docker")
