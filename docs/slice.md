@@ -11287,8 +11287,12 @@ Story `http-reply-cost-back` (rows 3.3 `rust/todo/get-1` and 3.8 `todo/get-1` of
   (`census::tests::a_growing_buffer_is_reallocated_not_allocated_again` counts the calls that
   reach `alloc` and `realloc`), and an inline reply is rendered into one buffer made with room
   for its head (`HEAD_ROOM`, 128 bytes, and each header field) and its body (`render_fields`'s
-  `after`): the head is written into it, the body is appended to it from the response instead
-  of being copied first, and the buffer becomes the bytes sent. Rust target 36 now, LLVM target
+  `after`, `text_with_room`): the head is written into it, the body is appended to it from the
+  response instead of being copied first, and the buffer becomes the bytes sent, each step
+  taking the buffer of the one before, not copying it (on the Rust target a conversion is a
+  move only as a function's last expression, which `head_bytes` and `render_framed` keep;
+  `allocations::text_is_appended_in_place_and_a_final_conversion_takes_the_buffer` of
+  `crates/ignite-rustgen` reads the generated code). Rust target 36 now, LLVM target
   0.
 - A task's stack overflow is reported on the worker's alternate signal stack. On the Rust target
   that stack is std's, which every thread std starts has; `ignite-io` makes none. The LLVM
