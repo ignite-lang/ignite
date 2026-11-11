@@ -56,7 +56,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, VecDeque};
 use std::ffi::c_void;
 use std::io;
-use std::os::fd::{AsFd, AsRawFd, BorrowedFd, RawFd};
+use std::os::fd::{AsFd, BorrowedFd};
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU8, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, Once, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
@@ -532,7 +532,7 @@ fn suspend() {
 pub(crate) fn wait_descriptor(
     waiter: &Waiter,
     task: &Task,
-    descriptor: RawFd,
+    descriptor: BorrowedFd<'_>,
     interest: Interest,
     deadline: Option<Instant>,
 ) -> io::Result<DescriptorWait> {
@@ -541,7 +541,7 @@ pub(crate) fn wait_descriptor(
     // Relaxed: set and read on this worker only (its dispatch).
     task.ready.store(0, Ordering::Relaxed);
     let woken = park(waiter, task, deadline);
-    let _ = reactor.deregister(token);
+    let _ = reactor.deregister(token, descriptor);
     let ready = Interest::from_bits(task.ready.swap(0, Ordering::SeqCst));
     Ok(if !ready.is_empty() {
         DescriptorWait::Ready(ready)
@@ -1369,7 +1369,7 @@ impl Readiness {
     ) -> io::Result<DescriptorWait> {
         let me = Waiter::current();
         let Some(task) = me.task() else {
-            return crate::wait::wait_descriptor(descriptor.as_raw_fd(), interest, deadline);
+            return crate::wait::wait_descriptor(descriptor, interest, deadline);
         };
         let state = self.descriptor();
         if let Some(waited) = wait_alone(task, state, descriptor, interest, mark, deadline, now)? {
@@ -1399,7 +1399,7 @@ impl Readiness {
                     return without_reactor(&me, descriptor, interest, deadline);
                 };
                 let sides = sides(state.write_armed.load(Ordering::Relaxed));
-                let token = reactor.register(descriptor.as_raw_fd(), sides, self.waiter.clone())?;
+                let token = reactor.register(descriptor, sides, self.waiter.clone())?;
                 registered.push((Arc::clone(&task.worker), token));
                 if registered.len() == 1 {
                     state.home.store(here, Ordering::Release);
@@ -1659,17 +1659,18 @@ fn without_reactor(
 }
 
 impl Readiness {
-    /// Deregister the descriptor from every worker and wake its waiters;
-    /// before the descriptor closes. A later wait registers it again.
-    pub(crate) fn deregister(&self) {
-        self.release(true);
+    /// Deregister `descriptor`, the one every wait of this readiness was
+    /// for, from every worker and wake its waiters; before the descriptor
+    /// closes. A later wait registers it again.
+    pub(crate) fn deregister(&self, descriptor: BorrowedFd<'_>) {
+        self.release(Some(descriptor));
     }
 
-    /// [`Readiness::deregister`]; without `delete` the workers' reactors
-    /// only forget the descriptor ([`EpollReactor::forget`]): its owner
-    /// closes it right after, and the close takes it out of their epoll
-    /// instances without an `epoll_ctl` each.
-    fn release(&self, delete: bool) {
+    /// [`Readiness::deregister`] of `delete`; without one the workers'
+    /// reactors only forget the descriptor ([`EpollReactor::forget`]): its
+    /// owner closes it right after, and the close takes it out of their
+    /// epoll instances without an `epoll_ctl` each.
+    fn release(&self, delete: Option<BorrowedFd<'_>>) {
         let registered = {
             let mut registered = lock(&self.descriptor().registered);
             self.descriptor()
@@ -1679,10 +1680,11 @@ impl Readiness {
         };
         for (shared, token) in registered {
             if let Some(reactor) = shared.reactor.get() {
-                if delete {
-                    let _ = reactor.deregister(token);
-                } else {
-                    reactor.forget(token);
+                match delete {
+                    Some(descriptor) => {
+                        let _ = reactor.deregister(token, descriptor);
+                    }
+                    None => reactor.forget(token),
                 }
             }
         }
@@ -1703,7 +1705,7 @@ impl Readiness {
 /// deregisters it.
 impl Drop for Readiness {
     fn drop(&mut self) {
-        self.release(false);
+        self.release(None);
     }
 }
 

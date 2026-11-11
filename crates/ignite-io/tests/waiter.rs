@@ -5,7 +5,7 @@
 //! by readiness or by a wake.
 
 use std::io::Write;
-use std::os::fd::AsRawFd;
+use std::os::fd::AsFd;
 use std::os::unix::net::UnixStream;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -148,7 +148,7 @@ fn readiness_ends_a_descriptor_wait() {
     let (watched, mut peer) = UnixStream::pair().unwrap();
     let (_waiter, result) = parked(move |_| {
         wait_descriptor(
-            watched.as_raw_fd(),
+            watched.as_fd(),
             Interest::READ,
             Some(Instant::now() + LIMIT),
         )
@@ -166,7 +166,7 @@ fn readiness_ends_a_descriptor_wait() {
 fn a_wake_ends_a_descriptor_wait() {
     let (watched, _peer) = UnixStream::pair().unwrap();
     let (waiter, result) =
-        parked(move |_| wait_descriptor(watched.as_raw_fd(), Interest::READ, None).unwrap());
+        parked(move |_| wait_descriptor(watched.as_fd(), Interest::READ, None).unwrap());
     std::thread::sleep(SHORT);
     assert!(result.try_recv().is_err(), "nothing ended the wait yet");
     wake(&waiter);
@@ -177,8 +177,7 @@ fn a_wake_ends_a_descriptor_wait() {
 fn a_descriptor_wait_ends_at_its_deadline() {
     let (watched, _peer) = UnixStream::pair().unwrap();
     let start = Instant::now();
-    let outcome =
-        wait_descriptor(watched.as_raw_fd(), Interest::READ, Some(start + SHORT)).unwrap();
+    let outcome = wait_descriptor(watched.as_fd(), Interest::READ, Some(start + SHORT)).unwrap();
     assert_eq!(outcome, DescriptorWait::Deadline);
     assert!(start.elapsed() >= SHORT);
 }

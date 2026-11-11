@@ -164,7 +164,7 @@ impl Slot {
             .write()
             .unwrap_or_else(PoisonError::into_inner)
             .take()?;
-        self.readiness.deregister();
+        self.readiness.deregister(closed.as_fd());
         drop(closed);
         Some(format!("released {}:{}", self.address, self.port))
     }
