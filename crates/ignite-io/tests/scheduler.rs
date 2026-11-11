@@ -2115,3 +2115,331 @@ fn child_writer_after_a_registered_reader() {
     drop(keep);
     wait_for_tasks();
 }
+
+/// The requests of a session of [`child_idle_timeout`] that answers.
+const IDLE_ROUNDS: usize = 5;
+/// The idle timeout, in milliseconds, of a session there that is sent
+/// nothing.
+const SHORT_IDLE: i64 = 200;
+
+/// A read that waits alone on its thread reads no clock for its idle
+/// timeout (`story:readiness-session-cost`): the timeout is the timeout of
+/// the one `poll` the read waits in, as `SO_RCVTIMEO` was the timeout of
+/// v0.15.0's `recv`, and a `poll` that ends by it has shown that the time
+/// passed. Counted with [`ignite_io::SchedulerCounts::clock_reads`], every
+/// clock read of the scheduler, its reactors and the waits, over a session
+/// with the idle timeout `Telnet.serve` sets: from its connection through
+/// [`IDLE_ROUNDS`] requests, each sent once the session waits for it
+/// (`rounds`), and over a session that is sent nothing until its timeout
+/// ends its read (`silent`). For the only task of a worker that blocks in a
+/// `poll` (the default worker count), the only task of a worker that waits
+/// through its reactor (`IGNITE_WORKERS=1`), and a read off a worker. One
+/// clock read per read that began to wait came before (the first read of a
+/// session at the default worker count, every read on one worker, three
+/// per read off a worker): the only clock read of a `terminald` serving one
+/// connection, which v0.15.0 served without one.
+///
+/// Two sessions on one worker park in its reactor, whose timers need an
+/// instant: they read the clock, which shows that the count sees the wait
+/// path, and each is still ended by its timeout.
+#[test]
+fn a_read_that_waits_alone_reads_no_clock_for_its_idle_timeout() {
+    let mut failures = Vec::new();
+    for (waiter, env) in [
+        ("a worker's only task", vec![]),
+        (
+            "the only task of a worker with a reactor",
+            vec![("IGNITE_WORKERS", "1")],
+        ),
+        ("a thread", vec![("SCHEDULER_IDLE_READER", "thread")]),
+        (
+            "two tasks of one worker",
+            vec![("IGNITE_WORKERS", "1"), ("SCHEDULER_IDLE_SESSIONS", "2")],
+        ),
+    ] {
+        for shape in ["rounds", "silent"] {
+            let mut env = env.clone();
+            env.push(("SCHEDULER_IDLE_SHAPE", shape));
+            let output = child("scheduler::child_idle_timeout", &env);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let counted: Vec<&str> = stdout
+                .lines()
+                .filter_map(|line| line.find(" clock reads").map(|_| line))
+                .map(|line| line.rsplit("... ").next().unwrap_or(line))
+                .collect();
+            println!("{waiter}, {shape}: {}", counted.join("; "));
+            if !output.status.success() || !stdout.contains("1 passed") {
+                failures.push(format!(
+                    "{waiter}, {shape}: {:?}\nstdout:\n{stdout}\nstderr:\n{}",
+                    output.status,
+                    String::from_utf8_lossy(&output.stderr)
+                ));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[test]
+fn child_idle_timeout() {
+    use std::io::{Read, Write};
+    if !in_child() {
+        return;
+    }
+    let on_thread = std::env::var("SCHEDULER_IDLE_READER").as_deref() == Ok("thread");
+    let silent = std::env::var("SCHEDULER_IDLE_SHAPE").as_deref() == Ok("silent");
+    let sessions: usize = std::env::var("SCHEDULER_IDLE_SESSIONS")
+        .map(|sessions| sessions.parse().unwrap())
+        .unwrap_or(1);
+    let clock_reads = || ignite_io::scheduler_counts().clock_reads;
+    let before = clock_reads();
+    let listener = TcpListener::bind(LOCALHOST.to_string(), 0).unwrap();
+    let port = listener.local_port() as u16;
+    let (ended, end) = mpsc::channel();
+    let mut peers = Vec::new();
+    for _ in 0..sessions {
+        let mut peer = std::net::TcpStream::connect((LOCALHOST, port)).unwrap();
+        peer.set_nodelay(true).unwrap();
+        peer.set_read_timeout(Some(LIMIT)).unwrap();
+        let stream = listener.accept().unwrap();
+        let ended = ended.clone();
+        let session = move || {
+            let idle = if silent { SHORT_IDLE } else { 600_000 };
+            stream.set_idle_timeout(idle).unwrap();
+            let _ = stream.write_all(COUNTED_PROMPT.to_vec());
+            loop {
+                match stream.read(4096) {
+                    Ok(Input::Data(bytes)) => {
+                        let _ = stream.write_all(bytes);
+                    }
+                    read => {
+                        // Counted here: a task that ends gives its worker
+                        // back to its loop, which reads the clock.
+                        let _ = ended.send((read, stream.timed_out(), clock_reads() - before));
+                        break;
+                    }
+                }
+            }
+            let _ = stream.close();
+        };
+        if on_thread {
+            std::thread::spawn(session);
+        } else {
+            spawn(session);
+        }
+        let mut prompt = vec![0u8; COUNTED_PROMPT.len()];
+        peer.read_exact(&mut prompt).unwrap();
+        assert_eq!(prompt, COUNTED_PROMPT);
+        peers.push(peer);
+    }
+    let alone = sessions == 1;
+    if silent {
+        for _ in 0..sessions {
+            let (read, timed_out, reads) = end
+                .recv_timeout(LIMIT)
+                .expect("the idle timeout ends the read of a session that is sent nothing");
+            println!("{reads} clock reads until the idle timeout ended a read");
+            assert!(
+                matches!(read, Ok(Input::Eof)),
+                "ended by the idle timeout: {read:?}"
+            );
+            assert!(timed_out, "the read tells its timeout from the peer's end");
+            if alone {
+                assert_eq!(reads, 0, "clock reads of a read that waits alone");
+            } else {
+                assert!(reads > 0, "a task parked in a reactor has a timer");
+            }
+        }
+    } else {
+        for round in 0..IDLE_ROUNDS {
+            for peer in &mut peers {
+                // The session waits in its read, as it does for a client.
+                std::thread::sleep(COUNTED_PAUSE);
+                let line = format!("echo {round}\r\n");
+                peer.write_all(line.as_bytes()).unwrap();
+                let mut echoed = vec![0u8; line.len()];
+                peer.read_exact(&mut echoed).unwrap();
+                assert_eq!(String::from_utf8_lossy(&echoed), line);
+            }
+        }
+        std::thread::sleep(COUNTED_PAUSE);
+        let reads = clock_reads() - before;
+        println!("{reads} clock reads in {sessions} sessions of {IDLE_ROUNDS} requests");
+        if alone {
+            assert_eq!(reads, 0, "clock reads of reads that wait alone");
+        } else {
+            assert!(reads > 0, "a task parked in a reactor has a timer");
+        }
+    }
+    drop(peers);
+    if !on_thread {
+        wait_for_tasks();
+    }
+}
+
+/// A read whose wait is interrupted is still ended by its idle timeout
+/// (`story:readiness-session-cost`). The timeout of a read that waits alone
+/// is the timeout of its `poll`, or of its `recv` (`SO_RCVTIMEO`), counted
+/// by the kernel from the call: a call that a signal ends and that is made
+/// again with the same timeout begins the whole timeout again, and signals
+/// that keep coming sooner than the timeout would keep the read waiting
+/// without end. So the wait after an interrupted call reads the clock once
+/// and goes on against that instant (`ignite_io`'s `wait::Limit`): the
+/// timeout begins again at most once. Here a signal interrupts the thread
+/// of a session that is sent nothing ten times per idle timeout, until its
+/// read ends: it must, by the timeout, well before [`LIMIT`].
+///
+/// For the three waits of [`a_read_that_waits_alone_reads_no_clock_for_its_idle_timeout`],
+/// for a session that has answered a request, whose read blocks its
+/// worker in `recv` (`in rhythm`), and for the IO mode `threads`, where
+/// every read blocks in `recv`.
+#[test]
+fn a_read_whose_wait_is_interrupted_is_still_ended_by_its_idle_timeout() {
+    let mut failures = Vec::new();
+    for (waiter, env) in [
+        ("a worker's only task", vec![]),
+        (
+            "the only task of a worker with a reactor",
+            vec![("IGNITE_WORKERS", "1")],
+        ),
+        ("a thread", vec![("SCHEDULER_IDLE_READER", "thread")]),
+        (
+            "a worker's only task, in rhythm",
+            vec![("SCHEDULER_IDLE_SHAPE", "rounds")],
+        ),
+        (
+            "a task of the IO mode threads",
+            vec![("IGNITE_IO", "threads")],
+        ),
+        (
+            "a task of the IO mode threads, in rhythm",
+            vec![("IGNITE_IO", "threads"), ("SCHEDULER_IDLE_SHAPE", "rounds")],
+        ),
+    ] {
+        let output = child("scheduler::child_interrupted_idle_timeout", &env);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let counted: Vec<&str> = stdout
+            .lines()
+            .filter_map(|line| line.find(" interrupts").map(|_| line))
+            .map(|line| line.rsplit("... ").next().unwrap_or(line))
+            .collect();
+        println!("{waiter}: {}", counted.join("; "));
+        if !output.status.success() || !stdout.contains("1 passed") {
+            failures.push(format!(
+                "{waiter}: {:?}\nstdout:\n{stdout}\nstderr:\n{}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[test]
+fn child_interrupted_idle_timeout() {
+    use nix::sys::signal::{SaFlags, SigAction, SigHandler, SigSet, Signal, sigaction};
+    use std::io::{Read, Write};
+    if !in_child() {
+        return;
+    }
+    extern "C" fn nothing(_: nix::libc::c_int) {}
+    // Without `SA_RESTART`, and a `poll` is never restarted either way.
+    let action = SigAction::new(
+        SigHandler::Handler(nothing),
+        SaFlags::empty(),
+        SigSet::empty(),
+    );
+    // SAFETY: the handler does nothing, which is safe in a signal handler,
+    // and this process, the child of one test, has no other use of SIGUSR1.
+    unsafe { sigaction(Signal::SIGUSR1, &action) }.unwrap();
+    let on_thread = std::env::var("SCHEDULER_IDLE_READER").as_deref() == Ok("thread");
+    let in_rhythm = std::env::var("SCHEDULER_IDLE_SHAPE").as_deref() == Ok("rounds");
+    let clock_reads = || ignite_io::scheduler_counts().clock_reads;
+    let before = clock_reads();
+    let listener = TcpListener::bind(LOCALHOST.to_string(), 0).unwrap();
+    let port = listener.local_port() as u16;
+    let mut peer = std::net::TcpStream::connect((LOCALHOST, port)).unwrap();
+    peer.set_nodelay(true).unwrap();
+    peer.set_read_timeout(Some(LIMIT)).unwrap();
+    let stream = listener.accept().unwrap();
+    let (ended, end) = mpsc::channel();
+    let (runs_on, thread) = mpsc::channel();
+    let session = move || {
+        let _ = runs_on.send(nix::unistd::gettid());
+        stream.set_idle_timeout(SHORT_IDLE).unwrap();
+        let _ = stream.write_all(COUNTED_PROMPT.to_vec());
+        loop {
+            match stream.read(4096) {
+                Ok(Input::Data(bytes)) => {
+                    let _ = stream.write_all(bytes);
+                }
+                read => {
+                    let _ = ended.send((read, stream.timed_out(), clock_reads() - before));
+                    break;
+                }
+            }
+        }
+        let _ = stream.close();
+    };
+    if on_thread {
+        std::thread::spawn(session);
+    } else {
+        spawn(session);
+    }
+    let thread = thread.recv_timeout(LIMIT).expect("the session runs");
+    let mut prompt = vec![0u8; COUNTED_PROMPT.len()];
+    peer.read_exact(&mut prompt).unwrap();
+    assert_eq!(prompt, COUNTED_PROMPT);
+    if in_rhythm {
+        // The session waits in its read, answers, and reads again.
+        std::thread::sleep(COUNTED_PAUSE);
+        let line = b"echo\r\n";
+        peer.write_all(line).unwrap();
+        let mut echoed = vec![0u8; line.len()];
+        peer.read_exact(&mut echoed).unwrap();
+        assert_eq!(echoed, line);
+    }
+    // Ten interrupts per idle timeout.
+    let every = Duration::from_millis(SHORT_IDLE as u64 / 10);
+    let began = Instant::now();
+    let mut interrupts = 0;
+    let ended = loop {
+        match end.recv_timeout(every) {
+            Ok(ended) => break Some(ended),
+            Err(mpsc::RecvTimeoutError::Timeout) if began.elapsed() < LIMIT => {
+                // To the session's thread, not to the process: any thread
+                // may take a signal sent to the process. A thread that has
+                // ended is no error to look at.
+                // SAFETY: `tgkill` takes three integers and no memory.
+                unsafe {
+                    nix::libc::syscall(
+                        nix::libc::SYS_tgkill,
+                        nix::libc::c_long::from(nix::unistd::getpid().as_raw()),
+                        nix::libc::c_long::from(thread.as_raw()),
+                        nix::libc::c_long::from(nix::libc::SIGUSR1),
+                    );
+                }
+                interrupts += 1;
+            }
+            Err(_) => break None,
+        }
+    };
+    let Some((read, timed_out, reads)) = ended else {
+        panic!(
+            "{interrupts} interrupts, one every {every:?}: the idle timeout of {SHORT_IDLE} ms \
+             did not end the read within {LIMIT:?}"
+        );
+    };
+    println!("{interrupts} interrupts, {reads} clock reads until the idle timeout ended the read");
+    assert!(
+        matches!(read, Ok(Input::Eof)),
+        "ended by the idle timeout: {read:?}"
+    );
+    assert!(timed_out, "the read tells its timeout from the peer's end");
+    assert!(interrupts > 0, "the read waited through an interrupt");
+    assert!(reads > 0, "an interrupted wait goes on against the clock");
+    drop(peer);
+    if !on_thread {
+        wait_for_tasks();
+    }
+}

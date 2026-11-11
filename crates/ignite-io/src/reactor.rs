@@ -245,11 +245,11 @@ fn timeout(deadline: Option<Instant>) -> PollTimeout {
     let Some(deadline) = deadline else {
         return PollTimeout::NONE;
     };
-    timeout_left(deadline.saturating_duration_since(Instant::now()))
+    timeout_left(deadline.saturating_duration_since(crate::sched::read_clock()))
 }
 
 /// The milliseconds of `left`, rounded up as [`timeout`] does.
-fn timeout_left(left: Duration) -> PollTimeout {
+pub(crate) fn timeout_left(left: Duration) -> PollTimeout {
     let millis = left.as_micros().div_ceil(1000);
     PollTimeout::try_from(millis.min(i32::MAX as u128)).unwrap_or(PollTimeout::NONE)
 }
@@ -264,32 +264,44 @@ pub(crate) fn eventfd() -> io::Result<EventFd> {
     )?)
 }
 
+/// How one `poll` of a descriptor beside a wake ended ([`poll_beside`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Polled {
+    /// The descriptor may be ready for the interest asked for.
+    pub(crate) ready: bool,
+    /// The wake descriptor is readable.
+    pub(crate) woken: bool,
+    /// The kernel ended the `poll` for its timeout: the whole timeout
+    /// passed and neither was ready. Never true for an interrupted `poll`.
+    pub(crate) timed_out: bool,
+}
+
 /// One `poll` of `descriptor` for `interest` and of `wake` for input, on
-/// the calling thread, until either may be ready or `deadline` passes:
-/// whether each is. `now`, if given, is the instant `deadline` was just
-/// computed from: the timeout is taken from it instead of reading the
-/// clock again. An interrupted `poll` reports neither.
+/// the calling thread, until either may be ready or `timeout` passes. The
+/// timeout is the caller's (`crate::wait::Limit::poll_timeout`): the
+/// `poll` reads no clock, and the kernel says whether the timeout ended it.
+/// An interrupted `poll` reports nothing.
 pub(crate) fn poll_beside(
     descriptor: BorrowedFd<'_>,
     interest: Interest,
     wake: BorrowedFd<'_>,
-    deadline: Option<Instant>,
-    now: Option<Instant>,
-) -> io::Result<(bool, bool)> {
+    timeout: PollTimeout,
+) -> io::Result<Polled> {
     let mut fds = [
         PollFd::new(descriptor, interest.poll()),
         PollFd::new(wake, PollFlags::POLLIN),
     ];
-    let timeout = match (deadline, now) {
-        (Some(deadline), Some(now)) => timeout_left(deadline.saturating_duration_since(now)),
-        _ => timeout(deadline),
-    };
-    match nix::poll::poll(&mut fds, timeout) {
-        Ok(_) | Err(Errno::EINTR) => {}
+    let timed_out = match nix::poll::poll(&mut fds, timeout) {
+        Ok(ready) => ready == 0,
+        Err(Errno::EINTR) => false,
         Err(error) => return Err(error.into()),
-    }
+    };
     let ready = |fd: &PollFd<'_>| fd.revents().is_some_and(|ready| !ready.is_empty());
-    Ok((ready(&fds[0]), ready(&fds[1])))
+    Ok(Polled {
+        ready: ready(&fds[0]),
+        woken: ready(&fds[1]),
+        timed_out,
+    })
 }
 
 /// Reset `eventfd`'s counter; a counter already zero is fine.
@@ -452,29 +464,27 @@ impl EpollReactor {
 impl EpollReactor {
     /// Wait on the calling thread, past the epoll instance, until
     /// `descriptor` may be ready for `interest`, [`Reactor::wake`] is
-    /// called or `deadline` passes; whether the descriptor is ready. The
-    /// wait of a worker's only task (`crate::sched`): one `poll`, as a
-    /// blocked thread's, instead of a switch to the worker's loop and its
+    /// called or `timeout` passes; whether the descriptor is ready, and
+    /// whether the timeout ended the wait ([`poll_beside`]). The wait of a
+    /// worker's only task (`crate::sched`): one `poll`, as a blocked
+    /// thread's, instead of a switch to the worker's loop and its
     /// `epoll_wait`. The descriptor may also be registered here; its edge
-    /// then waits in the epoll instance for the next `wait`. `now`, if
-    /// given, is the instant `deadline` was just computed from: the
-    /// timeout is taken from it instead of reading the clock again.
+    /// then waits in the epoll instance for the next `wait`.
     pub(crate) fn poll_one(
         &self,
         descriptor: BorrowedFd<'_>,
         interest: Interest,
-        deadline: Option<Instant>,
-        now: Option<Instant>,
-    ) -> io::Result<bool> {
-        let (ready, woken) = poll_beside(descriptor, interest, self.wakes.as_fd(), deadline, now)?;
-        if woken {
+        timeout: PollTimeout,
+    ) -> io::Result<Polled> {
+        let polled = poll_beside(descriptor, interest, self.wakes.as_fd(), timeout)?;
+        if polled.woken {
             // Relaxed (here and in `forget_wakes`, `wake`): a hint that
             // saves a `read`; a wake is never lost to it, because a worker
             // looks for what was handed over before it sleeps.
             self.unread.store(false, Ordering::Relaxed);
             drain(&self.wakes);
         }
-        Ok(ready)
+        Ok(polled)
     }
 
     /// Read back the wakes written since the eventfd was last read, before
@@ -614,31 +624,33 @@ impl PollReactor {
 
     /// Wait until `descriptor`, borrowed for the call and not registered,
     /// is ready for one of `interest`, [`Reactor::wake`] is called or
-    /// `deadline` passes; what it is ready for, [`Interest::NONE`] after a
-    /// wake, a deadline or an interrupted wait. One `poll` of the
-    /// descriptor and the eventfd, and a `read` of the eventfd after a
-    /// wake: the calls of a registration and a [`Reactor::wait`], without
-    /// the registration.
+    /// `timeout` passes; what it is ready for, [`Interest::NONE`] after a
+    /// wake, a timeout or an interrupted wait, and whether the timeout
+    /// ended the wait (the kernel says so: no clock is read for it). One
+    /// `poll` of the descriptor and the eventfd, and a `read` of the
+    /// eventfd after a wake: the calls of a registration and a
+    /// [`Reactor::wait`], without the registration.
     pub(crate) fn poll_one(
         &self,
         descriptor: BorrowedFd<'_>,
         interest: Interest,
-        deadline: Option<Instant>,
-    ) -> io::Result<Interest> {
+        timeout: PollTimeout,
+    ) -> io::Result<(Interest, bool)> {
         let mut fds = [
             PollFd::new(self.wakes.as_fd(), PollFlags::POLLIN),
             PollFd::new(descriptor, interest.poll()),
         ];
-        match nix::poll::poll(&mut fds, timeout(deadline)) {
-            Ok(_) => {}
-            Err(Errno::EINTR) => return Ok(Interest::NONE),
+        let timed_out = match nix::poll::poll(&mut fds, timeout) {
+            Ok(ready) => ready == 0,
+            Err(Errno::EINTR) => return Ok((Interest::NONE, false)),
             Err(error) => return Err(error.into()),
-        }
+        };
         if fds[0].revents().is_some_and(|ready| !ready.is_empty()) {
             drain(&self.wakes);
         }
-        Ok(Interest::of_poll(
-            fds[1].revents().unwrap_or(PollFlags::empty()),
+        Ok((
+            Interest::of_poll(fds[1].revents().unwrap_or(PollFlags::empty())),
+            timed_out,
         ))
     }
 }
