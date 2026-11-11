@@ -1010,7 +1010,10 @@ impl Pattern {
     /// `..name` under a tuple, a list, a variant's payload or an
     /// alternative of `|`. Every alternative contributes, so a name two
     /// alternatives bind is listed twice. A range binds nothing: its bounds
-    /// are literals or constants (`docs/slice.md` 13.7).
+    /// are literals or constants (`docs/slice.md` 13.7). A bare lowercase
+    /// name that resolves to a constant is listed too, as the syntax tree
+    /// cannot tell it from a binding; a caller with the symbol table
+    /// filters it, as the checker's `pattern` walk does.
     pub fn bindings(&self) -> Vec<&Ident> {
         let mut out = Vec::new();
         self.find_binding(&mut |id| {

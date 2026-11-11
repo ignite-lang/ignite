@@ -1531,10 +1531,17 @@ impl<'p> Evaluator<'p> {
                 plain(Value::Int(*ppm))
             }
             // Any other: a builtin with no value at compile time, such as a
-            // method of a handle (the receiver a member).
-            _ => Err(internal(format!(
-                "builtin `{builtin:?}` has no value at compile time"
-            ))),
+            // method of a handle (the receiver a member or a model's
+            // handle); a receiver of another shape is named.
+            _ => {
+                let receiver = match recv {
+                    Value::Member { .. } | Value::Handle(_) => String::new(),
+                    other => format!(" (receiver: `{}`)", other.debug_text()),
+                };
+                Err(internal(format!(
+                    "builtin `{builtin:?}` has no value at compile time{receiver}"
+                )))
+            }
         }
     }
 

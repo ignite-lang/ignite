@@ -376,6 +376,35 @@ fn a_handle_method_has_no_value_at_compile_time() {
     }
 }
 
+/// A builtin whose receiver value has another shape than its rule takes
+/// (an evaluator defect: a typed program gives none) keeps the refusal's
+/// text and names the receiver, as the evaluator did before
+/// `story:duplicated-rules-back`; a handle receiver is not named.
+#[test]
+fn a_receiver_of_another_shape_is_named() {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("eval-receiver-shape");
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("receiver_shape.ignite");
+    std::fs::write(
+        &file,
+        "package receiver_shape\n\nfn size(text: Text) -> Int = text.len()\n",
+    )
+    .unwrap();
+    let loaded = ignite::load(&file, None).unwrap_or_else(|e| panic!("{e}"));
+    let modules = loaded.modules();
+    let mut evaluator = Evaluator::new(&modules, Fuel::default());
+    let report = failed(call(
+        &mut evaluator,
+        "receiver_shape",
+        "size",
+        vec![Value::Int(7)],
+    ));
+    assert_eq!(
+        report,
+        "evaluation failed: builtin `TextLen` has no value at compile time (receiver: `7`)"
+    );
+}
+
 #[test]
 fn e118_closures_are_unencodable() {
     let loaded = ignite::load(&fixture("e118_unencodable_value.ignite"), None)

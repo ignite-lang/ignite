@@ -43,13 +43,18 @@ fn an_uppercase_constant_in_an_or_pattern_is_no_binding() {
     assert_eq!(check(text), "");
 }
 
-/// A lowercase constant is a constant pattern as well ("whatever its
-/// case: `lowest` is a constant pattern when a constant `lowest` is in
-/// scope"), so the same or-pattern with `limit` binds nothing either. The
-/// checker reports E049 for it: `Pattern::bindings`, which E049 reads,
-/// lists every lowercase name, constants included.
+/// What the checker does today, against `docs/slice.md` row 5 (a bare
+/// name that resolves to a constant is a constant pattern "whatever its
+/// case"): the or-pattern `limit | 0` with a constant `limit` is refused
+/// with E049, because `Pattern::bindings`, which E049 reads, lists every
+/// bare lowercase name, constants included. Pre-existing (the walks before
+/// `Pattern::bindings` did the same); `story:or-pattern-lowercase-constant`
+/// fixes it, which turns this case red: it then asserts no diagnostic.
 #[test]
-fn a_lowercase_constant_in_an_or_pattern_is_no_binding() {
+fn a_lowercase_constant_in_an_or_pattern_is_still_refused() {
     let text = "const limit: Int = 10\n\nfn f(n: Int) -> Int {\n  return match n {\n    limit | 0 => 1\n    _ => 2\n  }\n}\n";
-    assert_eq!(check(text), "");
+    assert_eq!(
+        check(text),
+        "t.ignite:5:5: error[E049]: `limit` is bound inside an or-pattern; an or-pattern cannot bind names, match the alternatives in separate arms"
+    );
 }
