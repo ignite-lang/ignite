@@ -1,5 +1,5 @@
 //! A task's stack overflow on both targets (story `http-reply-cost-back`,
-//! fix round 5, `docs/slice.md` section NN): a default start reports it
+//! fix round 5, `docs/slice.md` section 40): a default start reports it
 //! and aborts; a start with SIGSEGV and SIGBUS ignored reports it on the
 //! LLVM target, whose runtime gives every worker an alternate signal stack,
 //! and on the Rust target ends by the fault's signal, as at v0.15.0, since

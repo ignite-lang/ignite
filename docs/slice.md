@@ -11090,7 +11090,7 @@ worker was blocked so, the accepting task's among them, nothing was accepted for
 
 The drain (16.13). `serve_listener` keeps one `Holds` for all its connections,
 `Holds.start()` when the application has a `reply` and `Holds.none()` otherwise (only a `reply`
-holds a request; story `http-reply-cost-back`, section NN). `Holds.start()` is
+holds a request; story `http-reply-cost-back`, section 40). `Holds.start()` is
 a bounded channel of `HoldEvent`s to a register task, `keep_holds`. Each held
 receiver is sent to it (`Held`) before the wait; the register keeps the receivers not yet
 closed, dropping answered ones as the list grows. Once the drain begins, `accept` fails, and
@@ -11296,7 +11296,7 @@ us (`rustls-native-certs` was not taken): the substrate reads the PEM bundle its
   TLS, an invalid server name, authorities without a certificate.
 - No network: every certificate is generated in the test.
 
-## NN A dev build, a check and a plan take no longer than at v0.15.0
+## 39 A dev build, a check and a plan take no longer than at v0.15.0
 
 Story `build-time-back`: rows 6.2 (`llvm`, `rust`), 6.1 (`all/check`, `all/plan`) and the dev
 cells of 3.2 of `docs/quality.md` at v0.15.0 or better. The dedicated host has no cargo
@@ -11395,7 +11395,7 @@ and for a configured `debug` alike.
   program. `nix` without `dir` (48 M) or `resource` (71 M, and `std` has no `setrlimit`), and
   `entropy` and `environment` behind features (70 M together).
 
-## NN An HTTP reply allocates no more than at v0.15.0, and a server without held requests starts no task for them
+## 40 An HTTP reply allocates no more than at v0.15.0, and a server without held requests starts no task for them
 
 Story `http-reply-cost-back` (rows 3.3 `rust/todo/get-1` and 3.8 `todo/get-1` of
 `docs/quality.md`).
@@ -11454,7 +11454,7 @@ Story `http-reply-cost-back` (rows 3.3 `rust/todo/get-1` and 3.8 `todo/get-1` of
   before).
 - `valgrind` is a prerequisite of `reply_cost::`, as `strace` is of `scheduler::`.
 
-## NN Every binary is at or below its v0.15.0 size, and peak memory at one connection with it
+## 41 Every binary is at or below its v0.15.0 size, and peak memory at one connection with it
 
 Story `binary-size-back`: rows 3.9 and 3.2 of `docs/quality.md` towards v0.15.0's bytes
 without a program running slower, and row 3.8 at one connection with them. Each rule names the test that holds it; the bytes
@@ -11528,8 +11528,11 @@ of each step are in the commits.
   instructions per request); a worker limit of its own from the affinity mask and the cgroup
   quota (about 16,000 more instructions at the first connection than
   `std::thread::available_parallelism`).
+- Generation changes in wave 11 (the LLVM target closes a served connection's socket at the
+  end of its session; the Rust target's release project carries the linker layout above), so
+  `CODEGEN_REVISION` is `ignite-codegen/0.1.0-50` (one bump for both).
 
-## NN std.protocol.mysql: MySQL wire client with caching_sha2_password
+## 42 std.protocol.mysql: MySQL wire client with caching_sha2_password
 
 **Status: implemented in `story:std-mysql-client`.**
 
@@ -11541,7 +11544,7 @@ compiler and both backends are unchanged and no generated code changes. Its firs
 another party's database: the client sends no statement of its own except the one `read_only`
 asks for, and nothing it returns as a description of an error holds a statement or a credential.
 
-### NN.1 Packets, limits and errors
+### 42.1 Packets, limits and errors
 
 | item | meaning |
 |---|---|
@@ -11558,7 +11561,7 @@ connection closes its stream, so a connection that is out of step is not used ag
 the end of the stream and also a read that passed the stream's idle timeout, which the substrate
 reports alike. The module logs nothing.
 
-### NN.2 Connecting and authentication
+### 42.2 Connecting and authentication
 
 `type MysqlOptions { user, password = "", database = "", read_only = false, charset = 45
 (utf8mb4), limits, connect_timeout = 10 seconds, read_timeout = 30 seconds, server_name = "",
@@ -11598,7 +11601,7 @@ authentication of more than 8 packets are refused. With `read_only` the client s
 TRANSACTION READ ONLY` after authentication and returns only when the server took it: the server
 then refuses every write of the session (1792, `25006`).
 
-### NN.3 Statements and values
+### 42.3 Statements and values
 
 `query(client, sql)` is `COM_QUERY` over the text protocol. `prepare(client, sql)` is
 `COM_STMT_PREPARE` and gives a `Statement { id, parameters, columns }`; `execute(client,
@@ -11658,7 +11661,7 @@ is cut, out of sequence, out of shape or followed by bytes (`Closed`, `OutOfOrde
 `Malformed`). A server error in place of a result set or between its rows is `Server` and leaves
 the connection usable.
 
-### NN.4 Several connections
+### 42.4 Several connections
 
 A connection carries one statement at a time: two tasks that send on one connection read each
 other's replies. A program whose tasks ask concurrently holds several connections in a
@@ -11672,7 +11675,7 @@ the server's error is closed and not put back: a failed connection is out of the
 pool is smaller until the caller hands it a new one. No statement is run a second time on
 another connection. `quit_idle(pool)` quits the connections that are free.
 
-### NN.5 Layering
+### 42.5 Layering
 
 `mysql` is a protocol name for `layering::` (`docs/layering.md` rules 3 and 5): no module
 outside `std.protocol.*` and no file under `crates/*/src` names it, and none did. The module
@@ -11680,7 +11683,7 @@ imports `std.net`, `std.io`, `std.tls`, `std.digest`, `std.encoding`, `std.resul
 `std.text`, all of the base layer, and its own `std.protocol.mysql.binary`, which imports
 nothing.
 
-### NN.6 Tests
+### 42.6 Tests
 
 - `std/protocol/mysql.ignite`, both targets, 56 tests with a scripted server (`play`: reads each
   expected request byte for byte, writes its reply; the requests are written out by hand, the
@@ -11736,5 +11739,5 @@ nothing.
   16 MiB, each a command of two frames, and 17 DOUBLE values that print alike from `query` and
   from `execute`. The other needs no container: 40 connections quit, 40 refused, 40 refused
   TLS requests and 40 pools of three leave no descriptor on the Rust target and keep one each
-  on the LLVM target, which the test pins exactly (NN.2).
+  on the LLVM target, which the test pins exactly (42.2).
 - `layering::`, with `mysql` in the protocol names it reads from std.
