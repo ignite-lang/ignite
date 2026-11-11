@@ -13,7 +13,9 @@
 //! escape. A `match` whose scrutinee is such a value and whose arms keep
 //! what they bind is owned the same way ([`owned_scrutinee`], [`owned_match`]),
 //! and so is the value a `for` iterates when its body keeps what the loop
-//! binds ([`owned_iter`]). Such a value that no binding holds is a
+//! binds ([`owned_iter`]); a name bound there to a value without handles
+//! (the `error` of `Err(error) => return Err(error)`) lets none out and is
+//! not asked ([`binds_plain`]). Such a value that no binding holds is a
 //! temporary, owned by the expression that consumes it while that
 //! expression runs ([`kept_temporaries`], a `match` no statement claims, a
 //! bare expression statement, [`fresh`]).
@@ -41,21 +43,32 @@ use ignite_syntax::ast::{
 };
 use ignite_types::{Builtin, Callee, QualName, Ty, TypedProgram};
 
+use crate::layout::TypeEnv;
+
 /// What the ownership rules read: the typed module, its declarations and
-/// its module path, and the fns [`returns_fresh`] is deciding.
+/// its module path, the declared types of every module ([`handle_free`]
+/// looks into records and enums), and the fns [`returns_fresh`] is
+/// deciding.
 pub struct Cx<'a> {
     types: &'a TypedProgram,
     program: &'a Program,
     module: &'a str,
+    env: &'a TypeEnv,
     visiting: RefCell<Vec<String>>,
 }
 
 impl<'a> Cx<'a> {
-    pub fn new(types: &'a TypedProgram, program: &'a Program, module: &'a str) -> Cx<'a> {
+    pub fn new(
+        types: &'a TypedProgram,
+        program: &'a Program,
+        module: &'a str,
+        env: &'a TypeEnv,
+    ) -> Cx<'a> {
         Cx {
             types,
             program,
             module,
+            env,
             visiting: RefCell::new(Vec::new()),
         }
     }
@@ -88,17 +101,33 @@ pub fn owned(stmts: &[Stmt], index: usize, cx: &Cx<'_>) -> Vec<String> {
 
 /// Whether the `match` expression `e`, a statement of its block, owns its
 /// scrutinee: the scrutinee is a value no one else owns ([`produces`]) and
-/// every arm keeps every name its pattern binds.
+/// every arm keeps every name its pattern binds, or binds it to a value
+/// without handles ([`binds_plain`]): `Err(error) => return Err(error)`
+/// beside `Ok(stream) => { spawn serve(stream) }` lets no handle out.
 pub fn owned_scrutinee(e: &Expr, cx: &Cx<'_>) -> bool {
     let ExprKind::Match { scrutinee, arms } = &e.kind else {
         return false;
     };
     produces(scrutinee, cx)
         && arms.iter().all(|arm| {
-            pattern_names(&arm.pattern)
-                .iter()
-                .all(|name| keeps(&arm.body, name, cx))
+            pattern_names(&arm.pattern).iter().all(|name| {
+                let mut found = Vec::new();
+                expr_mentions(&arm.body, name, false, &mut found);
+                binds_plain(&found, cx) || keeps(&arm.body, name, cx)
+            })
         })
+}
+
+/// Whether a binding with the mentions `found` holds no handle for certain
+/// ([`handle_free`]): the type of a mention is the binding's. Such a binding
+/// lets no handle out wherever it goes (a result, a capture, an element of
+/// a list), so it does not decide who owns the value it was bound from. A
+/// binding that is never read is not known to.
+fn binds_plain(found: &[Mention<'_>], cx: &Cx<'_>) -> bool {
+    found
+        .iter()
+        .find_map(|(mention, _)| *mention)
+        .is_some_and(|mention| handle_free(cx.types.type_of(mention), cx))
 }
 
 /// Whether the expression statement `e` makes a value no one else owns
@@ -288,7 +317,8 @@ pub fn owned_match<'s>(stmt: &'s Stmt, cx: &Cx<'_>) -> Option<&'s Expr> {
 
 /// The iterated value of the `for` statement `stmt` when its block owns
 /// it: the value is one no one else owns ([`produces`]: `senders.values()`)
-/// and the body keeps every name the loop binds. The loop binds its
+/// and the body keeps every name the loop binds, or the name is bound to a
+/// value without handles ([`binds_plain`]). The loop binds its
 /// elements in place, so the handles are released when the block is left.
 pub fn owned_iter<'s>(stmt: &'s Stmt, cx: &Cx<'_>) -> Option<&'s Expr> {
     let (names, iter, body) = match &stmt.kind {
@@ -300,8 +330,12 @@ pub fn owned_iter<'s>(stmt: &'s Stmt, cx: &Cx<'_>) -> Option<&'s Expr> {
         } => (pattern_names(pattern), iter, body),
         _ => return None,
     };
-    (produces(iter, cx) && names.iter().all(|name| block_keeps(&body.stmts, name, cx)))
-        .then_some(iter)
+    let kept = |name: &String| {
+        let mut found = Vec::new();
+        block_mentions(&body.stmts, name, false, &mut found);
+        binds_plain(&found, cx) || block_keeps(&body.stmts, name, cx)
+    };
+    (produces(iter, cx) && names.iter().all(kept)).then_some(iter)
 }
 
 /// Whether `value` makes a value whose handles have no other owner.
@@ -862,6 +896,44 @@ fn plain(ty: &Ty) -> bool {
     }
 }
 
+/// Whether a value of type `ty` holds no handle for certain, its records
+/// and enums looked into: [`plain`], or a record or enum (inside a list,
+/// option, result, map or tuple too) whose every field and payload is such
+/// a type. What [`plain`] says of a fn value, a store, a capability and a
+/// type parameter stands: they may hold one. A type that contains itself
+/// adds nothing on the way back to itself.
+fn handle_free(ty: &Ty, cx: &Cx<'_>) -> bool {
+    fn inside(ty: &Ty, env: &TypeEnv, seen: &mut Vec<Ty>) -> bool {
+        match ty {
+            Ty::List(inner) | Ty::Option(inner) => inside(inner, env, seen),
+            Ty::Result(ok, err) | Ty::Map(ok, err) => {
+                inside(ok, env, seen) && inside(err, env, seen)
+            }
+            Ty::Tuple(items) => items.iter().all(|item| inside(item, env, seen)),
+            Ty::Record(_) | Ty::GenericRecord(..) => {
+                if seen.contains(ty) {
+                    return true;
+                }
+                seen.push(ty.clone());
+                env.fields_of(ty)
+                    .iter()
+                    .all(|(_, field)| inside(field, env, seen))
+            }
+            Ty::Enum(_) | Ty::GenericEnum(..) => {
+                if seen.contains(ty) {
+                    return true;
+                }
+                seen.push(ty.clone());
+                env.variants(ty)
+                    .iter()
+                    .all(|(_, payload)| payload.iter().all(|part| inside(part, env, seen)))
+            }
+            other => plain(other),
+        }
+    }
+    inside(ty, cx.env, &mut Vec::new())
+}
+
 /// Whether a value of type `ty` is a fn whose result holds no handle: a
 /// callee given it can get no handle out of it.
 fn yields_plain(ty: &Ty) -> bool {
@@ -1087,9 +1159,11 @@ fn callee_keeps(e: &Expr, name: &str, cx: &Cx<'_>) -> bool {
 }
 
 /// Whether a call `e` of a fn or role returns nothing that can alias its
-/// arguments' handles: its result holds none, or only fresh ones.
+/// arguments' handles: its result holds none ([`handle_free`]:
+/// `Connection.of(stream)` gives a record of two endpoints and a flag), or
+/// only fresh ones.
 fn result_apart(e: &Expr, cx: &Cx<'_>) -> bool {
-    plain(cx.types.type_of(e))
+    handle_free(cx.types.type_of(e), cx)
         || matches!(cx.types.callee(e), Some(Callee::Fn(q)) if returns_fresh(q, cx))
 }
 
