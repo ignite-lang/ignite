@@ -226,3 +226,94 @@ fn a_removed_unreadable_or_non_directory_listing_reads_as_the_base() {
         );
     }
 }
+
+/// The signal number each test handler saw, 0 when it did not run.
+static SEGV_SEEN: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+static BUS_SEEN: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+
+extern "C" fn segv_seen(
+    signal: i32,
+    info: *mut nix::libc::siginfo_t,
+    _context: *mut std::ffi::c_void,
+) {
+    // SAFETY: the kernel (or `on_fault` passing it on) gives a valid
+    // `siginfo_t` to a handler installed with `SA_SIGINFO`.
+    let number = if info.is_null() {
+        -1
+    } else {
+        unsafe { (*info).si_signo }
+    };
+    SEGV_SEEN.store(signal * 100 + number, std::sync::atomic::Ordering::SeqCst);
+}
+
+extern "C" fn bus_seen(
+    signal: i32,
+    info: *mut nix::libc::siginfo_t,
+    _context: *mut std::ffi::c_void,
+) {
+    // SAFETY: as in `segv_seen`.
+    let number = if info.is_null() {
+        -1
+    } else {
+        unsafe { (*info).si_signo }
+    };
+    BUS_SEEN.store(signal * 100 + number, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Fix 3 (`07cbf054`): `on_fault`, now private to `signal.rs`, still hands
+/// a `SIGSEGV` or `SIGBUS` outside a task's guard page to the handler that
+/// was installed before the first spawn, each signal to its own handler,
+/// with the kernel's `siginfo_t`. A raised signal stands in for a fault
+/// (`si_addr` of a `tgkill` is not in a guard page; returning does not
+/// repeat it).
+#[test]
+fn a_signal_outside_a_guard_page_reaches_the_handler_installed_before() {
+    passed(&child(
+        "unsafe_adversary_fixes::child_signal_outside_a_guard_page",
+    ));
+}
+
+#[test]
+fn child_signal_outside_a_guard_page() {
+    use nix::sys::signal::{SaFlags, SigAction, SigHandler, SigSet, Signal, raise, sigaction};
+    if !in_child() {
+        return;
+    }
+    for (signal, handler) in [
+        (Signal::SIGSEGV, segv_seen as extern "C" fn(_, _, _)),
+        (Signal::SIGBUS, bus_seen),
+    ] {
+        let action = SigAction::new(
+            SigHandler::SigAction(handler),
+            SaFlags::SA_SIGINFO | SaFlags::SA_ONSTACK,
+            SigSet::empty(),
+        );
+        // SAFETY: the handlers only store into an atomic.
+        unsafe { sigaction(signal, &action) }.unwrap();
+    }
+    ignite_io::spawn(|| {
+        raise(Signal::SIGSEGV).unwrap();
+        raise(Signal::SIGBUS).unwrap();
+    });
+    ignite_io::wait_for_tasks();
+    for (signal, handler) in [
+        (nix::libc::SIGSEGV, segv_seen as extern "C" fn(_, _, _)),
+        (nix::libc::SIGBUS, bus_seen),
+    ] {
+        // SAFETY: a null new action only reads the current one into `now`.
+        let mut now: nix::libc::sigaction = unsafe { std::mem::zeroed() };
+        assert_eq!(
+            unsafe { nix::libc::sigaction(signal, std::ptr::null(), &mut now) },
+            0
+        );
+        assert_ne!(
+            now.sa_sigaction, handler as usize,
+            "the overflow handler was not installed in front of the test's for signal {signal}"
+        );
+    }
+    let segv = SEGV_SEEN.load(std::sync::atomic::Ordering::SeqCst);
+    let bus = BUS_SEEN.load(std::sync::atomic::Ordering::SeqCst);
+    println!("segv handler saw {segv}, bus handler saw {bus}");
+    assert_eq!(segv, 11 * 100 + 11);
+    assert_eq!(bus, 7 * 100 + 7);
+}
