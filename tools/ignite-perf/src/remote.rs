@@ -1637,7 +1637,8 @@ pub const SIZE_ROW: &str = "3.9";
 /// `base_baseline`, `quality/baseline.json` at BASE ([`baseline_at`]), does not hold it, on that
 /// bar or anywhere else, trimmed: one it holds named the last release's code and does not let a
 /// cell grow again, and the refusal asks for a new one. With no `base_baseline` (it could not
-/// be read) a grown cell with a decision is refused, since the decision is not known to be new.
+/// be read), or one that has no `metrics` object and so is no baseline, a grown cell with a
+/// decision is refused, since the decision is not known to be new.
 /// Another value of the mark, or the mark on a row other than [`SIZE_ROW`], is an error.
 pub fn judge(baseline: &Json, base_baseline: Option<&Json>, rows: &[Row]) -> R<Judged> {
     let mut out = Judged::default();
@@ -1723,7 +1724,10 @@ pub fn judge(baseline: &Json, base_baseline: Option<&Json>, rows: &[Row]) -> R<J
                 ));
                 continue;
             };
-            match base_baseline.map(decisions_of) {
+            let held = base_baseline
+                .filter(|base| base.field("metrics").is_obj())
+                .map(decisions_of);
+            match held {
                 None => out.refused.push(format!(
                     "{values} {judged}; quality/baseline.json at the base could not be read, so the decision `{decision}` is not known to be new"
                 )),
@@ -1809,7 +1813,8 @@ fn git_commit(repo: &Path, rev: &str) -> R<String> {
 
 /// `quality/baseline.json` at the revision `rev` of `repo`, read on the caller's side (`git
 /// show <rev>:quality/baseline.json`): the committed file of that revision, whatever the working
-/// tree holds. [`judge`] reads from BASE's which decisions are the last release's.
+/// tree holds. [`judge`] reads from BASE's which decisions are the last release's. A file that
+/// is no JSON, or JSON without a `metrics` object, is an error: it holds no decision to compare.
 pub fn baseline_at(repo: &Path, rev: &str) -> R<Json> {
     let file = format!("{rev}:quality/baseline.json");
     let out = Command::new("git")
@@ -1822,7 +1827,12 @@ pub fn baseline_at(repo: &Path, rev: &str) -> R<Json> {
             String::from_utf8_lossy(&out.stderr).trim()
         ));
     }
-    Json::parse(&String::from_utf8_lossy(&out.stdout)).map_err(|e| format!("{file}: {e}"))
+    let read =
+        Json::parse(&String::from_utf8_lossy(&out.stdout)).map_err(|e| format!("{file}: {e}"))?;
+    if !read.field("metrics").is_obj() {
+        return Err(format!("{file}: no `metrics` object, so no baseline"));
+    }
+    Ok(read)
 }
 
 /// The fewest passes of each tree a release run takes, for the timing rows and the benchmark

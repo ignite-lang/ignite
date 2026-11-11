@@ -733,6 +733,41 @@ fn the_bases_baseline_is_read_from_the_revision() {
     );
 }
 
+/// A file at BASE that is JSON and no baseline (no `metrics` object) holds no decision to
+/// compare with, so it is not read as one: the reader refuses it, and the judge given such a
+/// value refuses the grown cell as it does without a baseline of the base.
+#[test]
+fn a_file_at_the_base_that_is_no_baseline_is_not_read_as_one() {
+    let decision = "story:x (2026-11-11): the TLS client session adds the bytes";
+    let baseline = size_baseline(Some(decision));
+    for (name, text) in [
+        ("base-empty-object", "{}"),
+        ("base-array", "[]"),
+        ("base-metrics-array", r#"{"metrics": []}"#),
+        ("base-metrics-null", r#"{"metrics": null}"#),
+    ] {
+        let root = repository_with_baseline(name, Some(text));
+        let error = remote::baseline_at(&root, "HEAD").unwrap_err();
+        assert!(
+            error.contains("HEAD:quality/baseline.json") && error.contains("`metrics`"),
+            "{text}: {error}"
+        );
+        let judged = remote::judge(
+            &baseline,
+            Some(&Json::parse(text).unwrap()),
+            &[row("3.9", "rust/todo", &[723], &[864])],
+        )
+        .unwrap();
+        assert!(
+            judged.grown.is_empty()
+                && judged.refused.len() == 1
+                && judged.refused[0]
+                    .contains("quality/baseline.json at the base could not be read"),
+            "{text}: {judged:?}"
+        );
+    }
+}
+
 /// Growth stays deliberate: a cell of the size row worse than BASE whose bar has no `decision`
 /// (none, a blank one, no bar at all) is refused, and the refusal says that a decision naming
 /// the added code is missing.
