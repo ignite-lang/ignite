@@ -30,27 +30,20 @@ impl<'p> Evaluator<'p> {
         let (outcome, units) = std::thread::scope(|scope| {
             let supervisor = world.clone();
             scope.spawn(move || {
-                while let Some(spawned) = supervisor.next_spawns() {
-                    for (id, job) in spawned {
-                        let task = supervisor.task(id);
-                        let started = std::thread::Builder::new()
-                            .name("ignite-eval-task".to_string())
-                            .stack_size(Evaluator::STACK_BYTES)
-                            .spawn_scoped(scope, move || {
-                                let mut ev = Evaluator::new(modules, fuel);
-                                ev.time_limit = time_limit;
-                                ev.deadline = deadline;
-                                ev.on_stack = true;
-                                let world = task.clone();
-                                guarded(&world, move || ev.run_task(task, job));
-                            });
-                        if let Err(error) = started {
-                            supervisor.end_with(EvalError::Failed {
-                                report: format!("evaluation failed: a task cannot start: {error}"),
-                            });
-                        }
-                    }
-                }
+                supervise(&supervisor, |task, job| {
+                    std::thread::Builder::new()
+                        .name("ignite-eval-task".to_string())
+                        .stack_size(Evaluator::STACK_BYTES)
+                        .spawn_scoped(scope, move || {
+                            let mut ev = Evaluator::new(modules, fuel);
+                            ev.time_limit = time_limit;
+                            ev.deadline = deadline;
+                            ev.on_stack = true;
+                            let world = task.clone();
+                            guarded(&world, move || ev.run_task(task, job));
+                        })
+                        .map(|_| ())
+                });
             });
             self.world = Some(world.clone());
             // A panic of the body ends the model first, so the task threads
@@ -59,7 +52,8 @@ impl<'p> Evaluator<'p> {
             {
                 Ok(result) => result,
                 Err(panic) => {
-                    world.end_with(panicked(panic.as_ref()));
+                    self.world = None;
+                    world.end_with(panicked("the test body", panic.as_ref()));
                     std::panic::resume_unwind(panic)
                 }
             };
@@ -619,19 +613,39 @@ pub(super) fn is_model_method(builtin: Builtin) -> bool {
 /// instead of waiting for a turn that never passes.
 fn guarded(world: &World, task: impl FnOnce()) {
     if let Err(panic) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(task)) {
-        world.end_with(panicked(panic.as_ref()));
+        world.end_with(panicked("a task of the model", panic.as_ref()));
     }
 }
 
-/// The failure of a panic with the payload `panic`.
-fn panicked(panic: &(dyn std::any::Any + Send)) -> EvalError {
+/// The supervisor of `world`: `start` starts the thread of each spawned
+/// task, until the test is over. A task that cannot start ends the test. A panic
+/// of the supervisor ends it too: no task would start after it.
+fn supervise(world: &World, mut start: impl FnMut(World, Job) -> std::io::Result<()>) {
+    let supervised = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        while let Some(spawned) = world.next_spawns() {
+            for (id, job) in spawned {
+                if let Err(error) = start(world.task(id), job) {
+                    world.end_with(EvalError::Failed {
+                        report: format!("evaluation failed: a task cannot start: {error}"),
+                    });
+                }
+            }
+        }
+    }));
+    if let Err(panic) = supervised {
+        world.end_with(panicked("the model's supervisor", panic.as_ref()));
+    }
+}
+
+/// The failure of a panic of `who` with the payload `panic`.
+fn panicked(who: &str, panic: &(dyn std::any::Any + Send)) -> EvalError {
     let message = panic
         .downcast_ref::<&str>()
         .map(|text| text.to_string())
         .or_else(|| panic.downcast_ref::<String>().cloned())
         .unwrap_or_else(|| "a panic without a message".to_string());
     EvalError::Failed {
-        report: format!("evaluation failed: a task of the model panicked: {message}"),
+        report: format!("evaluation failed: {who} panicked: {message}"),
     }
 }
 
@@ -661,5 +675,62 @@ mod tests {
         }
         let mut units = 1_000;
         assert!(world.block(Wait::Sleep, None, &mut units).is_err());
+    }
+
+    /// A supervisor that panics while it starts a task ends the test with
+    /// a failure instead of leaving the task without a thread.
+    #[test]
+    fn a_panicking_supervisor_ends_the_test_with_a_failure() {
+        let world = World::new(1_000);
+        let job = Job {
+            call: Call::Value(Value::Unit),
+            args: Vec::new(),
+        };
+        assert!(matches!(world.spawn(job), Ok(Ok(()))));
+        let supervisor = world.clone();
+        let thread = std::thread::spawn(move || {
+            supervise(&supervisor, |_, _| -> std::io::Result<()> {
+                panic!("boom")
+            })
+        });
+        let _ = thread.join();
+        match world.outcome().0 {
+            Some(Err(EvalError::Failed { report })) => assert_eq!(
+                report,
+                "evaluation failed: the model's supervisor panicked: boom"
+            ),
+            other => panic!("expected the failure of the panic, found {other:?}"),
+        }
+    }
+
+    /// A test body that panics with a task waiting for its thread ends the
+    /// model first, so the scope joins every thread and the panic goes on
+    /// to the caller; the evaluator keeps no model of the test after it.
+    #[test]
+    fn a_panicking_test_body_ends_the_model_and_leaves_none_behind() {
+        let modules: &'static crate::Modules<'static> =
+            Box::leak(Box::new(std::iter::empty().collect()));
+        let (sent, received) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut ev = Evaluator::new(modules, crate::Fuel::default());
+            ev.on_stack = true;
+            let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                ev.in_world(|ev| {
+                    let world = ev.world.clone().expect("a model under a test");
+                    let job = Job {
+                        call: Call::Value(Value::Unit),
+                        args: Vec::new(),
+                    };
+                    assert!(matches!(world.spawn(job), Ok(Ok(()))));
+                    panic!("boom")
+                })
+            }))
+            .is_err();
+            let _ = sent.send((unwound, ev.world.is_none()));
+        });
+        let outcome = received
+            .recv_timeout(std::time::Duration::from_secs(60))
+            .expect("the body's panic ends the model instead of leaving the test waiting");
+        assert_eq!(outcome, (true, true));
     }
 }
