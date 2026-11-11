@@ -170,26 +170,6 @@
     "crates/ignite/tests/fixtures/tests/store_load.ignite::values under updates of one shard: every id, values grow, no long wait, no lost write": "story:llvm-store-update-off-lock, 2026-11-07: the 500 ms wait assertion fails on LLVM at load 35 to 39, also when run alone, and passes at lower load"
   },
   "known_differences": {
-    "crates/ignite/tests/fixtures/leak/attack2.ignite::a nested match over stored ends is released (G30)": {
-      "consumer": "llvm",
-      "story": "story:llvm-release-handle-temporaries",
-      "what": "the soak grows channels and handles 200 to 2000 on LLVM and stays flat on Rust: a value copied out of a store that no owning let, statement match or for holds keeps its owner (docs/slice.md 30.3, known gap decided in wave 8; leak::stored_ends_read_in_every_form_are_released asserts it red)"
-    },
-    "crates/ignite/tests/fixtures/leak/attack2.ignite::a record put as a literal and removed is released (G30)": {
-      "consumer": "llvm",
-      "story": "story:llvm-release-handle-temporaries",
-      "what": "the soak grows channels and handles 200 to 2000 on LLVM and stays flat on Rust: a value copied out of a store that no owning let, statement match or for holds keeps its owner (docs/slice.md 30.3, known gap decided in wave 8; leak::stored_ends_read_in_every_form_are_released asserts it red)"
-    },
-    "crates/ignite/tests/fixtures/leak/attack2.ignite::a stored end looked at through is_some is released (G30)": {
-      "consumer": "llvm",
-      "story": "story:llvm-release-handle-temporaries",
-      "what": "the soak grows channels and handles 200 to 2000 on LLVM and stays flat on Rust: a value copied out of a store that no owning let, statement match or for holds keeps its owner (docs/slice.md 30.3, known gap decided in wave 8; leak::stored_ends_read_in_every_form_are_released asserts it red)"
-    },
-    "crates/ignite/tests/fixtures/leak/attack2.ignite::a stored end removed by a bare statement is released (G30)": {
-      "consumer": "llvm",
-      "story": "story:llvm-release-handle-temporaries",
-      "what": "the soak grows channels and handles 200 to 2000 on LLVM and stays flat on Rust: a value copied out of a store that no owning let, statement match or for holds keeps its owner (docs/slice.md 30.3, known gap decided in wave 8; leak::stored_ends_read_in_every_form_are_released asserts it red)"
-    },
     "crates/ignite/tests/fixtures/tests/basics.ignite::try on err fails": {
       "consumer": "eval",
       "story": "story:eval-try-report",
@@ -216,7 +196,7 @@
         },
         "llvm": {
           "decision": "wave 8 (2026-11-09), accepted by the coordinator: the adversary's pass 2 on story channel-release-on-close found four pre-existing LLVM leaks of stored ends read through temporaries (crates/ignite/tests/fixtures/leak/attack2.ignite, red on the wave base 91fa0a25 too); listed in known_differences, asserted red in leak::, fixed by story:llvm-release-handle-temporaries",
-          "value": 4
+          "value": 0
         }
       },
       "direction": "lower",

@@ -308,6 +308,7 @@ L20:
   %t25 = call i64 @"tests.bounds.same"(i64 %t24), !dbg !17
   store i64 %t25, ptr %t26, align 8, !dbg !16
   %t27 = load i64, ptr %t26, align 8, !dbg !20
+  call void @ignite_rt_tcp_retain(i64 %t27), !dbg !19
   call void @ignite_rt_spawn_begin(), !dbg !19
   %t28 = call ptr @ignite.alloc(i64 8, i64 8), !dbg !19
   store i64 %t27, ptr %t28, align 8, !dbg !19
