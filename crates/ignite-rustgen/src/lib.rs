@@ -7374,12 +7374,6 @@ fn dev_member_profile(package: &str) -> String {
 /// functions.
 const STD_DEV_PROFILE: &str = "\n[profile.dev.package.\"ignite-std\"]\ndebug = false\n";
 
-/// The release profile of the generated standard library, for a program
-/// that uses it: optimised for size (`opt-level = "s"`; story
-/// `binary-size-back`, row 3.9 of `docs/quality.md`; its speed is measured
-/// on the dedicated host only).
-const STD_RELEASE_PROFILE: &str = "\n[profile.release.package.\"ignite-std\"]\nopt-level = \"s\"\n";
-
 fn cargo_toml(
     package_name: &str,
     lib_rs: &str,
@@ -7404,7 +7398,6 @@ fn cargo_toml(
     out.push_str(&dev_member_profile(package_name));
     if uses_std {
         out.push_str(STD_DEV_PROFILE);
-        out.push_str(STD_RELEASE_PROFILE);
     }
     out.push_str("\n[lib]\n");
     let lib = crate_name(package_name);
