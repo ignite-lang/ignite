@@ -1,0 +1,193 @@
+package temporaries
+
+// A stored end read into a temporary no binding holds, in the five
+// positions beside those of `attack2.ignite` (`docs/slice.md` 30.3): the
+// result of a fn, an argument of `spawn`, a loop condition, a call under
+// `?`, and a task that fails while the copy is pending. Each run opens a
+// stored end, reads it in that position, checks that the stored end still
+// delivers and closes it. The soak finds a copy never released (it keeps
+// its channel open after the close); `still_sends` finds a copy released
+// twice (the second release closes the end the store still holds).
+// `crates/ignite/tests/leak.rs` runs them on both targets. The file is
+// outside `fixtures/`: the soak reads `Runtime.census()`, which the
+// evaluator has no model of, so the differential runner could not run it.
+
+import std.runtime.{soak}
+import std.option.{is_some}
+
+test type Waiter {
+  id: Int
+  wake: Receiver<Int>
+}
+
+test fn open(senders: Store<Sender<Int>>) -> Waiter {
+  let (tx, rx) = Channel.bounded(1)
+  let id = senders.next_id()
+  senders.put(id, tx)
+  Waiter { id, wake = rx }
+}
+
+test fn close(senders: Store<Sender<Int>>, id: Int) -> Unit {
+  match senders.remove(id) {
+    Some(found) => {
+      let t: Sender<Int> = found
+      t.close()
+    }
+    None => {}
+  }
+}
+
+test fn is(got: Option<Int>, want: Int) -> Bool = match got {
+  Some(v) => v == want
+  None => false
+}
+
+// Whether the end stored under `w.id` still delivers to `w.wake`.
+test fn still_sends(senders: Store<Sender<Int>>, w: Waiter) -> Bool {
+  let sent = match senders.get(w.id) {
+    Some(s) => {
+      let t: Sender<Int> = s
+      t.try_send(42)
+    }
+    None => false
+  }
+  sent && is(w.wake.receive_within(0 ms), 42)
+}
+
+// The result of a fn. `holds` consumes the copy in its result expression
+// and releases it; `lookup` returns the copy, so the caller's `match` owns
+// it and `lookup` must not release it too.
+test fn holds(senders: Store<Sender<Int>>, id: Int) -> Bool = senders.get(id).is_some()
+
+test fn lookup(senders: Store<Sender<Int>>, id: Int) -> Option<Sender<Int>> = senders.get(id)
+
+test fn returned_once(senders: Store<Sender<Int>>) -> Unit {
+  let w: Waiter = open(senders)
+  let present = holds(senders, w.id)
+  let rung = match lookup(senders, w.id) {
+    Some(s) => {
+      let t: Sender<Int> = s
+      t.try_send(1)
+    }
+    None => false
+  }
+  assert present && rung && is(w.wake.receive_within(0 ms), 1)
+  assert still_sends(senders, w)
+  close(senders, w.id)
+}
+
+test "a copy consumed by a fn's result is released, one it returns only by its caller (G30)" {
+  let senders: Store<Sender<Int>> = Store.new()
+  assert soak(2000, |run| returned_once(senders)).growth == []
+}
+
+// An argument of `spawn`: the task gets an owner of its own, so the
+// spawning block releases the copy after the start.
+test fn ring(found: Option<Sender<Int>>, done: Sender<Int>) -> Result<Unit, IoError> {
+  let rung = match found {
+    Some(s) => {
+      let t: Sender<Int> = s
+      t.try_send(2)
+    }
+    None => false
+  }
+  let d = done.send(if rung { 1 } else { 0 })
+  Ok(())
+}
+
+test fn spawned_once(senders: Store<Sender<Int>>) -> Unit {
+  let tasks = Runtime.census().tasks
+  let w: Waiter = open(senders)
+  let (dtx, drx) = Channel.bounded(1)
+  spawn ring(senders.get(w.id), dtx)
+  assert is(drx.receive_within(5 seconds), 1)
+  assert Runtime.settle(tasks, 5 seconds)
+  assert is(w.wake.receive_within(0 ms), 2)
+  assert still_sends(senders, w)
+  close(senders, w.id)
+}
+
+test "a copy passed to spawn is released by the task and the spawner once each (G30)" {
+  let senders: Store<Sender<Int>> = Store.new()
+  assert soak(2000, |run| spawned_once(senders)).growth == []
+}
+
+// A loop condition: a copy per evaluation, four here.
+test fn polled_once(senders: Store<Sender<Int>>) -> Unit {
+  let w: Waiter = open(senders)
+  var n = 0
+  while senders.get(w.id).is_some() && n < 3 {
+    n = n + 1
+  }
+  assert n == 3
+  assert still_sends(senders, w)
+  close(senders, w.id)
+}
+
+test "a copy read in a loop condition is released each time (G30)" {
+  let senders: Store<Sender<Int>> = Store.new()
+  assert soak(2000, |run| polled_once(senders)).growth == []
+}
+
+// Under `?`: the call that took the copy fails, and a `?` beside the copy
+// leaves the fn while the copy waits for its call.
+test fn seen(found: Option<Sender<Int>>) -> Result<Bool, IoError> =
+  if is_some(found) { Err(IoError.new("seen")) } else { Ok(false) }
+
+test fn refused(id: Int) -> Result<Int, IoError> = Err(IoError.new("refused"))
+
+test fn both(found: Option<Sender<Int>>, id: Int) -> Bool = is_some(found) && id >= 0
+
+test fn tried(senders: Store<Sender<Int>>, id: Int) -> Result<Bool, IoError> {
+  let looked = seen(senders.get(id))?
+  Ok(looked)
+}
+
+test fn pending(senders: Store<Sender<Int>>, id: Int) -> Result<Bool, IoError> {
+  let looked = both(senders.get(id), refused(id)?)
+  Ok(looked)
+}
+
+test fn failed(r: Result<Bool, IoError>) -> Bool = match r {
+  Ok(_) => false
+  Err(_) => true
+}
+
+test fn tried_once(senders: Store<Sender<Int>>) -> Unit {
+  let w: Waiter = open(senders)
+  assert failed(tried(senders, w.id))
+  assert failed(pending(senders, w.id))
+  assert still_sends(senders, w)
+  close(senders, w.id)
+}
+
+test "a copy under ? is released when the ? leaves (G30)" {
+  let senders: Store<Sender<Int>> = Store.new()
+  assert soak(2000, |run| tried_once(senders)).growth == []
+}
+
+// A task that fails while its copy waits for the call that took it: the
+// failure releases what the task owns, the copy included.
+test fn refuse(found: Option<Sender<Int>>) -> Bool {
+  assert !is_some(found), "refused a stored end"
+  false
+}
+
+test fn look_and_fail(senders: Store<Sender<Int>>, id: Int) -> Result<Unit, IoError> {
+  let looked = refuse(senders.get(id))
+  Ok(())
+}
+
+test fn failed_once(senders: Store<Sender<Int>>) -> Unit {
+  let tasks = Runtime.census().tasks
+  let w: Waiter = open(senders)
+  spawn look_and_fail(senders, w.id)
+  assert Runtime.settle(tasks, 5 seconds)
+  assert still_sends(senders, w)
+  close(senders, w.id)
+}
+
+test "a copy in a task that fails is released by the failure (G30)" {
+  let senders: Store<Sender<Int>> = Store.new()
+  assert soak(100, |run| failed_once(senders)).growth == []
+}

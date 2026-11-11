@@ -1,0 +1,147 @@
+package temporaries_unreleased
+
+// Adversary cases: temporaries that no rule of `crates/ignite-llvm/src/own.rs`
+// owns, so on LLVM the owner the copy out of the store added is never
+// released, while the Rust target drops them at the end of the statement.
+// Each soak grows on LLVM at f58a7733 and after
+// `story:llvm-release-handle-temporaries`, and stays flat on Rust.
+// `crates/ignite/tests/leak.rs` runs them on both targets.
+
+import std.runtime.{soak}
+import std.option.{is_some}
+
+test type Waiter {
+  id: Int
+  wake: Receiver<Int>
+}
+
+test type Holder {
+  s: Option<Sender<Int>>
+  n: Int
+}
+
+test fn open(senders: Store<Sender<Int>>) -> Waiter {
+  let (tx, rx) = Channel.bounded(1)
+  let id = senders.next_id()
+  senders.put(id, tx)
+  Waiter { id, wake = rx }
+}
+
+test fn close(senders: Store<Sender<Int>>, id: Int) -> Unit {
+  match senders.remove(id) {
+    Some(found) => {
+      let t: Sender<Int> = found
+      t.close()
+    }
+    None => {}
+  }
+}
+
+test fn forget(senders: Store<Sender<Int>>, id: Int) -> Unit {
+  let gone = senders.remove(id)
+}
+
+test fn is(got: Option<Int>, want: Int) -> Bool = match got {
+  Some(v) => v == want
+  None => false
+}
+
+test fn ring(found: Option<Sender<Int>>, v: Int) -> Bool = match found {
+  Some(s) => {
+    let t: Sender<Int> = s
+    t.try_send(v)
+  }
+  None => false
+}
+
+test fn still_sends(senders: Store<Sender<Int>>, w: Waiter) -> Bool {
+  let sent = match senders.get(w.id) {
+    Some(s) => {
+      let t: Sender<Int> = s
+      t.try_send(42)
+    }
+    None => false
+  }
+  sent && is(w.wake.receive_within(0 ms), 42)
+}
+
+// The receiver of a builtin method.
+test fn counted(senders: Store<Sender<Int>>) -> Unit {
+  let w: Waiter = open(senders)
+  assert senders.values().len() >= 1
+  assert still_sends(senders, w)
+  close(senders, w.id)
+}
+
+test "a store read that is the receiver of a builtin method is released" {
+  let senders: Store<Sender<Int>> = Store.new()
+  assert soak(200, |run| counted(senders)).growth == []
+}
+
+// A field of a fresh value: the rest of the value is dropped.
+test fn field_of_fresh(senders: Store<Sender<Int>>) -> Unit {
+  let id = open(senders).id
+  close(senders, id)
+}
+
+test "the rest of a fresh value read for one field is released" {
+  let senders: Store<Sender<Int>> = Store.new()
+  assert soak(200, |run| field_of_fresh(senders)).growth == []
+}
+
+// The value of a match arm whose result is thrown away.
+test fn arm_value(senders: Store<Sender<Int>>) -> Unit {
+  let w: Waiter = open(senders)
+  match w.id {
+    -1 => senders.get(w.id)
+    _ => senders.get(w.id)
+  }
+  assert still_sends(senders, w)
+  close(senders, w.id)
+}
+
+test "a store read that is the thrown-away value of a match arm is released" {
+  let senders: Store<Sender<Int>> = Store.new()
+  assert soak(200, |run| arm_value(senders)).growth == []
+}
+
+// Inside a record literal that is the argument of a call.
+test fn held(h: Holder) -> Bool = is_some(h.s)
+
+test fn in_a_record(senders: Store<Sender<Int>>) -> Unit {
+  let w: Waiter = open(senders)
+  assert held(Holder { s = senders.get(w.id), n = 1 })
+  assert still_sends(senders, w)
+  close(senders, w.id)
+}
+
+test "a store read inside a record argument of a call is released" {
+  let senders: Store<Sender<Int>> = Store.new()
+  assert soak(200, |run| in_a_record(senders)).growth == []
+}
+
+// Bound by the pattern of a match that is no statement, and put in a
+// store wrapped in `Some`.
+test fn wrapped(senders: Store<Sender<Int>>, other: Store<Option<Sender<Int>>>) -> Unit {
+  let w: Waiter = open(senders)
+  let n = 1 + match senders.get(w.id) {
+    Some(s) => {
+      other.put(1, Some(s))
+      1
+    }
+    None => 0
+  }
+  assert n == 2
+  forget(senders, w.id)
+  let rung = match other.remove(1) {
+    Some(found) => ring(found, 8)
+    None => false
+  }
+  assert rung && is(w.wake.receive_within(0 ms), 8)
+}
+
+test "a match scrutinee whose arm puts the binding in a store inside Some is released" {
+  let senders: Store<Sender<Int>> = Store.new()
+  let other: Store<Option<Sender<Int>>> = Store.new()
+  assert soak(200, |run| wrapped(senders, other)).growth == []
+}

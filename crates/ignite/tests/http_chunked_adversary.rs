@@ -123,3 +123,225 @@ fn the_chunk_decoder_copies_no_bytes_parameter_on_either_target() {
         copies.join("\n")
     );
 }
+
+/// Adversary pass 1 on unit counts (wave 11): story
+/// `ignored-tests-and-long-files-back` moves 34 helpers of
+/// `std.protocol.http` into `std.protocol.http.syntax` and promises "every
+/// path an importer names is unchanged". Imports are not re-exported, so a
+/// program that names a moved helper through `std.protocol.http` stops
+/// checking. Every in-repo program that imports `std.protocol.http` checks.
+#[test]
+fn every_program_importing_std_protocol_http_still_checks() {
+    fn walk(dir: &std::path::Path, out: &mut Vec<PathBuf>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                walk(&path, out);
+            } else if path.extension().is_some_and(|e| e == "ignite") {
+                out.push(path);
+            }
+        }
+    }
+    let root = repository();
+    let mut files = Vec::new();
+    walk(&root.join("crates/ignite/tests/fixtures"), &mut files);
+    walk(&root.join("examples"), &mut files);
+    files.sort();
+    let importers: Vec<PathBuf> = files
+        .into_iter()
+        .filter(|f| {
+            std::fs::read_to_string(f)
+                .unwrap()
+                .lines()
+                .any(|l| l.trim_start().starts_with("import std.protocol.http."))
+        })
+        .collect();
+    assert!(importers.len() >= 13, "{importers:?}");
+    let failed: Vec<String> = importers
+        .iter()
+        .filter_map(|f| {
+            ignite::check_with_std(f, Some(&standard_library()))
+                .err()
+                .map(|e| format!("{}: {e}", f.display()))
+        })
+        .collect();
+    assert!(failed.is_empty(), "{}", failed.join("\n"));
+}
+
+/// Every name `std.protocol.http` exported at the tag `v0.15.0`, generated
+/// once from `git show v0.15.0:std/protocol/http.ignite`: its records,
+/// aliases, enums, fns, constants and its protocol, test-only items and
+/// associated fns (`Response.json`) left out. A program could import each
+/// of them by that path then, so each stays importable by it.
+const V0_15_0_HTTP_NAMES: [&str; 91] = [
+    "IoResult",
+    "Request",
+    "Response",
+    "Content",
+    "HttpApp",
+    "no_piece",
+    "HttpLimits",
+    "READ_SIZE",
+    "MAXIMUM_LENGTH_DIGITS",
+    "Http",
+    "HttpServer",
+    "limit_reasons",
+    "reason",
+    "status_response",
+    "method_not_allowed",
+    "has_line_break",
+    "is_list_field",
+    "is_auth_field",
+    "is_date_field",
+    "list_elements",
+    "has_empty_element",
+    "has_bws",
+    "is_digits",
+    "is_imf_fixdate",
+    "is_allowed_field",
+    "checked",
+    "Framing",
+    "render_head",
+    "render",
+    "render_message",
+    "inline_length",
+    "render_framed",
+    "inline_framing",
+    "is_connect_success",
+    "has_no_content",
+    "streamed_framing",
+    "HEX_DIGITS",
+    "hex",
+    "chunk",
+    "send_streamed",
+    "header",
+    "segments",
+    "lists_connection_option",
+    "has_connection_option",
+    "response_closes",
+    "keep_alive",
+    "is_token_byte",
+    "is_token",
+    "is_token_in",
+    "is_ows",
+    "trim_ows",
+    "trimmed_in",
+    "lowered_in",
+    "is_field_value",
+    "is_field_value_in",
+    "is_target",
+    "is_target_in",
+    "absolute_form",
+    "scheme_length",
+    "starts_lowered",
+    "is_reg_name_byte",
+    "is_host",
+    "resolve_host",
+    "target_too_long",
+    "parse_head",
+    "RequestLine",
+    "request_line",
+    "target_parts",
+    "origin_parts",
+    "head_authority",
+    "HeadRead",
+    "read_head",
+    "read_body",
+    "Next",
+    "rejected",
+    "next_request",
+    "hex_digit_value",
+    "ChunkSize",
+    "chunk_size",
+    "LineRead",
+    "read_line",
+    "ChunkData",
+    "read_chunk_data",
+    "Chunked",
+    "read_chunked",
+    "transfer_codings",
+    "coding_status",
+    "parse_length",
+    "reject",
+    "asked",
+    "session",
+];
+
+/// Unit counts, fix round 1 (wave 11): a program importing every name of
+/// [`V0_15_0_HTTP_NAMES`] by explicit name from `std.protocol.http` checks.
+#[test]
+fn every_name_std_protocol_http_exported_at_v0_15_0_is_still_importable() {
+    let text = format!(
+        "package tests.http_v0_15_0_names\n\nimport std.protocol.http.{{{}}}\n\nfn main() -> Int = 0\n",
+        V0_15_0_HTTP_NAMES.join(", ")
+    );
+    let file = repository().join("crates/ignite/tests/fixtures/http_v0_15_0_names.ignite");
+    if let Err(e) = ignite::check_text(&file, text, Some(&standard_library())) {
+        panic!("a name of std.protocol.http at v0.15.0 no longer imports:\n{e}");
+    }
+}
+
+/// Each `test fn` of `text` by name: its head line and the lines after it
+/// up to the first blank line, with the comment lines directly above.
+fn test_fns(text: &str) -> std::collections::BTreeMap<String, String> {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut items = std::collections::BTreeMap::new();
+    for (i, line) in lines.iter().enumerate() {
+        let Some(rest) = line.strip_prefix("test fn ") else {
+            continue;
+        };
+        let name: String = rest
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
+        let mut start = i;
+        while start > 0 && lines[start - 1].starts_with("//") {
+            start -= 1;
+        }
+        let end = (i..lines.len())
+            .find(|&j| lines[j].trim().is_empty())
+            .unwrap_or(lines.len());
+        items.insert(name, lines[start..end].join("\n"));
+    }
+    items
+}
+
+/// Fix round 2 on unit counts (wave 11): the test-only helpers that
+/// `std/protocol/http/connection_tests.ignite` copies from
+/// `std/protocol/http.ignite` (a test-only item is not exported) are the
+/// same text, comments included, in both files: a fix to one reaches the
+/// other.
+#[test]
+fn the_helpers_copied_into_the_connection_tests_equal_their_originals() {
+    let std = standard_library();
+    let read = |path: &str| {
+        std::fs::read_to_string(std.join(path)).unwrap_or_else(|e| panic!("{path}: {e}"))
+    };
+    let originals = test_fns(&read("protocol/http.ignite"));
+    let copies = test_fns(&read("protocol/http/connection_tests.ignite"));
+    let shared: Vec<&String> = copies
+        .keys()
+        .filter(|name| originals.contains_key(*name))
+        .collect();
+    assert_eq!(
+        shared,
+        [
+            "answer",
+            "chunked",
+            "connected",
+            "every_byte",
+            "pause",
+            "read_at_least",
+            "read_to_end",
+            "reply",
+            "served_with",
+        ],
+        "the helpers both files declare"
+    );
+    for name in shared {
+        assert_eq!(
+            copies[name], originals[name],
+            "`{name}` in connection_tests.ignite differs from std/protocol/http.ignite"
+        );
+    }
+}
