@@ -7,6 +7,7 @@ import std.encoding.{hex}
 import std.result.{map_err}
 import std.text.{contains}
 import std.tls.{TlsOptions}
+import std.protocol.mysql.binary.{double_text, float_text, unsigned_text, date_text, time_text}
 
 // A client of the MySQL wire protocol (protocol 41, handshake version 10)
 // over any `ByteStream`: a `TcpStream` or a `TlsStream` in programs, a
@@ -117,6 +118,61 @@ type Done {
   last_insert_id: Int
   status: Int
   warnings: Int
+}
+
+// One value of a row or of a statement's parameter; SQL NULL is `None` in
+// its place.
+//
+// - `Int`: TINYINT, SMALLINT, MEDIUMINT, INT, BIGINT, YEAR, signed or
+//   unsigned, when it fits an `Int`.
+// - `Decimal`: the exact decimal text of a DECIMAL, of a FLOAT or a DOUBLE
+//   (the language has no floating-point type) and of a BIGINT UNSIGNED
+//   above the largest `Int`.
+// - `Bool`: TINYINT(1) and BIT(1).
+// - `Text`: character columns (CHAR, VARCHAR, TEXT, ENUM, SET), JSON, and
+//   DATE, TIME, DATETIME and TIMESTAMP as the server prints them
+//   (`2024-02-29 23:59:58.123456`). Bytes that are no UTF-8 become U+FFFD.
+// - `Bytes`: binary columns (BINARY, VARBINARY, BLOB, GEOMETRY) and a BIT
+//   wider than one.
+enum MysqlValue {
+  Int(Int),
+  Decimal(Text),
+  Bool(Bool),
+  Text(Text),
+  Bytes(Bytes)
+}
+
+// One column of a result set: where it comes from, its name, its
+// character set (63 is binary), its display length, its type (the
+// protocol's number), its flags (32 is UNSIGNED) and its decimals.
+type Column {
+  schema: Text
+  table: Text
+  name: Text
+  charset: Int
+  length: Int
+  kind: Int
+  flags: Int
+  decimals: Int
+}
+
+// What a statement gives: the columns and rows of its result set, each row
+// one value per column, or for a statement without one the rows it
+// affected and the id it inserted.
+type ResultSet {
+  columns: List<Column> = []
+  rows: List<List<Option<MysqlValue>>> = []
+  affected: Int = 0
+  last_insert_id: Int = 0
+  warnings: Int = 0
+}
+
+// A prepared statement of one connection: the server's id for it and how
+// many parameters and columns it has.
+type Statement {
+  id: Int
+  parameters: Int
+  columns: Int
 }
 
 const MAX_FRAME: Int = 16777215
@@ -724,6 +780,439 @@ fn quit<T: ByteStream>(client: Client<T>) -> Outcome<Unit> {
   sent
 }
 
+// ---- result sets ------------------------------------------------------------
+
+const BINARY_CHARSET: Int = 63
+const UNSIGNED: Int = 32
+const MORE_RESULTS: Int = 8
+const SECOND_RESULT: Text = "more than one result"
+
+// The column definition packet `payload` (`ColumnDefinition41`).
+fn parse_column(payload: Bytes) -> Outcome<Column> {
+  let (_, a) = take_text(payload, 0)?
+  let (schema, b) = take_text(payload, a)?
+  let (table, c) = take_text(payload, b)?
+  let (_, d) = take_text(payload, c)?
+  let (name, e) = take_text(payload, d)?
+  let (_, f) = take_text(payload, e)?
+  let (_, g) = take_count(payload, f)?
+  let (charset, h) = take_int(payload, g, 2)?
+  let (length, i) = take_int(payload, h, 4)?
+  let (kind, j) = take_int(payload, i, 1)?
+  let (flags, k) = take_int(payload, j, 2)?
+  let (decimals, _) = take_int(payload, k, 1)?
+  Ok(Column { schema, table, name, charset, length, kind, flags, decimals })
+}
+
+// Whether `payload` is the packet that ends definitions and rows.
+fn is_eof(payload: Bytes) -> Bool = !payload.is_empty() && payload.len() < 9 && payload[0] == 254
+
+fn is_integer(kind: Int) -> Bool = kind == 1 || kind == 2 || kind == 3 || kind == 8 || kind == 9 || kind == 13
+
+fn is_temporal(kind: Int) -> Bool = kind == 7 || kind == 10 || kind == 11 || kind == 12 || kind == 14
+
+// The bytes of a column that is no number and no date: a BIT(1) is a
+// `Bool`, a wider BIT its bytes, JSON and a column with a character set
+// text, a binary column its bytes.
+fn string_value(column: Column, bytes: Bytes) -> MysqlValue = if column.kind == 16 {
+  if column.length == 1 { Bool(bytes == b"\x01") } else { Bytes(bytes) }
+} else if column.kind == 245 || column.charset != BINARY_CHARSET {
+  Text(bytes.to_text())
+} else {
+  Bytes(bytes)
+}
+
+// The value of `column` that the text protocol sent as `bytes`.
+fn text_value(column: Column, bytes: Bytes) -> MysqlValue {
+  let kind = column.kind
+  if kind == 1 && column.length == 1 {
+    return Bool(bytes != b"0")
+  }
+  if is_integer(kind) {
+    let digits = bytes.to_text()
+    return match Int.parse(digits) {
+      Some(n) => Int(n)
+      None => Decimal(digits)
+    }
+  }
+  if kind == 0 || kind == 4 || kind == 5 || kind == 246 {
+    return Decimal(bytes.to_text())
+  }
+  if is_temporal(kind) {
+    return Text(bytes.to_text())
+  }
+  string_value(column, bytes)
+}
+
+// The integer of `width` bytes at `at` of a binary row, with its sign
+// unless the column is unsigned.
+fn whole_value(payload: Bytes, at: Int, width: Int, unsigned: Bool) -> Outcome<(MysqlValue, Int)> {
+  let (value, end) = take_int(payload, at, width)?
+  let half = 1 << (width * 8 - 1)
+  Ok((Int(if unsigned || value < half { value } else { value - half - half }), end))
+}
+
+// The value of `column` at `at` of the binary row `payload` and the offset
+// after it.
+fn binary_value(column: Column, payload: Bytes, at: Int) -> Outcome<(MysqlValue, Int)> {
+  let kind = column.kind
+  let unsigned = column.flags & UNSIGNED != 0
+  if kind == 1 && column.length == 1 {
+    let (value, end) = take_int(payload, at, 1)?
+    return Ok((Bool(value != 0), end))
+  }
+  if kind == 1 {
+    return whole_value(payload, at, 1, unsigned)
+  }
+  if kind == 2 || kind == 13 {
+    return whole_value(payload, at, 2, unsigned)
+  }
+  if kind == 3 || kind == 9 {
+    return whole_value(payload, at, 4, unsigned)
+  }
+  if kind == 8 {
+    let (value, end) = take_int(payload, at, 8)?
+    return Ok((if unsigned && value < 0 { Decimal(unsigned_text(value)) } else { Int(value) }, end))
+  }
+  if kind == 4 || kind == 5 {
+    let (bytes, end) = take_bytes(payload, at, if kind == 4 { 4 } else { 8 })?
+    return match if kind == 4 { float_text(bytes) } else { double_text(bytes) } {
+      Some(digits) => Ok((Decimal(digits), end))
+      None => Err(Malformed("a floating-point value that is no number"))
+    }
+  }
+  if is_temporal(kind) {
+    let (count, start) = take_int(payload, at, 1)?
+    let (bytes, end) = take_bytes(payload, start, count)?
+    return match if kind == 11 { time_text(bytes, column.decimals) } else { date_text(bytes, kind != 10, column.decimals) } {
+      Some(printed) => Ok((Text(printed), end))
+      None => Err(Malformed("a date or a time of no known length"))
+    }
+  }
+  if kind == 0 || kind == 15 || kind == 16 || kind >= 245 && kind <= 255 {
+    return match take_lenenc_bytes(payload, at)? {
+      (Some(bytes), end) => Ok((if kind == 0 || kind == 246 { Decimal(bytes.to_text()) } else { string_value(column, bytes) }, end))
+      (None, _) => Err(Malformed("a NULL mark inside a binary row"))
+    }
+  }
+  Err(Unsupported("column type {kind}"))
+}
+
+// The values of a row of the text protocol: each field behind its length,
+// 0xFB for NULL.
+fn read_text_row(columns: List<Column>, payload: Bytes) -> Outcome<List<Option<MysqlValue>>> {
+  var row: List<Option<MysqlValue>> = []
+  var at = 0
+  for column in columns {
+    let (field, end) = take_lenenc_bytes(payload, at)?
+    at = end
+    row.push(match field {
+      Some(bytes) => Some(text_value(column, bytes))
+      None => None
+    })
+  }
+  if at != payload.len() {
+    return Err(Malformed("a row longer than its columns"))
+  }
+  Ok(row)
+}
+
+// The values of a row of the binary protocol: a zero byte, the NULL
+// bitmap whose first two bits are unused, the values that are not NULL.
+fn read_binary_row(columns: List<Column>, payload: Bytes) -> Outcome<List<Option<MysqlValue>>> {
+  if payload[0] != 0 {
+    return Err(Malformed("a binary row without its header"))
+  }
+  var at = 1 + (columns.len() + 9) / 8
+  if payload.len() < at {
+    return Err(Malformed(SHORT))
+  }
+  var row: List<Option<MysqlValue>> = []
+  var bit = 2
+  for column in columns {
+    if payload[1 + bit / 8].to_int() >> (bit % 8) & 1 == 1 {
+      row.push(None)
+    } else {
+      let (value, end) = binary_value(column, payload, at)?
+      at = end
+      row.push(Some(value))
+    }
+    bit = bit + 1
+  }
+  if at != payload.len() {
+    return Err(Malformed("a row longer than its columns"))
+  }
+  Ok(row)
+}
+
+// The next packet of a result set's rows: one above the row limit is
+// refused when its frame header is read.
+fn read_row<T: ByteStream>(client: Client<T>, buffer: Bytes, at: Int, sequence: Int) -> Outcome<(Bytes, Bytes, Int, Int)> {
+  let packet = client.limits.packet.to_int()
+  let row = client.limits.row.to_int()
+  if row >= packet {
+    return read_packet(client.stream, packet, buffer, at, sequence)
+  }
+  match read_packet(client.stream, row, buffer, at, sequence) {
+    Err(PacketTooLarge) => Err(RowTooLarge)
+    other => other
+  }
+}
+
+// Sends the command `body` and reads what answers it: an OK packet, the
+// server's error, or a result set (the column count, the definitions, the
+// end mark, the rows of the text or the `binary` protocol, the end mark).
+// A request for a local file and a second result are refused.
+fn results<T: ByteStream>(client: Client<T>, body: Bytes, binary: Bool) -> Outcome<ResultSet> {
+  send(client, body)?
+  let maximum = client.limits.packet.to_int()
+  let (first, begun, offset, following) = read_packet(client.stream, maximum, Bytes.empty(), 0, 1)?
+  var data = begun
+  var at = offset
+  var number = following
+  if first.is_empty() {
+    return Err(Malformed(SHORT))
+  }
+  let kind = first[0].to_int()
+  if kind == 255 {
+    return Err(server_error(first))
+  }
+  if kind == 0 {
+    let done = parse_done(first)?
+    if done.status & MORE_RESULTS != 0 {
+      return Err(Unsupported(SECOND_RESULT))
+    }
+    if at != data.len() {
+      return Err(Malformed(TRAILING))
+    }
+    return Ok(ResultSet { affected = done.affected, last_insert_id = done.last_insert_id, warnings = done.warnings })
+  }
+  if kind == 251 {
+    return Err(Unsupported("LOAD DATA LOCAL INFILE"))
+  }
+  let (count, counted) = take_count(first, 0)?
+  if counted != first.len() {
+    return Err(Malformed("a column count with bytes after it"))
+  }
+  if count > client.limits.columns {
+    return Err(TooManyColumns)
+  }
+  var columns: List<Column> = []
+  while columns.len() < count {
+    let (payload, rest, end, next) = read_packet(client.stream, maximum, data, at, number)?
+    data = rest
+    at = end
+    number = next
+    columns.push(parse_column(payload)?)
+  }
+  let (mark, after, past, then) = read_packet(client.stream, maximum, data, at, number)?
+  data = after
+  at = past
+  number = then
+  if !is_eof(mark) {
+    return Err(Malformed("a result set without the end of its columns"))
+  }
+  var rows: List<List<Option<MysqlValue>>> = []
+  var warnings = 0
+  loop {
+    let (payload, rest, end, next) = read_row(client, data, at, number)?
+    data = rest
+    at = end
+    number = next
+    if payload.is_empty() {
+      return Err(Malformed(SHORT))
+    }
+    if payload[0] == 255 {
+      return Err(server_error(payload))
+    }
+    if is_eof(payload) {
+      if payload.len() >= 5 {
+        warnings = int_at(payload, 1, 2)
+        if int_at(payload, 3, 2) & MORE_RESULTS != 0 {
+          return Err(Unsupported(SECOND_RESULT))
+        }
+      }
+      break
+    }
+    if rows.len() >= client.limits.rows {
+      return Err(TooManyRows)
+    }
+    rows.push(if binary { read_binary_row(columns, payload)? } else { read_text_row(columns, payload)? })
+  }
+  if at != data.len() {
+    return Err(Malformed(TRAILING))
+  }
+  Ok(ResultSet { columns, rows, warnings })
+}
+
+// Runs the statement `sql` (`COM_QUERY`, the text protocol): its result
+// set, or its affected rows when it has none. `sql` is sent as it is; a
+// value from outside belongs in a parameter of `execute`. The server's
+// error leaves the connection usable; any other failure closes it.
+fn query<T: ByteStream>(client: Client<T>, sql: Text) -> Outcome<ResultSet> {
+  var body = b"\x03"
+  body.append(sql.to_bytes())
+  settle(client, results(client, body, false))
+}
+
+// ---- prepared statements ----------------------------------------------------
+
+// Reads `count` definitions and the mark that ends them.
+fn skip_definitions<T: ByteStream>(client: Client<T>, count: Int, buffer: Bytes, from: Int, sequence: Int) -> Outcome<(Bytes, Int, Int)> {
+  let maximum = client.limits.packet.to_int()
+  var data = buffer
+  var at = from
+  var number = sequence
+  var left = count
+  while left >= 0 {
+    let (payload, rest, end, next) = read_packet(client.stream, maximum, data, at, number)?
+    data = rest
+    at = end
+    number = next
+    if left > 0 {
+      _ = parse_column(payload)?
+    } else if !is_eof(payload) {
+      return Err(Malformed("definitions without their end"))
+    }
+    left = left - 1
+  }
+  Ok((data, at, number))
+}
+
+fn prepared<T: ByteStream>(client: Client<T>, sql: Text) -> Outcome<Statement> {
+  var body = b"\x16"
+  body.append(sql.to_bytes())
+  send(client, body)?
+  let (first, begun, offset, following) = read_packet(client.stream, client.limits.packet.to_int(), Bytes.empty(), 0, 1)?
+  if first.is_empty() {
+    return Err(Malformed(SHORT))
+  }
+  if first[0] == 255 {
+    return Err(server_error(first))
+  }
+  if first[0] != 0 {
+    return Err(Malformed("a reply to prepare that is neither a statement nor an error"))
+  }
+  if first.len() < 12 {
+    return Err(Malformed(SHORT))
+  }
+  let statement = Statement { id = int_at(first, 1, 4), parameters = int_at(first, 7, 2), columns = int_at(first, 5, 2) }
+  if statement.columns > client.limits.columns {
+    return Err(TooManyColumns)
+  }
+  var data = begun
+  var at = offset
+  var number = following
+  if statement.parameters > 0 {
+    let (rest, end, next) = skip_definitions(client, statement.parameters, data, at, number)?
+    data = rest
+    at = end
+    number = next
+  }
+  if statement.columns > 0 {
+    let (rest, end, _) = skip_definitions(client, statement.columns, data, at, number)?
+    data = rest
+    at = end
+  }
+  if at != data.len() {
+    return Err(Malformed(TRAILING))
+  }
+  Ok(statement)
+}
+
+// Prepares `sql`, whose values are the `?` marks (`COM_STMT_PREPARE`). The
+// statement belongs to this connection until `close`.
+fn prepare<T: ByteStream>(client: Client<T>, sql: Text) -> Outcome<Statement> = settle(client, prepared(client, sql))
+
+// `types` and `values` with the type and the bytes of the parameter
+// `value`: an `Int` as BIGINT, a `Bool` as TINYINT, a `Decimal` as DECIMAL
+// in text, a `Text` as VAR_STRING, `Bytes` as BLOB.
+fn bound(types: Bytes, values: Bytes, value: MysqlValue) -> (Bytes, Bytes) {
+  var kinds = types
+  var out = values
+  match value {
+    Int(n) => {
+      kinds.append(b"\x08\x00")
+      out = put_int(out, n, 8)
+    }
+    Bool(set) => {
+      kinds.append(b"\x01\x00")
+      out.push(if set { 1 } else { 0 })
+    }
+    Decimal(digits) => {
+      kinds.append(b"\xf6\x00")
+      out = put_lenenc_bytes(out, digits.to_bytes())
+    }
+    Text(text) => {
+      kinds.append(b"\xfd\x00")
+      out = put_lenenc_bytes(out, text.to_bytes())
+    }
+    Bytes(bytes) => {
+      kinds.append(b"\xfc\x00")
+      out = put_lenenc_bytes(out, bytes)
+    }
+  }
+  (kinds, out)
+}
+
+// The `COM_STMT_EXECUTE` packet of `statement` with `parameters`: its id,
+// no cursor, one iteration, and for parameters the NULL bitmap, the types
+// and the values. A parameter is bytes behind a type; none is put into
+// the statement's text.
+fn execute_body(statement: Statement, parameters: List<Option<MysqlValue>>) -> Bytes {
+  var body = put_int(b"\x17", statement.id, 4)
+  body.push(0)
+  body = put_int(body, 1, 4)
+  if parameters.is_empty() {
+    return body
+  }
+  var bitmap = Bytes.with_capacity((parameters.len() + 7) / 8)
+  while bitmap.len() < (parameters.len() + 7) / 8 {
+    bitmap.push(0)
+  }
+  var types = Bytes.with_capacity(parameters.len() * 2)
+  var values = Bytes.empty()
+  var i = 0
+  for parameter in parameters {
+    match parameter {
+      Some(value) => {
+        let (kinds, out) = bound(types, values, value)
+        types = kinds
+        values = out
+      }
+      None => {
+        bitmap[i / 8] = (bitmap[i / 8].to_int() | 1 << (i % 8)).wrap_byte()
+        types.append(b"\x06\x00")
+      }
+    }
+    i = i + 1
+  }
+  body.append(bitmap)
+  body.push(1)
+  body.append(types)
+  body.append(values)
+  body
+}
+
+// Runs `statement` with `parameters`, one for each of its `?` marks
+// (`COM_STMT_EXECUTE`, the binary protocol): its result set, or its
+// affected rows when it has none. Another number of parameters is refused
+// before anything is sent.
+fn execute<T: ByteStream>(client: Client<T>, statement: Statement, parameters: List<Option<MysqlValue>>) -> Outcome<ResultSet> {
+  if parameters.len() != statement.parameters {
+    return Err(WrongParameterCount(statement.parameters, parameters.len()))
+  }
+  settle(client, results(client, execute_body(statement, parameters), true))
+}
+
+// Releases `statement` on the server (`COM_STMT_CLOSE`), which sends no
+// reply.
+fn close<T: ByteStream>(client: Client<T>, statement: Statement) -> Outcome<Unit> {
+  settle(client, send(client, put_int(b"\x19", statement.id, 4)))?
+  Process.flush()
+  Ok(())
+}
+
 // ---- tests ------------------------------------------------------------------
 
 // A connected pair of pipe ends; each gives up on a peer silent for 5 s,
@@ -1265,4 +1754,428 @@ test "a reply that is no reply ends the connection: it is closed, not reused" {
   let (late, more) = counted([(b"\x01\x00\x00\x00\x0e", ok_packet(1) + ok_packet(2))])?
   assert ping(Client { stream = late }) == Err(Malformed(TRAILING))
   assert more.receive() == Some(0)
+}
+
+// ---- tests: statements -------------------------------------------------------
+
+// A client whose server runs `exchanges`, past its handshake.
+test fn session(exchanges: List<(Bytes, Bytes)>) -> Result<Client<PipeStream>, IoError> {
+  let stream = scripted(exchanges)?
+  Ok(Client { stream })
+}
+
+// The command packet of `code` and `text`: packet 0 of an exchange.
+test fn command(code: Byte, text: Text) -> Bytes {
+  var body = Bytes.empty()
+  body.push(code)
+  body.append(text.to_bytes())
+  frames(body, 0)
+}
+
+// The packets of one reply, numbered from 1.
+test fn reply(payloads: List<Bytes>) -> Bytes {
+  var out = Bytes.empty()
+  var number = 1
+  for payload in payloads {
+    out.append(frames(payload, number))
+    number = number + 1
+  }
+  out
+}
+
+// A column definition written field by field as the protocol documents
+// it: catalog `def`, schema `shop`, table and original table `t`, the name
+// twice, 12 as the length of the fixed fields, the character set, the
+// length, the type, the flags, the decimals and two zero bytes.
+test fn column_of(name: Text, kind: Int, length: Int, flags: Int, charset: Int, decimals: Int) -> Bytes {
+  var out = b"\x03def\x04shop\x01t\x01t"
+  out.push(name.len().wrap_byte())
+  out.append(name.to_bytes())
+  out.push(name.len().wrap_byte())
+  out.append(name.to_bytes())
+  out.push(12)
+  out = put_int(out, charset, 2)
+  out = put_int(out, length, 4)
+  out.push(kind.wrap_byte())
+  out = put_int(out, flags, 2)
+  out.push(decimals.wrap_byte())
+  out.append(b"\x00\x00")
+  out
+}
+
+test fn eof() -> Bytes = b"\xfe\x00\x00\x02\x00"
+
+// A row of the text protocol: each field behind its length, 0xFB for NULL.
+// The fields of these tests are shorter than 251 bytes.
+test fn text_row(fields: List<Option<Bytes>>) -> Bytes {
+  var out = Bytes.empty()
+  for field in fields {
+    match field {
+      Some(bytes) => {
+        out.push(bytes.len().wrap_byte())
+        out.append(bytes)
+      }
+      None => out.push(251)
+    }
+  }
+  out
+}
+
+// A row of the binary protocol: a zero byte, the NULL bitmap whose first
+// two bits are unused, and the values that are not NULL.
+test fn binary_row(values: List<Option<Bytes>>) -> Bytes {
+  var out = zeros(1 + (values.len() + 9) / 8)
+  var i = 0
+  for value in values {
+    match value {
+      Some(bytes) => out.append(bytes)
+      None => {
+        let at = 1 + (i + 2) / 8
+        out[at] = (out[at].to_int() | (1 << ((i + 2) % 8))).wrap_byte()
+      }
+    }
+    i = i + 1
+  }
+  out
+}
+
+// One column of every supported type: its definition, a value as the text
+// protocol sends it, the same value as the binary protocol sends it, and
+// what both decode to.
+test fn typed() -> List<(Bytes, Bytes, Bytes, MysqlValue)> = [
+  (column_of("flag", 1, 1, 0, 63, 0), b"1", b"\x01", Bool(true)),
+  (column_of("tiny", 1, 4, 0, 63, 0), b"-128", b"\x80", Int(-128)),
+  (column_of("utiny", 1, 3, 32, 63, 0), b"255", b"\xff", Int(255)),
+  (column_of("small", 2, 6, 0, 63, 0), b"-32768", b"\x00\x80", Int(-32768)),
+  (column_of("usmall", 2, 5, 32, 63, 0), b"65535", b"\xff\xff", Int(65535)),
+  (column_of("medium", 9, 9, 0, 63, 0), b"-8388608", b"\x00\x00\x80\xff", Int(-8388608)),
+  (column_of("whole", 3, 11, 0, 63, 0), b"-2147483648", b"\x00\x00\x00\x80", Int(-2147483648)),
+  (column_of("uwhole", 3, 10, 32, 63, 0), b"4294967295", b"\xff\xff\xff\xff", Int(4294967295)),
+  (column_of("big", 8, 20, 0, 63, 0), b"9223372036854775807", b"\xff\xff\xff\xff\xff\xff\xff\x7f", Int(9223372036854775807)),
+  (column_of("minus", 8, 20, 0, 63, 0), b"-2", b"\xfe\xff\xff\xff\xff\xff\xff\xff", Int(-2)),
+  (column_of("ubig", 8, 20, 32, 63, 0), b"5", b"\x05\x00\x00\x00\x00\x00\x00\x00", Int(5)),
+  (column_of("huge", 8, 20, 32, 63, 0), b"18446744073709551615", b"\xff\xff\xff\xff\xff\xff\xff\xff", Decimal("18446744073709551615")),
+  (column_of("year", 13, 4, 96, 63, 0), b"2024", b"\xe8\x07", Int(2024)),
+  (column_of("price", 246, 12, 0, 63, 2), b"-1234.50", b"\x08-1234.50", Decimal("-1234.50")),
+  (column_of("ratio", 4, 12, 0, 63, 31), b"1.1", b"\xcd\xcc\x8c\x3f", Decimal("1.1")),
+  (column_of("exact", 5, 22, 0, 63, 31), b"0.1", b"\x9a\x99\x99\x99\x99\x99\xb9\x3f", Decimal("0.1")),
+  (column_of("name", 253, 400, 0, 45, 0), b"Zo\xc3\xab", b"\x04Zo\xc3\xab", Text("Zoë")),
+  (column_of("code", 254, 12, 0, 45, 0), b"ab", b"\x02ab", Text("ab")),
+  (column_of("note", 252, 262140, 16, 45, 0), b"long text", b"\x09long text", Text("long text")),
+  (column_of("empty", 253, 400, 0, 45, 0), b"", b"\x00", Text("")),
+  (column_of("raw", 252, 65535, 144, 63, 0), b"\x00\xff", b"\x02\x00\xff", Bytes(b"\x00\xff")),
+  (column_of("key", 253, 16, 128, 63, 0), b"\x01\x02", b"\x02\x01\x02", Bytes(b"\x01\x02")),
+  (column_of("bit", 16, 1, 32, 63, 0), b"\x01", b"\x01\x01", Bool(true)),
+  (column_of("bits", 16, 8, 32, 63, 0), b"\xa5", b"\x01\xa5", Bytes(b"\xa5")),
+  (column_of("doc", 245, 4294967295, 144, 63, 0), r#"{"a": 1}"#.to_bytes(), b"\x08" + r#"{"a": 1}"#.to_bytes(), Text(r#"{"a": 1}"#)),
+  (column_of("day", 10, 10, 128, 63, 0), b"2024-02-29", b"\x04\xe8\x07\x02\x1d", Text("2024-02-29")),
+  (column_of("at", 12, 26, 128, 63, 6), b"2024-02-29 23:59:58.123456", b"\x0b\xe8\x07\x02\x1d\x17\x3b\x3a\x40\xe2\x01\x00", Text("2024-02-29 23:59:58.123456")),
+  (column_of("stamp", 7, 19, 128, 63, 0), b"2024-02-29 23:59:58", b"\x07\xe8\x07\x02\x1d\x17\x3b\x3a", Text("2024-02-29 23:59:58")),
+  (column_of("span", 11, 10, 128, 63, 0), b"-34:11:12", b"\x08\x01\x01\x00\x00\x00\x0a\x0b\x0c", Text("-34:11:12")),
+  (column_of("mood", 254, 12, 256, 45, 0), b"glad", b"\x04glad", Text("glad")),
+  (column_of("tags", 254, 12, 2048, 45, 0), b"a,b", b"\x03a,b", Text("a,b"))
+]
+
+// The reply of a result set over `typed()`: one row with every value, one
+// with every column NULL; `binary` chooses the protocol of the rows.
+test fn typed_reply(binary: Bool) -> Bytes {
+  let entries = typed()
+  var payloads = [put_lenenc(Bytes.empty(), entries.len())]
+  var values: List<Option<Bytes>> = []
+  var nulls: List<Option<Bytes>> = []
+  for entry in entries {
+    payloads.push(entry.0)
+    values.push(Some(if binary { entry.2 } else { entry.1 }))
+    nulls.push(None)
+  }
+  payloads.push(eof())
+  payloads.push(if binary { binary_row(values) } else { text_row(values) })
+  payloads.push(if binary { binary_row(nulls) } else { text_row(nulls) })
+  payloads.push(eof())
+  reply(payloads)
+}
+
+// Whether `result` is the two rows of `typed_reply`.
+test fn is_typed(result: ResultSet) -> Bool {
+  let entries = typed()
+  var expected: List<Option<MysqlValue>> = []
+  var absent: List<Option<MysqlValue>> = []
+  for entry in entries {
+    expected.push(Some(entry.3))
+    absent.push(None)
+  }
+  assert result.columns.len() == entries.len()
+  assert result.rows.len() == 2
+  var i = 0
+  while i < expected.len() {
+    assert result.rows[0][i] == expected[i], result.columns[i].name
+    i = i + 1
+  }
+  result.rows[1] == absent
+}
+
+// Whether the connection of `client` is closed: a command on it fails
+// before it is sent.
+test fn shut<T: ByteStream>(client: Client<T>) -> Bool = ping(client) == Err(Io("write to a closed stream"))
+
+test "a column definition is its schema, table, name, character set, length, type, flags and decimals" {
+  // The packet the protocol's documentation shows for `SELECT @@version_comment`.
+  let documented = unhex("0364656600000011404076657273696f6e5f636f6d6d656e74000c08001c000000fd00001f0000")
+  assert parse_column(documented) == Ok(Column { schema = "", table = "", name = "@@version_comment", charset = 8, length = 28, kind = 253, flags = 0, decimals = 31 })
+  assert parse_column(column_of("price", 246, 12, 32, 63, 2)) == Ok(Column { schema = "shop", table = "t", name = "price", charset = 63, length = 12, kind = 246, flags = 32, decimals = 2 })
+  assert parse_column(documented.slice(0, 30)) == Err(Malformed(SHORT))
+  assert parse_column(Bytes.empty()) == Err(Malformed(SHORT))
+  assert parse_column(b"\x03def\x00\x00\x00\xfb\x00\x0c\x08\x00\x1c\x00\x00\x00\xfd\x00\x00\x1f\x00\x00") == Err(Malformed("a NULL where a name is expected"))
+}
+
+test "a text result set gives its columns and decodes every column type, NULL as none" {
+  let client = session([(command(3, "SELECT * FROM t"), typed_reply(false))])?
+  let result = query(client, "SELECT * FROM t")?
+  assert result.columns[0] == Column { schema = "shop", table = "t", name = "flag", charset = 63, length = 1, kind = 1, flags = 0, decimals = 0 }
+  assert result.columns[30].name == "tags"
+  assert is_typed(result)
+  assert result.affected == 0 && result.last_insert_id == 0 && result.warnings == 0
+}
+
+test "a text value follows its column: a false flag, a cleared bit, an integer that fits no Int" {
+  let flag = parse_column(column_of("flag", 1, 1, 0, 63, 0))?
+  assert text_value(flag, b"0") == Bool(false)
+  assert text_value(flag, b"1") == Bool(true)
+  let bit = parse_column(column_of("bit", 16, 1, 32, 63, 0))?
+  assert text_value(bit, b"\x00") == Bool(false)
+  let wide = parse_column(column_of("huge", 8, 20, 32, 63, 0))?
+  assert text_value(wide, b"9223372036854775807") == Int(9223372036854775807)
+  assert text_value(wide, b"9223372036854775808") == Decimal("9223372036854775808")
+  // A type this client does not know is read by its character set.
+  assert text_value(parse_column(column_of("odd", 99, 4, 0, 45, 0))?, b"abc") == Text("abc")
+  assert text_value(parse_column(column_of("odd", 99, 4, 0, 63, 0))?, b"abc") == Bytes(b"abc")
+  assert text_value(parse_column(column_of("shape", 255, 4, 144, 63, 0))?, b"\x00\x01") == Bytes(b"\x00\x01")
+}
+
+test "a statement without a result set is its affected rows, last insert id and warnings" {
+  let client = session([(command(3, "UPDATE t SET a = 1"), reply([b"\x00\xfc\x2c\x01\x07\x02\x00\x03\x00"]))])?
+  let result = query(client, "UPDATE t SET a = 1")?
+  assert result.columns.is_empty() && result.rows.is_empty()
+  assert result.affected == 300 && result.last_insert_id == 7 && result.warnings == 3
+}
+
+test "an empty result set has its columns and no row" {
+  let client = session([(command(3, "SELECT a FROM t WHERE 1 = 0"), reply([b"\x01", column_of("a", 3, 11, 0, 63, 0), eof(), b"\xfe\x02\x00\x22\x00"]))])?
+  let result = query(client, "SELECT a FROM t WHERE 1 = 0")?
+  assert result.columns.len() == 1 && result.rows.is_empty() && result.warnings == 2
+}
+
+test "a server error in place of a result set and one between its rows keep the connection" {
+  let syntax = "You have an error in your SQL syntax near 'SELEC secret'"
+  let client = session([
+    (command(3, "SELEC secret"), reply([err_payload(1064, "42000", syntax)])),
+    (command(3, "SELECT a FROM t"), reply([b"\x01", column_of("a", 3, 11, 0, 63, 0), eof(), text_row([Some(b"1")]), err_payload(1317, "70100", "Query execution was interrupted")])),
+    (frames(b"\x0e", 0), ok_packet(1))
+  ])?
+  let refused = query(client, "SELEC secret")
+  assert refused == Err(Server(ServerError { code = 1064, sql_state = "42000", message = syntax }))
+  assert describe(Server(ServerError { code = 1064, sql_state = "42000", message = syntax })) == "server error 1064 (42000)"
+  assert query(client, "SELECT a FROM t") == Err(Server(ServerError { code = 1317, sql_state = "70100", message = "Query execution was interrupted" }))
+  assert ping(client) == Ok(())
+}
+
+test "a request for a local file is refused and nothing is sent in answer" {
+  let (stream, counts) = counted([(command(3, "LOAD DATA LOCAL INFILE 'x' INTO TABLE t"), reply([b"\xfb/etc/hostname"]))])?
+  let client = Client { stream }
+  assert query(client, "LOAD DATA LOCAL INFILE 'x' INTO TABLE t") == Err(Unsupported("LOAD DATA LOCAL INFILE"))
+  assert describe(Unsupported("LOAD DATA LOCAL INFILE")) == "LOAD DATA LOCAL INFILE is not supported"
+  assert shut(client)
+  assert counts.receive() == Some(0)
+}
+
+test "a second result is refused: after a result set and after a statement without one" {
+  let rows = session([(command(3, "CALL p()"), reply([b"\x01", column_of("a", 3, 11, 0, 63, 0), eof(), text_row([Some(b"1")]), b"\xfe\x00\x00\x0a\x00"]))])?
+  assert query(rows, "CALL p()") == Err(Unsupported("more than one result"))
+  assert shut(rows)
+  let none = session([(command(3, "CALL q()"), reply([b"\x00\x00\x00\x0a\x00\x00\x00"]))])?
+  assert query(none, "CALL q()") == Err(Unsupported("more than one result"))
+  assert shut(none)
+}
+
+test "a result set past a limit is refused and its connection closed" {
+  let three = reply([b"\x03", column_of("a", 3, 11, 0, 63, 0), column_of("b", 3, 11, 0, 63, 0), column_of("c", 3, 11, 0, 63, 0), eof(), eof()])
+  let wide = Client { stream = scripted([(command(3, "S"), three)])?, limits = MysqlLimits { columns = 2 } }
+  assert query(wide, "S") == Err(TooManyColumns)
+  assert shut(wide)
+  let fits = Client { stream = scripted([(command(3, "S"), three)])?, limits = MysqlLimits { columns = 3 } }
+  assert query(fits, "S")?.columns.len() == 3
+  let two = reply([b"\x01", column_of("a", 253, 40, 0, 45, 0), eof(), text_row([Some(b"1234567")]), text_row([Some(b"12345678")]), eof()])
+  let long = Client { stream = scripted([(command(3, "S"), two)])?, limits = MysqlLimits { rows = 1 } }
+  assert query(long, "S") == Err(TooManyRows)
+  assert shut(long)
+  let both = Client { stream = scripted([(command(3, "S"), two)])?, limits = MysqlLimits { rows = 2 } }
+  assert query(both, "S")?.rows.len() == 2
+  let heavy = Client { stream = scripted([(command(3, "S"), two)])?, limits = MysqlLimits { row = 8 bytes } }
+  assert query(heavy, "S") == Err(RowTooLarge)
+  assert shut(heavy)
+  let light = Client { stream = scripted([(command(3, "S"), two)])?, limits = MysqlLimits { row = 9 bytes } }
+  assert query(light, "S")?.rows.len() == 2
+  let big = Client { stream = scripted([(command(3, "S"), two)])?, limits = MysqlLimits { packet = 16 bytes } }
+  assert query(big, "S") == Err(PacketTooLarge)
+  assert shut(big)
+}
+
+test "a result set cut short, out of sequence or out of shape is refused and its connection closed" {
+  let a = column_of("a", 3, 11, 0, 63, 0)
+  let cut = session([(command(3, "S"), reply([b"\x01", a, eof(), text_row([Some(b"1")])]))])?
+  assert query(cut, "S") == Err(Closed)
+  assert shut(cut)
+  let silent = session([(command(3, "S"), Bytes.empty())])?
+  assert query(silent, "S") == Err(Closed)
+  let open = session([(command(3, "S"), reply([b"\x01", a, text_row([Some(b"1")]), eof()]))])?
+  assert query(open, "S") == Err(Malformed("a result set without the end of its columns"))
+  assert shut(open)
+  let counted_twice = session([(command(3, "S"), reply([b"\x01\x01", a, eof(), eof()]))])?
+  assert query(counted_twice, "S") == Err(Malformed("a column count with bytes after it"))
+  let short = session([(command(3, "S"), reply([b"\x02", a, a, eof(), text_row([Some(b"1")]), eof()]))])?
+  assert query(short, "S") == Err(Malformed(SHORT))
+  let wide = session([(command(3, "S"), reply([b"\x01", a, eof(), text_row([Some(b"1"), Some(b"2")]), eof()]))])?
+  assert query(wide, "S") == Err(Malformed("a row longer than its columns"))
+  assert shut(wide)
+  let late = session([(command(3, "S"), reply([b"\x01", a, eof(), eof(), eof()]))])?
+  assert query(late, "S") == Err(Malformed(TRAILING))
+  assert shut(late)
+  let skipped = session([(command(3, "S"), frames(b"\x01", 1) + frames(a, 2) + frames(eof(), 4))])?
+  assert query(skipped, "S") == Err(OutOfOrder(3, 4))
+  assert shut(skipped)
+  let empty = session([(command(3, "S"), reply([Bytes.empty()]))])?
+  assert query(empty, "S") == Err(Malformed(SHORT))
+}
+
+test "prepare gives the statement's id and counts, and reads its definitions" {
+  let sql = "SELECT a FROM t WHERE b = ? AND c = ?"
+  let client = session([
+    (command(0x16, sql), reply([b"\x00\x07\x00\x00\x00\x01\x00\x02\x00\x00\x00\x00", column_of("?", 253, 0, 0, 63, 0), column_of("?", 253, 0, 0, 63, 0), eof(), column_of("a", 3, 11, 0, 63, 0), eof()])),
+    (command(0x16, "DO 1"), reply([b"\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"])),
+    (command(0x16, "SELECT ?"), reply([b"\x00\x0a\x00\x00\x00\x01\x00\x01\x00\x00\x00\x00", column_of("?", 253, 0, 0, 63, 0), eof(), column_of("?", 253, 0, 0, 63, 0), eof()])),
+    (command(0x16, "SELECT 1"), reply([b"\x00\x0b\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00", column_of("1", 8, 2, 129, 63, 0), eof()])),
+    (command(0x16, "SELEC"), reply([err_payload(1064, "42000", "near 'SELEC'")])),
+    (frames(b"\x0e", 0), ok_packet(1))
+  ])?
+  assert prepare(client, sql) == Ok(Statement { id = 7, parameters = 2, columns = 1 })
+  assert prepare(client, "DO 1") == Ok(Statement { id = 9, parameters = 0, columns = 0 })
+  assert prepare(client, "SELECT ?") == Ok(Statement { id = 10, parameters = 1, columns = 1 })
+  assert prepare(client, "SELECT 1") == Ok(Statement { id = 11, parameters = 0, columns = 1 })
+  assert prepare(client, "SELEC") == Err(Server(ServerError { code = 1064, sql_state = "42000", message = "near 'SELEC'" }))
+  assert ping(client) == Ok(())
+}
+
+test "a reply to prepare that is cut, short or followed by bytes is refused and its connection closed" {
+  let short = session([(command(0x16, "S"), reply([b"\x00\x07\x00\x00\x00\x01\x00\x02\x00\x00\x00"]))])?
+  assert prepare(short, "S") == Err(Malformed(SHORT))
+  assert shut(short)
+  let other = session([(command(0x16, "S"), reply([b"\x05\x07\x00\x00\x00\x01\x00\x02\x00\x00\x00\x00"]))])?
+  assert prepare(other, "S") == Err(Malformed("a reply to prepare that is neither a statement nor an error"))
+  let cut = session([(command(0x16, "S"), reply([b"\x00\x07\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00", column_of("?", 253, 0, 0, 63, 0)]))])?
+  assert prepare(cut, "S") == Err(Closed)
+  let open = session([(command(0x16, "S"), reply([b"\x00\x07\x00\x00\x00\x00\x00\x01\x00\x00\x00\x00", column_of("?", 253, 0, 0, 63, 0), column_of("?", 253, 0, 0, 63, 0)]))])?
+  assert prepare(open, "S") == Err(Malformed("definitions without their end"))
+  let late = session([(command(0x16, "S"), reply([b"\x00\x09\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00", eof()]))])?
+  assert prepare(late, "S") == Err(Malformed(TRAILING))
+  assert shut(late)
+  let many = Client { stream = scripted([(command(0x16, "S"), reply([b"\x00\x07\x00\x00\x00\x03\x00\x00\x00\x00\x00\x00"]))])?, limits = MysqlLimits { columns = 2 } }
+  assert prepare(many, "S") == Err(TooManyColumns)
+  assert shut(many)
+}
+
+test "execute sends each parameter as a typed value behind the NULL bitmap, never in the statement's text" {
+  let sql = "SELECT a FROM t WHERE b = ?"
+  let hostile = "x' OR '1'='1"
+  // COM_STMT_EXECUTE: statement 7, no cursor, one iteration, no NULL, new
+  // types, one VAR_STRING, the 12 bytes of the parameter behind their length.
+  let one = b"\x17\x07\x00\x00\x00\x00\x01\x00\x00\x00\x00\x01\xfd\x00\x0cx' OR '1'='1"
+  // Six parameters: BIGINT -2, NULL (bit 1 of the bitmap), VAR_STRING,
+  // BLOB, TINY 1, NEWDECIMAL.
+  let six = b"\x17\x08\x00\x00\x00\x00\x01\x00\x00\x00\x02\x01\x08\x00\x06\x00\xfd\x00\xfc\x00\x01\x00\xf6\x00\xfe\xff\xff\xff\xff\xff\xff\xff\x08O'Reilly\x02\x00\x01\x01\x0512.50"
+  // Nine parameters take two bytes of bitmap: the first and the last NULL.
+  let nine = b"\x17\x09\x00\x00\x00\x00\x01\x00\x00\x00\x01\x01\x01\x06\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x01\x00\x06\x00\x00\x00\x00\x00\x00\x00\x00"
+  let none = b"\x17\x0a\x00\x00\x00\x00\x01\x00\x00\x00"
+  let client = session([
+    (command(0x16, sql), reply([b"\x00\x07\x00\x00\x00\x01\x00\x01\x00\x00\x00\x00", column_of("?", 253, 0, 0, 63, 0), eof(), column_of("a", 3, 11, 0, 63, 0), eof()])),
+    (frames(one, 0), reply([b"\x01", column_of("a", 3, 11, 0, 63, 0), eof(), eof()])),
+    (frames(six, 0), ok_packet(1)),
+    (frames(nine, 0), ok_packet(1)),
+    (frames(none, 0), ok_packet(1))
+  ])?
+  let statement = prepare(client, sql)?
+  let found = execute(client, statement, [Some(Text(hostile))])?
+  assert found.columns.len() == 1 && found.rows.is_empty()
+  let stored = execute(client, Statement { id = 8, parameters = 6, columns = 0 }, [Some(Int(-2)), None, Some(Text("O'Reilly")), Some(Bytes(b"\x00\x01")), Some(Bool(true)), Some(Decimal("12.50"))])?
+  assert stored.columns.is_empty() && stored.affected == 0
+  let off = Some(Bool(false))
+  _ = execute(client, Statement { id = 9, parameters = 9, columns = 0 }, [None, off, off, off, off, off, off, off, None])?
+  _ = execute(client, Statement { id = 10, parameters = 0, columns = 0 }, [])?
+}
+
+test "a binary result set decodes every column type to the value the text protocol gives" {
+  let client = session([(frames(b"\x17\x07\x00\x00\x00\x00\x01\x00\x00\x00", 0), typed_reply(true))])?
+  let result = execute(client, Statement { id = 7, parameters = 0, columns = 31 }, [])?
+  assert is_typed(result)
+}
+
+test "the NULL bitmap of a binary row starts at its third bit" {
+  // Two columns, the second NULL: bit 3 of the one bitmap byte.
+  let pair = reply([b"\x02", column_of("a", 3, 11, 0, 63, 0), column_of("b", 253, 40, 0, 45, 0), eof(), b"\x00\x08\x2a\x00\x00\x00", eof()])
+  // Seven columns take two bytes of bitmap: the seventh is bit 0 of the second.
+  let a = column_of("a", 1, 4, 0, 63, 0)
+  let seven = reply([b"\x07", a, a, a, a, a, a, a, eof(), b"\x00\x00\x01\x01\x02\x03\x04\x05\x06", eof()])
+  let run = b"\x17\x07\x00\x00\x00\x00\x01\x00\x00\x00"
+  let client = session([(frames(run, 0), pair), (frames(run, 0), seven)])?
+  let statement = Statement { id = 7, parameters = 0, columns = 2 }
+  assert execute(client, statement, [])?.rows == [[Some(Int(42)), None]]
+  assert execute(client, statement, [])?.rows == [[Some(Int(1)), Some(Int(2)), Some(Int(3)), Some(Int(4)), Some(Int(5)), Some(Int(6)), None]]
+  assert binary_row([Some(b"\x2a\x00\x00\x00"), None]) == b"\x00\x08\x2a\x00\x00\x00"
+}
+
+test "a binary row out of shape is refused: no header, cut, too long, an unknown type, no number, an odd date" {
+  let run = b"\x17\x07\x00\x00\x00\x00\x01\x00\x00\x00"
+  let statement = Statement { id = 7, parameters = 0, columns = 1 }
+  let whole = column_of("a", 3, 11, 0, 63, 0)
+  let headless = session([(frames(run, 0), reply([b"\x01", whole, eof(), b"\x01\x00\x2a\x00\x00\x00", eof()]))])?
+  assert execute(headless, statement, []) == Err(Malformed("a binary row without its header"))
+  assert shut(headless)
+  let cut = session([(frames(run, 0), reply([b"\x01", whole, eof(), b"\x00\x00\x2a\x00\x00", eof()]))])?
+  assert execute(cut, statement, []) == Err(Malformed(SHORT))
+  let long = session([(frames(run, 0), reply([b"\x01", whole, eof(), b"\x00\x00\x2a\x00\x00\x00\x00", eof()]))])?
+  assert execute(long, statement, []) == Err(Malformed("a row longer than its columns"))
+  let unknown = session([(frames(run, 0), reply([b"\x01", column_of("a", 99, 4, 0, 63, 0), eof(), b"\x00\x00\x2a", eof()]))])?
+  assert execute(unknown, statement, []) == Err(Unsupported("column type 99"))
+  assert describe(Unsupported("column type 99")) == "column type 99 is not supported"
+  assert shut(unknown)
+  let infinite = session([(frames(run, 0), reply([b"\x01", column_of("a", 5, 22, 0, 63, 31), eof(), b"\x00\x00\x00\x00\x00\x00\x00\x00\xf0\x7f", eof()]))])?
+  assert execute(infinite, statement, []) == Err(Malformed("a floating-point value that is no number"))
+  let odd = session([(frames(run, 0), reply([b"\x01", column_of("a", 10, 10, 128, 63, 0), eof(), b"\x00\x00\x05\xe8\x07\x02\x1d\x17", eof()]))])?
+  assert execute(odd, statement, []) == Err(Malformed("a date or a time of no known length"))
+  let bare = session([(frames(run, 0), reply([b"\x01", whole, eof(), b"\x00", eof()]))])?
+  assert execute(bare, statement, []) == Err(Malformed(SHORT))
+}
+
+test "execute with another number of parameters than the statement has sends nothing and keeps the connection" {
+  let client = session([(frames(b"\x0e", 0), ok_packet(1))])?
+  let statement = Statement { id = 7, parameters = 2, columns = 1 }
+  assert execute(client, statement, [Some(Int(1))]) == Err(WrongParameterCount(2, 1))
+  assert execute(client, statement, []) == Err(WrongParameterCount(2, 0))
+  assert describe(WrongParameterCount(2, 1)) == "1 parameters for a statement with 2"
+  assert ping(client) == Ok(())
+}
+
+test "a server error answers execute and keeps the connection; close sends the statement's id and reads no reply" {
+  let run = b"\x17\x07\x00\x00\x00\x00\x01\x00\x00\x00"
+  let (stream, counts) = counted([
+    (frames(run, 0), reply([err_payload(1243, "HY000", "Unknown prepared statement handler (7) given to mysqld_stmt_execute")])),
+    (b"\x05\x00\x00\x00\x19\x07\x00\x00\x00", Bytes.empty()),
+    (frames(b"\x0e", 0), ok_packet(1))
+  ])?
+  let client = Client { stream }
+  let statement = Statement { id = 7, parameters = 0, columns = 1 }
+  assert execute(client, statement, []) == Err(Server(ServerError { code = 1243, sql_state = "HY000", message = "Unknown prepared statement handler (7) given to mysqld_stmt_execute" }))
+  assert close(client, statement) == Ok(())
+  assert ping(client) == Ok(())
+  assert quit(client) == Ok(())
+  assert counts.receive() == Some(1 + 4)
 }
