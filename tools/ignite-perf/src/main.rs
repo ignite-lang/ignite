@@ -28,6 +28,13 @@ fn main() {
         Mode::QualityHost(args) => std::process::exit(readiness::exit_status(
             ignite_perf::remote::host_main(&args),
         )),
+        Mode::Runtime(args) => {
+            let target_dir = args.repo.join(&args.target_dir);
+            std::process::exit(readiness::exit_status(
+                ignite_perf::bench::release_runtime(&args.repo, &target_dir, None)
+                    .map(|built| println!("{}", built.archive.display())),
+            ))
+        }
         Mode::Smoke(args) => ("smoke", args),
         Mode::Prepare(args) => ("prepare", args),
         Mode::Cold(args) => ("cold", args),

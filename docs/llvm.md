@@ -89,6 +89,22 @@ glibc 2.41) and the dedicated host (Ubuntu 24.04, glibc 2.39) have it. A `--stat
 has no dynamic relocations and links without it. The Rust target passes the flag the same
 way as the compression above (`binary_size::` in `crates/ignite/tests/binary_size.rs`).
 
+Release runtime without the backtrace symbolizer (story `binary-size-back`, row 3.9). A
+release runtime archive, native and bitcode, is built on the standard library compiled from
+its source (the toolchain's `rust-src` component) with `-Zbuild-std=std,panic_unwind
+-Zbuild-std-features=panic-unwind`: every feature of the standard library but `backtrace`, whose
+symbolizer (`gimli`, `addr2line`, `miniz_oxide`) is about 130 KB of every executable. A stable
+cargo takes the flags with `RUSTC_BOOTSTRAP=1`. One recipe, `crates/ignite-rt/release_std.rs`,
+builds every such archive: the driver's build script in the release profile (`task dist`,
+`cargo install`), and `ignite-perf runtime`, which `task bench-throughput` and the dedicated
+host's benchmark run. An Ignite program reports its failures itself, so its failure report is
+unchanged (`binary_size::a_release_failure_report_is_the_dev_one_on_both_targets`); a panic
+inside the runtime prints its message and location and an unsymbolized backtrace. A toolchain
+without `rust-src` builds the archive on the prebuilt standard library and says so
+(`cargo::warning`, `ignite-perf runtime` on stderr; `runtime::` in
+`tools/ignite-perf/tests/runtime.rs`). Dev archives, the test runner's included, keep the
+prebuilt standard library.
+
 LTO (story `llvm-lto-runtime`). A `-linux-gnu` driver carries the runtime twice: the native
 archive and the same archive built with `-Clinker-plugin-lto`, whose Rust code is LLVM
 bitcode (`crates/ignite/build.rs`, a second nested `cargo build` beside the first, in the

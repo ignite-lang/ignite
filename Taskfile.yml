@@ -174,10 +174,10 @@ tasks:
   bench-throughput:
     desc: Build both targets' release terminald and print the throughput matrix (CELLS=rr:16,pipe:256 and RUNS=n narrow it)
     cmds:
-      - cargo build -q --release -p ignite-rt -p ignite-load
+      - cargo build -q --release -p ignite-load
       - cargo build -q -p ignite
       - target/debug/ignite build {{.EXAMPLE}} --target rust --release --out target/bench/rust --target-dir target/bench/rust-target
-      - target/debug/ignite build {{.EXAMPLE}} --target llvm --release --runtime target/release/libignite_rt.a --out target/bench/llvm
+      - target/debug/ignite build {{.EXAMPLE}} --target llvm --release --runtime "$(cargo run -q -p ignite-perf -- runtime --target-dir target/bench-rt)" --out target/bench/llvm
       - target/release/ignite-load matrix --server rust=target/bench/rust-target/release/terminald --server llvm=target/bench/llvm/bin/terminald --runs {{.RUNS | default "3"}} {{if .CELLS}}--cells {{.CELLS}}{{end}} --out target/bench/throughput.jsonl
 
   server:

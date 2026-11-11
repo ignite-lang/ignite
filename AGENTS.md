@@ -503,7 +503,14 @@ without waiting for a person.
   would carry a musl runtime archive that the default, dynamic LLVM link cannot use), `bin/ignite`
   with `share/ignite/std`, the standard library a driver at `<prefix>/bin/ignite` reads first;
   the Rust target still needs a clone (`--substrate`). The VS Code extension of `ignite-lsp`
-  downloads it.
+  downloads it. `task dist` needs the toolchain's `rust-src` component (`rustup component add
+  rust-src`): the release runtime archive the driver carries is built on the standard library from
+  source without its backtrace symbolizer (`crates/ignite-rt/release_std.rs`, an unstable cargo
+  flag under `RUSTC_BOOTSTRAP=1`; story `binary-size-back`, row 3.9). Without it the build warns
+  and carries an archive about 130 KB larger per LLVM executable: refuse such a build. The same
+  recipe builds the archive of `cargo install`, `task bench-throughput` and the dedicated host's
+  benchmark (`ignite-perf runtime`, its setup installs `rust-src`); the toolchain image takes the
+  released driver and builds no archive.
 - Image (story `toolchain-image`), after the archive is uploaded: `task image VERSION=X.Y.Z`
   (`dist/toolchain/Dockerfile`: `rust:1.98-trixie`, clang, lld, the release archive checked
   against its `.sha256`, the tag's source in `/usr/local/src/ignite` with its crates fetched,

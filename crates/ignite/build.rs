@@ -26,6 +26,12 @@
 //! clang's; when that build fails the file says `None` and release builds
 //! link the native archive.
 //!
+//! In the release profile every archive is built on the standard library
+//! from source without its backtrace symbolizer (`../ignite-rt/release_std.rs`,
+//! story `binary-size-back`) when the toolchain has the `rust-src`
+//! component; without it the archives are built on the prebuilt standard
+//! library and the build warns.
+//!
 //! It also sets `IGNITE_VERSION`, the version `ignite --version` prints
 //! (`src/version.rs`): the package version, with the
 //! commit the driver was built from unless it is a clean build of the
@@ -33,6 +39,9 @@
 
 #[path = "src/version/describe.rs"]
 mod version;
+
+#[path = "../ignite-rt/release_std.rs"]
+mod release_std;
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -57,6 +66,7 @@ fn main() {
     for path in [
         crates.join("ignite-rt/src"),
         crates.join("ignite-rt/Cargo.toml"),
+        crates.join("ignite-rt/release_std.rs"),
         crates.join("ignite-io/src"),
         crates.join("ignite-io/Cargo.toml"),
         workspace.join("Cargo.toml"),
@@ -70,6 +80,16 @@ fn main() {
     let target_dir = runtime_target_dir(&out);
     let target = env("TARGET");
     let release = env("PROFILE") == "release";
+    let std_source = release && {
+        let rustc = std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
+        let found = release_std::sysroot(&rustc)
+            .and_then(|sysroot| release_std::library(&sysroot))
+            .is_some();
+        if !found {
+            println!("cargo::warning={}", release_std::MISSING);
+        }
+        found
+    };
     let musl = musl_self_contained(&target);
     let runtime_build = |target_dir: &Path| {
         let mut command = Command::new(env("CARGO"));
@@ -93,6 +113,9 @@ fn main() {
             .env_remove("CARGO_BUILD_TARGET");
         if release {
             command.arg("--release");
+            if std_source {
+                release_std::apply(&mut command);
+            }
         }
         command
     };
