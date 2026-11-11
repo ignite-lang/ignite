@@ -12,6 +12,42 @@ import std.protocol.mysql.binary.{double_text, float_text, unsigned_text, date_t
 // A client of the MySQL wire protocol (protocol 41, handshake version 10)
 // over any `ByteStream`: a `TcpStream` or a `TlsStream` in programs, a
 // `PipeStream` in tests.
+//
+// - Connecting: `connect(endpoint, options)` is a client over plain TCP,
+//   `connect_tls` one over TLS (the SSLRequest, then `Tls.client` with
+//   `options.tls` before the account is sent); `start` authenticates on a
+//   stream already open. `MysqlOptions` holds the account, the database,
+//   the connect and the read timeout, and `read_only`, which sets the
+//   session's transactions read only before the client is returned.
+// - Authentication: `mysql_native_password` and `caching_sha2_password`,
+//   as the server's default or after its authentication switch. When
+//   `caching_sha2_password` asks for the password itself (the server has
+//   not cached the account), it is sent on a TLS stream only: on a plain
+//   stream the call fails with `FullAuthenticationNeedsTls`, and the RSA
+//   exchange is not spoken. Any other plugin is `UnsupportedPlugin`.
+// - Statements: `query` runs one over the text protocol; `prepare`,
+//   `execute` and `close` (or `execute_once` for the three) run one over
+//   the binary protocol with its `?` marks bound to parameters, which
+//   travel as values and are never put into the statement's text. Both
+//   give a `ResultSet`: the columns and the rows, each value a
+//   `MysqlValue` or `None` for NULL. `ping` and `quit` complete the
+//   session.
+// - Errors: every call returns `Result<_, MysqlError>`. The server's error
+//   is `Server` with its code, SQL state and message, and leaves the
+//   connection usable. Any other failure closes the connection. `describe`
+//   and `io_error` word an error without the server's message, which can
+//   quote the statement: no statement text and no credential is in what
+//   they return, and this module logs nothing.
+// - Several connections: a connection carries one statement at a time, so
+//   tasks that ask concurrently share a `Pool` (`pool_of`, `checkout`,
+//   `checkin`, `pool_query`, `pool_execute`); a connection that failed is
+//   not put back, and `checkin` takes a new one in its place.
+//
+// Not spoken: compression, `LOAD DATA LOCAL INFILE` (the server's request
+// for a file is refused and never answered), several statements in one
+// call and several results from one, replication, the RSA key exchange.
+// The client sends no statement of its own but `SET SESSION TRANSACTION
+// READ ONLY` for `read_only`.
 
 type Outcome<T> = Result<T, MysqlError>
 
