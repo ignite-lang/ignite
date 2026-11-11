@@ -38,10 +38,10 @@
 //! are exchanged whenever a different task resumes, through [`TaskLocals`].
 //!
 //! Stack overflow: a task's guard page is recognised by the `SIGSEGV`
-//! handler installed with the first worker (on an alternate signal stack
-//! each worker sets up), which prints `thread 'worker' has overflowed its
-//! stack` and aborts, as a thread's overflow does; any other fault goes to
-//! the handler that was installed before.
+//! handler (`crate::signal`) installed with the first worker (on an
+//! alternate signal stack each worker sets up), which prints `thread
+//! 'worker' has overflowed its stack` and aborts, as a thread's overflow
+//! does; any other fault goes to the handler that was installed before.
 //!
 //! A descriptor a task waits for (a socket, a listener, standard input)
 //! is registered once per worker, edge-triggered, through a
@@ -54,11 +54,10 @@
 
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, VecDeque};
-use std::ffi::c_void;
 use std::io;
-use std::os::fd::{AsFd, AsRawFd, BorrowedFd, RawFd};
+use std::os::fd::{AsFd, BorrowedFd};
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU8, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, Once, OnceLock, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
 
 use corosensei::stack::{DefaultStack, Stack};
@@ -532,7 +531,7 @@ fn suspend() {
 pub(crate) fn wait_descriptor(
     waiter: &Waiter,
     task: &Task,
-    descriptor: RawFd,
+    descriptor: BorrowedFd<'_>,
     interest: Interest,
     deadline: Option<Instant>,
 ) -> io::Result<DescriptorWait> {
@@ -541,7 +540,7 @@ pub(crate) fn wait_descriptor(
     // Relaxed: set and read on this worker only (its dispatch).
     task.ready.store(0, Ordering::Relaxed);
     let woken = park(waiter, task, deadline);
-    let _ = reactor.deregister(token);
+    let _ = reactor.deregister(token, descriptor);
     let ready = Interest::from_bits(task.ready.swap(0, Ordering::SeqCst));
     Ok(if !ready.is_empty() {
         DescriptorWait::Ready(ready)
@@ -556,7 +555,7 @@ pub(crate) fn wait_descriptor(
 /// could be reserved or no worker thread started. Called with the task
 /// already counted live (`crate::task`).
 pub(crate) fn spawn(job: Job) -> io::Result<()> {
-    install_overflow_handler();
+    crate::signal::install_overflow_handler();
     let here = HERE.with(Cell::get);
     // A stack mapped while `WORKERS` was not held, because no free one
     // was found under it; the next look places the task with it.
@@ -626,6 +625,9 @@ fn start_worker(
     shared.tasks.store(1, Ordering::Relaxed);
     shared.hand_over(|incoming| incoming.new.push((job, stack)));
     let started = Arc::clone(&shared);
+    // Counted before the worker starts, which may end the task and count
+    // it out of `LIVE` before `spawn` returns here. Relaxed: as above.
+    let live = LIVE.fetch_add(1, Ordering::Relaxed) + 1;
     match std::thread::Builder::new()
         .name(String::from("worker"))
         .spawn(move || work(started))
@@ -635,11 +637,11 @@ fn start_worker(
             found.count();
             count(&COUNTERS.workers_started);
             workers.push(shared);
-            // Relaxed: as above.
-            escalate(LIVE.fetch_add(1, Ordering::Relaxed) + 1);
+            escalate(live);
             Ok(())
         }
         Err(error) => {
+            LIVE.fetch_sub(1, Ordering::Relaxed);
             let (job, stack) = lock(&shared.incoming)
                 .new
                 .pop()
@@ -1111,33 +1113,12 @@ fn page_size() -> usize {
     })
 }
 
-/// The handlers of `SIGSEGV` and `SIGBUS` before [`on_fault`].
-static PREVIOUS: OnceLock<[nix::sys::signal::SigAction; 2]> = OnceLock::new();
-
-/// Install [`on_fault`] for `SIGSEGV` and `SIGBUS` once, keeping the
-/// handlers before it for every fault outside a task's guard page.
-fn install_overflow_handler() {
-    use nix::sys::signal::{SaFlags, SigAction, SigHandler, SigSet, Signal, sigaction};
-    static INSTALL: Once = Once::new();
-    INSTALL.call_once(|| {
-        let ours = SigAction::new(
-            SigHandler::SigAction(on_fault),
-            SaFlags::SA_ONSTACK | SaFlags::SA_SIGINFO,
-            SigSet::empty(),
-        );
-        // SAFETY: `on_fault` is async-signal-safe: it reads a `const`
-        // thread-local cell, writes to stderr with `write`, aborts, or
-        // hands the signal to the handler that was installed before.
-        let previous = unsafe {
-            [
-                sigaction(Signal::SIGSEGV, &ours),
-                sigaction(Signal::SIGBUS, &ours),
-            ]
-        };
-        if let [Ok(segv), Ok(bus)] = previous {
-            let _ = PREVIOUS.set([segv, bus]);
-        }
-    });
+/// The guard page of the running task's stack, `start..end`, `(0, 0)` off
+/// a task: what the stack overflow handler (`crate::signal`) compares a
+/// fault's address with. Reads a `const` thread-local cell only, so it is
+/// async-signal-safe.
+pub(crate) fn guard_page() -> (usize, usize) {
+    GUARD.try_with(Cell::get).unwrap_or((0, 0))
 }
 
 /// A worker's alternate signal stack: the overflow handler cannot run on
@@ -1175,33 +1156,6 @@ fn alternate_signal_stack() {
             ss_size: SIZE,
         };
         libc::sigaltstack(&stack, std::ptr::null_mut());
-    }
-}
-
-/// The `SIGSEGV` and `SIGBUS` handler (module docs).
-extern "C" fn on_fault(signal: i32, info: *mut nix::libc::siginfo_t, context: *mut c_void) {
-    use nix::sys::signal::{SaFlags, SigAction, SigHandler, SigSet, Signal, sigaction};
-    // SAFETY: the kernel passes a valid `siginfo_t` to a handler installed
-    // with `SA_SIGINFO`; `si_addr` is defined for SIGSEGV and SIGBUS.
-    let address = unsafe { (*info).si_addr() } as usize;
-    let (start, end) = GUARD.try_with(Cell::get).unwrap_or((0, 0));
-    if start <= address && address < end {
-        let message = b"\nthread 'worker' has overflowed its stack\nfatal runtime error: stack overflow, aborting\n";
-        let _ = nix::unistd::write(std::io::stderr().as_fd(), message);
-        std::process::abort();
-    }
-    let which = usize::from(signal != Signal::SIGSEGV as i32);
-    match PREVIOUS.get().map(|previous| previous[which].handler()) {
-        Some(SigHandler::SigAction(previous)) => previous(signal, info, context),
-        Some(SigHandler::Handler(previous)) => previous(signal),
-        _ => {
-            let default = SigAction::new(SigHandler::SigDfl, SaFlags::empty(), SigSet::empty());
-            if let Ok(signal) = Signal::try_from(signal) {
-                // SAFETY: restoring the default action is async-signal-safe;
-                // the fault repeats on return and ends the process with it.
-                let _ = unsafe { sigaction(signal, &default) };
-            }
-        }
     }
 }
 
@@ -1369,7 +1323,7 @@ impl Readiness {
     ) -> io::Result<DescriptorWait> {
         let me = Waiter::current();
         let Some(task) = me.task() else {
-            return crate::wait::wait_descriptor(descriptor.as_raw_fd(), interest, deadline);
+            return crate::wait::wait_descriptor(descriptor, interest, deadline);
         };
         let state = self.descriptor();
         if let Some(waited) = wait_alone(task, state, descriptor, interest, mark, deadline, now)? {
@@ -1399,7 +1353,7 @@ impl Readiness {
                     return without_reactor(&me, descriptor, interest, deadline);
                 };
                 let sides = sides(state.write_armed.load(Ordering::Relaxed));
-                let token = reactor.register(descriptor.as_raw_fd(), sides, self.waiter.clone())?;
+                let token = reactor.register(descriptor, sides, self.waiter.clone())?;
                 registered.push((Arc::clone(&task.worker), token));
                 if registered.len() == 1 {
                     state.home.store(here, Ordering::Release);
@@ -1659,17 +1613,18 @@ fn without_reactor(
 }
 
 impl Readiness {
-    /// Deregister the descriptor from every worker and wake its waiters;
-    /// before the descriptor closes. A later wait registers it again.
-    pub(crate) fn deregister(&self) {
-        self.release(true);
+    /// Deregister `descriptor`, the one every wait of this readiness was
+    /// for, from every worker and wake its waiters; before the descriptor
+    /// closes. A later wait registers it again.
+    pub(crate) fn deregister(&self, descriptor: BorrowedFd<'_>) {
+        self.release(Some(descriptor));
     }
 
-    /// [`Readiness::deregister`]; without `delete` the workers' reactors
-    /// only forget the descriptor ([`EpollReactor::forget`]): its owner
-    /// closes it right after, and the close takes it out of their epoll
-    /// instances without an `epoll_ctl` each.
-    fn release(&self, delete: bool) {
+    /// [`Readiness::deregister`] of `delete`; without one the workers'
+    /// reactors only forget the descriptor ([`EpollReactor::forget`]): its
+    /// owner closes it right after, and the close takes it out of their
+    /// epoll instances without an `epoll_ctl` each.
+    fn release(&self, delete: Option<BorrowedFd<'_>>) {
         let registered = {
             let mut registered = lock(&self.descriptor().registered);
             self.descriptor()
@@ -1679,10 +1634,11 @@ impl Readiness {
         };
         for (shared, token) in registered {
             if let Some(reactor) = shared.reactor.get() {
-                if delete {
-                    let _ = reactor.deregister(token);
-                } else {
-                    reactor.forget(token);
+                match delete {
+                    Some(descriptor) => {
+                        let _ = reactor.deregister(token, descriptor);
+                    }
+                    None => reactor.forget(token),
                 }
             }
         }
@@ -1703,7 +1659,7 @@ impl Readiness {
 /// deregisters it.
 impl Drop for Readiness {
     fn drop(&mut self) {
-        self.release(false);
+        self.release(None);
     }
 }
 

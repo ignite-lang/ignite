@@ -25,7 +25,7 @@ use std::time::{Duration, Instant};
 use nix::errno::Errno;
 use nix::fcntl::{FcntlArg, OFlag, fcntl};
 use nix::poll::{PollFd, PollFlags, poll};
-use nix::sys::signal::{SigHandler, Signal, kill, killpg};
+use nix::sys::signal::{Signal, kill, killpg};
 use nix::sys::wait::{Id, WaitPidFlag, WaitStatus, waitid};
 use nix::unistd::Pid;
 
@@ -328,8 +328,7 @@ static SIGCHLD_DEFAULT: Once = Once::new();
 /// before every spawn, which covers the test runner.
 pub(crate) fn default_sigchld() {
     SIGCHLD_DEFAULT.call_once(|| {
-        // SAFETY: the default action installs no handler code.
-        let _ = unsafe { nix::sys::signal::signal(Signal::SIGCHLD, SigHandler::SigDfl) };
+        crate::signal::restore_default(Signal::SIGCHLD);
     });
 }
 

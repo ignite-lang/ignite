@@ -265,11 +265,12 @@ fn trim_if_released(
 
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 fn trim_heap() {
+    // SAFETY: glibc's `malloc_trim` has this signature, takes no pointer
+    // and is thread-safe, so every call of it is safe.
     unsafe extern "C" {
-        fn malloc_trim(pad: usize) -> i32;
+        safe fn malloc_trim(pad: usize) -> i32;
     }
-    // SAFETY: glibc's `malloc_trim` takes no pointer and is thread-safe.
-    unsafe { malloc_trim(0) };
+    malloc_trim(0);
 }
 
 #[cfg(not(all(target_os = "linux", target_env = "gnu")))]

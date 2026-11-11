@@ -258,6 +258,7 @@ fn value_type(value: &Value) -> String {
         Value::Fn(_) => "Fn".to_string(),
         Value::Closure { .. } => "Closure".to_string(),
         Value::IoError { .. } => "IoError".to_string(),
+        Value::Handle(handle) => handle.kind().name().to_string(),
     }
 }
 
@@ -304,6 +305,7 @@ pub fn render(value: &Value) -> String {
         Value::Fn(name) => name.to_string(),
         Value::Closure { .. } => "<closure>".to_string(),
         Value::IoError { message, .. } => format!("IoError({})", quote(message)),
+        Value::Handle(handle) => format!("<{}>", handle.kind().name()),
     }
 }
 

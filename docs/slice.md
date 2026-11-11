@@ -618,7 +618,7 @@ meaning. The generator emits exactly the Rust on the right.
 | `t.to_bytes()` | `t.clone().into_bytes()`; `t.into_bytes()` when `t` is a fresh text nothing else owns (a literal, a `+` chain or interpolation, `to_text` of Int, Byte or Bool, `concat`, `trim`) | `t.as_bytes()` to a lent bytes parameter and in the other borrowed forms of 20.3.7 |
 | `b.to_text()` | `String::from_utf8_lossy(&b).into_owned()` | |
 | `b.slice(i, j).to_text()` | `String::from_utf8_lossy(::ignite_io::checked::slice_ref(&b, i, j, <site>)).into_owned()`: the slice is borrowed, not copied, with the failure of `checked::slice` | Bytes |
-| `b.index_of(n, i) -> Option<Int>` | `::ignite_io::text::index_of(&b, &n, i)`: the offset of the first `n` at or after `i` (a negative `i` reads as 0; `None` when `i` is past the end, also for an empty `n`), by `memchr` or `memmem`; `t.to_bytes()` and a checked `slice` are borrowed, not copied. The LLVM runtime's `bytes_index_of` calls the same function (-1 for `None`). Story `text-fast-search` | Bytes |
+| `b.index_of(n, i) -> Option<Int>` | `::ignite_io::text::index_of(&b, &n, i)`: the offset of the first `n` at or after `i` (a negative `i` reads as 0; `None` when `i` is past the end, also for an empty `n`), by a scan for the first byte of `n` and a compare of the rest (story `unsafe-sites-back`; before, `memchr` or `memmem`); `t.to_bytes()` and a checked `slice` are borrowed, not copied. The LLVM runtime's `bytes_index_of` calls the same function (-1 for `None`). Story `text-fast-search` | Bytes |
 | `t.pieces(s) -> List<Text>` | `::ignite_io::text::pieces(&t, &s)`: the texts between the separators, empty pieces kept, `[t]` for an empty `s`; no piece is checked for UTF-8 again, since valid text cut at a valid separator stays valid. `std.text.split` is this builtin. The LLVM runtime's `text_pieces` uses the same search. Story `text-fast-search` | Text |
 | `b.at(i)` | `b[(i) as usize]`, then `.clone()` when the element is not `Int`, `Byte` or `Bool` (also `l[i]`) | Bytes, List |
 | `l.map(f)` | `l.iter().cloned().map(f).collect::<Vec<_>>()` | List; `l.iter().map(..)` without the copy in the cases of 20.3.7 |
@@ -7853,8 +7853,15 @@ once and act on the last component relative to it (the root's own descriptor whe
 the root). When that call fails for any reason the operation walks as above, which either
 succeeds (the path changed in between) or gives the error this section words, naming the
 component; the walk is also the whole resolution once `openat2` answered `ENOSYS` or `EPERM` (a
-kernel before 5.6, a seccomp filter). A listing reads the directory with `getdents64` itself.
-Every behaviour above, its errors included, is the same in both resolutions; the substrate's
+kernel before 5.6, a seccomp filter). A listing reads the directory with `readdir` through
+`nix::dir::Dir` (story `unsafe-sites-back`). The calls of a listing, as `strace` shows them:
+an `fstat`, an `fcntl(F_GETFL)` and an `fcntl(F_SETFD, FD_CLOEXEC)` (`fdopendir`), the
+`getdents64` calls, an `lseek` back to the start (the end of the iteration) and the `close` of
+the descriptor. `remove_tree` lists each level through that level's own descriptor. A level it
+descends from then duplicates the descriptor (`fcntl(F_DUPFD_CLOEXEC)`) and closes the listing
+before it goes deeper. The deepest level keeps its listing until it is emptied. So the walk
+holds one descriptor per level and one listing at a time. Level `k` holds `k + 1` descriptors
+while it makes its duplicate, and a tree 256 levels deep needs 256 descriptors. Every behaviour above, its errors included, is the same in both resolutions; the substrate's
 tests run on both (`fs::tests`, `Scratch::both`). Measured with `strace -c` on the todo example's
 patch workload (16 connections on one todo, LLVM, release): 108.5 syscalls per reply before,
 45.8 after, the plain-Rust reference 16.0. Of the 45.8, 8.1 are failed `remove`s of versions a
@@ -10503,6 +10510,47 @@ counted object holds (both targets). Release builds ignore the variable.
   (`fixtures/leak/repro.ignite`) on both targets and runs every mode at `N=20000`: each mode's
   peak resident size (`VmHWM`, the lowest of up to three runs) is within 2 MB of `none`'s.
 
+### 33.5 The evaluator's model of the substrate under a test
+
+Story `eval-substrate-model`. `Evaluator::run_test` runs a test's body as task 0 of an
+in-memory, deterministic model of the substrate (`crates/ignite-eval/src/substrate.rs`). The
+model exists only while a test runs: `ignite check`, `ignite plan` and every other evaluation
+at compile time still report `evaluation failed: builtin `X` has no value at compile time` for
+the same builtins.
+
+| has a value under a test | as on the targets |
+|---|---|
+| `Store.new()` and every `Store<T>` method | ids from 1, values in id order; a copy shares the store |
+| `Setting.of`, `CommandLine.of`, `Environment.of` and their methods | what the capability was made of; the last entry of a variable wins |
+| `Pipe.pair()`, every `PipeStream` method and the `ByteStream` methods on a pipe end | 18.4: a task's writes wait in the send buffer until a flush point (a read, `Process.flush()`, an operation that waits, the task's end, 64 KiB, `close`, the end's drop) and arrive as one batch; the 16 MiB queue, `pipe peer is gone`, `write to a closed stream`, the urgent byte and the idle timeout |
+| `spawn` of a fn, a role, a fn value, a constant or a field fn, and calls of a role | the callee and arguments are evaluated by the spawning task; a fn value's call only when every argument is a name, as the Rust target evaluates that form inside the task |
+| `Channel.bounded` (capacity of at least 1), every `Sender` and `Receiver` method | 30: a waiting `send` or `receive` first delivers the task's writes |
+| `Clock.monotonic()`, `Clock.sleep(d)` | virtual time: nanoseconds since the test began, advanced only by the scheduler |
+| `Process.flush()` | delivers the task's writes |
+
+Tasks are cooperative. The first task in spawn order that can run holds the turn until it waits
+(a read, a `send` into a full channel, a `receive` from an empty one, a sleep) or ends; then
+the turn passes to the first task, in spawn order, that is ready or whose deadline has come.
+When none is, the virtual time moves to the earliest deadline; with no deadline the test ends
+as `evaluation failed: every task of the model waits and none has a deadline (a deadlock)`.
+Every task has an OS thread of its own and only the turn holder runs, so the order is the same
+on every run. The tasks share the test's fuel: a task that never waits ends the test on fuel. A
+failure (14.8) ends only its task, as on the targets; the test is over when its body ends. A
+last use moves its value (20.3.1), so a handle given to a task is dropped with the task. No
+wall clock is read: a timeout or a sleep costs no time.
+
+The values the model holds (stored values, queued values, pipe bytes by 64) count against the
+node limit (15.3). A handle is not encodable (E118) and its debug text is the type's name
+(`<PipeStream>`). Still without a value under a test: TCP and TLS, `Launcher`, `Directory`,
+`Entropy`, `Stdout` and `Stderr`, `Process.exit`, `Process.open_files_limit`, `Clock.now()`,
+`Runtime.census()` and `Runtime.settle` (33.2), and `main`. A unit that reaches one of them
+stays one the evaluator cannot run (`quality/baseline.json` `eval_cannot_run`).
+
+Tests: `crates/ignite/tests/eval_model.rs` (the order of tasks, the deadlock report, a task
+that ends on fuel, a failing task that ends only itself, pipe flush points and batches, virtual
+time, and the refusal outside a test) and the differential corpus run, where every unit the
+model runs agrees with the Rust target.
+
 ## 34 SHA-1, SHA-256 and base64 in std (`std.digest`, `std.encoding`)
 
 **Status: implemented in `story:std-digest`.**
@@ -10971,7 +11019,9 @@ the listener's queue, each dropped SYN blocked its worker until the retransmit, 
 worker was blocked so, the accepting task's among them, nothing was accepted for minutes.
 
 The drain (16.13). `serve_listener` keeps one `Holds` for all its connections,
-`Holds.start()`: a bounded channel of `HoldEvent`s to a register task, `keep_holds`. Each held
+`Holds.start()` when the application has a `reply` and `Holds.none()` otherwise (only a `reply`
+holds a request; story `http-reply-cost-back`, section NN). `Holds.start()` is
+a bounded channel of `HoldEvent`s to a register task, `keep_holds`. Each held
 receiver is sent to it (`Held`) before the wait; the register keeps the receivers not yet
 closed, dropping answered ones as the list grows. Once the drain begins, `accept` fails, and
 `serve_listener` calls `drain_holds` before it returns the error: `Drain` closes every kept
@@ -11173,3 +11223,35 @@ us (`rustls-native-certs` was not taken): the substrate reads the PEM bundle its
   against a server that never answers, a timeout that is not positive, a peer that speaks no
   TLS, an invalid server name, authorities without a certificate.
 - No network: every certificate is generated in the test.
+
+## NN An HTTP reply allocates no more than at v0.15.0, and a server without held requests starts no task for them
+
+Story `http-reply-cost-back` (rows 3.3 `rust/todo/get-1` and 3.8 `todo/get-1` of
+`docs/quality.md`).
+
+- Allocations per `GET /todos/1` reply of `todod`, counted by `valgrind --tool=memcheck
+  --trace-malloc=yes` over 200 replies after 50 on one connection
+  (`reply_cost::a_get_reply_allocates_no_more_than_at_v0_15_0`, the bounds measured by
+  `reply_cost::count_a_given_todod` over the v0.15.0 binaries): Rust target 37 at v0.15.0, 53
+  at wave 10, 37 now; LLVM target 1, 1, 0.
+- The 16 came with `Request.connection` (section 37): `session` copied the connection into the
+  request it kept for the answer (its two addresses, 2 allocations), `asked` copied it again (2),
+  the request asked was copied once more for `handle` or `reply` (8) and `Respond`'s response was
+  copied out of the reply (4). `session` now sets the connection on the copy the application is
+  asked only, moves that copy into `handle` or `reply` and the response into `respond`; the
+  request kept for the answer gets the connection only for a `Streamed` response, whose `piece`
+  sees it. An `Upgrade` copies the request again for its takeover. The connection is still copied
+  once per request (2 allocations).
+- Two allocations per reply that v0.15.0 made too pay for those 2: `read_head` takes the first
+  read of a request as the request's bytes instead of copying it (`read_once`: a binding of
+  `stream.read` matched in place is a borrow of the stream to the last-use analysis, so it was
+  copied), and `ignite_io::flush` gives the emptied list of streams to send back to the task
+  instead of dropping it, so the task's next write does not allocate it again (the one
+  allocation per reply of the LLVM target).
+- `serve_listener` starts the register of held requests (`Holds.start()`, the task
+  `keep_holds`) only when the application has a `reply`, the only way to hold a request:
+  `reply_cost::a_server_without_reply_starts_no_task_for_held_requests` builds
+  `tests/fixtures/http_census.ignite` on both targets and reads `Runtime.census().tasks` while
+  each of its servers answers its only connection: 1 without `reply` (2 before), 2 with one (as
+  before).
+- `valgrind` is a prerequisite of `reply_cost::`, as `strace` is of `scheduler::`.
