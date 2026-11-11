@@ -32,7 +32,7 @@ Current values: run `v0.16.0` on 2026-11-10, commit `e009426f`.
 | # | metric | kind | target | bar | current | trend |
 |---|---|---|---|---|---|---|
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | eval | 4 | 4 | = |
-| 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | llvm | 4 | 4 | = |
+| 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | llvm | 0 | 4 | = |
 | 1.2 | differential corpus size | ratchet | eval | 494 | 494 | +19 better |
 | 1.2 | differential corpus size | ratchet | llvm | 856 | 856 | +94 better |
 | 1.2 | differential corpus size | ratchet | rust | 856 | 856 | +94 better |
