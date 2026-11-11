@@ -314,54 +314,77 @@ struct Entry {
 /// code with its hasher and the random seed it reads (story
 /// `binary-size-back`).
 struct Entries {
-    slots: Vec<(u32, Option<Entry>)>,
-    free: Vec<u32>,
+    slots: Vec<Slot>,
+    /// The index plus one of the first free slot, 0 for none; each free
+    /// slot names the next in [`Slot::next`]. A list in the slots, not a
+    /// vector of its own: a worker's reactor is new with the worker, and
+    /// with a second vector a connection that a new worker served took
+    /// about 145 instructions more, in `malloc`.
+    free: u32,
+}
+
+/// A slot of [`Entries`].
+struct Slot {
+    generation: u32,
+    /// While the slot is free: the index plus one of the next free slot.
+    next: u32,
+    entry: Option<Entry>,
 }
 
 impl Entries {
     const fn new() -> Entries {
         Entries {
             slots: Vec::new(),
-            free: Vec::new(),
+            free: 0,
         }
     }
 
     /// Hold `entry`; its token.
     fn insert(&mut self, entry: Entry) -> u64 {
-        let index = match self.free.pop() {
-            Some(index) => index as usize,
+        let index = match self.free.checked_sub(1) {
+            Some(index) => {
+                let index = index as usize;
+                self.free = self.slots[index].next;
+                index
+            }
             None => {
-                self.slots.push((0, None));
+                self.slots.push(Slot {
+                    generation: 0,
+                    next: 0,
+                    entry: None,
+                });
                 self.slots.len() - 1
             }
         };
         let slot = &mut self.slots[index];
-        slot.0 = slot.0.wrapping_add(1);
-        slot.1 = Some(entry);
-        (u64::from(slot.0) << 32) | (index as u64 + 1)
+        slot.generation = slot.generation.wrapping_add(1);
+        slot.entry = Some(entry);
+        (u64::from(slot.generation) << 32) | (index as u64 + 1)
     }
 
     /// The index of the slot `token` names, while it holds that
     /// registration.
     fn index(&self, token: u64) -> Option<usize> {
         let index = (token & 0xffff_ffff).checked_sub(1)? as usize;
-        let (generation, entry) = self.slots.get(index)?;
-        (u64::from(*generation) == token >> 32 && entry.is_some()).then_some(index)
+        let slot = self.slots.get(index)?;
+        (u64::from(slot.generation) == token >> 32 && slot.entry.is_some()).then_some(index)
     }
 
     fn get(&self, token: u64) -> Option<&Entry> {
-        self.slots[self.index(token)?].1.as_ref()
+        self.slots[self.index(token)?].entry.as_ref()
     }
 
     fn get_mut(&mut self, token: u64) -> Option<&mut Entry> {
         let index = self.index(token)?;
-        self.slots[index].1.as_mut()
+        self.slots[index].entry.as_mut()
     }
 
     fn remove(&mut self, token: u64) -> Option<Entry> {
         let index = self.index(token)?;
-        self.free.push(index as u32);
-        self.slots[index].1.take()
+        let slot = &mut self.slots[index];
+        slot.next = self.free;
+        self.free = index as u32 + 1;
+        slot.entry.take()
     }
 }
 
