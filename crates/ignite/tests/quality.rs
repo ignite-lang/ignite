@@ -3781,7 +3781,8 @@ fn gate_adv2_the_reference_is_the_last_local_run_under_the_tag() {
 /// decision: nothing refuses the release while the decision stands.
 #[test]
 fn gate_adv2_a_benchmark_bar_a_decision_moved_worse_refuses_the_release() {
-    let decision = "Accepted for v0.16.0 (Timo, 2026-11-09): the dedicated-host run refused this row";
+    let decision =
+        "Accepted for v0.16.0 (Timo, 2026-11-09): the dedicated-host run refused this row";
     let mut size = metric(
         Direction::Lower,
         Tolerance::Percent(5),
