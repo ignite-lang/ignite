@@ -328,6 +328,30 @@ fn another_descriptor_is_refused<H: Harness>(harness: H) {
     );
 }
 
+/// A registration after a deregistration has a token of its own: the
+/// earlier token, deregistered again, leaves the new registration in place
+/// (an `EpollReactor` reuses the slot of an ended registration, story
+/// `binary-size-back`).
+fn a_reused_registration_has_a_token_of_its_own<H: Harness>(harness: H) {
+    let reactor = harness.reactor();
+    let first = reactor
+        .register(harness.descriptor(), Interest::READ, Waiter::current())
+        .unwrap();
+    reactor.deregister(first, harness.descriptor()).unwrap();
+    let second = reactor
+        .register(harness.descriptor(), Interest::READ, Waiter::current())
+        .unwrap();
+    assert_ne!(first, second, "a reused registration got the earlier token");
+    reactor.deregister(first, harness.descriptor()).unwrap();
+    harness.make_readable();
+    let events = events_within(reactor);
+    assert!(
+        events.iter().any(|event| event.token == second),
+        "the earlier token ended the new registration: {events:?}"
+    );
+    reactor.deregister(second, harness.descriptor()).unwrap();
+}
+
 macro_rules! contract {
     ($name:ident, $harness:expr) => {
         mod $name {
@@ -356,6 +380,11 @@ macro_rules! contract {
             #[test]
             fn another_descriptor_is_refused() {
                 super::another_descriptor_is_refused($harness);
+            }
+
+            #[test]
+            fn a_reused_registration_has_a_token_of_its_own() {
+                super::a_reused_registration_has_a_token_of_its_own($harness);
             }
         }
     };
