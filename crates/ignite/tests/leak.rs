@@ -23,14 +23,29 @@ fn fixture(name: &str) -> PathBuf {
         .join(name)
 }
 
+/// A soak program outside the differential runner's corpus
+/// (`tests/soak/`): its tests read `Runtime.census()`, which the evaluator
+/// has no model of by design, so in `fixtures/` each would be a unit of
+/// `eval_cannot_run` (metric 1.6, `docs/quality.md`).
+fn soak_program(name: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/soak")
+        .join(name)
+}
+
 struct Run {
     status: i32,
     output: String,
 }
 
-/// `ignite test <file> <filter>` on `target`, with `IGNITE_DEBUG_LEAK` set
-/// to `leak` when given.
+/// `ignite test <file> <filter>` on `target` for a fixture of
+/// `fixtures/leak/`, with `IGNITE_DEBUG_LEAK` set to `leak` when given.
 fn ignite_test(target: &str, file: &str, filter: &str, leak: Option<&str>) -> Run {
+    ignite_test_at(target, &fixture(file), filter, leak)
+}
+
+/// `ignite test <path> <filter>` on `target` (see [`ignite_test`]).
+fn ignite_test_at(target: &str, path: &Path, filter: &str, leak: Option<&str>) -> Run {
     let index = TARGETS.iter().position(|t| *t == target).expect("a target");
     let _guard = LOCKS[index].lock().unwrap_or_else(|e| e.into_inner());
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
@@ -39,7 +54,7 @@ fn ignite_test(target: &str, file: &str, filter: &str, leak: Option<&str>) -> Ru
     let mut command = Command::new(env!("CARGO_BIN_EXE_ignite"));
     command
         .arg("test")
-        .arg(fixture(file))
+        .arg(path)
         .arg(filter)
         .args(["--target", target, "--out"])
         .arg(&dir)
@@ -312,46 +327,202 @@ fn reachable_handles_stay_usable_and_stored_reads_are_released() {
 /// reads through `for` (left by `break`, `continue`, `return`), nested
 /// `match`es, `is_some`, a bare `remove` or a record literal `put` keep the
 /// census flat.
-///
-/// Known gap, decided in wave 8: on LLVM four temporary forms still keep the
-/// owner `copy_from_heap` added (an unbraced arm-value `match`, a record
-/// literal passed to `put`, `get(..).is_some()`, a bare `remove` statement).
-/// They are pre-existing and filed as the backlog draft
-/// `story:llvm-release-handle-temporaries`; this test holds today's state so
-/// that a fix turns it red and is taken into the expectation.
 #[test]
 fn stored_ends_read_in_every_form_are_released() {
-    const KNOWN_ON_LLVM: [&str; 4] = [
-        "a nested match over stored ends is released (G30)",
-        "a record put as a literal and removed is released (G30)",
-        "a stored end looked at through is_some is released (G30)",
-        "a stored end removed by a bare statement is released (G30)",
-    ];
     on_both_targets(|target| {
         let run = ignite_test(target, "attack2.ignite", "", None);
+        assert_eq!(run.status, 0, "{target}:\n{}", run.output);
+        assert!(
+            run.output.contains("16 passed; 0 failed"),
+            "{target}:\n{}",
+            run.output
+        );
+    });
+}
+
+/// A stored end read into a temporary no binding holds
+/// (`tests/soak/temporaries.ignite`): consumed by a fn's result or
+/// returned by it, passed to `spawn`, read in a loop condition, taken by a
+/// call under `?` or beside a `?` that leaves, and pending in a task that
+/// fails. Each case fails on a copy never released (the soak's census) and
+/// on a copy released twice (the stored end stops delivering).
+#[test]
+fn stored_ends_read_into_temporaries_are_released_once() {
+    on_both_targets(|target| {
+        let run = ignite_test_at(target, &soak_program("temporaries.ignite"), "", None);
+        assert_eq!(run.status, 0, "{target}:\n{}", run.output);
+        assert!(
+            run.output.contains("5 passed; 0 failed"),
+            "{target}:\n{}",
+            run.output
+        );
+    });
+}
+
+/// Adversary cases (`tests/soak/temporaries_attack.ignite`): the store lets
+/// its own owner go before the temporary is used, so a copy released before
+/// its use or twice closes the end the temporary names; a temporary sent,
+/// put, passed to `spawn` directly or through a callee, aliased by a fn's
+/// result, on every path of `if`, `break`, `continue` and a short circuit,
+/// and a stream passed to a role call. A fresh end a callee moves to a task
+/// stays open for the task whether the callee rebinds it through a fn, a
+/// method, a role, a generic fn, a fn value, a field, an `if` or a `match`
+/// of calls, and whether the caller passes it as a temporary or a binding
+/// (`own::moves_fresh`); a call in a loop that passes the same end to a
+/// task on every round gives each task an owner of its own
+/// (`own::sole_mentions`).
+#[test]
+fn temporaries_used_after_the_store_let_go_are_released_once() {
+    on_both_targets(|target| {
+        let run = ignite_test_at(target, &soak_program("temporaries_attack.ignite"), "", None);
+        assert_eq!(run.status, 0, "{target}:\n{}", run.output);
+        assert!(
+            run.output.contains("19 passed; 0 failed"),
+            "{target}:\n{}",
+            run.output
+        );
+    });
+}
+
+/// Adversary cases (`tests/soak/temporaries_unreleased.ignite`): store
+/// reads no owner rule covers on LLVM (the receiver of a builtin method,
+/// the rest of a fresh value read for one field, a thrown-away match arm
+/// value, a read inside a record argument, a match binding put in a store
+/// inside `Some`). The Rust target drops them at the end of the statement.
+///
+/// Known gap, pre-existing (red at `f58a7733` too), filed as
+/// `story:llvm-temporaries-without-owner-rule`: on LLVM the five still keep
+/// the owner `copy_from_heap` added. This test holds today's state by name,
+/// each failing by growth of the handle census, so that a fix of any form,
+/// or a form that turns from a leak into an early or double release, turns
+/// it red and is taken into the expectation.
+#[test]
+fn five_temporary_forms_are_not_released_on_llvm_yet() {
+    const KNOWN_ON_LLVM: [&str; 5] = [
+        "a store read that is the receiver of a builtin method is released",
+        "the rest of a fresh value read for one field is released",
+        "a store read that is the thrown-away value of a match arm is released",
+        "a store read inside a record argument of a call is released",
+        "a match scrutinee whose arm puts the binding in a store inside Some is released",
+    ];
+    on_both_targets(|target| {
+        let run = ignite_test_at(
+            target,
+            &soak_program("temporaries_unreleased.ignite"),
+            "",
+            None,
+        );
         if target == "llvm" {
             assert_ne!(run.status, 0, "{target}:\n{}", run.output);
             assert!(
-                run.output.contains("12 passed; 4 failed"),
-                "known gap, decided in wave 8 (story:llvm-release-handle-temporaries): \
-                 {target} changed:\n{}",
+                run.output.contains("0 passed; 5 failed"),
+                "known gap (story:llvm-temporaries-without-owner-rule): {target} changed:\n{}",
                 run.output
             );
             for name in KNOWN_ON_LLVM {
                 assert!(
                     run.output
-                        .contains(&format!("test attack2/{name} ... FAILED")),
-                    "known gap, decided in wave 8: {name} no longer fails on {target}:\n{}",
+                        .contains(&format!("test temporaries_unreleased/{name} ... FAILED")),
+                    "known gap (story:llvm-temporaries-without-owner-rule): {name} no longer \
+                     fails on {target}:\n{}",
                     run.output
+                );
+                let failure = failure_of(&run.output, &format!("temporaries_unreleased/{name}"));
+                assert!(
+                    failure.contains("soak(200,")
+                        && failure.contains("Growth { kind: \"handles\", before: "),
+                    "known gap (story:llvm-temporaries-without-owner-rule): {name} no longer \
+                     fails by growth on {target}:\n{failure}"
                 );
             }
         } else {
             assert_eq!(run.status, 0, "{target}:\n{}", run.output);
             assert!(
-                run.output.contains("16 passed; 0 failed"),
+                run.output.contains("5 passed; 0 failed"),
                 "{target}:\n{}",
                 run.output
             );
         }
     });
+}
+
+/// Adversary cases, pass 2 (`soak/moves_attack.ignite`): an end a `spawn`
+/// moves to its task (`own::moves_fresh`, `own::sole_mentions`,
+/// `region::moved_to_task`) stays open for every other holder the caller
+/// kept: an alias, a record or a closure made before the call, an owned
+/// binding with an alias, a parameter bound by an arm's own `let`, a later
+/// mention, a match binding and a field of a parameter; and the owners a
+/// task gets are released once per round (the `over_pipe` shape of the
+/// golden `bounds.program.ll`, an end of an outer block, a stream a role
+/// call returns from an accepted temporary). The case of a list the callee
+/// reads with `at` is a known gap
+/// ([`an_element_read_from_a_list_and_moved_to_a_task_is_closed_early_on_llvm_yet`]).
+#[test]
+fn ends_moved_to_a_task_stay_open_for_every_other_holder() {
+    on_both_targets(|target| {
+        let run = ignite_test_at(target, &soak_program("moves_attack.ignite"), "", None);
+        assert_eq!(run.status, 0, "{target}:\n{}", run.output);
+        assert!(
+            run.output.contains("11 passed; 0 failed"),
+            "{target}:\n{}",
+            run.output
+        );
+    });
+}
+
+/// Adversary case, pass 2, moved unchanged to `soak/moves_aliases.ignite`:
+/// a callee reads an end from a list with `xs.at(0)` and spawns it.
+///
+/// Known gap, pre-existing (red at `f58a7733` and at v0.15.0 too), filed as
+/// `story:llvm-task-move-aliases`: `own::moves_fresh` calls the result of
+/// every builtin other than `copy()` fresh, so the task takes the list's
+/// owner of the end without one of its own and its release closes the end
+/// the caller still sends on. This test holds the LLVM failure, so a fix
+/// turns it red and the case goes back to the adversary's test.
+#[test]
+fn an_element_read_from_a_list_and_moved_to_a_task_is_closed_early_on_llvm_yet() {
+    const NAME: &str = "moves_aliases/an element a callee reads from a list and moves to a task \
+                        stays open for the list";
+    on_both_targets(|target| {
+        let run = ignite_test_at(target, &soak_program("moves_aliases.ignite"), "", None);
+        if target == "llvm" {
+            assert_ne!(run.status, 0, "{target}:\n{}", run.output);
+            assert!(
+                run.output.contains("0 passed; 1 failed")
+                    && run.output.contains(&format!("test {NAME} ... FAILED")),
+                "known gap (story:llvm-task-move-aliases): {target} changed:\n{}",
+                run.output
+            );
+            let failure = failure_of(&run.output, NAME);
+            assert!(
+                failure.contains("is not a channel sender"),
+                "known gap (story:llvm-task-move-aliases): {target} no longer fails by an early \
+                 release:\n{failure}"
+            );
+        } else {
+            assert_eq!(run.status, 0, "{target}:\n{}", run.output);
+            assert!(
+                run.output.contains("1 passed; 0 failed"),
+                "{target}:\n{}",
+                run.output
+            );
+        }
+    });
+}
+
+/// The failure report of the test `name` in the output of `ignite test`:
+/// from its `---- <name> stderr ----` line to the next report or the
+/// failure list; empty when there is none.
+fn failure_of<'o>(output: &'o str, name: &str) -> &'o str {
+    let head = format!("---- {name} stderr ----");
+    let Some(start) = output.find(&head) else {
+        return "";
+    };
+    let body = &output[start + head.len()..];
+    let end = ["\n---- ", "\nfailures:"]
+        .iter()
+        .filter_map(|marker| body.find(marker))
+        .min()
+        .unwrap_or(body.len());
+    &body[..end]
 }

@@ -1,0 +1,14 @@
+{
+  "at": "2026-11-11T08:26:59Z",
+  "actor": "human:timo",
+  "artifact": "story:ignored-tests-and-long-files-back",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "review-result:adversary-counts-pass-2",
+    "review": "review-result:adversary-counts-pass-2",
+    "outcome": "fixed"
+  }
+}

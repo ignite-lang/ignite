@@ -1,0 +1,514 @@
+package temporaries_attack
+
+// Adversary cases against the owner scopes of temporaries
+// (`story:llvm-release-handle-temporaries`, `docs/slice.md` 30.3). In
+// `temporaries.ignite` the store still holds its own owner while the
+// temporary is used, so a copy released before its use goes unseen. Here
+// the store lets its owner go first (`forget`), so a copy released early
+// or twice closes the end the temporary still names, and the soak finds a
+// copy never released. `crates/ignite/tests/leak.rs` runs them on both
+// targets.
+
+import std.runtime.{soak}
+import std.option.{is_some}
+
+test type Waiter {
+  id: Int
+  wake: Receiver<Int>
+}
+
+test fn open(senders: Store<Sender<Int>>) -> Waiter {
+  let (tx, rx) = Channel.bounded(1)
+  let id = senders.next_id()
+  senders.put(id, tx)
+  Waiter { id, wake = rx }
+}
+
+test fn close(senders: Store<Sender<Int>>, id: Int) -> Unit {
+  match senders.remove(id) {
+    Some(found) => {
+      let t: Sender<Int> = found
+      t.close()
+    }
+    None => {}
+  }
+}
+
+// Drops the stored end without closing it: its owner goes, the others stay.
+test fn forget(senders: Store<Sender<Int>>, id: Int) -> Unit {
+  let gone = senders.remove(id)
+}
+
+test fn is(got: Option<Int>, want: Int) -> Bool = match got {
+  Some(v) => v == want
+  None => false
+}
+
+test fn ring(found: Option<Sender<Int>>, v: Int) -> Bool = match found {
+  Some(s) => {
+    let t: Sender<Int> = s
+    t.try_send(v)
+  }
+  None => false
+}
+
+test fn still_sends(senders: Store<Sender<Int>>, w: Waiter) -> Bool {
+  let sent = match senders.get(w.id) {
+    Some(s) => {
+      let t: Sender<Int> = s
+      t.try_send(42)
+    }
+    None => false
+  }
+  sent && is(w.wake.receive_within(0 ms), 42)
+}
+
+// The callee uses the copy after the store let its owner go: only the
+// temporary's owner keeps the end open until the call is done.
+test fn ring_after(found: Option<Sender<Int>>, senders: Store<Sender<Int>>, id: Int) -> Bool {
+  forget(senders, id)
+  ring(found, 11)
+}
+
+test fn used_after_the_store(senders: Store<Sender<Int>>) -> Unit {
+  let w: Waiter = open(senders)
+  assert ring_after(senders.get(w.id), senders, w.id)
+  assert is(w.wake.receive_within(0 ms), 11)
+}
+
+test "a temporary a callee uses after the store let it go stays open until the call is done" {
+  let senders: Store<Sender<Int>> = Store.new()
+  assert soak(200, |run| used_after_the_store(senders)).growth == []
+}
+
+// Sent on a channel: the heap copy is an owner of its own.
+test fn ring_got(got: Option<Option<Sender<Int>>>, v: Int) -> Bool = match got {
+  Some(found) => ring(found, v)
+  None => false
+}
+
+test fn sent_once(senders: Store<Sender<Int>>) -> Unit {
+  let w: Waiter = open(senders)
+  let (ctx, crx) = Channel.bounded(1)
+  let sent = ctx.send(senders.get(w.id))
+  forget(senders, w.id)
+  assert ring_got(crx.receive_within(1 seconds), 5) && is(w.wake.receive_within(0 ms), 5)
+}
+
+test "a temporary sent on a channel is released once and the sent copy stays open" {
+  let senders: Store<Sender<Int>> = Store.new()
+  assert soak(200, |run| sent_once(senders)).growth == []
+}
+
+// Put in another store: the stored copy is an owner of its own.
+test fn put_once(senders: Store<Sender<Int>>, other: Store<Option<Sender<Int>>>) -> Unit {
+  let w: Waiter = open(senders)
+  other.put(1, senders.get(w.id))
+  forget(senders, w.id)
+  let rung = match other.remove(1) {
+    Some(found) => ring(found, 6)
+    None => false
+  }
+  assert rung && is(w.wake.receive_within(0 ms), 6)
+}
+
+test "a temporary put in another store is released once and the stored copy stays open" {
+  let senders: Store<Sender<Int>> = Store.new()
+  let other: Store<Option<Sender<Int>>> = Store.new()
+  assert soak(200, |run| put_once(senders, other)).growth == []
+}
+
+// Handed to a task that outlives the spawner, directly and through a
+// callee: the task uses the copy after the spawner released its own.
+test fn ring_later(found: Option<Sender<Int>>, go: Receiver<Int>, done: Sender<Int>) -> Result<Unit, IoError> {
+  let g = go.receive_within(5 seconds)
+  let rung = ring(found, 7)
+  let d = done.send(if rung { 1 } else { 0 })
+  Ok(())
+}
+
+test fn starter(senders: Store<Sender<Int>>, id: Int, go: Receiver<Int>, done: Sender<Int>) -> Unit {
+  spawn ring_later(senders.get(id), go, done)
+}
+
+test fn launch(found: Option<Sender<Int>>, go: Receiver<Int>, done: Sender<Int>) -> Unit {
+  spawn ring_later(found, go, done)
+}
+
+test fn outlived(senders: Store<Sender<Int>>, through_callee: Bool) -> Unit {
+  let tasks = Runtime.census().tasks
+  let w: Waiter = open(senders)
+  let (gtx, grx) = Channel.bounded(1)
+  let (dtx, drx) = Channel.bounded(1)
+  if through_callee {
+    launch(senders.get(w.id), grx, dtx)
+  } else {
+    starter(senders, w.id, grx, dtx)
+  }
+  forget(senders, w.id)
+  let g = gtx.send(1)
+  assert is(drx.receive_within(5 seconds), 1)
+  assert Runtime.settle(tasks, 5 seconds)
+  assert is(w.wake.receive_within(0 ms), 7)
+}
+
+test "a temporary passed to spawn stays open for a task that outlives its spawner" {
+  let senders: Store<Sender<Int>> = Store.new()
+  assert soak(100, |run| outlived(senders, false)).growth == []
+}
+
+test "a temporary a callee hands to a task stays open after the call" {
+  let senders: Store<Sender<Int>> = Store.new()
+  assert soak(100, |run| outlived(senders, true)).growth == []
+}
+
+// A fn whose result aliases its argument: the argument is no temporary of
+// the call, so the result stays open after the store let go.
+test fn pass(found: Option<Sender<Int>>) -> Option<Sender<Int>> = found
+
+test fn aliased(senders: Store<Sender<Int>>) -> Unit {
+  let w: Waiter = open(senders)
+  let kept = pass(senders.get(w.id))
+  forget(senders, w.id)
+  assert ring(kept, 12)
+  assert is(w.wake.receive_within(0 ms), 12)
+}
+
+test "a temporary a fn's result aliases stays open after the call" {
+  let senders: Store<Sender<Int>> = Store.new()
+  let runs = soak(20, |run| aliased(senders))
+}
+
+// A fresh end handed to a callee that rebinds it through a call and
+// spawns with the rebinding: `region::moved_to_task` moves the handle to
+// the task without an owner of its own, so the caller's release of the
+// temporary closes the end the task still uses.
+test fn ring_end(t: Sender<Int>, go: Receiver<Int>, done: Sender<Int>) -> Result<Unit, IoError> {
+  let g = go.receive_within(5 seconds)
+  let ok = t.try_send(3)
+  let d = done.send(if ok { 1 } else { 0 })
+  Ok(())
+}
+
+test fn same(t: Sender<Int>) -> Sender<Int> = t
+
+test fn launch_end(t: Sender<Int>, go: Receiver<Int>, done: Sender<Int>) -> Unit {
+  let u = same(t)
+  spawn ring_end(u, go, done)
+}
+
+test fn made(back: Sender<Receiver<Int>>) -> Sender<Int> {
+  let (tx, rx) = Channel.bounded(1)
+  let sent = back.send(rx)
+  tx
+}
+
+test fn moved_by_callee() -> Unit {
+  let tasks = Runtime.census().tasks
+  let (btx, brx) = Channel.bounded(1)
+  let (gtx, grx) = Channel.bounded(1)
+  let (dtx, drx) = Channel.bounded(1)
+  launch_end(made(btx), grx, dtx)
+  let r = brx.receive_within(1 seconds)
+  let g = gtx.send(1)
+  assert is(drx.receive_within(5 seconds), 1)
+  assert Runtime.settle(tasks, 5 seconds)
+  let got = match r {
+    Some(rx) => {
+      let x: Receiver<Int> = rx
+      x.receive_within(0 ms)
+    }
+    None => None
+  }
+  assert is(got, 3)
+}
+
+test "a fresh end a callee moves to a task stays open for the task" {
+  let runs = soak(20, |run| moved_by_callee())
+}
+
+// The same move through every other form whose value can be its
+// argument: a method call, a role call, a generic fn, a fn value, a field
+// of a call result, an `if` and a `match` whose arms are calls. None of
+// them makes a fresh end, so the task needs an owner of its own; a task
+// given the caller's owner instead loses the end when the caller's
+// temporary is released.
+test type Holder {
+  end: Sender<Int>
+}
+
+test fn hold(t: Sender<Int>) -> Holder = Holder { end = t }
+
+test fn ident<T>(x: T) -> T = x
+
+protocol Pass {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> TcpStream requires [stream.write] {
+    return stream
+  }
+}
+
+test fn launch_method(t: Sender<Int>, go: Receiver<Int>, done: Sender<Int>) -> Unit {
+  let u = t.same()
+  spawn ring_end(u, go, done)
+}
+
+test fn write_end(s: TcpStream, go: Receiver<Int>, done: Sender<Int>) -> Result<Unit, IoError> {
+  let g = go.receive_within(5 seconds)
+  let ok = match s.write_all(b"ok") {
+    Ok(_) => 1
+    Err(_) => 0
+  }
+  let d = done.send(ok)
+  Ok(())
+}
+
+test fn launch_role(t: TcpStream, go: Receiver<Int>, done: Sender<Int>) -> Unit {
+  let u = Pass.serve(t, |x| x)
+  spawn write_end(u, go, done)
+}
+
+// The role form takes a stream: the accepted stream is the temporary.
+test fn role_moved() -> Result<Unit, IoError> {
+  let tasks = Runtime.census().tasks
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let client = TcpStream.connect("127.0.0.1", listener.local_port())?
+  let (gtx, grx) = Channel.bounded(1)
+  let (dtx, drx) = Channel.bounded(1)
+  launch_role(listener.accept()?, grx, dtx)
+  let g = gtx.send(1)
+  assert is(drx.receive_within(5 seconds), 1)
+  assert Runtime.settle(tasks, 5 seconds)
+  Ok(())
+}
+
+test fn role_moved_run() -> Unit {
+  let ok = match role_moved() {
+    Ok(_) => true
+    Err(_) => false
+  }
+  assert ok
+}
+
+test fn launch_generic(t: Sender<Int>, go: Receiver<Int>, done: Sender<Int>) -> Unit {
+  let u = ident(t)
+  spawn ring_end(u, go, done)
+}
+
+test fn launch_value(t: Sender<Int>, go: Receiver<Int>, done: Sender<Int>, f: fn(Sender<Int>) -> Sender<Int>) -> Unit {
+  let u = f(t)
+  spawn ring_end(u, go, done)
+}
+
+test fn launch_field(t: Sender<Int>, go: Receiver<Int>, done: Sender<Int>) -> Unit {
+  let u = hold(t).end
+  spawn ring_end(u, go, done)
+}
+
+test fn launch_if(t: Sender<Int>, go: Receiver<Int>, done: Sender<Int>, n: Int) -> Unit {
+  let u = if n > 0 { same(t) } else { ident(t) }
+  spawn ring_end(u, go, done)
+}
+
+test fn launch_match(t: Sender<Int>, go: Receiver<Int>, done: Sender<Int>, n: Int) -> Unit {
+  let u = match n {
+    0 => same(t)
+    _ => ident(t)
+  }
+  spawn ring_end(u, go, done)
+}
+
+test fn moved_through(form: Int) -> Unit {
+  let tasks = Runtime.census().tasks
+  let (btx, brx) = Channel.bounded(1)
+  let (gtx, grx) = Channel.bounded(1)
+  let (dtx, drx) = Channel.bounded(1)
+  match form {
+    0 => launch_method(made(btx), grx, dtx)
+    2 => launch_generic(made(btx), grx, dtx)
+    3 => launch_value(made(btx), grx, dtx, same)
+    4 => launch_field(made(btx), grx, dtx)
+    5 => launch_if(made(btx), grx, dtx, 1)
+    _ => launch_match(made(btx), grx, dtx, 0)
+  }
+  let r = brx.receive_within(1 seconds)
+  let g = gtx.send(1)
+  assert is(drx.receive_within(5 seconds), 1)
+  assert Runtime.settle(tasks, 5 seconds)
+  let got = match r {
+    Some(rx) => {
+      let x: Receiver<Int> = rx
+      x.receive_within(0 ms)
+    }
+    None => None
+  }
+  assert is(got, 3)
+}
+
+test "a fresh end a callee moves to a task through a method call stays open for the task" {
+  let runs = soak(20, |run| moved_through(0))
+}
+
+test "a fresh end a callee moves to a task through a role call stays open for the task" {
+  let runs = soak(20, |run| role_moved_run())
+}
+
+test "a fresh end a callee moves to a task through a generic fn stays open for the task" {
+  let runs = soak(20, |run| moved_through(2))
+}
+
+test "a fresh end a callee moves to a task through a fn value stays open for the task" {
+  let runs = soak(20, |run| moved_through(3))
+}
+
+test "a fresh end a callee moves to a task through a field of a call stays open for the task" {
+  let runs = soak(20, |run| moved_through(4))
+}
+
+test "a fresh end a callee moves to a task through an if of calls stays open for the task" {
+  let runs = soak(20, |run| moved_through(5))
+}
+
+test "a fresh end a callee moves to a task through a match of calls stays open for the task" {
+  let runs = soak(20, |run| moved_through(6))
+}
+
+// The binding form of `moved_by_callee`: the caller's inner block owns the
+// end and releases it when it is left, before the task uses it.
+test fn moved_from_binding() -> Unit {
+  let tasks = Runtime.census().tasks
+  let (btx, brx) = Channel.bounded(1)
+  let (gtx, grx) = Channel.bounded(1)
+  let (dtx, drx) = Channel.bounded(1)
+  if tasks >= 0 {
+    let t = made(btx)
+    launch_end(t, grx, dtx)
+  }
+  let r = brx.receive_within(1 seconds)
+  let g = gtx.send(1)
+  assert is(drx.receive_within(5 seconds), 1)
+  assert Runtime.settle(tasks, 5 seconds)
+  let got = match r {
+    Some(rx) => {
+      let x: Receiver<Int> = rx
+      x.receive_within(0 ms)
+    }
+    None => None
+  }
+  assert is(got, 3)
+}
+
+test "a fresh end bound by the caller and moved to a task by a callee stays open for the task" {
+  let runs = soak(20, |run| moved_from_binding())
+}
+
+// A binding whose one mention is in a loop body (`own::sole_mentions`):
+// every round's call returns the same end, so no round's task may take the
+// end's only owner; the second task still sends after the first has ended.
+test fn take(r: Option<Receiver<Int>>) -> Option<Int> = match r {
+  Some(rx) => {
+    let x: Receiver<Int> = rx
+    x.receive_within(0 ms)
+  }
+  None => None
+}
+
+test fn moved_in_a_loop() -> Unit {
+  let tasks = Runtime.census().tasks
+  let (btx, brx) = Channel.bounded(1)
+  let (gtx, grx) = Channel.bounded(2)
+  let (dtx, drx) = Channel.bounded(2)
+  let t = made(btx)
+  for round in [1, 2] {
+    let u = same(t)
+    spawn ring_end(u, grx, dtx)
+  }
+  let r = brx.receive_within(1 seconds)
+  let g1 = gtx.send(1)
+  assert is(drx.receive_within(5 seconds), 1)
+  assert Runtime.settle(tasks + 1, 5 seconds)
+  assert is(take(r), 3)
+  let g2 = gtx.send(1)
+  assert is(drx.receive_within(5 seconds), 1)
+  assert Runtime.settle(tasks, 5 seconds)
+  assert is(take(r), 3)
+}
+
+test "a fresh end a call in a loop passes to a task on every round stays open for each task" {
+  let runs = soak(20, |run| moved_in_a_loop())
+}
+
+// Both branches of an `if`, `break` and `continue` inside an argument, and
+// a short circuit whose right side does not run: one release per copy on
+// every path.
+test fn both(found: Option<Sender<Int>>, n: Int) -> Bool = is_some(found) && n >= 0
+
+test fn paths(senders: Store<Sender<Int>>, flip: Bool) -> Unit {
+  let w: Waiter = open(senders)
+  let ok = if flip { is_some(senders.get(w.id)) } else { ring(senders.get(w.id), 9) }
+  assert ok
+  if !flip {
+    assert is(w.wake.receive_within(0 ms), 9)
+  }
+  var n = 0
+  loop {
+    n = n + 1
+    let k = both(senders.get(w.id), if n > 4 { break } else { if n == 2 { continue } else { n } })
+    assert k
+  }
+  assert n == 5
+  let a = w.id < 0 && is_some(senders.get(w.id))
+  let b = w.id >= 0 || is_some(senders.get(w.id))
+  assert !a && b
+  assert still_sends(senders, w)
+  close(senders, w.id)
+}
+
+test "a temporary on every path of if, break, continue and a short circuit is released once" {
+  let senders: Store<Sender<Int>> = Store.new()
+  assert soak(200, |run| paths(senders, run % 2 == 0)).growth == []
+}
+
+// A generic callee, nested calls and two temporaries in one call.
+test fn present<T>(x: Option<T>) -> Bool = match x {
+  Some(_) => true
+  None => false
+}
+
+test fn two(a: Option<Sender<Int>>, b: Option<Sender<Int>>) -> Bool = is_some(a) && is_some(b)
+
+test fn calls(senders: Store<Sender<Int>>) -> Unit {
+  let w: Waiter = open(senders)
+  assert present(senders.get(w.id))
+  assert !(!is_some(senders.get(w.id)))
+  assert two(senders.get(w.id), senders.get(w.id))
+  assert still_sends(senders, w)
+  close(senders, w.id)
+}
+
+test "temporaries of a generic callee, nested calls and two in one call are released once" {
+  let senders: Store<Sender<Int>> = Store.new()
+  assert soak(200, |run| calls(senders)).growth == []
+}
+
+// A role call: a stream accepted under `?` and passed to the role is a
+// temporary of the call, released when it returns.
+protocol Greet {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> Result<Unit, IoError> requires [stream.write] {
+    return stream.write_all(b"ok")
+  }
+}
+
+test fn role_once() -> Result<Unit, IoError> {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let client = TcpStream.connect("127.0.0.1", listener.local_port())?
+  let r = Greet.serve(listener.accept()?, |t| t)
+  Ok(())
+}
+
+test fn role_run(run: Int) -> Unit {
+  let r = role_once()
+}
+
+test "an accepted stream passed to a role call is released" {
+  assert soak(100, |run| role_run(run)).growth == []
+}
