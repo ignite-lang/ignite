@@ -10510,6 +10510,47 @@ counted object holds (both targets). Release builds ignore the variable.
   (`fixtures/leak/repro.ignite`) on both targets and runs every mode at `N=20000`: each mode's
   peak resident size (`VmHWM`, the lowest of up to three runs) is within 2 MB of `none`'s.
 
+### 33.5 The evaluator's model of the substrate under a test
+
+Story `eval-substrate-model`. `Evaluator::run_test` runs a test's body as task 0 of an
+in-memory, deterministic model of the substrate (`crates/ignite-eval/src/substrate.rs`). The
+model exists only while a test runs: `ignite check`, `ignite plan` and every other evaluation
+at compile time still report `evaluation failed: builtin `X` has no value at compile time` for
+the same builtins.
+
+| has a value under a test | as on the targets |
+|---|---|
+| `Store.new()` and every `Store<T>` method | ids from 1, values in id order; a copy shares the store |
+| `Setting.of`, `CommandLine.of`, `Environment.of` and their methods | what the capability was made of; the last entry of a variable wins |
+| `Pipe.pair()`, every `PipeStream` method and the `ByteStream` methods on a pipe end | 18.4: a task's writes wait in the send buffer until a flush point (a read, `Process.flush()`, an operation that waits, the task's end, 64 KiB, `close`, the end's drop) and arrive as one batch; the 16 MiB queue, `pipe peer is gone`, `write to a closed stream`, the urgent byte and the idle timeout |
+| `spawn` of a fn, a role, a fn value, a constant or a field fn, and calls of a role | the callee and arguments are evaluated by the spawning task; a fn value's call only when every argument is a name, as the Rust target evaluates that form inside the task |
+| `Channel.bounded` (capacity of at least 1), every `Sender` and `Receiver` method | 30: a waiting `send` or `receive` first delivers the task's writes |
+| `Clock.monotonic()`, `Clock.sleep(d)` | virtual time: nanoseconds since the test began, advanced only by the scheduler |
+| `Process.flush()` | delivers the task's writes |
+
+Tasks are cooperative. The first task in spawn order that can run holds the turn until it waits
+(a read, a `send` into a full channel, a `receive` from an empty one, a sleep) or ends; then
+the turn passes to the first task, in spawn order, that is ready or whose deadline has come.
+When none is, the virtual time moves to the earliest deadline; with no deadline the test ends
+as `evaluation failed: every task of the model waits and none has a deadline (a deadlock)`.
+Every task has an OS thread of its own and only the turn holder runs, so the order is the same
+on every run. The tasks share the test's fuel: a task that never waits ends the test on fuel. A
+failure (14.8) ends only its task, as on the targets; the test is over when its body ends. A
+last use moves its value (20.3.1), so a handle given to a task is dropped with the task. No
+wall clock is read: a timeout or a sleep costs no time.
+
+The values the model holds (stored values, queued values, pipe bytes by 64) count against the
+node limit (15.3). A handle is not encodable (E118) and its debug text is the type's name
+(`<PipeStream>`). Still without a value under a test: TCP and TLS, `Launcher`, `Directory`,
+`Entropy`, `Stdout` and `Stderr`, `Process.exit`, `Process.open_files_limit`, `Clock.now()`,
+`Runtime.census()` and `Runtime.settle` (33.2), and `main`. A unit that reaches one of them
+stays one the evaluator cannot run (`quality/baseline.json` `eval_cannot_run`).
+
+Tests: `crates/ignite/tests/eval_model.rs` (the order of tasks, the deadlock report, a task
+that ends on fuel, a failing task that ends only itself, pipe flush points and batches, virtual
+time, and the refusal outside a test) and the differential corpus run, where every unit the
+model runs agrees with the Rust target.
+
 ## 34 SHA-1, SHA-256 and base64 in std (`std.digest`, `std.encoding`)
 
 **Status: implemented in `story:std-digest`.**

@@ -7,8 +7,6 @@ description = "Ignite compile-time evaluator: property values, the system model,
 autotests = false
 
 [lib]
-# Cases live in tests/main.rs; re-enable before adding source unit tests.
-test = false
 bench = false
 
 [dependencies]
