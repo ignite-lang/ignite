@@ -2113,9 +2113,18 @@ fn cargo_output_dir(target_dir: &Path, release: bool, triple: Option<&str>) -> P
 /// every configured `rustflags`.
 const STATIC_RUSTFLAGS: &str = r#"["-C", "relocation-model=static"]"#;
 
+/// The `rustflags` of a dev Rust build, for every target (`cfg(all())`,
+/// joined with the flags configured for the target): the linker writes
+/// the debug sections compressed with zlib, as on the LLVM target
+/// (`llvm_build::DEV_LINK_FLAGS`, row 3.2). A generated manifest cannot
+/// carry link arguments, and a build script would cost a compilation per
+/// build. `RUSTFLAGS` in the environment replaces them.
+const DEV_RUSTFLAGS: &str =
+    r#"target.'cfg(all())'.rustflags=["-C", "link-arg=-Wl,--compress-debug-sections=zlib"]"#;
+
 /// `cargo build` of the generated project in `out`, `--quiet` when `quiet`,
-/// `--target <triple>` with [`STATIC_RUSTFLAGS`] for a static build
-/// (`docs/slice.md` 23.5).
+/// [`DEV_RUSTFLAGS`] without `--release`, `--target <triple>` with
+/// [`STATIC_RUSTFLAGS`] for a static build (`docs/slice.md` 23.5).
 /// Cargo is `$CARGO` when set, else `cargo` from `PATH`.
 fn cargo_build(
     out: &Path,
@@ -2135,6 +2144,8 @@ fn cargo_build(
         .arg(target_dir);
     if release {
         command.arg("--release");
+    } else {
+        command.arg("--config").arg(DEV_RUSTFLAGS);
     }
     if let Some(triple) = triple {
         command

@@ -374,6 +374,60 @@ fn breakpoint_frame_has_its_line(backtrace: &str) -> bool {
         .is_some_and(|line| frame_in(line, "src/report.rs"))
 }
 
+/// The `.debug_*` sections of `file`: name, bytes and whether it is
+/// compressed (`readelf -SW`: a compressed section has the flag `C`).
+fn debug_sections(file: &Path) -> Vec<(String, u64, bool)> {
+    let sections = text(&run(Command::new("readelf").arg("-SW").arg(file)).stdout);
+    let mut debug = Vec::new();
+    for line in sections.lines() {
+        let Some(at) = line.find("] ") else {
+            continue;
+        };
+        let fields: Vec<&str> = line[at + 2..].split_whitespace().collect();
+        let Some(name) = fields.first().filter(|name| name.starts_with(".debug_")) else {
+            continue;
+        };
+        // Name, type, address, offset, size, entry size, then the flags
+        // (absent for a section without any).
+        let flags = fields.get(6).copied().unwrap_or("");
+        let size = fields
+            .get(4)
+            .and_then(|size| u64::from_str_radix(size, 16).ok())
+            .unwrap_or(u64::MAX);
+        let compressed = flags.contains('C') && !flags.chars().any(|c| c.is_ascii_digit());
+        debug.push(((*name).to_string(), size, compressed));
+    }
+    debug
+}
+
+/// Story `binary-size-back`, row 3.2: the linker writes a dev
+/// executable's debug strings compressed (zlib, which gdb and the
+/// standard library's symbolizer read), and with `every` each other debug
+/// section of at least 1 KiB too (a linker leaves a section of a few bytes
+/// as it is when compressing would not make it smaller). An LLVM dev link
+/// with lld compresses the strings only (`DEV_LLD_COMPRESSION` in
+/// `src/llvm_build.rs`); a Rust dev link every debug section.
+fn assert_debug_compressed(file: &Path, every: bool) {
+    let sections = debug_sections(file);
+    assert!(
+        sections
+            .iter()
+            .any(|(name, _, compressed)| name == ".debug_str" && *compressed),
+        "{}: .debug_str is not compressed: {sections:?}",
+        file.display()
+    );
+    let plain: Vec<&String> = sections
+        .iter()
+        .filter(|(_, size, compressed)| every && *size >= 1024 && !compressed)
+        .map(|(name, _, _)| name)
+        .collect();
+    assert!(
+        plain.is_empty(),
+        "{}: debug sections not compressed: {plain:?}",
+        file.display()
+    );
+}
+
 /// `docs/llvm.md` section 9: a dev backtrace of a failing program names
 /// file and line of the substrate's frames and of the Ignite source: on
 /// the LLVM target the Ignite fn's frame itself (its debug metadata), and
@@ -382,6 +436,8 @@ fn breakpoint_frame_has_its_line(backtrace: &str) -> bool {
 /// names the Ignite source. The substrate frames checked are of code its
 /// crates compile themselves (`failure_report`, `ignite_rt_fail_arith`),
 /// not generic instances a member compiles with its own line tables.
+/// Both executables have their debug sections compressed
+/// ([`assert_debug_compressed`]): the backtrace is read from those.
 #[test]
 fn dev_backtrace_names_ignite_and_substrate_lines_on_both_targets() {
     let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/backtrace.ignite");
@@ -391,6 +447,7 @@ fn dev_backtrace_names_ignite_and_substrate_lines_on_both_targets() {
     run(ignite_build(&source, "llvm", &llvm)
         .arg("--runtime")
         .arg(common::runtime_archive()));
+    assert_debug_compressed(&llvm.join("bin/overflow"), false);
     let backtrace = gdb_backtrace(&llvm.join("bin/overflow"));
     assert!(
         frames(&backtrace)
@@ -414,6 +471,7 @@ fn dev_backtrace_names_ignite_and_substrate_lines_on_both_targets() {
     run(ignite_build(&source, "rust", &rust)
         .arg("--target-dir")
         .arg(&target));
+    assert_debug_compressed(&target.join("debug/overflow"), true);
     let backtrace = gdb_backtrace(&target.join("debug/overflow"));
     assert!(
         breakpoint_frame_has_its_line(&backtrace),

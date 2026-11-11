@@ -358,6 +358,21 @@ pub const LINK_FLAGS: &[&str] = &["-Wl,--gc-sections"];
 /// release profile does (`strip = "debuginfo"`).
 pub const RELEASE_LINK_FLAGS: &[&str] = &["-Wl,--strip-debug"];
 
+/// A dev executable linked without lld has its debug sections written
+/// compressed with zlib, which gdb, lldb, binutils and the standard
+/// library's symbolizer read (zstd the last does not): about half of the
+/// executable's bytes (row 3.2 of `docs/quality.md`, story
+/// `binary-size-back`). The linker reads the same input and compresses what
+/// it writes, at zlib's fastest level.
+pub const DEV_LINK_FLAGS: &[&str] = &["-Wl,--compress-debug-sections=zlib"];
+
+/// What a dev link with lld compresses instead of [`DEV_LINK_FLAGS`]: the
+/// debug strings only, the most bytes per instruction of the link (the
+/// mangled names of every function; `todod` 10.4 to 8.2 MB for a third of
+/// the link's instructions, where every debug section would cost the link
+/// three times its instructions for 4.7 MB).
+pub const DEV_LLD_COMPRESSION: &str = "-Wl,--compress-sections=.debug_str=zlib";
+
 /// Link flags of a dev build that finds lld ([`dev_lld`]), before the
 /// inputs. A dev link copies and relocates the debug sections of every
 /// archive member it loads; lld maps the archive and works on all cores
@@ -383,7 +398,8 @@ fn dev_lld(options: &BuildOptions, clang: &Path) -> bool {
 /// The arguments of every link of a build before its objects: the musl
 /// kit's start files with `--static`, ThinLTO with the bitcode runtime
 /// ([`LTO_LINK_FLAGS`]), else lld on a dev build that finds it
-/// ([`DEV_LLD_FLAGS`]).
+/// ([`DEV_LLD_FLAGS`]) with [`DEV_LLD_COMPRESSION`], else on a dev build
+/// [`DEV_LINK_FLAGS`].
 fn link_flags_before(
     options: &BuildOptions,
     kit: Option<&crate::musl::Kit>,
@@ -401,6 +417,9 @@ fn link_flags_before(
         args.push(format!("-Wl,--thinlto-cache-dir={}", cache.display()).into());
     } else if kit.is_none() && dev_lld(options, clang) {
         args.extend(DEV_LLD_FLAGS.iter().map(Into::into));
+        args.push(DEV_LLD_COMPRESSION.into());
+    } else if !options.release {
+        args.extend(DEV_LINK_FLAGS.iter().map(Into::into));
     }
     args
 }

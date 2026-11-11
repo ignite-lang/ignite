@@ -28,9 +28,9 @@ std/**/*.ignite, program.ignite --parse--> --check--> --type (ignite-types)--> -
 writes `DIR/llvm/{std.ll, program.ll, main_<exe>.ll}`, runs
 `clang -c -O0 -g -ffunction-sections -fdata-sections -Werror=override-module --target=<triple>`
 (`-O2` with `--release`) on each, links each executable with
-`clang -o DIR/bin/<exe> --target=<triple> [-fuse-ld=lld] main_<exe>.o program.o std.o <runtime> -Wl,--gc-sections [-Wl,--strip-debug] -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc`
+`clang -o DIR/bin/<exe> --target=<triple> [-fuse-ld=lld -Wl,--compress-sections=.debug_str=zlib | -Wl,--compress-debug-sections=zlib] main_<exe>.o program.o std.o <runtime> -Wl,--gc-sections [-Wl,--strip-debug] -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc`
 (`-Wl,--strip-debug` with `--release` only, as cargo's release profile drops debug
-information; the libraries are the list `cargo rustc -p ignite-rt --print native-static-libs`
+information; the compression without `--release`, below; the libraries are the list `cargo rustc -p ignite-rt --print native-static-libs`
 prints, fixed in the driver; `-fuse-ld=lld` on a build without `--release`, `--triple` and
 `--static` when `ld.lld` lies beside the clang the driver runs, its symbolic links resolved,
 else clang's default linker links), and prints `built DIR/bin/<exe>`. Exit statuses as for the Rust
@@ -59,6 +59,20 @@ still names the files and lines of the Ignite source and of both crates' frames
 (`dev_build::` in `crates/ignite/tests/dev_build.rs`). lld, where it lies beside clang, links
 on all cores and maps the archive instead of reading it section by section; an executable
 it links carries a build id as one GNU ld links does.
+
+Compressed debug sections (story `binary-size-back`, row 3.2). A dev link writes debug
+sections compressed with zlib at its fastest level; the linker reads the same input and
+compresses what it writes. With lld it compresses the debug strings only
+(`-Wl,--compress-sections=.debug_str=zlib`: `todod` 10.4 to 8.2 MB, the link's instructions
+270 to 428 M), with another linker every debug section
+(`-Wl,--compress-debug-sections=zlib`, which GNU ld knows: 4.7 MB, 746 M with lld). gdb,
+lldb, binutils and the standard library's symbolizer read zlib sections (zstd the last does
+not), so a backtrace keeps its files and lines
+(`dev_build::dev_backtrace_names_ignite_and_substrate_lines_on_both_targets` asserts the
+compression it reads through). A dev build on the Rust target compresses every debug
+section (its linker is the toolchain's choice or the user's), passed with
+`--config target.'cfg(all())'.rustflags`, joined with the rustflags configured for the target;
+`RUSTFLAGS` in the environment replaces it.
 
 LTO (story `llvm-lto-runtime`). A `-linux-gnu` driver carries the runtime twice: the native
 archive and the same archive built with `-Clinker-plugin-lto`, whose Rust code is LLVM
