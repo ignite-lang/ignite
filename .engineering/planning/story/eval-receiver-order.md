@@ -2,9 +2,11 @@
 format: aep.planning-md/3
 id: story:eval-receiver-order
 kind: story
-status: draft
+status: archived
 title: Evaluator evaluates a builtin's receiver first
-revision: 1
+revision: 2
+transitions:
+- {from: "draft", to: "archived", at: "2026-11-11T23:23:02Z", actor: "human:timo", revision: 2}
 ---
 # Story: eval-receiver-order
 

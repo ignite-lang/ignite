@@ -2,14 +2,15 @@
 format: aep.planning-md/3
 id: story:release-rule-names-a-cell-inside-its-tolerance
 kind: story
-status: active
+status: implemented
 title: A release tracks the rows that are worse than the last release and is not refused by them
 relations:
 - informed_by: story:readiness-task-stealing
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-11T21:27:01Z", actor: "human:timo", revision: 4}
 - {from: "proposed", to: "active", at: "2026-11-11T21:27:01Z", actor: "human:timo", revision: 5}
+- {from: "active", to: "implemented", at: "2026-11-11T23:22:42Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 # Story: a release tracks the rows that are worse than the last release and is not refused by them
 

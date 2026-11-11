@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:build-time-back
 kind: story
-status: active
+status: implemented
 title: A dev build, a check and a plan take no longer than at v0.15.0
 scope:
 - confidence: cited
@@ -21,10 +21,11 @@ scope:
   path: quality/baseline.json
 - confidence: inferred
   path: tools/ignite-perf/src/remote-user-data.sh
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-11T00:24:53Z", actor: "human:timo", revision: 4, executor: "agent:claude-coordinator", correlation: "wave-11"}
 - {from: "proposed", to: "active", at: "2026-11-11T00:24:53Z", actor: "human:timo", revision: 5, executor: "agent:claude-coordinator", correlation: "wave-11"}
+- {from: "active", to: "implemented", at: "2026-11-11T23:22:37Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 # Story: a dev build, a check and a plan take no longer than at v0.15.0
 

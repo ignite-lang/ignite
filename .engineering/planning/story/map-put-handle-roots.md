@@ -2,11 +2,13 @@
 format: aep.planning-md/3
 id: story:map-put-handle-roots
 kind: story
-status: draft
+status: archived
 title: A handle stored in a Map keeps its roots
 relations:
 - informed_by: review-result:adversary-ownership-pass-1
-revision: 1
+revision: 2
+transitions:
+- {from: "draft", to: "archived", at: "2026-11-11T23:23:02Z", actor: "human:timo", revision: 2}
 ---
 # Story: map-put-handle-roots
 

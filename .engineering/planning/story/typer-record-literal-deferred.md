@@ -2,10 +2,12 @@
 format: aep.planning-md/3
 id: story:typer-record-literal-deferred
 kind: story
-status: draft
+status: archived
 title: A record literal argument is typed after the arguments that bind its parameters
 summary: Record literal arguments are deferred to the second typing pass, as closures are.
-revision: 1
+revision: 2
+transitions:
+- {from: "draft", to: "archived", at: "2026-11-11T23:22:57Z", actor: "human:timo", revision: 2}
 ---
 # Story: A record literal argument is typed after the arguments that bind its parameters
 

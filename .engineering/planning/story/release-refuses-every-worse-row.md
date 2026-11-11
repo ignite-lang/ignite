@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:release-refuses-every-worse-row
 kind: story
-status: active
+status: archived
 title: A release is refused for every row worse than the last release
 relations:
 - supersedes: story:remote-refusals-honour-decisions
@@ -17,10 +17,11 @@ scope:
   path: tools/ignite-perf/src/remote.rs
 - confidence: inferred
   path: tools/ignite-perf/tests
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-11T00:24:52Z", actor: "human:timo", revision: 4, executor: "agent:claude-coordinator", correlation: "wave-11"}
 - {from: "proposed", to: "active", at: "2026-11-11T00:24:52Z", actor: "human:timo", revision: 5, executor: "agent:claude-coordinator", correlation: "wave-11"}
+- {from: "active", to: "archived", at: "2026-11-11T23:23:02Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 # Story: a release is refused for every row worse than the last release
 

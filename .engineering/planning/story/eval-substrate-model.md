@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:eval-substrate-model
 kind: story
-status: active
+status: implemented
 title: The evaluator runs tests over in-memory stores, pipes, tasks and channels
 scope:
 - confidence: cited
@@ -13,10 +13,11 @@ scope:
   path: docs/slice.md
 - confidence: inferred
   path: quality/baseline.json
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-11T00:24:54Z", actor: "human:timo", revision: 4, executor: "agent:claude-coordinator", correlation: "wave-11"}
 - {from: "proposed", to: "active", at: "2026-11-11T00:24:54Z", actor: "human:timo", revision: 5, executor: "agent:claude-coordinator", correlation: "wave-11"}
+- {from: "active", to: "implemented", at: "2026-11-11T23:22:41Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 # Story: the evaluator runs tests over in-memory stores, pipes, tasks and channels
 

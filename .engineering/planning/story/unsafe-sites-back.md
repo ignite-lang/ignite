@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:unsafe-sites-back
 kind: story
-status: active
+status: implemented
 title: The substrate holds no more unsafe sites than at v0.15.0
 relations:
 - depends_on: story:readiness-syscalls-per-connection
@@ -45,10 +45,11 @@ scope:
   path: crates/ignite-rt/src/text.rs
 - confidence: inferred
   path: quality/baseline.json
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-11T00:24:53Z", actor: "human:timo", revision: 4, executor: "agent:claude-coordinator", correlation: "wave-11"}
 - {from: "proposed", to: "active", at: "2026-11-11T00:24:53Z", actor: "human:timo", revision: 5, executor: "agent:claude-coordinator", correlation: "wave-11"}
+- {from: "active", to: "implemented", at: "2026-11-11T23:22:41Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 # Story: the substrate holds no more `unsafe` sites than at v0.15.0
 

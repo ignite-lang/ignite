@@ -2,9 +2,11 @@
 format: aep.planning-md/3
 id: story:tls-engine-own-crates
 kind: story
-status: draft
+status: archived
 title: A program that opens no TLS session links no part of the TLS engine, debug info included
-revision: 1
+revision: 2
+transitions:
+- {from: "draft", to: "archived", at: "2026-11-11T23:23:01Z", actor: "human:timo", revision: 2}
 ---
 # Story: a program that opens no TLS session links no part of the TLS engine, debug info included
 

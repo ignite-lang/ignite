@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:ignored-tests-and-long-files-back
 kind: story
-status: active
+status: implemented
 title: No more ignored tests and no more files over 3,000 lines than at v0.15.0
 relations:
 - depends_on: story:http-reply-cost-back
@@ -22,10 +22,11 @@ scope:
   path: std/protocol/http.ignite
 - confidence: cited
   path: std/protocol/http/syntax.ignite
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-11T00:24:55Z", actor: "human:timo", revision: 4, executor: "agent:claude-coordinator", correlation: "wave-11"}
 - {from: "proposed", to: "active", at: "2026-11-11T00:24:55Z", actor: "human:timo", revision: 5, executor: "agent:claude-coordinator", correlation: "wave-11"}
+- {from: "active", to: "implemented", at: "2026-11-11T23:22:42Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 # Story: no more ignored tests and no more files over 3,000 lines than at v0.15.0
 
