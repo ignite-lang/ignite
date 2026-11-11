@@ -1,42 +1,29 @@
 //! Byte search for the builtins `Bytes.index_of` and `Text.pieces`
 //! (`docs/slice.md` section 13), the one implementation both targets call:
 //! generated Rust directly, the LLVM target through `ignite-rt`. The search
-//! is the C library's `memchr` for a needle of one byte and `memmem` for a
-//! longer one.
-
-use nix::libc;
+//! scans for the needle's first byte and compares the rest of the needle
+//! where it finds one: safe code instead of the C library's `memchr` and
+//! `memmem`, which std has no safe and stable equivalent of
+//! (`story:unsafe-sites-back`). Its worst case is the haystack's length
+//! times the needle's, where `memmem` is linear.
 
 /// The offset of the first `needle` in `haystack`; `Some(0)` for an empty
 /// needle.
 pub fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    if needle.len() > haystack.len() {
-        return None;
-    }
-    if needle.is_empty() {
+    let Some((&first, rest)) = needle.split_first() else {
         return Some(0);
-    }
-    // SAFETY: the pointers and lengths are those of two live slices;
-    // `memchr` reads at most `haystack.len()` bytes and `memmem` reads
-    // within both slices.
-    let found = unsafe {
-        match needle {
-            [byte] => libc::memchr(
-                haystack.as_ptr().cast(),
-                libc::c_int::from(*byte),
-                haystack.len(),
-            ),
-            _ => libc::memmem(
-                haystack.as_ptr().cast(),
-                haystack.len(),
-                needle.as_ptr().cast(),
-                needle.len(),
-            ),
-        }
     };
-    if found.is_null() {
-        return None;
+    // The last offset a match can start at.
+    let last = haystack.len().checked_sub(needle.len())?;
+    let mut at = 0;
+    while at <= last {
+        let start = at + haystack[at..=last].iter().position(|&byte| byte == first)?;
+        if haystack[start + 1..start + needle.len()] == *rest {
+            return Some(start);
+        }
+        at = start + 1;
     }
-    Some(found as usize - haystack.as_ptr() as usize)
+    None
 }
 
 /// `bytes.index_of(needle, start)`: the offset of the first `needle` in
