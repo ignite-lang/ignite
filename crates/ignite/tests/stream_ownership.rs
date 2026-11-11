@@ -312,6 +312,28 @@ impl HttpProcess {
             .count()
     }
 
+    /// What the server has open, by kind and without the scheduler's own,
+    /// for a failure's message: `2 socket, 1 pipe, 2 null`. A file is
+    /// named by its last component.
+    fn kinds(&self) -> String {
+        let mut counts: std::collections::BTreeMap<String, usize> = Default::default();
+        for target in self.open() {
+            if target.starts_with("anon_inode:") {
+                continue;
+            }
+            let kind = match target.split_once(":[") {
+                Some((kind, _)) => kind.to_string(),
+                None => target.rsplit('/').next().unwrap_or(&target).to_string(),
+            };
+            *counts.entry(kind).or_default() += 1;
+        }
+        counts
+            .iter()
+            .map(|(kind, count)| format!("{count} {kind}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
     /// The server's descriptors ([`Self::descriptors`]) at rest, the count
     /// a test compares with at its end: taken after one connection was
     /// served and closed. After its `listening` line the server reads how
@@ -331,17 +353,25 @@ impl HttpProcess {
 
     /// Fails unless the server, still running, comes back to `start`
     /// descriptors ([`Self::descriptors`]) after the `served` connections
-    /// of `what`: each task ends on its own time after its client left.
+    /// of `what`: each task ends on its own time after its client left,
+    /// and a connection whose end the server has not noticed is closed by
+    /// its idle timeout ([`IDLE`]) at the latest, so the wait's ceiling is
+    /// past that. A run that needed the timeout says so.
     fn holds_as_before(&mut self, start: usize, served: usize, what: &str) {
-        let deadline = Instant::now() + SERVED;
-        while self.descriptors() != start && Instant::now() < deadline {
+        let begun = Instant::now();
+        while self.descriptors() != start && begun.elapsed() < IDLE + SERVED {
             std::thread::sleep(Duration::from_millis(10));
         }
+        if begun.elapsed() >= SERVED {
+            eprintln!(
+                "note: {what}: the server was back at {start} descriptors only once its idle timeout had run"
+            );
+        }
         let open = self.descriptors();
-        let sockets = self.sockets();
+        let kinds = self.kinds();
         assert_eq!(
             open, start,
-            "{open} descriptors open after {served} connections ({what}), {start} before; {sockets} of them are sockets"
+            "{open} descriptors open after {served} connections ({what}), {start} before; open now: {kinds}"
         );
         assert!(self.child.try_wait().expect("try_wait").is_none());
     }
@@ -357,6 +387,11 @@ impl Drop for HttpProcess {
 /// The longest a test below waits for an answer, or for the server to
 /// close what it served: a ceiling on a wait that returns at its event.
 const SERVED: Duration = Duration::from_secs(30);
+
+/// The idle time after which the servers below close a connection: the
+/// default of `HttpLimits` (`std/protocol/http.ignite`), which `todod` and
+/// `ownerd` keep.
+const IDLE: Duration = Duration::from_secs(30);
 
 /// The connections each test below serves.
 const CONNECTIONS: usize = 40;
