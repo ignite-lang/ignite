@@ -62,6 +62,7 @@ mod slice18;
 mod slice18_adversary;
 mod slice9;
 mod stack_overflow;
+mod stack_overflow_adversary;
 mod static_link;
 mod stream_ownership;
 mod syntax;
