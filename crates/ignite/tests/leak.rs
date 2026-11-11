@@ -358,3 +358,45 @@ fn stored_ends_read_into_temporaries_are_released_once() {
         );
     });
 }
+
+/// Adversary cases (`tests/soak/temporaries_attack.ignite`): the store lets
+/// its own owner go before the temporary is used, so a copy released before
+/// its use or twice closes the end the temporary names; a temporary sent,
+/// put, passed to `spawn` directly or through a callee, aliased by a fn's
+/// result, moved to a task by a callee, on every path of `if`, `break`,
+/// `continue` and a short circuit, and a stream passed to a role call.
+#[test]
+fn temporaries_used_after_the_store_let_go_are_released_once() {
+    on_both_targets(|target| {
+        let run = ignite_test_at(target, &soak_program("temporaries_attack.ignite"), "", None);
+        assert_eq!(run.status, 0, "{target}:\n{}", run.output);
+        assert!(
+            run.output.contains("10 passed; 0 failed"),
+            "{target}:\n{}",
+            run.output
+        );
+    });
+}
+
+/// Adversary cases (`tests/soak/temporaries_unreleased.ignite`): store
+/// reads no owner rule covers on LLVM (the receiver of a builtin method,
+/// the rest of a fresh value read for one field, a thrown-away match arm
+/// value, a read inside a record argument, a match binding put in a store
+/// inside `Some`). The Rust target drops them at the end of the statement.
+#[test]
+fn temporaries_in_forms_without_an_owner_rule_are_released() {
+    on_both_targets(|target| {
+        let run = ignite_test_at(
+            target,
+            &soak_program("temporaries_unreleased.ignite"),
+            "",
+            None,
+        );
+        assert_eq!(run.status, 0, "{target}:\n{}", run.output);
+        assert!(
+            run.output.contains("5 passed; 0 failed"),
+            "{target}:\n{}",
+            run.output
+        );
+    });
+}
