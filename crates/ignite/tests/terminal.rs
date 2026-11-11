@@ -63,14 +63,57 @@ fn shown(bytes: &[u8]) -> String {
     bytes.escape_ascii().to_string()
 }
 
-/// A child process, killed on drop.
+/// A child process, killed on drop and waited for, and before it the
+/// processes it started that still run: a wrapper that does not become its
+/// program is their parent (`strace`, [`first_session_calls`]), and a
+/// process traced by a `strace` that was killed runs on with no parent to
+/// end it.
 struct Running(Child);
 
 impl Drop for Running {
     fn drop(&mut self) {
+        let started = started_by(self.0.id());
+        for pid in &started {
+            let _ = nix::sys::signal::kill(
+                nix::unistd::Pid::from_raw(*pid),
+                nix::sys::signal::Signal::SIGKILL,
+            );
+        }
         let _ = self.0.kill();
         let _ = self.0.wait();
+        // Each is reaped by its parent, or by the process that inherits it.
+        let deadline = Instant::now() + TIMEOUT;
+        while started.iter().any(|pid| runs(*pid)) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(5));
+        }
     }
+}
+
+/// The processes the threads of process `parent` started and did not wait
+/// for yet.
+fn started_by(parent: u32) -> Vec<i32> {
+    let Ok(tasks) = std::fs::read_dir(format!("/proc/{parent}/task")) else {
+        return Vec::new();
+    };
+    tasks
+        .flatten()
+        .filter_map(|task| std::fs::read_to_string(task.path().join("children")).ok())
+        .flat_map(|children| {
+            children
+                .split_whitespace()
+                .filter_map(|pid| pid.parse().ok())
+                .collect::<Vec<i32>>()
+        })
+        .collect()
+}
+
+/// Whether process `pid` still runs: it exists and is not a killed process
+/// that waits to be reaped.
+fn runs(pid: i32) -> bool {
+    std::fs::read_to_string(format!("/proc/{pid}/stat")).is_ok_and(|stat| {
+        stat.rsplit_once(") ")
+            .is_some_and(|(_, after_name)| !after_name.starts_with('Z'))
+    })
 }
 
 /// A running compiled `terminald --port 0`.
@@ -867,10 +910,14 @@ fn first_session_calls(target: Target) -> (usize, String) {
         status.success(),
         "strace cannot trace a child here: {status:?}"
     );
+    // A file per count: two tests count the same target at the same time,
+    // and two `strace` writing one file count each other's calls.
+    static COUNTS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let trace = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
-        "terminal-first-session-{}-{}.txt",
+        "terminal-first-session-{}-{}-{}.txt",
         std::process::id(),
-        target.index()
+        target.index(),
+        COUNTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
     let _ = std::fs::remove_file(&trace);
     let server = Server::start_under(target, &["strace", "-f", "-o", trace.to_str().unwrap()]);
@@ -958,12 +1005,14 @@ fn left_behind(executable: &Path) -> Vec<i32> {
 /// Adversary pass 1 on unit `session` of wave 11
 /// (`story:readiness-session-cost`): the count of the first session leaves
 /// no server behind. [`first_session_calls`] runs `terminald` under
-/// `strace -f` and ends the run by dropping its [`Server`], which kills the
-/// child it started: `strace`. A process traced by a `strace` that was
-/// killed runs on, so the `terminald` stays, listening on its port, with no
-/// parent that will end it: one more per target at every run of
+/// `strace -f` and ends the run by dropping its [`Server`], whose child is
+/// `strace`. A process traced by a `strace` that was killed runs on: while
+/// the drop killed only its own child, the `terminald` stayed, listening on
+/// its port, with no parent that would end it, one more per target at every
+/// run of
 /// [`the_first_session_costs_at_most_one_system_call_more_than_at_v0_15_0`].
-/// What this test finds left behind it ends itself.
+/// [`Running`] now ends what its child started first. What this test finds
+/// left behind it ends itself.
 #[test]
 fn the_count_of_the_first_session_leaves_no_server_running() {
     let mut failures = Vec::new();
