@@ -42,8 +42,7 @@ or `-z pack-relative-relocs`
 (`docs/slice.md` 23).
 
 Size. Every function and datum is in its own section (rustc emits the runtime's code that
-way by default), so `--gc-sections` drops what no executable reaches. The workspace builds `ignite-rt` and `ignite-io` with `codegen-units = 1` and `opt-level = "s"`
-(optimised for size; story `binary-size-back`, its speed measured on the dedicated host only) in the release
+way by default), so `--gc-sections` drops what no executable reaches. The workspace builds `ignite-rt` with `codegen-units = 1` in the release
 profile. Its dev profile builds `ignite-io` at `opt-level = 1`. That setting affects only
 runtimes built in the dev profile: the runtime a debug driver carries, and the dev-profile
 runner archive that `task quality` links into row 3.2's LLVM release executables, which with
