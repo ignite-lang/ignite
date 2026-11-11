@@ -859,6 +859,12 @@ impl TcpStream {
                 mark => (Some(mark), true),
             }
         };
+        // Whether a wait of this read may block its worker in `recv`: only
+        // in rhythm, and only while the read's idle timeout has not begun
+        // (`limit` is unset). A flag of its own, so that a read that never
+        // waits for readiness does not look at the limit: asking the limit
+        // cost the generated Rust six instructions per request.
+        let mut may_block = in_rhythm;
         loop {
             // A wait that this read would make now: either this task may
             // block its worker in the `recv` itself (it is the worker's only
@@ -867,17 +873,16 @@ impl TcpStream {
             // set first, is that timeout), or it waits for readiness.
             let mut blocking = None;
             if let Some(mark) = wait_first.take() {
-                blocking = (in_rhythm && limit.is_none())
-                    .then(crate::sched::block_alone)
-                    .flatten();
+                blocking = may_block.then(crate::sched::block_alone).flatten();
                 if blocking.is_some() && self.inner.apply_idle().is_err() {
                     blocking = None;
                 }
-                if blocking.is_none()
-                    && let Some(ended_early) = self.wait_readable(mark, &mut limit)
-                {
-                    ended(ended_early.is_ok());
-                    return ended_early.map(|()| None);
+                if blocking.is_none() {
+                    may_block = false;
+                    if let Some(ended_early) = self.wait_readable(mark, &mut limit) {
+                        ended(ended_early.is_ok());
+                        return ended_early.map(|()| None);
+                    }
                 }
             }
             block_next.set(self.inner.blocking || blocking.is_some());
@@ -913,6 +918,7 @@ impl TcpStream {
                     // timeout begins again once, against the clock.
                     if self.inner.blocking || blocked {
                         limit.get_or_insert_with(|| self.idle_limit().begun());
+                        may_block = false;
                         wait_first = Some(mark);
                     }
                 }
