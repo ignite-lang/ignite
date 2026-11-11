@@ -40,9 +40,9 @@ Current values: run `v0.16.0` on 2026-11-10, commit `e009426f`.
 |---|---|---|---|---|---|---|
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | eval | 2 | 4 | = |
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | llvm | 0 | 4 | = |
-| 1.2 | differential corpus size | ratchet | eval | 769 | 494 | +19 better |
-| 1.2 | differential corpus size | ratchet | llvm | 930 | 856 | +94 better |
-| 1.2 | differential corpus size | ratchet | rust | 930 | 856 | +94 better |
+| 1.2 | differential corpus size | ratchet | eval | 770 | 494 | +19 better |
+| 1.2 | differential corpus size | ratchet | llvm | 931 | 856 | +94 better |
+| 1.2 | differential corpus size | ratchet | rust | 931 | 856 | +94 better |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/builtins | 112 | 149 | +3 worse |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/patterns | 13 | 13 | = |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | llvm/builtins | 12 | 13 | = |
@@ -161,9 +161,9 @@ Current values: run `v0.16.0` on 2026-11-10, commit `e009426f`.
 | 4.2 | gaps per claimed spec | ratchet | rust/rfc855 | 0 | 0 | = |
 | 4.2 | gaps per claimed spec | ratchet | rust/rfc9110 | 2 | 2 | = |
 | 4.2 | gaps per claimed spec | ratchet | rust/rfc9112 | 1 | 1 | = |
-| 4.3 | inline tests per target | ratchet | eval | 426 | 234 | +17 better |
-| 4.3 | inline tests per target | ratchet | llvm | 516 | 452 | +77 better |
-| 4.3 | inline tests per target | ratchet | rust | 516 | 452 | +77 better |
+| 4.3 | inline tests per target | ratchet | eval | 427 | 234 | +17 better |
+| 4.3 | inline tests per target | ratchet | llvm | 517 | 452 | +77 better |
+| 4.3 | inline tests per target | ratchet | rust | 517 | 452 | +77 better |
 | 4.4 | std functions with no inline test | ratchet | | unmeasured: no instrument yet: needs the call graph of the test bodies | | |
 
 ## 5 Operations: run, apply, host
