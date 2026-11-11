@@ -43,6 +43,8 @@ mod leak;
 mod llvm;
 mod llvm_build;
 mod llvm_memory;
+mod mysql;
+mod mysql_adversary;
 mod nats;
 mod net_builtins;
 mod open_files_limit;

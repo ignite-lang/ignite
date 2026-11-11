@@ -353,7 +353,7 @@ fn std_modules_import_only_their_own_layer_or_below() {
     let protocols = protocol_names(&std);
     let catalogued = catalogued(&std);
     assert!(
-        ["telnet", "http", "jsonrpc", "resp", "nats"]
+        ["telnet", "http", "jsonrpc", "resp", "nats", "mysql"]
             .iter()
             .all(|p| protocols.contains(*p)),
         "protocol names read from std/protocol/: {protocols:?}"

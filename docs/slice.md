@@ -11494,3 +11494,205 @@ of each step are in the commits.
   instructions per request); a worker limit of its own from the affinity mask and the cgroup
   quota (about 16,000 more instructions at the first connection than
   `std::thread::available_parallelism`).
+
+## NN std.protocol.mysql: MySQL wire client with caching_sha2_password
+
+**Status: implemented in `story:std-mysql-client`.**
+
+Case-study gap G11: no MySQL client in std and no FFI. `std.protocol.mysql` is a client of the
+MySQL wire protocol (protocol 41, handshake version 10), generic over `T: ByteStream`, written in
+Ignite on the existing stream, channel, TLS and digest builtins (`std.digest.sha1` and `sha256`
+are the two scrambles' hashes); no builtin, no substrate code and no dependency is added, so the
+compiler and both backends are unchanged and no generated code changes. Its first consumer reads
+another party's database: the client sends no statement of its own except the one `read_only`
+asks for, and nothing it returns as a description of an error holds a statement or a credential.
+
+### NN.1 Packets, limits and errors
+
+| item | meaning |
+|---|---|
+| `frames(payload, sequence) -> Bytes` | one packet: frames of a 3-byte length and a sequence number modulo 256; a payload of 16 MiB - 1 bytes or more is split, and one that fills its last frame is followed by an empty frame |
+| `read_packet(stream, maximum, buffer, at, sequence)` | the next packet with its frames joined, the bytes read so far, the offset after it and the next sequence number; a frame with another number is `OutOfOrder(expected, got)`, a payload above `maximum` is `PacketTooLarge` when its frame header is read, before its bytes are |
+| `type MysqlLimits` | `packet` 64 MiB (one packet, frames joined), `row` 16 MiB (one row's packet), `rows` 1,000,000 (rows of one result set), `columns` 4,096 (its columns) |
+| `enum MysqlError` | `Server(ServerError)`, `Io(Text)`, `Closed`, `OutOfOrder(Int, Int)`, `PacketTooLarge`, `RowTooLarge`, `TooManyRows`, `TooManyColumns`, `Malformed(Text)`, `Unsupported(Text)`, `UnsupportedPlugin(Text)`, `FullAuthenticationNeedsTls`, `TlsNotOffered`, `WrongParameterCount(Int, Int)`, `NoConnection` |
+| `type ServerError` | the server's error packet: `code`, `sql_state` (empty when the server sent none), `message` |
+| `describe(error) -> Text`, `io_error(error) -> IoError` | the error in words; of `Server` the code and the SQL state only (`server error 1064 (42000)`), since the server's message can quote the statement and name the account; of `UnsupportedPlugin` the printable ASCII among the first 64 bytes of the name, which the server chose |
+
+Every call returns `Result<_, MysqlError>`. `Server` leaves the connection usable, as does
+`WrongParameterCount`, which is found before anything is sent. Every other error of a call on a
+connection closes its stream, so a connection that is out of step is not used again. `Closed` is
+the end of the stream and also a read that passed the stream's idle timeout, which the substrate
+reports alike. The module logs nothing.
+
+### NN.2 Connecting and authentication
+
+`type MysqlOptions { user, password = "", database = "", read_only = false, charset = 45
+(utf8mb4), limits, connect_timeout = 10 seconds, read_timeout = 30 seconds, server_name = "",
+tls: TlsOptions }`. `connect(endpoint, options)` is a `Client<TcpStream>`; `connect_tls` is a
+`Client<TlsStream>`: it reads the server's handshake on the TCP stream, sends the SSLRequest
+packet and opens the `std.tls` session with `options.tls` for `options.server_name` (the
+endpoint's address when empty) before the account is sent, and fails with `TlsNotOffered` when
+the server's handshake offers no TLS. Both dial with `TcpStream.connect_within(connect_timeout)`
+and set the stream's idle timeout to `read_timeout`. `start(stream, options)` authenticates on
+any stream already connected (the tests' `PipeStream`); `request_tls` and `authenticate` are the
+two steps of `connect_tls` for a caller with a stream of its own. Whether a connection uses TLS
+is the caller's choice of function, because the two give different stream types; there is no
+"TLS when offered" mode. On the LLVM target a connection's descriptor is released when the
+process exits: `quit` and every failure close the stream, but a client record that a function
+returns is owned by no block (`docs/llvm.md`, section 4), so a program that opens connections
+without end runs out of descriptors there. The Rust target releases the descriptor when the
+client is dropped or quit.
+
+| the server | the client |
+|---|---|
+| handshake names `mysql_native_password` | answers SHA1(password) xor SHA1(scramble, SHA1(SHA1(password))) |
+| handshake names `caching_sha2_password` | answers SHA256(password) xor SHA256(SHA256(SHA256(password)), scramble) |
+| authentication switch (0xFE) to either plugin | answers with that plugin's scramble over the new nonce |
+| `caching_sha2_password` fast authentication (0x01 0x03) | reads the OK that follows |
+| `caching_sha2_password` full authentication (0x01 0x04) on a TLS stream | sends the password and a NUL |
+| the same on a plain stream | `FullAuthenticationNeedsTls`, which names TLS; nothing is sent, the stream is closed. The RSA key exchange is not spoken |
+| any other plugin, in the handshake or in a switch | `UnsupportedPlugin(name)`; the pre-4.1 switch is `mysql_old_password` |
+| an error packet | `Server`, as for a wrong password (1045, `28000`) |
+
+An empty password answers with nothing under both plugins. The client asks for the capabilities
+`LONG_PASSWORD`, `LONG_FLAG`, `PROTOCOL_41`, `TRANSACTIONS`, `SECURE_CONNECTION`, `PLUGIN_AUTH`,
+`PLUGIN_AUTH_LENENC_CLIENT_DATA`, `CONNECT_WITH_DB` for a database and `SSL` after the
+SSLRequest. It asks for no compression, no `LOCAL_FILES`, no `MULTI_STATEMENTS`, no
+`MULTI_RESULTS` and not for `DEPRECATE_EOF`. A server without protocol 41 or without plugin
+authentication, a handshake of another version, a user or database name that holds a NUL and an
+authentication of more than 8 packets are refused. With `read_only` the client sends `SET SESSION
+TRANSACTION READ ONLY` after authentication and returns only when the server took it: the server
+then refuses every write of the session (1792, `25006`).
+
+### NN.3 Statements and values
+
+`query(client, sql)` is `COM_QUERY` over the text protocol. `prepare(client, sql)` is
+`COM_STMT_PREPARE` and gives a `Statement { id, parameters, columns }`; `execute(client,
+statement, parameters)` is `COM_STMT_EXECUTE` over the binary protocol with one
+`Option<MysqlValue>` per `?` mark; `close(client, statement)` is `COM_STMT_CLOSE`;
+`execute_once(client, sql, parameters)` does the three. `ping` is `COM_PING`, `quit` is
+`COM_QUIT` and closes the stream. A command of 16 MiB - 1 bytes or more (a long statement, a
+large parameter) travels as two frames or more, and its reply is read at the sequence number
+after its last frame. `query`, `execute` and `execute_once` give a `ResultSet
+{ columns, rows, affected, last_insert_id, warnings }`: the `Column`s (`schema`, `table`,
+`name`, `charset`, `length`, `kind`, `flags`, `decimals`) and the rows, each a
+`List<Option<MysqlValue>>` with `None` for NULL, or for a statement without a result set its
+affected rows and inserted id.
+
+A parameter is never put into the statement's text: `prepare` sends `sql` as written, and
+`execute` sends each parameter as a typed value behind the NULL bitmap (`Int` as BIGINT, `Bool`
+as TINYINT, `Decimal` as DECIMAL in text, `Text` as VAR_STRING, `Bytes` as BLOB, `None` as
+NULL). `query` sends `sql` as it is; a value from outside belongs in a parameter. Another number
+of parameters than the statement has is `WrongParameterCount(expected, got)` before anything is
+sent.
+
+| column type | `MysqlValue` |
+|---|---|
+| TINYINT(1), BIT(1) | `Bool` |
+| TINYINT, SMALLINT, MEDIUMINT, INT, BIGINT, YEAR, signed and unsigned | `Int`; a BIGINT UNSIGNED above the largest `Int` is `Decimal` with all its digits |
+| DECIMAL | `Decimal`, the server's exact text |
+| FLOAT, DOUBLE | `Decimal`: the language has no floating-point type (the story's `Float`), so the value is its decimal text, as `std.json`'s and `std.data`'s `Decimal` |
+| CHAR, VARCHAR, TEXT, ENUM, SET, JSON | `Text`; bytes that are no UTF-8 become U+FFFD |
+| DATE, TIME, DATETIME, TIMESTAMP | `Text` as the server prints them: `2024-02-29`, `-34:11:12`, `2024-02-29 23:59:58.123456` |
+| BINARY, VARBINARY, BLOB, GEOMETRY, BIT wider than one | `Bytes` (a column whose character set is 63) |
+
+The two protocols give the same value for the same column. The binary protocol sends a FLOAT and
+a DOUBLE as their four and eight bytes; `std.protocol.mysql.binary` (`float_text`,
+`double_text`) prints them as the shortest decimal digits that read back as the same number, by
+Burger and Dybvig's free-format algorithm over natural numbers in base 10^9, of two last digits
+equally near the even one, and in the notation of the server's text protocol: plain digits from
+1e-15 to below 1e15 (`0.1`, `123456.789`, `0.000000000000001`; `1000000000000000.2`, whose point
+has a digit after it), one digit, a fraction and an exponent beyond (`1e15`, `1.5e-16`), `-0` for
+a negative zero. The text protocol carries the server's own text, which for a FLOAT is rounded
+to six significant digits, so the same FLOAT can print with more digits from `execute` than from
+`query`; a DOUBLE prints alike (tested with values of no declared number of decimals). The
+module also prints the binary dates and times as the text protocol does (`date_text`,
+`time_text`, the fraction's digits from the column's decimals) and an unsigned 64-bit integer
+(`unsigned_text`).
+
+Refused, each as a typed error that closes the connection: the server's request for a local file
+(`LOAD DATA LOCAL INFILE`, `Unsupported`; the client never reads a file and sends nothing in
+answer), a second result (`Unsupported("more than one result")`), a row above `limits.row`
+(`RowTooLarge`, refused at its frame header), more rows or columns than the limits, a binary
+column of a type the client does not know (`Unsupported("column type N")`), and every reply that
+is cut, out of sequence, out of shape or followed by bytes (`Closed`, `OutOfOrder`,
+`Malformed`). A server error in place of a result set or between its rows is `Server` and leaves
+the connection usable.
+
+### NN.4 Several connections
+
+A connection carries one statement at a time: two tasks that send on one connection read each
+other's replies. A program whose tasks ask concurrently holds several connections in a
+`Pool<T>`: `pool_of(clients, wait)` makes one of connections already open, which holds as many
+as it starts with; `checkout(pool)` takes one out, waiting up to `wait` (`NoConnection` after
+it); `checkin(pool, client)` puts one back, or puts a new connection in the place of one that
+failed, and quits a connection the pool has no room for. `pool_query(pool, sql)` and
+`pool_execute(pool, sql, parameters)` take a connection, run the statement (`query`,
+`execute_once`) and put the connection back. A connection whose call failed with anything but
+the server's error is closed and not put back: a failed connection is out of the pool, and the
+pool is smaller until the caller hands it a new one. No statement is run a second time on
+another connection. `quit_idle(pool)` quits the connections that are free.
+
+### NN.5 Layering
+
+`mysql` is a protocol name for `layering::` (`docs/layering.md` rules 3 and 5): no module
+outside `std.protocol.*` and no file under `crates/*/src` names it, and none did. The module
+imports `std.net`, `std.io`, `std.tls`, `std.digest`, `std.encoding`, `std.result` and
+`std.text`, all of the base layer, and its own `std.protocol.mysql.binary`, which imports
+nothing.
+
+### NN.6 Tests
+
+- `std/protocol/mysql.ignite`, both targets, 55 tests with a scripted server (`play`: reads each
+  expected request byte for byte, writes its reply; the requests are written out by hand, the
+  scrambles are known answers computed outside the module), over `Pipe.pair()` but for two over
+  TCP: a command of two frames, which a pipe does not hold, and the close of a failed handshake,
+  which only a `TcpStream` tells from its idle timeout:
+  - packets: integers and lengths at every width; a packet over many small deliveries; a
+    payload of 16 MiB - 1 with its empty frame, and one longer, joined when read; a frame out of
+    sequence; a packet one byte above the limit, refused at its header; a cut packet;
+  - the handshake: the server's packet field by field and each refusal; both scrambles for two
+    passwords and two nonces; the response and the SSLRequest byte for byte; each plugin as the
+    server's default; the fast path; full authentication on a plain stream (the typed error, and
+    no byte sent after it); full authentication after the SSLRequest at sequence 2; a switch in
+    either direction; `sha256_password`, `mysql_clear_password` and the pre-4.1 switch refused
+    by name, and what `describe` keeps of a forged name; a refused account; a server without
+    `SECURE_CONNECTION`; eight authentication packets followed and the ninth refused; bytes
+    after the authentication; a NUL in the database name; the stream closed by a failed
+    handshake; a read-only session, and that no other session sends a statement;
+  - statements: a column definition from the protocol's documentation; a result set of 31
+    columns, one per supported type, with a row of values and a row of NULLs, over the text and
+    over the binary protocol with the same expected values; OK, an empty result set, a server
+    error first and between rows; the local-file request; a second result; each limit at the
+    bound and one past it; every cut, out-of-sequence and out-of-shape reply; `prepare` with
+    and without parameters and columns, with 4,096 columns and refused with 4,097; the bytes
+    of `execute` for one, six, nine and no parameters, a hostile text among them; a parameter
+    of 16 MiB - 1 bytes, whose command is two frames and whose reply is read at sequence 2;
+    the NULL bitmap's offset; `close`; a wrong parameter count;
+  - the pool: one caller per connection, the wait, a full pool, a connection returned after a
+    result and after a server error, a failed one taken out and replaced, three tasks on one
+    connection.
+- `std/protocol/mysql/binary.ignite`, both targets, 9 tests: 36 doubles and 13 floats against
+  the digits Python's `repr` and NumPy's `float32` print, in the server's notation (the largest,
+  the smallest and the lowest normal number, both notations at their bounds, a tie between two
+  last digits, the zeros, what is no number), unsigned integers up to 2^64 - 1, dates and times
+  at every length the protocol sends.
+- `mysql::real_servers_with_both_plugins_on_both_targets` in `crates/ignite/tests/mysql.rs`:
+  two containers of `mysql:8.0` on free loopback ports, one whose default plugin is
+  `caching_sha2_password` and one whose default is `mysql_native_password`, both with TLS under
+  an authority the test generates; then 9 Ignite tests on each target: the password over TLS
+  only and then the fast path, each plugin directly and after a switch, a wrong password,
+  `sha256_password`, an unknown authority, another host name, a closed port, a table with a
+  column of every type read alike by `query` and by `execute`, parameters (a hostile text
+  selects nothing), a read-only session refusing an INSERT, a pool of two connections under
+  three tasks with a killed connection taken out, and the read timeout. It is not `#[ignore]`:
+  it runs where `docker version` succeeds and the image is present (`docker pull mysql:8.0`),
+  and says on standard error why it did nothing anywhere else; it pulls nothing itself.
+  `IGNITE_MYSQL_IMAGE` names another image, `IGNITE_CONTAINER_LABEL` a label for the containers.
+- `mysql_adversary::` in `crates/ignite/tests/mysql_adversary.rs`, two tests. One runs as
+  `mysql::` does, against one container: a parameter of 16 MiB - 1 bytes and a statement of
+  16 MiB, each a command of two frames, and 17 DOUBLE values that print alike from `query` and
+  from `execute`. The other needs no container: 40 connections quit, 40 refused, 40 refused
+  TLS requests and 40 pools of three leave no descriptor on the Rust target and keep one each
+  on the LLVM target, which the test pins exactly (NN.2).
+- `layering::`, with `mysql` in the protocol names it reads from std.

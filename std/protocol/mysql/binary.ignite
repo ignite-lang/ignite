@@ -1,0 +1,561 @@
+package std.protocol.mysql.binary
+
+// What the fixed-width values of the MySQL binary protocol print as
+// (`docs/slice.md`, the section of `std.protocol.mysql`): a FLOAT and a
+// DOUBLE as the shortest decimal digits that read back as the same number,
+// a BIGINT UNSIGNED above the largest `Int` in full, and a DATE, a
+// DATETIME, a TIMESTAMP and a TIME as the text protocol prints them.
+// `std.protocol.mysql` reads the bytes of a row and calls these; the
+// language has no floating-point type, so a floating-point value is
+// carried as its decimal text.
+
+// ---- natural numbers of any size --------------------------------------------
+
+// A natural number is its limbs in base 10^9, the least significant first,
+// with no zero limb at the top but the one of zero.
+const LIMB: Int = 1000000000
+
+fn big(value: Int) -> List<Int> {
+  var out: List<Int> = []
+  var rest = value
+  loop {
+    out.push(rest % LIMB)
+    rest = rest / LIMB
+    if rest == 0 {
+      break
+    }
+  }
+  out
+}
+
+// `a` times `factor`, which is from 1 to 2^30.
+fn times(a: List<Int>, factor: Int) -> List<Int> {
+  var out: List<Int> = []
+  var carry = 0
+  for limb in a {
+    let product = limb * factor + carry
+    out.push(product % LIMB)
+    carry = product / LIMB
+  }
+  while carry > 0 {
+    out.push(carry % LIMB)
+    carry = carry / LIMB
+  }
+  out
+}
+
+fn plus(a: List<Int>, b: List<Int>) -> List<Int> {
+  var out: List<Int> = []
+  var carry = 0
+  var i = 0
+  while i < a.len() || i < b.len() || carry > 0 {
+    var sum = carry
+    if i < a.len() {
+      sum = sum + a[i]
+    }
+    if i < b.len() {
+      sum = sum + b[i]
+    }
+    if sum >= LIMB {
+      out.push(sum - LIMB)
+      carry = 1
+    } else {
+      out.push(sum)
+      carry = 0
+    }
+    i = i + 1
+  }
+  out
+}
+
+// `a` less `b`, which is not above `a`.
+fn minus(a: List<Int>, b: List<Int>) -> List<Int> {
+  var out: List<Int> = []
+  var borrow = 0
+  var top = 1
+  var i = 0
+  while i < a.len() {
+    var limb = a[i] - borrow
+    if i < b.len() {
+      limb = limb - b[i]
+    }
+    if limb < 0 {
+      limb = limb + LIMB
+      borrow = 1
+    } else {
+      borrow = 0
+    }
+    out.push(limb)
+    i = i + 1
+    if limb != 0 {
+      top = i
+    }
+  }
+  out.slice(0, top)
+}
+
+// Below zero when `a` is below `b`, zero when they are equal, above zero
+// when `a` is above `b`.
+fn compare(a: List<Int>, b: List<Int>) -> Int {
+  if a.len() != b.len() {
+    return a.len() - b.len()
+  }
+  var i = a.len() - 1
+  while i >= 0 {
+    if a[i] != b[i] {
+      return a[i] - b[i]
+    }
+    i = i - 1
+  }
+  0
+}
+
+// `a` times 2^`bits`.
+fn doubled(a: List<Int>, bits: Int) -> List<Int> {
+  var out = a
+  var left = bits
+  while left >= 30 {
+    out = times(out, 1073741824)
+    left = left - 30
+  }
+  if left > 0 {
+    out = times(out, 1 << left)
+  }
+  out
+}
+
+// `a` times 10^`places`.
+fn scaled(a: List<Int>, places: Int) -> List<Int> {
+  var out = a
+  var left = places
+  while left >= 9 {
+    out = times(out, LIMB)
+    left = left - 9
+  }
+  while left > 0 {
+    out = times(out, 10)
+    left = left - 1
+  }
+  out
+}
+
+// ---- floating point ---------------------------------------------------------
+
+// The shortest decimal digits that read back as `mantissa` times
+// 2^`exponent` and the place of the decimal point before them: the value
+// is 0.d1d2... times 10^place. `narrow` says that the number below is half
+// as far away as the number above (the lowest mantissa of a binade). The
+// free-format algorithm of Burger and Dybvig, "Printing Floating-Point
+// Numbers Quickly and Accurately" (1996), with a reader that rounds to
+// even; where two last digits are equally near, the even one, as David
+// Gay's `dtoa` ends, which the server prints with.
+fn shortest(mantissa: Int, exponent: Int, narrow: Bool) -> (Bytes, Int) {
+  let even = mantissa % 2 == 0
+  let widen = if narrow { 1 } else { 0 }
+  var rest = doubled(big(mantissa), 1 + widen)
+  var scale = doubled(big(1), 1 + widen)
+  var above = doubled(big(1), widen)
+  var below = big(1)
+  if exponent >= 0 {
+    rest = doubled(rest, exponent)
+    above = doubled(above, exponent)
+    below = doubled(below, exponent)
+  } else {
+    scale = doubled(scale, 0 - exponent)
+  }
+  var width = 0
+  var bits = mantissa
+  while bits > 0 {
+    width = width + 1
+    bits = bits >> 1
+  }
+  var place = (width - 1 + exponent) * 30103 / 100000
+  if place >= 0 {
+    scale = scaled(scale, place)
+  } else {
+    rest = scaled(rest, 0 - place)
+    above = scaled(above, 0 - place)
+    below = scaled(below, 0 - place)
+  }
+  loop {
+    let order = compare(plus(rest, above), scale)
+    if order < 0 || (order == 0 && !even) {
+      break
+    }
+    scale = times(scale, 10)
+    place = place + 1
+  }
+  loop {
+    let order = compare(times(plus(rest, above), 10), scale)
+    if order > 0 || (order == 0 && even) {
+      break
+    }
+    rest = times(rest, 10)
+    above = times(above, 10)
+    below = times(below, 10)
+    place = place - 1
+  }
+  var digits = Bytes.with_capacity(17)
+  loop {
+    rest = times(rest, 10)
+    above = times(above, 10)
+    below = times(below, 10)
+    var digit = 0
+    while compare(rest, scale) >= 0 {
+      rest = minus(rest, scale)
+      digit = digit + 1
+    }
+    let low = compare(rest, below)
+    let high = compare(plus(rest, above), scale)
+    if high == 0 && even {
+      // The digit above is the upper end of what reads back, itself
+      // included: taken unless this digit reads back too.
+      if low > 0 {
+        digit = digit + 1
+      }
+    } else if low < 0 || (low == 0 && even) {
+      // This digit reads back; when the one above does too, the nearer of
+      // the two, and of two equally near the even one.
+      if high > 0 {
+        let half = compare(times(rest, 2), scale)
+        if half > 0 || (half == 0 && digit % 2 == 1) {
+          digit = digit + 1
+        }
+      }
+    } else if high > 0 {
+      digit = digit + 1
+    } else {
+      digits.push(b'0' + digit.wrap_byte())
+      continue
+    }
+    digits.push(b'0' + digit.wrap_byte())
+    break
+  }
+  (digits, place)
+}
+
+fn zeros(count: Int) -> Bytes {
+  var out = Bytes.with_capacity(count)
+  while out.len() < count {
+    out.push(b'0')
+  }
+  out
+}
+
+// `digits` with the decimal point `place` digits in, as the server's text
+// protocol writes a DOUBLE (`my_gcvt` with room for every digit): plain
+// digits when the point is at most 15 places in or has a digit after it,
+// and when at most 14 zeros follow it; else one digit, the others as a
+// fraction and the exponent of ten, which has no plus sign.
+fn notation(negative: Bool, digits: Bytes, place: Int) -> Text {
+  let count = digits.len()
+  var out = Bytes.with_capacity(32)
+  if negative {
+    out.push(b'-')
+  }
+  if place > 0 && (place <= 15 || count > place) {
+    if place >= count {
+      out.append(digits)
+      out.append(zeros(place - count))
+    } else {
+      out.append(digits.slice(0, place))
+      out.push(b'.')
+      out.append(digits.slice(place, count))
+    }
+    return out.to_text()
+  }
+  if place > 0 - 15 && place <= 0 {
+    out.append(b"0.")
+    out.append(zeros(0 - place))
+    out.append(digits)
+    return out.to_text()
+  }
+  out.push(digits[0])
+  if count > 1 {
+    out.push(b'.')
+    out.append(digits.slice(1, count))
+  }
+  let power = place - 1
+  "{out.to_text()}e{power}"
+}
+
+fn little_endian(data: Bytes) -> Int {
+  var value = 0
+  var i = 0
+  while i < data.len() {
+    value = value | data[i].to_int() << i * 8
+    i = i + 1
+  }
+  value
+}
+
+// The number whose sign bit is at `width` - 1, whose exponent has
+// `exponent_bits` bits and whose fraction has the rest.
+fn floating(bits: Int, width: Int, exponent_bits: Int) -> Option<Text> {
+  let fraction_bits = width - 1 - exponent_bits
+  let negative = bits >> width - 1 & 1 == 1
+  let top = (1 << exponent_bits) - 1
+  let biased = bits >> fraction_bits & top
+  let fraction = bits & (1 << fraction_bits) - 1
+  if biased == top {
+    return None
+  }
+  if biased == 0 && fraction == 0 {
+    return Some(if negative { "-0" } else { "0" })
+  }
+  let lowest = 2 - (1 << exponent_bits - 1) - fraction_bits
+  let (digits, place) = if biased == 0 {
+    shortest(fraction, lowest, false)
+  } else {
+    shortest(fraction | 1 << fraction_bits, lowest + biased - 1, fraction == 0 && biased > 1)
+  }
+  Some(notation(negative, digits, place))
+}
+
+// The eight bytes of a DOUBLE, least significant first, as the shortest
+// decimal digits that read back as it, of two equally near the even one,
+// written as the server's text protocol writes the column: plain digits
+// (`0.1`, `123456.789`, `0.000000000000001`) from 1e-15 to below 1e15,
+// one digit, a fraction and an exponent beyond (`1e15`, `1.5e-16`). Zero
+// keeps its sign. `None` for an infinity, for what is no number and for
+// any other count of bytes.
+fn double_text(data: Bytes) -> Option<Text> = if data.len() == 8 { floating(little_endian(data), 64, 11) } else { None }
+
+// The four bytes of a FLOAT, as `double_text`: the shortest digits that
+// read back as the same single-precision number, so 1.1 prints as `1.1`.
+fn float_text(data: Bytes) -> Option<Text> = if data.len() == 4 { floating(little_endian(data), 32, 8) } else { None }
+
+// ---- integers ---------------------------------------------------------------
+
+// `value` read as an unsigned 64-bit integer, in decimal: what a BIGINT
+// UNSIGNED above the largest `Int` prints as.
+fn unsigned_text(value: Int) -> Text {
+  if value >= 0 {
+    return "{value}"
+  }
+  let half = value >> 1 & 9223372036854775807
+  let tenth = half / 5
+  let unit = half % 5 * 2 + (value & 1)
+  "{tenth}{unit}"
+}
+
+// ---- dates and times --------------------------------------------------------
+
+// `out` with `value` in at least `width` decimal digits.
+fn padded(out: Bytes, value: Int, width: Int) -> Bytes {
+  let digits = "{value}".to_bytes()
+  var buffer = out
+  buffer.append(zeros(width - digits.len()))
+  buffer.append(digits)
+  buffer
+}
+
+// `out` with the fraction of a second: `places` digits of `micros`; with
+// more than six places asked for (no fixed count), six when there are
+// microseconds and none when there are not.
+fn fraction(out: Bytes, micros: Option<Int>, places: Int) -> Bytes {
+  let count = if places <= 6 { places } else if micros == None { 0 } else { 6 }
+  if count <= 0 {
+    return out
+  }
+  var buffer = out
+  buffer.push(b'.')
+  let six = padded(Bytes.with_capacity(6), match micros {
+    Some(value) => value
+    None => 0
+  }, 6)
+  buffer.append(six.slice(0, count))
+  buffer
+}
+
+// The value of a DATE, a DATETIME or a TIMESTAMP of the binary protocol
+// (0, 4, 7 or 11 bytes: year, month, day, then hour, minute, second, then
+// microseconds) as the text protocol prints it: `2024-02-29`, and with
+// `with_time` `2024-02-29 23:59:58` and `decimals` digits of the second's
+// fraction. `None` for any other count of bytes.
+fn date_text(data: Bytes, with_time: Bool, decimals: Int) -> Option<Text> {
+  let count = data.len()
+  if count != 0 && count != 4 && count != 7 && count != 11 {
+    return None
+  }
+  var out = Bytes.with_capacity(26)
+  if count == 0 {
+    out.append(b"0000-00-00")
+  } else {
+    out = padded(out, little_endian(data.slice(0, 2)), 4)
+    out.push(b'-')
+    out = padded(out, data[2].to_int(), 2)
+    out.push(b'-')
+    out = padded(out, data[3].to_int(), 2)
+  }
+  if !with_time {
+    return Some(out.to_text())
+  }
+  out.push(b' ')
+  if count < 7 {
+    out.append(b"00:00:00")
+  } else {
+    out = padded(out, data[4].to_int(), 2)
+    out.push(b':')
+    out = padded(out, data[5].to_int(), 2)
+    out.push(b':')
+    out = padded(out, data[6].to_int(), 2)
+  }
+  let micros = if count == 11 { Some(little_endian(data.slice(7, 11))) } else { None }
+  Some(fraction(out, micros, decimals).to_text())
+}
+
+// The value of a TIME of the binary protocol (0, 8 or 12 bytes: sign,
+// days, hour, minute, second, then microseconds) as the text protocol
+// prints it: `-34:11:12`, the days counted into the hours, with `decimals`
+// digits of the second's fraction. `None` for any other count of bytes.
+fn time_text(data: Bytes, decimals: Int) -> Option<Text> {
+  let count = data.len()
+  if count != 0 && count != 8 && count != 12 {
+    return None
+  }
+  var out = Bytes.with_capacity(20)
+  if count == 0 {
+    out.append(b"00:00:00")
+    return Some(fraction(out, None, decimals).to_text())
+  }
+  if data[0] != 0 {
+    out.push(b'-')
+  }
+  out = padded(out, little_endian(data.slice(1, 5)) * 24 + data[5].to_int(), 2)
+  out.push(b':')
+  out = padded(out, data[6].to_int(), 2)
+  out.push(b':')
+  out = padded(out, data[7].to_int(), 2)
+  let micros = if count == 12 { Some(little_endian(data.slice(8, 12))) } else { None }
+  Some(fraction(out, micros, decimals).to_text())
+}
+
+// ---- tests ------------------------------------------------------------------
+
+test "a double prints as the shortest digits that read back as it" {
+  assert double_text(b"\x00\x00\x00\x00\x00\x00\xf0\x3f") == Some("1")
+  assert double_text(b"\x9a\x99\x99\x99\x99\x99\xb9\x3f") == Some("0.1")
+  assert double_text(b"\x55\x55\x55\x55\x55\x55\xd5\x3f") == Some("0.3333333333333333")
+  assert double_text(b"\x34\x33\x33\x33\x33\x33\xd3\x3f") == Some("0.30000000000000004")
+  assert double_text(b"\xc9\x76\xbe\x9f\x0c\x24\xfe\x40") == Some("123456.789")
+  assert double_text(b"\x00\x00\x00\x00\x00\x00\x04\x40") == Some("2.5")
+  assert double_text(b"\x00\x00\x00\x00\x00\x00\x04\xc0") == Some("-2.5")
+  assert double_text(b"\x00\x00\x00\x00\x00\x00\xe0\x3f") == Some("0.5")
+  assert double_text(b"\x66\x66\x66\x66\x66\x66\x11\x40") == Some("4.35")
+  assert double_text(b"\x00\x00\x00\x00\x00\x00\x59\x40") == Some("100")
+  assert double_text(b"\x00\x00\x00\x00\x00\x00\x40\x43") == Some("9.007199254740992e15")
+}
+
+test "the largest, the smallest and the lowest normal double print in full" {
+  assert double_text(b"\xff\xff\xff\xff\xff\xff\xef\x7f") == Some("1.7976931348623157e308")
+  assert double_text(b"\x01\x00\x00\x00\x00\x00\x00\x00") == Some("5e-324")
+  assert double_text(b"\x00\x00\x00\x00\x00\x00\x10\x00") == Some("2.2250738585072014e-308")
+  assert double_text(b"\xf6\x4a\xe1\xc7\x02\x2d\xb5\x44") == Some("1e23")
+}
+
+test "plain digits where the server's text protocol prints them: below 1e15 and down to 1e-15, an exponent beyond" {
+  assert double_text(b"\x00\x00\x90\x1e\xc4\xbc\xd6\x42") == Some("100000000000000")
+  assert double_text(b"\xff\xff\x33\x26\xf5\x6b\x0c\x43") == Some("999999999999999.9")
+  assert double_text(b"\x66\xde\x77\x83\x21\x12\xdc\x42") == Some("123456789012345.6")
+  assert double_text(b"\x00\x00\x34\x26\xf5\x6b\x0c\x43") == Some("1e15")
+  assert double_text(b"\x00\x80\xe0\x37\x79\xc3\x41\x43") == Some("1e16")
+  assert double_text(b"\x40\x8c\xb5\x78\x1d\xaf\x15\x44") == Some("1e20")
+  assert double_text(b"\xda\xbc\x04\x7e\x3a\xc5\x1a\x44") == Some("1.2345678901234568e20")
+  assert double_text(b"\x50\xef\xe2\xd6\xe4\x1a\x4b\x44") == Some("1e21")
+  assert double_text(b"\x92\xd5\x4d\x06\xcf\xf0\x80\x44") == Some("1e22")
+  assert double_text(b"\x8d\xed\xb5\xa0\xf7\xc6\xb0\x3e") == Some("0.000001")
+  assert double_text(b"\x48\xaf\xbc\x9a\xf2\xd7\x7a\x3e") == Some("0.0000001")
+  assert double_text(b"\x26\x10\xc0\x17\x70\xe0\xaf\x3e") == Some("0.00000095")
+  assert double_text(b"\x4c\xce\x61\xe3\xa7\x9d\xe4\x3d") == Some("0.00000000015")
+  assert double_text(b"\x16\x56\xe7\x9e\xaf\x03\xd2\x3c") == Some("0.000000000000001")
+  assert double_text(b"\x20\x01\x5b\x6e\x87\x05\xdb\x3c") == Some("0.0000000000000015")
+  assert double_text(b"\xbc\x89\xd8\x97\xb2\xd2\x9c\x3c") == Some("1e-16")
+}
+
+test "zero keeps its sign, and what is no number or no eight bytes prints as nothing" {
+  assert double_text(b"\x00\x00\x00\x00\x00\x00\x00\x00") == Some("0")
+  assert double_text(b"\x00\x00\x00\x00\x00\x00\x00\x80") == Some("-0")
+  assert double_text(b"\x00\x00\x00\x00\x00\x00\xf0\x7f") == None
+  assert double_text(b"\x00\x00\x00\x00\x00\x00\xf0\xff") == None
+  assert double_text(b"\x01\x00\x00\x00\x00\x00\xf8\x7f") == None
+  assert double_text(b"\x00\x00\x00\x00\x00\x00\xf0") == None
+  assert double_text(Bytes.empty()) == None
+  assert float_text(b"\x00\x00\x00\x00") == Some("0")
+  assert float_text(b"\x00\x00\x00\x80") == Some("-0")
+  assert float_text(b"\x00\x00\x80\x7f") == None
+  assert float_text(b"\x00\x00\xc0\x7f") == None
+  assert float_text(b"\x00\x00\x80") == None
+  assert float_text(b"\x00\x00\x00\x00\x00\x00\xf0\x3f") == None
+}
+
+test "a float prints as the shortest digits that read back as the same float" {
+  assert float_text(b"\xcd\xcc\x8c\x3f") == Some("1.1")
+  assert float_text(b"\xcd\xcc\xcc\x3d") == Some("0.1")
+  assert float_text(b"\x00\x00\x80\x3f") == Some("1")
+  assert float_text(b"\x00\x00\x80\x4b") == Some("16777216")
+  assert float_text(b"\xff\xff\x7f\x7f") == Some("3.4028235e38")
+  assert float_text(b"\x01\x00\x00\x00") == Some("1e-45")
+  assert float_text(b"\x00\x00\x80\x00") == Some("1.1754944e-38")
+  assert float_text(b"\xd0\x0f\x49\x40") == Some("3.14159")
+  assert float_text(b"\x00\x00\x40\xbf") == Some("-0.75")
+  assert float_text(b"\xf9\x02\x15\x50") == Some("10000000000")
+  assert float_text(b"\x9a\x99\x99\x3e") == Some("0.3")
+}
+
+test "an unsigned 64-bit integer above the largest Int prints in full" {
+  assert unsigned_text(0) == "0"
+  assert unsigned_text(7) == "7"
+  assert unsigned_text(9223372036854775807) == "9223372036854775807"
+  assert unsigned_text(0 - 9223372036854775807 - 1) == "9223372036854775808"
+  assert unsigned_text(0 - 1) == "18446744073709551615"
+  assert unsigned_text(0 - 2) == "18446744073709551614"
+  assert unsigned_text(0 - 6) == "18446744073709551610"
+}
+
+test "a date and a date with a time print as the text protocol prints them" {
+  assert date_text(b"\xe8\x07\x02\x1d", false, 0) == Some("2024-02-29")
+  assert date_text(Bytes.empty(), false, 0) == Some("0000-00-00")
+  assert date_text(b"\xe8\x07\x02\x1d\x17\x3b\x3a", false, 0) == Some("2024-02-29")
+  assert date_text(b"\xe8\x07\x02\x1d\x17\x3b\x3a", true, 0) == Some("2024-02-29 23:59:58")
+  assert date_text(b"\xe8\x07\x02\x1d", true, 0) == Some("2024-02-29 00:00:00")
+  assert date_text(Bytes.empty(), true, 0) == Some("0000-00-00 00:00:00")
+  assert date_text(b"\x09\x00\x01\x02\x03\x04\x05", true, 0) == Some("0009-01-02 03:04:05")
+  assert date_text(b"\xe8\x07\x02\x1d\x17\x3b\x3a\x40\xe2\x01\x00", true, 6) == Some("2024-02-29 23:59:58.123456")
+  assert date_text(b"\xe8\x07\x02\x1d\x17\x3b\x3a\x40\xe2\x01\x00", true, 3) == Some("2024-02-29 23:59:58.123")
+  assert date_text(b"\xe8\x07\x02\x1d\x17\x3b\x3a\x40\xe2\x01\x00", true, 0) == Some("2024-02-29 23:59:58")
+  assert date_text(b"\xe8\x07\x02\x1d\x17\x3b\x3a\x40\xe2\x01\x00", true, 31) == Some("2024-02-29 23:59:58.123456")
+  assert date_text(b"\xe8\x07\x02\x1d\x17\x3b\x3a", true, 6) == Some("2024-02-29 23:59:58.000000")
+  assert date_text(b"\xe8\x07\x02\x1d\x17\x3b\x3a", true, 31) == Some("2024-02-29 23:59:58")
+  assert date_text(b"\xe8\x07\x02\x1d\x17\x3b\x3a\x05\x00\x00\x00", true, 6) == Some("2024-02-29 23:59:58.000005")
+  assert date_text(b"\xe8\x07\x02", true, 0) == None
+  assert date_text(b"\xe8\x07\x02\x1d\x17", true, 0) == None
+  assert date_text(b"\xe8\x07\x02\x1d\x17\x3b\x3a\x40\xe2\x01\x00\x00", true, 6) == None
+}
+
+test "a time prints its sign, its hours with the days in them, and its fraction" {
+  assert time_text(Bytes.empty(), 0) == Some("00:00:00")
+  assert time_text(b"\x00\x00\x00\x00\x00\x0a\x0b\x0c", 0) == Some("10:11:12")
+  assert time_text(b"\x01\x01\x00\x00\x00\x0a\x0b\x0c", 0) == Some("-34:11:12")
+  assert time_text(b"\x00\x22\x00\x00\x00\x16\x3b\x3b", 0) == Some("838:59:59")
+  assert time_text(b"\x00\x00\x00\x00\x00\x01\x02\x03\x40\xe2\x01\x00", 6) == Some("01:02:03.123456")
+  assert time_text(b"\x00\x00\x00\x00\x00\x01\x02\x03\x40\xe2\x01\x00", 2) == Some("01:02:03.12")
+  assert time_text(b"\x00\x00\x00\x00\x00\x01\x02\x03", 3) == Some("01:02:03.000")
+  assert time_text(Bytes.empty(), 2) == Some("00:00:00.00")
+  assert time_text(b"\x00\x00\x00\x00\x00\x01\x02", 0) == None
+  assert time_text(b"\x00\x00\x00\x00\x00\x01\x02\x03\x40", 0) == None
+}
+
+// ---- tests: adversary, pass 1 --------------------------------------------------
+
+test "adversary: a double halfway between two shortest digits prints the even one, as the server and Python's repr do" {
+  // 1000000000000000.25 and 2^50 + 0.25 are exact; 17 digits tell each from
+  // its neighbours, and both ...2 and ...3 read back as it. MySQL 8.0 prints
+  // these columns as ...2 over the text protocol (`SELECT
+  // 1000000000000000.25e0`), and so do Python's repr and every shortest
+  // round-trip printer that breaks the tie to even.
+  assert double_text(b"\x02\x00\x34\x26\xf5\x6b\x0c\x43") == Some("1000000000000000.2")
+  assert double_text(b"\x01\x00\x00\x00\x00\x00\x10\x43") == Some("1125899906842624.2")
+  // The same tie above the half: ...75 goes to ...8 either way.
+  assert double_text(b"\x06\x00\x34\x26\xf5\x6b\x0c\x43") == Some("1000000000000000.8")
+}
