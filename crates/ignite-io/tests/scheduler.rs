@@ -1123,12 +1123,21 @@ const V0_15_0_STARTS_SEQUENTIAL: u64 = 3;
 /// task register). The last also on one worker (`IGNITE_WORKERS=1`), whose
 /// lone tasks wait through its reactor: there a wake written by the spawn
 /// that placed the task and not read back made each session's first wait
-/// end at once, and the task register its socket (`EPOLL_CTL_ADD`).
+/// end at once, and the task register its socket (`EPOLL_CTL_ADD`). In
+/// every shape no `EPOLL_CTL_DEL` of a socket (its close takes it out of
+/// epoll) and no registration of a socket for room to write (no session
+/// here fills its send buffer); sockets are registered where sessions share
+/// a worker, with 8 clients on 4 workers.
 #[test]
 fn a_connection_makes_none_of_the_calls_the_story_removed() {
     strace_works();
     let mut failures = Vec::new();
-    for (clients, each, workers) in [(8, 25, None), (1, 50, None), (1, 50, Some("1"))] {
+    for (clients, each, workers) in [
+        (8, 25, None),
+        (8, 25, Some("4")),
+        (1, 50, None),
+        (1, 50, Some("1")),
+    ] {
         let none = traced_run(None, 0, 0, workers);
         let served = traced_run(None, clients, each, workers);
         let connections = (clients * each) as i64;
@@ -1150,10 +1159,22 @@ fn a_connection_makes_none_of_the_calls_the_story_removed() {
                 registered,
                 if clients == 1 { 0 } else { i64::MAX },
             ),
+            ("EPOLL_CTL_DEL of a socket", served.deleted as i64, 0),
+            (
+                "registrations of a socket for room to write",
+                served.armed as i64,
+                0,
+            ),
         ] {
             if count > most {
                 failures.push(format!("{shape}: {count} {name}, at most {most} expected"));
             }
+        }
+        if workers == Some("4") && registered == 0 {
+            failures.push(format!(
+                "{shape}: no socket registered, so the bounds on deleting and on room to \
+                 write were not tried"
+            ));
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
