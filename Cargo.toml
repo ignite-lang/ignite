@@ -37,6 +37,11 @@ rcgen = "0.14"
 
 [profile.release.package.ignite-rt]
 codegen-units = 1
+opt-level = "s"
+
+[profile.release.package.ignite-io]
+codegen-units = 1
+opt-level = "s"
 
 [profile.dev.package."*"]
 debug = false
