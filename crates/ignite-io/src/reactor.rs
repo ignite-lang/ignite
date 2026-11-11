@@ -248,10 +248,38 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-fn eventfd() -> io::Result<EventFd> {
+pub(crate) fn eventfd() -> io::Result<EventFd> {
     Ok(EventFd::from_flags(
         EfdFlags::EFD_CLOEXEC | EfdFlags::EFD_NONBLOCK,
     )?)
+}
+
+/// One `poll` of `descriptor` for `interest` and of `wake` for input, on
+/// the calling thread, until either may be ready or `deadline` passes:
+/// whether each is. `now`, if given, is the instant `deadline` was just
+/// computed from: the timeout is taken from it instead of reading the
+/// clock again. An interrupted `poll` reports neither.
+pub(crate) fn poll_beside(
+    descriptor: BorrowedFd<'_>,
+    interest: Interest,
+    wake: BorrowedFd<'_>,
+    deadline: Option<Instant>,
+    now: Option<Instant>,
+) -> io::Result<(bool, bool)> {
+    let mut fds = [
+        PollFd::new(descriptor, interest.poll()),
+        PollFd::new(wake, PollFlags::POLLIN),
+    ];
+    let timeout = match (deadline, now) {
+        (Some(deadline), Some(now)) => timeout_left(deadline.saturating_duration_since(now)),
+        _ => timeout(deadline),
+    };
+    match nix::poll::poll(&mut fds, timeout) {
+        Ok(_) | Err(Errno::EINTR) => {}
+        Err(error) => return Err(error.into()),
+    }
+    let ready = |fd: &PollFd<'_>| fd.revents().is_some_and(|ready| !ready.is_empty());
+    Ok((ready(&fds[0]), ready(&fds[1])))
 }
 
 /// Reset `eventfd`'s counter; a counter already zero is fine.
@@ -326,26 +354,15 @@ impl EpollReactor {
         deadline: Option<Instant>,
         now: Option<Instant>,
     ) -> io::Result<bool> {
-        let mut fds = [
-            PollFd::new(descriptor, interest.poll()),
-            PollFd::new(self.wakes.as_fd(), PollFlags::POLLIN),
-        ];
-        let timeout = match (deadline, now) {
-            (Some(deadline), Some(now)) => timeout_left(deadline.saturating_duration_since(now)),
-            _ => timeout(deadline),
-        };
-        match nix::poll::poll(&mut fds, timeout) {
-            Ok(_) | Err(Errno::EINTR) => {}
-            Err(error) => return Err(error.into()),
-        }
-        if fds[1].revents().is_some_and(|ready| !ready.is_empty()) {
+        let (ready, woken) = poll_beside(descriptor, interest, self.wakes.as_fd(), deadline, now)?;
+        if woken {
             // Relaxed (here and in `forget_wakes`, `wake`): a hint that
             // saves a `read`; a wake is never lost to it, because a worker
             // looks for what was handed over before it sleeps.
             self.unread.store(false, Ordering::Relaxed);
             drain(&self.wakes);
         }
-        Ok(fds[0].revents().is_some_and(|ready| !ready.is_empty()))
+        Ok(ready)
     }
 
     /// Read back the wakes written since the eventfd was last read, before

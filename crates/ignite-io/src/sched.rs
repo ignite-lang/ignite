@@ -9,11 +9,13 @@
 //! only through the [`Reactor`] interface) until a descriptor is ready, a
 //! timer is due or another thread wakes it. A worker creates its reactor
 //! (an epoll and an eventfd descriptor) when a task first waits for a
-//! descriptor and parks its thread until then. Workers start lazily, one per
-//! spawn up to [`worker_limit`] (`IGNITE_WORKERS`, default
+//! descriptor through it (a lone task that may block the worker does not,
+//! `wait_blocking`) and parks its thread until then. Workers start lazily,
+//! one per spawn up to [`worker_limit`] (`IGNITE_WORKERS`, default
 //! `std::thread::available_parallelism`), and a worker without a task for
-//! [`crate::LINGER`] ends, so an idle server runs `main` and the drain's
-//! thread only (`docs/readiness-io.md` section 6 row 6).
+//! [`crate::LINGER`] since its last task ended ends, so an idle server runs
+//! `main` and the drain's thread only (`docs/readiness-io.md` section 6
+//! row 6).
 //!
 //! A task is a stack (2 MiB reserved as a thread's, a guard page below it,
 //! touched pages only resident; stacks are pooled: a few stay with the
@@ -61,6 +63,7 @@ use std::time::{Duration, Instant};
 
 use corosensei::stack::{DefaultStack, Stack};
 use corosensei::{Coroutine, CoroutineResult, Yielder};
+use nix::sys::eventfd::EventFd;
 
 use crate::reactor::{EpollReactor, Event, Interest, Reactor, Token};
 use crate::wait::{DescriptorWait, WaitList, Waiter, Woken, wake_ready};
@@ -587,7 +590,7 @@ pub(crate) fn spawn(job: Job) -> io::Result<()> {
                 give_stack(unused, None);
             }
             // Relaxed: a bound for `block_alone`, not an order with any data.
-            LIVE.fetch_add(1, Ordering::Relaxed);
+            escalate(LIVE.fetch_add(1, Ordering::Relaxed) + 1);
             shared.hand_over(|incoming| incoming.new.push((job, stack)));
             count(&COUNTERS.spawns);
             found.count();
@@ -633,7 +636,7 @@ fn start_worker(
             count(&COUNTERS.workers_started);
             workers.push(shared);
             // Relaxed: as above.
-            LIVE.fetch_add(1, Ordering::Relaxed);
+            escalate(LIVE.fetch_add(1, Ordering::Relaxed) + 1);
             Ok(())
         }
         Err(error) => {
@@ -1039,6 +1042,12 @@ fn work(shared: Arc<Shared>) {
             worker.resume(waiter);
             ran += 1;
         }
+        if ran > 0 {
+            // A task ran, so the worker was not without one since: a
+            // session that waits alone runs from its start to its end in
+            // one turn, and the worker lingers from its end on.
+            idle_since = None;
+        }
         let next_timer = worker.fire_timers();
         if runnable() {
             if ran >= BUDGET
@@ -1425,7 +1434,8 @@ impl Readiness {
 /// ends the wait. `None` when the worker has other work, or the
 /// hand-over ended the wait before the descriptor was ready: the task
 /// then parks as usual, so the worker runs what came instead of an
-/// attempt that finds nothing.
+/// attempt that finds nothing. A worker without a reactor waits
+/// ([`wait_blocking`]) without making one while it may.
 fn wait_alone(
     task: &Task,
     state: &Descriptor,
@@ -1441,8 +1451,13 @@ fn wait_alone(
     if shared.tasks.load(Ordering::Relaxed) != 1 || runnable() {
         return Ok(None);
     }
-    // Created here by the worker's first wait: a task runs, and `sleeping`
-    // is not set yet ([`Shared::notify`]).
+    if shared.reactor.get().is_none()
+        && let Some(waited) = wait_blocking(state, descriptor, interest, mark, deadline, now)
+    {
+        return waited.map(Some);
+    }
+    // Created here by the worker's first wait that may not block it: a
+    // task runs, and `sleeping` is not set yet ([`Shared::notify`]).
     let Ok(reactor) = shared.reactor() else {
         return Ok(None);
     };
@@ -1471,6 +1486,82 @@ fn wait_alone(
     } else {
         None
     })
+}
+
+/// [`wait_alone`] on a worker that has no reactor: the task blocks the
+/// worker's thread in one `poll` of the descriptor, under the bounds of
+/// [`block_alone`], so a worker whose tasks only wait alone makes no epoll
+/// instance and no eventfd (`story:readiness-syscalls-per-connection`:
+/// six calls per worker started, which neither v0.15.0's threads nor a
+/// `recv` that blocks make). The worker counts as busy meanwhile: a spawn
+/// finds an idle worker or starts one, as for a blocking `recv`. The
+/// `poll` also watches [`ESCALATION`], so that once as many tasks live as
+/// workers may start ([`escalate`]), the wait ends and waits through the
+/// worker's reactor instead, where a hand-over ends it: a burst of
+/// sessions that wait before their first request does not leave all but
+/// one worker blocked while the last takes the rest. `None` when the task
+/// may not block its worker, or the escalation ended the wait before the
+/// descriptor was ready.
+fn wait_blocking(
+    state: &Descriptor,
+    descriptor: BorrowedFd<'_>,
+    interest: Interest,
+    mark: u64,
+    deadline: Option<Instant>,
+    now: Option<Instant>,
+) -> Option<io::Result<DescriptorWait>> {
+    // Relaxed: a hint that saves a `poll` that would end at once.
+    if ESCALATED.load(Ordering::Relaxed) {
+        return None;
+    }
+    let escalation = escalation()?;
+    let blocking = block_alone()?;
+    // Acquire: pairs with the event count's increment (`Descriptor::ready`).
+    if state.events(interest).load(Ordering::Acquire) != mark {
+        return Some(Ok(DescriptorWait::Woken));
+    }
+    let polled =
+        crate::reactor::poll_beside(descriptor, interest, escalation.as_fd(), deadline, now);
+    drop(blocking);
+    Some(match polled {
+        Ok((true, _)) => Ok(DescriptorWait::Ready(interest)),
+        Ok((false, true)) => return None,
+        Ok((false, false)) if deadline.is_some_and(|end| Instant::now() >= end) => {
+            Ok(DescriptorWait::Deadline)
+        }
+        Ok((false, false)) => Ok(DescriptorWait::Woken),
+        Err(error) => Err(error),
+    })
+}
+
+/// Written once and never read ([`escalate`]): readable from then on, it
+/// ends every `poll` of [`wait_blocking`]. `None` when no eventfd could be
+/// made; no task then blocks its worker in a `poll`.
+static ESCALATION: OnceLock<Option<EventFd>> = OnceLock::new();
+
+/// [`ESCALATION`] was written.
+static ESCALATED: AtomicBool = AtomicBool::new(false);
+
+/// [`ESCALATION`], made by the first wait that blocks its worker in a
+/// `poll`, or by [`escalate`] before it writes it.
+fn escalation() -> Option<&'static EventFd> {
+    ESCALATION
+        .get_or_init(|| crate::reactor::eventfd().ok())
+        .as_ref()
+}
+
+/// A spawn made `live` tasks live: once they are as many as workers may
+/// start, end every `poll` of [`wait_blocking`], now and later. A worker
+/// that blocks in it takes no task, and tasks do not move; without free
+/// workers to start, a spawn that passes it would place its task on a
+/// busier worker. Once per process: [`ESCALATION`] stays readable.
+fn escalate(live: usize) {
+    if live >= worker_limit()
+        && !ESCALATED.swap(true, Ordering::SeqCst)
+        && let Some(escalation) = escalation()
+    {
+        let _ = escalation.write(1);
+    }
 }
 
 /// Workers whose only task is in a blocking read ([`block_alone`]).

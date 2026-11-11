@@ -1029,37 +1029,58 @@ fn child_silent_burst() {
 
 /// The serving side of the connect workload (rows 3.7 and 3.3
 /// `terminal/connect-8`, `story:readiness-syscalls-per-connection`) in
-/// system calls per connection: `strace -f -yy` over the whole server
-/// process, less a run of the same server that serves none. Counted are
-/// the calls of the connection path ([`TRACED`]; `close`, `read`, `write`
-/// and `epoll_ctl` only on a socket or an eventfd, see [`parse_trace`]),
-/// not what starting or ending a thread costs, so the count does not
-/// depend on how many workers start or retire. A session does what
-/// `Telnet.serve` does for the workload's client: set the idle timeout,
-/// send the prompt, read the line, look for urgent data, send `bye`,
-/// close. The client connects, waits for the prompt, pauses
+/// system calls per connection, at the default worker count (the
+/// dedicated host sets none): `strace -f -yy` over the whole server
+/// process, every call it makes, starting and ending threads included,
+/// less a run of the same server that serves none ([`parse_trace`]). A
+/// session does what `Telnet.serve` does for the workload's client: set
+/// the idle timeout, send the prompt, read the line, look for urgent data,
+/// send `bye`, close. The client connects, waits for the prompt, pauses
 /// ([`COUNTED_PAUSE`], so the traced server waits in its read as an
 /// untraced one does), sends `quit`, reads to the end and closes, again.
 ///
 /// The bounds are v0.15.0's `terminald`, Rust target, release build,
 /// counted by this same method ([`count_a_given_server`] with
-/// `SCHEDULER_COUNT_SERVER` naming the binary), the lowest of five
-/// rounds: [`V0_15_0_CONCURRENT`] with 8 clients of 25 connections each
-/// (rounds 12.95 to 13.01; the LLVM target's 12.96 to 13.02),
-/// [`V0_15_0_SEQUENTIAL`] with 50 connections in sequence (13.94 to
-/// 14.24; LLVM 14.24 to 14.78). Two calls this
-/// story removed are also bounded by name: no `EPOLL_CTL_DEL` of a socket
-/// (its close takes it out of epoll) and no registration of a socket for
-/// room to write (no session here fills its send buffer).
+/// `SCHEDULER_COUNT_SERVER` naming the binary), the lowest of ten rounds:
+/// [`V0_15_0_CONCURRENT`] with 8 clients of 25 connections each (rounds
+/// 13.63 to 13.88; the LLVM target's 13.44 to 13.54),
+/// [`V0_15_0_SEQUENTIAL`] with 50 connections in sequence (14.24 to 14.86;
+/// LLVM 14.62 to 15.30). Bounded by name besides: the threads started, at
+/// most [`V0_15_0_STARTS_CONCURRENT`] and [`V0_15_0_STARTS_SEQUENTIAL`]
+/// (the most of the same rounds; v0.15.0 started 8 to 11, median 9, and 1
+/// to 3, median 2: a thread or worker is started when a connection comes
+/// before the session it follows has ended, which the load decides, but a
+/// worker that served for a second and retired started 16 and more,
+/// [`a_worker_serving_sessions_back_to_back_stays`]); no epoll instance
+/// (a worker whose tasks only wait alone makes no reactor); no
+/// `EPOLL_CTL_DEL` of a socket (its close takes it out of epoll); no
+/// registration of a socket for room to write (no session here fills its
+/// send buffer).
 #[test]
 fn a_connection_costs_no_more_system_calls_than_at_v0_15_0() {
     strace_works();
     let mut failures = Vec::new();
-    for (clients, each, bound) in [(8, 25, V0_15_0_CONCURRENT), (1, 50, V0_15_0_SEQUENTIAL)] {
-        let (shape, total, served) = count_shape(None, clients, each);
-        println!("v0.15.0 {bound}; {shape}");
+    for (clients, each, bound, starts) in [
+        (8, 25, V0_15_0_CONCURRENT, V0_15_0_STARTS_CONCURRENT),
+        (1, 50, V0_15_0_SEQUENTIAL, V0_15_0_STARTS_SEQUENTIAL),
+    ] {
+        let (shape, total, served, none) = count_shape(None, clients, each, None);
+        println!("v0.15.0 {bound}, {starts} threads started; {shape}");
         if total > bound {
             failures.push(format!("{shape}\nmore than v0.15.0's {bound}"));
+        }
+        let started = served.started.saturating_sub(none.started);
+        if started > starts {
+            failures.push(format!(
+                "{shape}\n{started} threads started, v0.15.0 started {starts}"
+            ));
+        }
+        let epolls = served.calls.get("epoll_create1").copied().unwrap_or(0);
+        if epolls > 0 {
+            failures.push(format!(
+                "{shape}\n{epolls} epoll instances made, none expected: a worker whose \
+                 tasks only wait alone makes no reactor"
+            ));
         }
         if served.deleted > 0 {
             failures.push(format!(
@@ -1081,9 +1102,62 @@ fn a_connection_costs_no_more_system_calls_than_at_v0_15_0() {
 
 /// v0.15.0's count per connection with 8 clients of 25 connections, by
 /// [`count_a_given_server`] over its `terminald` (Rust target, release).
-const V0_15_0_CONCURRENT: f64 = 12.95;
+const V0_15_0_CONCURRENT: f64 = 13.63;
 /// The same with 50 connections in sequence.
-const V0_15_0_SEQUENTIAL: f64 = 13.94;
+const V0_15_0_SEQUENTIAL: f64 = 14.24;
+/// The threads v0.15.0's `terminald` started for 8 clients of 25
+/// connections.
+const V0_15_0_STARTS_CONCURRENT: u64 = 11;
+/// The same for 50 connections in sequence.
+const V0_15_0_STARTS_SEQUENTIAL: u64 = 3;
+
+/// The calls `story:readiness-syscalls-per-connection` removed, each bounded
+/// by name over the run serving connections less the run serving none, so
+/// that one of them coming back fails even while the total stays under
+/// v0.15.0's: no `setsockopt` per connection (the idle timeout is set before
+/// a `recv` that blocks, and no session here blocks in one), one `accept4`
+/// per connection (a `poll` comes first, no `accept4` fails), one
+/// `recvfrom` per connection (the first read waits before it reads), and,
+/// with sessions in sequence, each alone on its worker, no `epoll_ctl` of a
+/// socket (a wake already taken does not end the lone wait and make its
+/// task register). The last also on one worker (`IGNITE_WORKERS=1`), whose
+/// lone tasks wait through its reactor: there a wake written by the spawn
+/// that placed the task and not read back made each session's first wait
+/// end at once, and the task register its socket (`EPOLL_CTL_ADD`).
+#[test]
+fn a_connection_makes_none_of_the_calls_the_story_removed() {
+    strace_works();
+    let mut failures = Vec::new();
+    for (clients, each, workers) in [(8, 25, None), (1, 50, None), (1, 50, Some("1"))] {
+        let none = traced_run(None, 0, 0, workers);
+        let served = traced_run(None, clients, each, workers);
+        let connections = (clients * each) as i64;
+        let calls = |name: &str| {
+            let count = |traced: &Traced| traced.calls.get(name).copied().unwrap_or(0) as i64;
+            count(&served) - count(&none)
+        };
+        let shape = format!(
+            "{clients} clients x {each} on {} workers",
+            workers.unwrap_or("the default")
+        );
+        let registered = served.registered as i64 - none.registered as i64;
+        for (name, count, most) in [
+            ("setsockopt", calls("setsockopt"), 0),
+            ("accept4", calls("accept4"), connections),
+            ("recvfrom", calls("recvfrom"), connections),
+            (
+                "epoll_ctl of a socket",
+                registered,
+                if clients == 1 { 0 } else { i64::MAX },
+            ),
+        ] {
+            if count > most {
+                failures.push(format!("{shape}: {count} {name}, at most {most} expected"));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
 
 /// The count of [`a_connection_costs_no_more_system_calls_than_at_v0_15_0`]
 /// over a `terminald` binary named by `SCHEDULER_COUNT_SERVER` (started
@@ -1100,7 +1174,7 @@ fn count_a_given_server() {
     let shape = std::env::var("SCHEDULER_COUNT_SHAPE").unwrap_or_default();
     for (clients, each) in [(8, 25), (1, 50)] {
         if shape.is_empty() || shape == format!("{clients}x{each}") {
-            let (shape, _, _) = count_shape(Some(Path::new(&server)), clients, each);
+            let (shape, _, _, _) = count_shape(Some(Path::new(&server)), clients, each, None);
             println!("{shape}");
         }
     }
@@ -1120,19 +1194,15 @@ fn strace_works() {
     );
 }
 
-/// The system calls [`parse_trace`] counts: the connection path. Thread
-/// start and end (`clone3`, `mmap`, `mprotect`, `sigaltstack`,
-/// `rt_sigprocmask`, a worker's `epoll_create1` and `eventfd2`) are not
-/// traced.
-const TRACED: &str = "trace=accept,accept4,getpeername,setsockopt,recvfrom,recvmsg,read,\
-                      sendto,sendmsg,write,shutdown,close,poll,ppoll,epoll_wait,epoll_pwait,\
-                      epoll_ctl,futex,fcntl";
-
 /// What one traced run of a server made.
 #[derive(Default)]
 struct Traced {
     /// Calls by name.
     calls: BTreeMap<String, u64>,
+    /// Threads started (`clone3`, `clone`).
+    started: u64,
+    /// `EPOLL_CTL_ADD`, `EPOLL_CTL_MOD` or `EPOLL_CTL_DEL` of a socket.
+    registered: u64,
     /// `EPOLL_CTL_DEL` of a socket.
     deleted: u64,
     /// `EPOLL_CTL_ADD` or `EPOLL_CTL_MOD` of a socket with `EPOLLOUT`.
@@ -1150,21 +1220,10 @@ fn socket(argument: &str) -> bool {
         .starts_with("<TCP")
 }
 
-/// Whether `argument` is an eventfd, a worker's wake.
-fn eventfd(argument: &str) -> bool {
-    argument
-        .trim_start()
-        .trim_start_matches(|c: char| c.is_ascii_digit())
-        .starts_with("<{eventfd-")
-}
-
-/// The calls of a `strace -f -yy` trace: every call [`TRACED`] names,
-/// except `close` of what is no socket (a retiring worker's epoll and
-/// eventfd, files), `read` and `write` of what is neither a socket nor an
-/// eventfd (standard output, a thread's start reading its CPU limits),
-/// `epoll_ctl` of what is no socket (a worker's own eventfd when its
-/// reactor is made), and `fcntl(F_GETFD)` (a debug build's check before
-/// each `close`, std's `debug_assert_fd_is_open`).
+/// The calls of a `strace -f -yy` trace: every call, except
+/// `fcntl(F_GETFD)`, the check a debug build makes before each `close`
+/// (std's `debug_assert_fd_is_open`), which the release builds compared
+/// with do not make.
 fn parse_trace(text: &str) -> Traced {
     let mut traced = Traced::default();
     for line in text.lines() {
@@ -1181,40 +1240,43 @@ fn parse_trace(text: &str) -> Traced {
         let Some((name, arguments)) = call.split_once('(') else {
             continue;
         };
-        let counted = match name {
-            "close" => socket(arguments),
-            "read" | "write" => socket(arguments) || eventfd(arguments),
-            "fcntl" => !arguments.contains("F_GETFD"),
-            "epoll_ctl" => {
-                let target = ["EPOLL_CTL_ADD, ", "EPOLL_CTL_MOD, ", "EPOLL_CTL_DEL, "]
-                    .iter()
-                    .find_map(|operation| arguments.split_once(operation))
-                    .is_some_and(|(_, target)| socket(target));
-                if target && arguments.contains("EPOLL_CTL_DEL") {
-                    traced.deleted += 1;
-                }
-                if target && !arguments.contains("EPOLL_CTL_DEL") && arguments.contains("EPOLLOUT")
-                {
-                    traced.armed += 1;
-                }
-                target
-            }
-            _ => true,
-        };
-        if counted {
-            *traced.calls.entry(name.to_string()).or_default() += 1;
+        if name == "fcntl" && arguments.contains("F_GETFD") {
+            continue;
         }
+        if name == "clone3" || name == "clone" {
+            traced.started += 1;
+        }
+        if name == "epoll_ctl"
+            && ["EPOLL_CTL_ADD, ", "EPOLL_CTL_MOD, ", "EPOLL_CTL_DEL, "]
+                .iter()
+                .find_map(|operation| arguments.split_once(operation))
+                .is_some_and(|(_, target)| socket(target))
+        {
+            traced.registered += 1;
+            if arguments.contains("EPOLL_CTL_DEL") {
+                traced.deleted += 1;
+            } else if arguments.contains("EPOLLOUT") {
+                traced.armed += 1;
+            }
+        }
+        *traced.calls.entry(name.to_string()).or_default() += 1;
     }
     traced
 }
 
 /// Count one shape: the run serving `clients` x `each` connections less
 /// the run serving none, per connection, of `server` (a `terminald`) or of
-/// [`child_counted_server`]. The shape's line with the table, the total,
-/// and the serving run.
-fn count_shape(server: Option<&Path>, clients: usize, each: usize) -> (String, f64, Traced) {
-    let none = traced_run(server, 0, 0);
-    let served = traced_run(server, clients, each);
+/// [`child_counted_server`] on `workers` workers (`None`: the default).
+/// The shape's line with the table, the total, the serving run and the
+/// run serving none.
+fn count_shape(
+    server: Option<&Path>,
+    clients: usize,
+    each: usize,
+    workers: Option<&str>,
+) -> (String, f64, Traced, Traced) {
+    let none = traced_run(server, 0, 0, workers);
+    let served = traced_run(server, clients, each, workers);
     let connections = (clients * each) as f64;
     let mut names: Vec<&String> = none.calls.keys().chain(served.calls.keys()).collect();
     names.sort();
@@ -1226,24 +1288,49 @@ fn count_shape(server: Option<&Path>, clients: usize, each: usize) -> (String, f
         let calls = (count(&served) - count(&none)) / connections;
         total += calls;
         if calls.abs() >= 0.005 {
-            table.push_str(&format!("{name:>12} {calls:6.2}\n"));
+            table.push_str(&format!("{name:>16} {calls:6.2}\n"));
         }
     }
     let shape = format!(
-        "{clients} clients x {each}: {total:.2} per connection; EPOLL_CTL_DEL of a socket {}, \
-         registrations for room to write {}, wakes with room to write only {}\n{table}",
-        served.deleted, served.armed, served.write_only
+        "{clients} clients x {each}: {total:.2} per connection; threads started {}; \
+         EPOLL_CTL_DEL of a socket {}, registrations for room to write {}, wakes with room \
+         to write only {}\n{table}",
+        served.started as i64 - none.started as i64,
+        served.deleted,
+        served.armed,
+        served.write_only
     );
-    (shape, total, served)
+    (shape, total, served, none)
 }
 
 /// Runs of [`traced_run`] in this process, to name their trace files.
 static TRACES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
+/// A server under `strace`: when dropped, also while a client's failure
+/// unwinds, the server and `strace` are killed if they still run and
+/// waited for, and the trace file is removed.
+struct Tracing {
+    tracer: std::process::Child,
+    trace: std::path::PathBuf,
+}
+
+impl Drop for Tracing {
+    fn drop(&mut self) {
+        if matches!(self.tracer.try_wait(), Ok(None)) {
+            if let Some(server) = child_of(self.tracer.id()) {
+                let _ = nix::sys::signal::kill(server, nix::sys::signal::Signal::SIGKILL);
+            }
+            let _ = self.tracer.kill();
+            let _ = self.tracer.wait();
+        }
+        let _ = std::fs::remove_file(&self.trace);
+    }
+}
+
 /// Run `server` (a `terminald`, ended with SIGTERM) or
-/// [`child_counted_server`] under `strace` for `clients` clients of `each`
-/// connections; what it made.
-fn traced_run(server: Option<&Path>, clients: usize, each: usize) -> Traced {
+/// [`child_counted_server`] on `workers` workers under `strace` for
+/// `clients` clients of `each` connections; what it made.
+fn traced_run(server: Option<&Path>, clients: usize, each: usize, workers: Option<&str>) -> Traced {
     use std::io::{BufRead, BufReader, Read};
     let trace = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
         "scheduler-trace-{}-{}.txt",
@@ -1252,9 +1339,10 @@ fn traced_run(server: Option<&Path>, clients: usize, each: usize) -> Traced {
     ));
     let mut command = Command::new("strace");
     command
-        .args(["-f", "-yy", "-e", TRACED, "-o"])
+        .args(["-f", "-yy", "-o"])
         .arg(&trace)
         .env_remove("IGNITE_IO")
+        .env_remove("IGNITE_WORKERS")
         .stdout(std::process::Stdio::piped());
     let given = server.map(|server| {
         let port = std::net::TcpListener::bind((LOCALHOST, 0))
@@ -1275,11 +1363,16 @@ fn traced_run(server: Option<&Path>, clients: usize, each: usize) -> Traced {
                 "--test-threads=1",
             ])
             .env(CHILD, "1")
-            .env("IGNITE_WORKERS", "4")
             .env(COUNTED_CONNECTIONS, (clients * each).to_string());
+        if let Some(workers) = workers {
+            command.env("IGNITE_WORKERS", workers);
+        }
     }
-    let mut tracer = command.spawn().expect("strace runs");
-    let mut out = BufReader::new(tracer.stdout.take().unwrap());
+    let mut tracing = Tracing {
+        tracer: command.spawn().expect("strace runs"),
+        trace,
+    };
+    let mut out = BufReader::new(tracing.tracer.stdout.take().unwrap());
     let port = match given {
         Some(port) => {
             assert!(until(|| listening(port)), "the server never listened");
@@ -1309,21 +1402,30 @@ fn traced_run(server: Option<&Path>, clients: usize, each: usize) -> Traced {
             })
         })
         .collect();
-    for worker in workers {
-        worker.join().unwrap();
-    }
+    let failed: Vec<String> = workers
+        .into_iter()
+        .filter_map(|worker| worker.join().err())
+        .map(|panic| {
+            panic
+                .downcast_ref::<String>()
+                .cloned()
+                .or_else(|| panic.downcast_ref::<&str>().map(|s| s.to_string()))
+                .unwrap_or_default()
+        })
+        .collect();
+    assert!(failed.is_empty(), "a client failed: {failed:?}");
     if given.is_some() {
-        terminate_child_of(tracer.id());
+        let server = child_of(tracing.tracer.id()).expect("strace's child");
+        nix::sys::signal::kill(server, nix::sys::signal::Signal::SIGTERM).unwrap();
     }
     let mut rest = String::new();
     out.read_to_string(&mut rest).unwrap();
-    let status = tracer.wait().unwrap();
+    let status = tracing.tracer.wait().unwrap();
     assert!(
         given.is_some() || status.success(),
         "the server failed: {status:?}\n{rest}"
     );
-    let text = std::fs::read_to_string(&trace).unwrap();
-    let _ = std::fs::remove_file(&trace);
+    let text = std::fs::read_to_string(&tracing.trace).unwrap();
     let traced = parse_trace(&text);
     assert!(!traced.calls.is_empty(), "no calls traced:\n{text}");
     traced
@@ -1344,21 +1446,15 @@ fn listening(port: u16) -> bool {
     })
 }
 
-/// Send SIGTERM to the process `strace` (`tracer`) started.
-fn terminate_child_of(tracer: u32) {
-    let children =
-        std::fs::read_to_string(format!("/proc/{tracer}/task/{tracer}/children")).unwrap();
-    let child: i32 = children
+/// The process `strace` (`tracer`) started, while it runs.
+fn child_of(tracer: u32) -> Option<nix::unistd::Pid> {
+    std::fs::read_to_string(format!("/proc/{tracer}/task/{tracer}/children"))
+        .ok()?
         .split_whitespace()
-        .next()
-        .expect("strace's child")
+        .next()?
         .parse()
-        .unwrap();
-    nix::sys::signal::kill(
-        nix::unistd::Pid::from_raw(child),
-        nix::sys::signal::Signal::SIGTERM,
-    )
-    .unwrap();
+        .ok()
+        .map(nix::unistd::Pid::from_raw)
 }
 
 /// The client's pause between the prompt and its request.
@@ -1423,6 +1519,46 @@ fn child_counted_server() {
         });
     }
     wait_for_tasks();
+}
+
+/// A worker that runs one session after another, each of them waiting
+/// alone on the worker's thread from its start to its end, is not without
+/// a task between them for [`ignite_io::LINGER`], so it does not end and
+/// no other starts, however long the sessions go on
+/// (`story:readiness-syscalls-per-connection`: a worker that served for
+/// [`ignite_io::LINGER`] used to retire after its next session, and the
+/// spawn after it started a thread again).
+#[test]
+fn a_worker_serving_sessions_back_to_back_stays() {
+    passed(&child("scheduler::child_back_to_back", &[]));
+}
+
+#[test]
+fn child_back_to_back() {
+    use std::io::Write;
+    if !in_child() {
+        return;
+    }
+    let until = Instant::now() + ignite_io::LINGER * 3 / 2;
+    let mut sessions = 0;
+    while Instant::now() < until {
+        let (stream, mut peer) = pair();
+        let (read, got) = mpsc::channel();
+        spawn(move || {
+            let _ = read.send(stream.read(16));
+        });
+        std::thread::sleep(Duration::from_millis(50));
+        peer.write_all(b"hi").unwrap();
+        let got = got.recv_timeout(LIMIT).expect("the session read");
+        assert_eq!(got.unwrap(), Input::Data(b"hi".to_vec()));
+        wait_for_tasks();
+        sessions += 1;
+    }
+    let counts = ignite_io::scheduler_counts();
+    assert_eq!(
+        counts.workers_started, 1,
+        "{sessions} sessions in sequence: {counts:?}"
+    );
 }
 
 /// A socket already registered with a worker for reading (a reader parked

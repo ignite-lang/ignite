@@ -5,6 +5,9 @@
 use std::path::Path;
 use std::process::Command;
 
+/// Only the compiler's diagnostics count (`--message-format json`, a
+/// `compiler-message` whose text begins with `warning`): a warning cargo
+/// prints about the machine's configuration is not the library's.
 #[test]
 fn the_library_alone_builds_without_a_warning() {
     let output = Command::new(env!("CARGO"))
@@ -12,7 +15,7 @@ fn the_library_alone_builds_without_a_warning() {
             "check",
             "--lib",
             "--message-format",
-            "short",
+            "json",
             "--manifest-path",
         ])
         .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"))
@@ -20,7 +23,18 @@ fn the_library_alone_builds_without_a_warning() {
         .arg(Path::new(env!("CARGO_TARGET_TMPDIR")).join("library-alone"))
         .output()
         .expect("cargo runs");
-    let printed = String::from_utf8_lossy(&output.stderr);
-    assert!(output.status.success(), "{printed}");
-    assert!(!printed.contains("warning"), "{printed}");
+    let messages = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "{messages}\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let warnings: Vec<&str> = messages
+        .lines()
+        .filter(|line| {
+            line.contains(r#""reason":"compiler-message""#)
+                && line.contains(r#""rendered":"warning"#)
+        })
+        .collect();
+    assert!(warnings.is_empty(), "{}", warnings.join("\n"));
 }
