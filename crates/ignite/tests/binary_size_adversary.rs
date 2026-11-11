@@ -1,9 +1,12 @@
-//! Adversary case of `story:binary-size-back`: the generated project's dev
-//! profile builds `ignite-std` without debug information
+//! Adversary cases of `story:binary-size-back`, Rust target. The generated
+//! project's dev profile builds `ignite-std` without debug information
 //! (`STD_DEV_PROFILE` in `crates/ignite-rustgen/src/lib.rs`), and the
 //! story's acceptance keeps "a dev backtrace of a failing Ignite program
-//! still names file and line". `dev_build`'s backtrace fixture fails in
-//! the program's own fn; this one fails in a fn of the standard library.
+//! still names file and line": `dev_build`'s backtrace fixture fails in
+//! the program's own fn, the one here in a fn of the standard library.
+//! And the driver's link argument for packed relocations reaches cargo as
+//! a target's `rustflags`, which takes the place of the `build.rustflags`
+//! of the user's cargo configuration.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -33,6 +36,68 @@ fn gdb_backtrace(executable: &Path) -> String {
         .output()
         .expect("start gdb");
     format!("{}{}", text(&output.stdout), text(&output.stderr))
+}
+
+/// The link argument the driver gives a dynamic Rust build goes to cargo as
+/// `target.'cfg(all())'.rustflags` (`link_rustflags` in `src/lib.rs`).
+/// Cargo takes its extra flags from one source only, the first of
+/// `RUSTFLAGS`, the matching `target.*.rustflags` joined, and
+/// `build.rustflags`: with a target entry always there, the
+/// `build.rustflags` of the user's cargo configuration (a processor to
+/// build for, a linker) no longer reach the build, which they did before.
+/// Here `build.rustflags` (as `CARGO_BUILD_RUSTFLAGS`) names a run path,
+/// which the executable's dynamic section must then hold. The cargo home
+/// is one of this test's own (the registry of the real one linked in) and
+/// the build runs from `/`, so that no other cargo configuration, with
+/// target flags of its own, takes part.
+#[test]
+fn a_rust_build_keeps_the_build_rustflags_of_the_cargo_configuration() {
+    const MARKER: &str = "/build-rustflags-marker";
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/backtrace.ignite");
+    let dir = tmp("size-build-rustflags");
+    let real_home = std::env::var_os("CARGO_HOME").map_or_else(
+        || Path::new(&std::env::var_os("HOME").expect("HOME")).join(".cargo"),
+        PathBuf::from,
+    );
+    let home = dir.join("cargo-home");
+    std::fs::create_dir_all(&home).unwrap();
+    std::os::unix::fs::symlink(real_home.join("registry"), home.join("registry")).unwrap();
+    let target = dir.join("cargo");
+    let build = Command::new(env!("CARGO_BIN_EXE_ignite"))
+        .arg("build")
+        .arg(&source)
+        .args(["--target", "rust"])
+        .arg("--out")
+        .arg(dir.join("out"))
+        .arg("--target-dir")
+        .arg(&target)
+        .current_dir("/")
+        .env("CARGO_HOME", &home)
+        .env(
+            "CARGO_BUILD_RUSTFLAGS",
+            format!("-C link-arg=-Wl,-rpath,{MARKER}"),
+        )
+        .env_remove("RUSTFLAGS")
+        .env_remove("CARGO_ENCODED_RUSTFLAGS")
+        .env_remove("CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS")
+        .output()
+        .expect("start ignite build");
+    assert!(
+        build.status.success(),
+        "ignite build: {}{}",
+        text(&build.stdout),
+        text(&build.stderr)
+    );
+    let dynamic = Command::new("readelf")
+        .arg("-dW")
+        .arg(target.join("debug/overflow"))
+        .output()
+        .expect("start readelf");
+    let dynamic = text(&dynamic.stdout);
+    assert!(
+        dynamic.contains(MARKER),
+        "the run path of build.rustflags is not in the executable:\n{dynamic}"
+    );
 }
 
 /// A program that fails inside the standard library (`std.time`'s
