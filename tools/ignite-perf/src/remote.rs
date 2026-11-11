@@ -28,7 +28,8 @@
 //! `--run vX.Y.Z` the run is a release: a row whose HEAD median is worse than BASE's (the last
 //! release, measured on the same host in the same run) beyond the metric's tolerance in
 //! `quality/baseline.json`, or worse in every pass than every pass of BASE, refuses it, and the
-//! records are labelled `run`.
+//! records are labelled `run`. A cell of the size row (3.9) that is worse is held by a
+//! `decision` on its bar and printed instead ([`judge`]).
 //!
 //! `--dry-run` makes the read-only calls, makes every call that creates with EC2's
 //! `--dry-run` (the answer `DryRunOperation` is success) and prints the rest without making
@@ -1608,11 +1609,53 @@ pub fn shown(value: i64, unit: &str) -> String {
 /// every HEAD sample is worse than every BASE sample (a row of one sample each: any worse value).
 /// The tolerance is a bound on noise only: where the samples overlap the difference is not
 /// shown and the tolerance decides; where they do not, the row is worse. No `decision` holds a
-/// row for a release.
+/// row for a release, the size row excepted ([`judge`]).
 pub fn refusals(baseline: &Json, rows: &[Row]) -> R<Vec<String>> {
-    let mut out = Vec::new();
+    Ok(judge(baseline, rows)?.refused)
+}
+
+/// What a release run found: every reason the release is refused, and every grown cell of the
+/// size row a decision holds, one line each (the cell, BASE's value, HEAD's, the decision).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Judged {
+    pub refused: Vec<String>,
+    pub grown: Vec<String>,
+}
+
+/// The size row among the rows this run measures: the stripped release binary against plain
+/// Rust. It is the only one of them the baseline may mark `"release_growth": "decision"`; the
+/// others are time and memory, which no decision holds for a release.
+pub const SIZE_ROW: &str = "3.9";
+
+/// The rows of a release run judged against `baseline` ([`refusals`]). A cell of the size row
+/// (`"release_growth": "decision"` on its metric; `AGENTS.md` § Releases: a binary may grow when
+/// a release adds code) that would be refused is listed in `grown` instead when its bar in the
+/// baseline carries a `decision`, which names the code that added the bytes; without one it is
+/// refused and the refusal says the decision is missing. Another value of the mark, or the mark
+/// on a row other than [`SIZE_ROW`], is an error.
+pub fn judge(baseline: &Json, rows: &[Row]) -> R<Judged> {
+    let mut out = Judged::default();
     for row in rows {
         let metric = baseline.field("metrics").field(&row.metric);
+        let size_row = match metric.get("release_growth") {
+            None => false,
+            Some(Json::Str(rule)) if rule == "decision" => {
+                if row.metric != SIZE_ROW {
+                    return Err(format!(
+                        "{}: `release_growth` is for the size row {SIZE_ROW} only; no decision holds a timing or benchmark row for a release",
+                        row.metric
+                    ));
+                }
+                true
+            }
+            Some(other) => {
+                return Err(format!(
+                    "{}: `release_growth` is {}, and \"decision\" is its only value",
+                    row.metric,
+                    compact(other)
+                ));
+            }
+        };
         let direction = metric
             .field("direction")
             .as_str()
@@ -1649,14 +1692,31 @@ pub fn refusals(baseline: &Json, rows: &[Row]) -> R<Vec<String>> {
             } else {
                 "; every sample worse than every sample of the base"
             };
-            out.push(format!(
-                "{} {}: {} at the base, {} now ({direction}, {}{shown_apart})",
+            let values = format!(
+                "{} {}: {} at the base, {} now",
                 row.metric,
                 row.target,
                 shown(base, unit),
-                shown(head, unit),
-                compact(tolerance)
-            ));
+                shown(head, unit)
+            );
+            let judged = format!("({direction}, {}{shown_apart})", compact(tolerance));
+            if !size_row {
+                out.refused.push(format!("{values} {judged}"));
+                continue;
+            }
+            let decision = metric
+                .field("bars")
+                .field(&row.target)
+                .field("decision")
+                .as_str()
+                .map(str::trim)
+                .filter(|decision| !decision.is_empty());
+            match decision {
+                Some(decision) => out.grown.push(format!("{values}; decision: {decision}")),
+                None => out.refused.push(format!(
+                    "{values} {judged}; a size row grows at a release only by a `decision` on the bar of the grown cell, and a `decision` naming the added code is missing"
+                )),
+            }
         }
     }
     Ok(out)
@@ -1842,10 +1902,10 @@ pub fn main(args: &RemoteArgs) -> R<i32> {
         bench_records = crate::bench::records(&samples, &sizes, args.bench_passes);
     }
     let baseline = crate::perf::read_json(&args.repo.join("quality/baseline.json"))?;
-    let refused = if args.run.starts_with('v') {
-        refusals(&baseline, &rows)?
+    let Judged { refused, grown } = if args.run.starts_with('v') {
+        judge(&baseline, &rows)?
     } else {
-        Vec::new()
+        Judged::default()
     };
     let label = if refused.is_empty() {
         args.run.as_str()
@@ -1907,6 +1967,13 @@ pub fn main(args: &RemoteArgs) -> R<i32> {
         );
     }
     println!("appended {} records to {}", lines.len(), history.display());
+    if !grown.is_empty() {
+        println!(
+            "release {}: the size row above the base, each cell held by the decision on its bar:\n  {}",
+            args.run,
+            grown.join("\n  ")
+        );
+    }
     if !refused.is_empty() {
         eprintln!("release {} refused:\n  {}", args.run, refused.join("\n  "));
         return Ok(1);

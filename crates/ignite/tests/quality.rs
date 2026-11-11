@@ -20,6 +20,7 @@
 //! it never writes a worse one.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -153,6 +154,11 @@ pub struct Metric {
     pub goal: Option<String>,
     /// Why the metric has no number, when it has none.
     pub unmeasured: Option<String>,
+    /// `"release_growth": "decision"` in the baseline: a binary-size row
+    /// ([`SIZE`]). A release may leave a cell of it above the last release
+    /// when the cell's bar carries a `decision` naming the code that added
+    /// the bytes ([`release_judged_against`]); a merge reads nothing from it.
+    pub grows_by_decision: bool,
     pub bars: BTreeMap<String, Bar>,
 }
 
@@ -255,6 +261,23 @@ pub fn read_baseline(json: &Json) -> Result<Baseline, String> {
                 "{id}: a metric has a `source` or says why it is `unmeasured`, one of the two"
             ));
         }
+        let grows_by_decision = match fields.get("release_growth") {
+            None => false,
+            Some(Json::Str(rule)) if rule == "decision" => {
+                if !SIZE.contains(&id.as_str()) {
+                    return Err(format!(
+                        "{id}: `release_growth` is for the binary-size rows {SIZE:?} only; no decision holds another row for a release"
+                    ));
+                }
+                true
+            }
+            Some(other) => {
+                return Err(format!(
+                    "{id}: `release_growth` is {}, and \"decision\" is its only value",
+                    other.compact()
+                ));
+            }
+        };
         let mut bars = BTreeMap::new();
         if let Some(entries) = fields.get("bars") {
             for (target, bar) in object(entries, &format!("{id} bars"))? {
@@ -297,6 +320,7 @@ pub fn read_baseline(json: &Json) -> Result<Baseline, String> {
                 tolerance_decision: optional(fields, "tolerance_decision"),
                 goal: optional(fields, "goal"),
                 unmeasured,
+                grows_by_decision,
                 bars,
             },
         );
@@ -390,6 +414,9 @@ pub fn write_baseline(baseline: &Baseline) -> String {
             }
             if let Some(reason) = &m.unmeasured {
                 fields.insert("unmeasured".to_string(), s(reason));
+            }
+            if m.grows_by_decision {
+                fields.insert("release_growth".to_string(), s("decision"));
             }
             if !m.bars.is_empty() {
                 let bars = m
@@ -1668,6 +1695,16 @@ fn host_runs(history: &[Record]) -> HostRuns {
 /// it, `check` refuses a relabel against `main`).
 const TIMING: [&str; 3] = ["5.3", "6.1", "6.2"];
 
+/// The binary-size rows: 3.2 (bytes of `todod` and `terminald`, `task
+/// quality`) and 3.9 (the stripped release binary against plain Rust,
+/// `task quality-remote`). They are the rows the baseline marks with
+/// `"release_growth": "decision"` and the only ones it may mark
+/// (`read_baseline`, `the_size_rows_are_marked_and_no_other_row_is`): time
+/// comes before bytes, so a release may add bytes with the code it adds and
+/// may add time on no row (`AGENTS.md` § Releases). The list is fixed here,
+/// as [`TIMING`] is, so a row relabelled as a size row is not exempted.
+const SIZE: [&str; 2] = ["3.2", "3.9"];
+
 fn is_timing(id: &str) -> bool {
     TIMING.contains(&id)
 }
@@ -2055,6 +2092,22 @@ server (3.3, 3.7 to 3.9) are ratios against a plain-Rust implementation of the s
 measured on that host in the same run (`bench/native/`); a Go implementation is shown as a\n\
 reference without a bar.\n\n",
     );
+    let sizes: Vec<&str> = baseline
+        .metrics
+        .iter()
+        .filter(|(_, m)| m.grows_by_decision)
+        .map(|(id, _)| id.as_str())
+        .collect();
+    if !sizes.is_empty() {
+        out.push_str(&format!(
+            "The binary-size rows ({}) are the one exception for a release, marked `release_growth` in\n\
+`quality/baseline.json`: a release that adds code may leave a cell of them above the release before\n\
+it when the cell's bar carries a decision naming the code that added the bytes, and the release run\n\
+lists every such cell. Without that decision the release is refused. A merge holds these rows to\n\
+their bars like any other, and bytes are never bought with time.\n\n",
+            sizes.join(", ")
+        ));
+    }
     let hosts = host_runs(history);
     out.push_str(&format!("Current values: run {current_run}.\n"));
     for (index, area) in baseline.areas.iter().enumerate() {
@@ -2199,18 +2252,22 @@ fn civil_date(secs: u64) -> String {
 /// bars are judged here against the bars in the baseline at the tag (`git
 /// show <tag>:quality/baseline.json`): a bar a decision moved worse than the
 /// tag's refuses the release ([`decided_against_the_tag`]).
+///
+/// The size rows are the one exception (`"release_growth": "decision"` in
+/// the baseline, [`SIZE`]; `AGENTS.md` § Releases, 2026-11-11: a binary may
+/// grow when a release adds code). A cell of one above the reference is not
+/// refused when its bar carries a `decision`, which names the code that
+/// added the bytes: it is listed ([`Release::grown`], [`grown_section`]).
+/// Without a decision on its bar it is refused, and the refusal says the
+/// decision is missing. The two checks of a bar a decision moved worse skip
+/// these rows.
 pub fn release_refusals(
     baseline: &Baseline,
     history: &[Record],
     values: &[Value],
     last_release: impl Into<LastRelease>,
 ) -> Vec<String> {
-    let last_release = last_release.into();
-    let at_tag = match &last_release {
-        LastRelease::Tag(tag) => baseline_at(tag),
-        _ => None,
-    };
-    release_refusals_against(baseline, at_tag.as_ref(), history, values, last_release)
+    release_judged(baseline, history, values, last_release).refused
 }
 
 /// The baseline at the revision `rev`, when it can be read.
@@ -2227,6 +2284,86 @@ pub fn release_refusals_against(
     values: &[Value],
     last_release: impl Into<LastRelease>,
 ) -> Vec<String> {
+    release_judged_against(baseline, at_tag, history, values, last_release).refused
+}
+
+/// One cell of a size row above the last release that the decision on its
+/// bar holds.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Grown {
+    pub metric: String,
+    pub target: String,
+    /// The value at the last release.
+    pub then: i64,
+    pub now: i64,
+    pub unit: String,
+    pub decision: String,
+}
+
+/// What the release check found: every reason the release is refused, and
+/// every grown cell of a size row a decision holds.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Release {
+    pub refused: Vec<String>,
+    pub grown: Vec<Grown>,
+}
+
+/// The section of a release run's output that lists `grown`, one line per
+/// cell: the cell, its value at the last release, its value now and the
+/// decision on its bar. Empty when no cell grew.
+pub fn grown_section(run: &str, grown: &[Grown]) -> String {
+    if grown.is_empty() {
+        return String::new();
+    }
+    let mut out = format!(
+        "release {run}: {} of the size rows above the last release, each held by the decision on its bar:\n",
+        match grown.len() {
+            1 => "1 cell".to_string(),
+            n => format!("{n} cells"),
+        }
+    );
+    for cell in grown {
+        out.push_str(&format!(
+            "  {} {}: {} at the last release, {} now; decision: {}\n",
+            cell.metric,
+            cell.target,
+            shown(cell.then, &cell.unit),
+            shown(cell.now, &cell.unit),
+            cell.decision
+        ));
+    }
+    out
+}
+
+/// [`release_judged_against`] with the baseline at the last release's tag
+/// read from git.
+pub fn release_judged(
+    baseline: &Baseline,
+    history: &[Record],
+    values: &[Value],
+    last_release: impl Into<LastRelease>,
+) -> Release {
+    let last_release = last_release.into();
+    let at_tag = match &last_release {
+        LastRelease::Tag(tag) => baseline_at(tag),
+        _ => None,
+    };
+    release_judged_against(baseline, at_tag.as_ref(), history, values, last_release)
+}
+
+/// The release check ([`release_refusals`]) with the baseline at the last
+/// release's tag given (`None` when it cannot be read).
+pub fn release_judged_against(
+    baseline: &Baseline,
+    at_tag: Option<&Baseline>,
+    history: &[Record],
+    values: &[Value],
+    last_release: impl Into<LastRelease>,
+) -> Release {
+    let refuse = |refused: Vec<String>| Release {
+        refused,
+        grown: Vec::new(),
+    };
     let last_release = last_release.into();
     let released = history.iter().any(|r| r.run.starts_with('v'));
     let label = match &last_release {
@@ -2236,9 +2373,9 @@ pub fn release_refusals_against(
                 LastRelease::Unreadable(why) => why.as_str(),
                 _ => "no `v*` tag is reachable from HEAD",
             };
-            return vec![format!(
+            return refuse(vec![format!(
                 "the last release's tag could not be read ({why}), and quality/history.jsonl holds a release run: run `git fetch --tags` and the release check again"
-            )];
+            )]);
         }
         LastRelease::NoTag | LastRelease::Unreadable(_) => "bar",
     };
@@ -2247,14 +2384,14 @@ pub fn release_refusals_against(
         .rev()
         .find(|((run, _, _), _)| run == label)
     else {
-        return match &last_release {
+        return refuse(match &last_release {
             LastRelease::Tag(tag) => vec![format!(
                 "the last release {tag} has no record in quality/history.jsonl, so the release has no reference"
             )],
             _ => Vec::new(),
-        };
+        });
     };
-    let mut refused = Vec::new();
+    let (mut refused, mut grown) = (Vec::new(), Vec::new());
     for v in values {
         let (Some(metric), Some(then)) = (
             baseline.metrics.get(&v.metric),
@@ -2266,6 +2403,36 @@ pub fn release_refusals_against(
             continue;
         }
         let worse = metric.direction.worse(*then, v.value, Tolerance::Count(0));
+        if metric.grows_by_decision {
+            if !worse {
+                continue;
+            }
+            let decision = metric
+                .bars
+                .get(&v.target)
+                .and_then(|bar| bar.decision.as_deref())
+                .map(str::trim)
+                .filter(|decision| !decision.is_empty());
+            match decision {
+                Some(decision) => grown.push(Grown {
+                    metric: v.metric.clone(),
+                    target: v.target.clone(),
+                    then: *then,
+                    now: v.value,
+                    unit: metric.unit.clone(),
+                    decision: decision.to_string(),
+                }),
+                None => refused.push(format!(
+                    "{} {}: {} at the last release, {} now ({}, any worse value); a size row grows at a release only by a `decision` on the bar of the grown cell, and a `decision` naming the added code is missing",
+                    v.metric,
+                    v.target,
+                    then,
+                    v.value,
+                    metric.direction.word()
+                )),
+            }
+            continue;
+        }
         let decided = metric.bars.get(&v.target).and_then(|bar| {
             let decision = bar.decision.as_deref()?.trim();
             (!decision.is_empty()
@@ -2299,7 +2466,7 @@ pub fn release_refusals_against(
     if let LastRelease::Tag(tag) = &last_release {
         refused.extend(decided_against_the_tag(baseline, at_tag, tag));
     }
-    refused
+    Release { refused, grown }
 }
 
 /// The timing and benchmark bars a `decision` moved worse than the bar of
@@ -2307,7 +2474,9 @@ pub fn release_refusals_against(
 /// rows are measured only on the dedicated host, so their bars are the
 /// reference here. A row without a bar at the tag refuses nothing; a tag
 /// whose baseline cannot be read while such a decided bar stands is one
-/// refusal.
+/// refusal. The size row among them (3.9) is left out: a decision on its
+/// bar is what lets it grow, and `ignite-perf quality-remote` judges and
+/// lists its cells.
 fn decided_against_the_tag(
     baseline: &Baseline,
     at_tag: Option<&Baseline>,
@@ -2316,7 +2485,7 @@ fn decided_against_the_tag(
     let decided = baseline
         .metrics
         .iter()
-        .filter(|(id, _)| is_timing(id) || is_bench(id))
+        .filter(|(id, metric)| (is_timing(id) || is_bench(id)) && !metric.grows_by_decision)
         .flat_map(|(id, metric)| {
             metric.bars.iter().filter_map(move |(target, bar)| {
                 let decision = bar.decision.as_deref()?.trim();
@@ -2349,7 +2518,8 @@ fn decided_against_the_tag(
 /// `task quality`: read every source's measured values from
 /// `target/quality/` (the gate tests and `ignite-perf quality` wrote them),
 /// refuse a release (`IGNITE_QUALITY_RUN=vX.Y.Z`) whose count rows are worse
-/// than the last, append one record per metric and target to
+/// than the last, print the cells of a size row a decision lets grow
+/// ([`grown_section`], refused or not), append one record per metric and target to
 /// `quality/history.jsonl` with its `host` (`IGNITE_QUALITY_HOST`, default
 /// `local`) and regenerate `quality/trend.md`, the table of
 /// `docs/quality.md` and the book page. The sizes of `ignite-perf quality`
@@ -2388,11 +2558,17 @@ fn record() {
     let mut errors = check(&baseline, "perf", &perf, None);
     let run = std::env::var("IGNITE_QUALITY_RUN").unwrap_or_else(|_| "run".to_string());
     let history = read_history();
-    let refused = if run.starts_with('v') {
-        release_refusals(&baseline, &history, &values, last_release_tag(&run))
+    let Release { refused, grown } = if run.starts_with('v') {
+        release_judged(&baseline, &history, &values, last_release_tag(&run))
     } else {
-        Vec::new()
+        Release::default()
     };
+    // Written to stderr itself, not with `eprintln!`: the harness captures
+    // that of a passing test, and a release that passes still shows its
+    // grown cells.
+    std::io::stderr()
+        .write_all(grown_section(&run, &grown).as_bytes())
+        .unwrap();
     let commit = Command::new("git")
         .args(["rev-parse", "HEAD"])
         .current_dir(workspace())
@@ -2556,6 +2732,7 @@ fn metric(direction: Direction, tolerance: Tolerance, bars: &[(&str, i64)]) -> M
         tolerance_decision: None,
         goal: None,
         unmeasured: None,
+        grows_by_decision: false,
         bars: bars
             .iter()
             .map(|(t, v)| {
@@ -2982,6 +3159,359 @@ fn a_release_waits_until_a_decision_that_moved_a_bar_worse_is_withdrawn() {
     assert!(
         refused.len() == 1 && refused[0].contains(decision),
         "a decision that moved a bar worse than the last release is still in the baseline, and the release was not refused: {refused:?}"
+    );
+}
+
+/// The cell the size-row tests judge.
+const SIZE_CELL: &str = "rust/todod/release";
+
+/// Row 3.2 with one bar on [`SIZE_CELL`]; `marked` is the baseline's
+/// `"release_growth": "decision"`.
+fn size_row(marked: bool, bar: i64, decision: Option<&str>) -> Metric {
+    let mut m = metric(Direction::Lower, Tolerance::Percent(5), &[(SIZE_CELL, bar)]);
+    m.source = Some("perf".to_string());
+    m.unit = "bytes".to_string();
+    m.grows_by_decision = marked;
+    m.bars.get_mut(SIZE_CELL).unwrap().decision = decision.map(str::to_string);
+    m
+}
+
+/// The last release's record of 3.2 on [`SIZE_CELL`], and a value of it now.
+fn size_at_the_last_release(value: i64) -> Vec<Record> {
+    let mut record = release_record("v0.15.0", "b", value);
+    record.metric = "3.2".to_string();
+    record.target = SIZE_CELL.to_string();
+    vec![record]
+}
+
+fn size_now(value: i64) -> Value {
+    Value {
+        metric: "3.2".to_string(),
+        target: SIZE_CELL.to_string(),
+        value,
+        load: None,
+    }
+}
+
+/// `AGENTS.md` § Releases (2026-11-11): time comes before bytes, and a
+/// binary may grow when a release adds code. A cell of a size row
+/// (`"release_growth": "decision"`) above the last release is not refused
+/// when its bar carries a `decision`; it is listed with the value at the
+/// last release, the value now and the decision, and the release run's
+/// section holds the same.
+#[test]
+fn a_grown_cell_of_a_size_row_passes_by_a_decision_and_is_listed() {
+    let decision = "story:x (2026-11-11): the TLS client session adds 40 B";
+    let baseline = baseline_of(&[("3.2", size_row(true, 1040, Some(decision)))]);
+    let judged = release_judged_against(
+        &baseline,
+        None,
+        &size_at_the_last_release(1000),
+        &[size_now(1040)],
+        Some("v0.15.0"),
+    );
+    assert!(
+        judged.refused.is_empty(),
+        "a size row grown by a decision was refused: {:?}",
+        judged.refused
+    );
+    assert_eq!(
+        judged.grown,
+        vec![Grown {
+            metric: "3.2".to_string(),
+            target: SIZE_CELL.to_string(),
+            then: 1000,
+            now: 1040,
+            unit: "bytes".to_string(),
+            decision: decision.to_string(),
+        }],
+        "the grown cell is not listed"
+    );
+    assert!(
+        release_refusals_against(
+            &baseline,
+            None,
+            &size_at_the_last_release(1000),
+            &[size_now(1001)],
+            Some("v0.15.0"),
+        )
+        .is_empty(),
+        "one byte above the last release, by a decision, was refused"
+    );
+    let section = grown_section("v0.16.0", &judged.grown);
+    assert!(
+        section.contains("v0.16.0")
+            && section.contains("3.2 rust/todod/release: 1000 B at the last release, 1040 B now")
+            && section.contains(decision),
+        "the release run's section does not hold the cell, both values and the decision: {section:?}"
+    );
+    assert_eq!(
+        grown_section("v0.16.0", &[]),
+        "",
+        "a release without a grown cell prints a section"
+    );
+}
+
+/// Growth stays deliberate: a cell of a size row above the last release
+/// whose bar has no `decision` (or a blank one) is refused, by any amount,
+/// and the refusal says that a decision naming the added code is missing.
+#[test]
+fn a_grown_cell_of_a_size_row_without_a_decision_is_refused() {
+    for (decision, now) in [(None, 1040), (Some("  "), 1040), (None, 1001)] {
+        let baseline = baseline_of(&[("3.2", size_row(true, 1040, decision))]);
+        let judged = release_judged_against(
+            &baseline,
+            None,
+            &size_at_the_last_release(1000),
+            &[size_now(now)],
+            Some("v0.15.0"),
+        );
+        assert!(
+            judged.refused.len() == 1
+                && judged.refused[0].starts_with(&format!(
+                    "3.2 rust/todod/release: 1000 at the last release, {now} now"
+                ))
+                && judged.refused[0].contains("a `decision` naming the added code is missing"),
+            "decision {decision:?}, {now} now: {:?}",
+            judged.refused
+        );
+        assert!(judged.grown.is_empty(), "{:?}", judged.grown);
+    }
+    let unbarred = Value {
+        target: "rust/terminald/release".to_string(),
+        ..size_now(1040)
+    };
+    let mut history = size_at_the_last_release(1000);
+    history[0].target = unbarred.target.clone();
+    let judged = release_judged_against(
+        &baseline_of(&[("3.2", size_row(true, 1040, Some("story:x: another cell")))]),
+        None,
+        &history,
+        &[unbarred],
+        Some("v0.15.0"),
+    );
+    assert!(
+        judged.refused.len() == 1
+            && judged.refused[0].contains("a `decision` naming the added code is missing")
+            && judged.grown.is_empty(),
+        "a grown cell without a bar passed on another cell's decision: {judged:?}"
+    );
+}
+
+/// The rule is for size rows only: a row the baseline does not mark is
+/// judged as before, so a `decision` holds no worse value of it, the same
+/// bytes and the same decision included, and it is listed nowhere.
+#[test]
+fn a_row_that_is_no_size_row_is_refused_with_a_decision_as_before() {
+    let decision = "story:x (2026-11-11): two more gaps";
+    let mut gaps_row = metric(Direction::Lower, Tolerance::Count(0), &[("rust", 2)]);
+    gaps_row.bars.get_mut("rust").unwrap().decision = Some(decision.to_string());
+    let mut history = size_at_the_last_release(1000);
+    history.push(release_record("v0.15.0", "b", 1));
+    let baseline = baseline_of(&[
+        ("3.2", size_row(false, 1040, Some(decision))),
+        ("4.2", gaps_row),
+    ]);
+    let judged = release_judged_against(
+        &baseline,
+        None,
+        &history,
+        &[size_now(1040), gaps(2)],
+        Some("v0.15.0"),
+    );
+    assert!(
+        judged.refused.len() == 2
+            && judged.refused[0].contains("1000 at the last release, 1040 now")
+            && judged.refused[1].contains("1 at the last release, 2 now")
+            && judged
+                .refused
+                .iter()
+                .all(|r| r.contains(decision) && r.contains("withdraw it")),
+        "a row that is no size row was held by a decision: {:?}",
+        judged.refused
+    );
+    assert!(judged.grown.is_empty(), "{:?}", judged.grown);
+}
+
+/// A size row at or below the last release needs nothing: no decision, no
+/// listing, no refusal.
+#[test]
+fn a_size_row_that_shrank_needs_no_decision() {
+    for (bar, now) in [(1000, 990), (990, 990), (1000, 1000)] {
+        let judged = release_judged_against(
+            &baseline_of(&[("3.2", size_row(true, bar, None))]),
+            None,
+            &size_at_the_last_release(1000),
+            &[size_now(now)],
+            Some("v0.15.0"),
+        );
+        assert_eq!(
+            judged,
+            Release::default(),
+            "bar {bar}, 1000 at the last release, {now} now"
+        );
+    }
+}
+
+/// The check that refuses a bar a `decision` moved worse than the last
+/// release skips size rows, in both its forms: 3.2 against the last
+/// release's value (a size back at that value with the decision still on a
+/// higher bar), and 3.9 against its bar in the baseline at the tag. A
+/// benchmark row that is no size row (3.8) is refused there as before, and
+/// only it counts when the tag's baseline cannot be read.
+#[test]
+fn a_decision_on_the_bar_of_a_size_row_refuses_no_release() {
+    let decision = "story:x (2026-11-11): the scheduler's bytes";
+    let judged = release_judged_against(
+        &baseline_of(&[("3.2", size_row(true, 1040, Some(decision)))]),
+        None,
+        &size_at_the_last_release(1000),
+        &[size_now(1000)],
+        Some("v0.15.0"),
+    );
+    assert_eq!(
+        judged,
+        Release::default(),
+        "a size back at the last release's value, its bar moved by a decision"
+    );
+    let unmarked = release_refusals_against(
+        &baseline_of(&[("3.2", size_row(false, 1040, Some(decision)))]),
+        None,
+        &size_at_the_last_release(1000),
+        &[size_now(1000)],
+        Some("v0.15.0"),
+    );
+    assert!(
+        unmarked.len() == 1 && unmarked[0].contains("withdraw it"),
+        "{unmarked:?}"
+    );
+
+    let ratio = |marked: bool, bar: i64, decision: Option<&str>| {
+        let mut m = metric(
+            Direction::Lower,
+            Tolerance::Percent(5),
+            &[("llvm/todo", bar)],
+        );
+        m.source = Some("bench".to_string());
+        m.unit = "permille".to_string();
+        m.grows_by_decision = marked;
+        m.bars.get_mut("llvm/todo").unwrap().decision = decision.map(str::to_string);
+        m
+    };
+    let history = vec![release_record("v0.15.0", "b", 1)];
+    let at_tag = baseline_of(&[
+        ("3.8", ratio(false, 720, None)),
+        ("3.9", ratio(true, 720, None)),
+    ]);
+    let size_only = baseline_of(&[
+        ("3.8", ratio(false, 720, None)),
+        ("3.9", ratio(true, 869, Some(decision))),
+    ]);
+    for tag_baseline in [Some(&at_tag), None] {
+        let refused =
+            release_refusals_against(&size_only, tag_baseline, &history, &[], Some("v0.15.0"));
+        assert!(
+            refused.is_empty(),
+            "the bar of 3.9 moved by a decision refused the release: {refused:?}"
+        );
+    }
+    let both = baseline_of(&[
+        ("3.8", ratio(false, 869, Some(decision))),
+        ("3.9", ratio(true, 869, Some(decision))),
+    ]);
+    let refused = release_refusals_against(&both, Some(&at_tag), &history, &[], Some("v0.15.0"));
+    assert!(
+        refused.len() == 1 && refused[0].starts_with("3.8 llvm/todo: bar 720 at v0.15.0, 869 now"),
+        "{refused:?}"
+    );
+    let refused = release_refusals_against(&both, None, &history, &[], Some("v0.15.0"));
+    assert!(
+        refused.len() == 1 && refused[0].contains("so 1 timing and benchmark bars"),
+        "{refused:?}"
+    );
+}
+
+/// One metric `id` as the baseline's JSON text, `release_growth` given as
+/// JSON.
+fn baseline_text_marked(id: &str, release_growth: &str) -> String {
+    format!(
+        r#"{{"about":"a","areas":["A"],"metrics":{{"{id}":{{"area":"A","name":"m","kind":"ratchet","direction":"lower","unit":"bytes","instrument":"i","source":"perf","tolerance":"5%","release_growth":{release_growth},"bars":{{"rust":{{"value":1}}}}}}}},"known_differences":{{}},"eval_cannot_run":{{}}}}"#
+    )
+}
+
+/// The mark is one field of a metric, `"release_growth": "decision"`: read,
+/// written back in the canonical form, and validated where the baseline is
+/// read. Another value is an error, and so is the field on a row that is no
+/// size row ([`SIZE`]): a timing row, a benchmark row other than 3.9, a
+/// count.
+#[test]
+fn the_size_mark_is_read_written_and_validated() {
+    for id in SIZE {
+        let json = parse(&baseline_text_marked(id, r#""decision""#), "the baseline");
+        let baseline = read_baseline(&json).unwrap();
+        assert!(
+            baseline.metrics[id].grows_by_decision,
+            "{id}: the mark was not read"
+        );
+        let written = write_baseline(&baseline);
+        assert!(
+            written.contains("\"name\": \"m\",\n      \"release_growth\": \"decision\",\n"),
+            "{id}: the mark was not written: {written}"
+        );
+        assert_eq!(
+            read_baseline(&parse(&written, "the written baseline")).unwrap(),
+            baseline
+        );
+    }
+    let unmarked = baseline_of(&[("3.2", size_row(false, 1, None))]);
+    assert!(!write_baseline(&unmarked).contains("release_growth"));
+    for value in [r#""always""#, r#""""#, "true", "1", "null"] {
+        let json = parse(&baseline_text_marked("3.2", value), "the baseline");
+        let error = read_baseline(&json).unwrap_err();
+        assert!(
+            error.contains("3.2") && error.contains("`release_growth`") && error.contains(value),
+            "release_growth {value}: {error}"
+        );
+    }
+    for id in ["5.3", "6.1", "6.2", "3.3", "3.7", "3.8", "4.2"] {
+        let json = parse(&baseline_text_marked(id, r#""decision""#), "the baseline");
+        let error = read_baseline(&json).unwrap_err();
+        assert!(
+            error.contains(id) && error.contains("`release_growth`") && error.contains("3.2"),
+            "{id} marked as a size row: {error}"
+        );
+    }
+}
+
+/// `quality/baseline.json` marks the size rows 3.2 and 3.9 and no other
+/// row, and `docs/quality.md` and the book page say what the mark means.
+#[test]
+fn the_size_rows_are_marked_and_no_other_row_is() {
+    let baseline = load_baseline();
+    let marked: Vec<&str> = baseline
+        .metrics
+        .iter()
+        .filter(|(_, m)| m.grows_by_decision)
+        .map(|(id, _)| id.as_str())
+        .collect();
+    assert_eq!(
+        marked, SIZE,
+        "the rows of quality/baseline.json with `release_growth`"
+    );
+    let docs = std::fs::read_to_string(docs_path()).unwrap();
+    assert!(
+        docs.contains("`release_growth`") && docs.contains("\"release_growth\": \"decision\""),
+        "docs/quality.md does not say what `release_growth` means"
+    );
+    let page = render_site_page(&baseline, &read_history());
+    assert!(
+        page.contains("binary-size rows (3.2, 3.9)") && page.contains("`release_growth`"),
+        "the book page does not say what `release_growth` means"
+    );
+    let unmarked = render_site_page(&baseline_of(&[("3.2", size_row(false, 1, None))]), &[]);
+    assert!(
+        !unmarked.contains("release_growth"),
+        "the book page names size rows the baseline does not mark"
     );
 }
 

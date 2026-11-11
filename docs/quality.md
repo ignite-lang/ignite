@@ -10,7 +10,7 @@ shows the same metrics with their current values and trend.
 
 | file | holds | written by |
 |---|---|---|
-| `quality/baseline.json` | every metric: area, kind, direction, tolerance, instrument, source, target where set, the bar per target, the decisions that moved a bar (`decision`) or loosened a tolerance (`tolerance_decision`); `known_differences`, `intermittent_decisions`, `eval_cannot_run` and `eval_slow` of the differential runner | by hand for a new metric or a decision; `IGNITE_BLESS=1` for an improvement or a new value |
+| `quality/baseline.json` | every metric: area, kind, direction, tolerance, instrument, source, target where set, the bar per target, the decisions that moved a bar (`decision`) or loosened a tolerance (`tolerance_decision`), the mark of a binary-size row (`release_growth`, section "`task quality` and releases"); `known_differences`, `intermittent_decisions`, `eval_cannot_run` and `eval_slow` of the differential runner | by hand for a new metric or a decision; `IGNITE_BLESS=1` for an improvement or a new value |
 | `quality/history.jsonl` | one record per metric, target and run: `commit`, `date`, `host` (`local` for this workstation, `ec2:<type>` for the dedicated timing host), `run` (`bar`, `vX.Y.Z` or `run`), `metric`, `target`, `value`, and the 1-minute `load` for a timed row on `local`; a dedicated-host record also has `machine`, `base` and `base_value` (below) | `task quality` (`quality::record`; `IGNITE_QUALITY_HOST` sets `host`, default `local`); the dedicated-host records `task quality-remote` |
 | `quality/bench.jsonl` | the native benchmark's absolute values, one record per run, program, cell and implementation: `commit`, `base`, `date`, `host`, `run`, `program`, `cell`, `implementation` (`head-llvm`, `head-rust`, `base-llvm`, `base-rust`, `native-rust`, `native-go`), the medians `rps`, `p50_us`, `p99_us`, `peak_rss_kib`, the stripped `size_bytes`, `errors` and `passes` | `task quality-remote` |
 | `quality/trend.md` | one row per release (and the bar) with the change against the row before; timing rows on `local` counted apart as not comparable; a second table with one row per dedicated-host run (timing rows), a third with one row per run and benchmark cell (ratios against plain Rust) | generated from the history by `task quality` and `task quality-remote` |
@@ -97,8 +97,8 @@ history refuses the release, and so does a history with a `v*` run whose tag can
 `git fetch --tags`); the `bar` run is the reference only when the history holds no `v*` run. Every
 row it judges is a deterministic value (a count, or a size such as 3.2), so its tolerance there
 is 0, whatever the metric's tolerance for a merge; a hill-climb row is judged like any other.
-No `decision` holds a row for a release (no release is worse than the release before it on any
-row, `AGENTS.md` § Releases): a merge may still move a bar worse with a `decision`, but a bar a
+No `decision` holds a row for a release, the binary-size rows excepted (below; no release is
+worse than the release before it on any other row, `AGENTS.md` § Releases): a merge may still move a bar worse with a `decision`, but a bar a
 decision moved worse than the last release refuses the release, whatever the measured value,
 until the decision is withdrawn, and the refusal names the decision. The values of timing and
 benchmark rows are not part of that refusal: they are judged only on the dedicated host's
@@ -108,6 +108,33 @@ release's tag (`git show <tag>:quality/baseline.json`) refuses the release, nami
 bars and the decision; a row without a bar at the tag refuses nothing, and a tag whose baseline
 cannot be read while such a decided bar stands refuses the release. The release steps in
 `AGENTS.md` § Releases run both.
+
+The binary-size rows are the one exception (`AGENTS.md` § Releases: time comes before bytes, and
+a binary may grow when a release adds code). A metric with `"release_growth": "decision"` in
+`quality/baseline.json` is a size row: 3.2 (the bytes of `todod` and `terminald`) and 3.9 (the
+stripped release binary against plain Rust) carry the field and no other row may
+(`quality::SIZE`; the field on another row, or with another value, is an error where the
+baseline is read, and `quality::the_size_rows_are_marked_and_no_other_row_is` holds the two rows
+to it). For a release the field means:
+
+- A cell of a size row above the last release is not refused when the bar of that cell carries
+  a `decision`. The decision names the code that added the bytes; the check reads that it is
+  there, a person reads what it says. The cell is listed: `quality::record` prints, for each, the
+  cell, its value at the last release, its value now and the decision text (on stderr, under
+  `release vX.Y.Z: N cells of the size rows above the last release`), whether the release is
+  refused on another row or not.
+- A cell above the last release whose bar has no `decision`, or a blank one, or that has no bar,
+  is refused by any amount, and the refusal says that a `decision` naming the added code is
+  missing. A release does not grow by accident.
+- A cell at or below the last release needs nothing.
+- The two checks of a bar a `decision` moved worse (against the last release's value, and for
+  3.9 against the bar at the last release's tag) skip size rows: on these rows a decision is
+  what lets the cell grow, so it is not withdrawn for the release.
+
+Every other row is judged as before, and no `decision` holds it. A merge reads nothing from the
+field: a size is held against its bar on every run of `task quality`, and a bar moves worse
+against `main` only with a `decision` of its own. Bytes are never bought with time: a change that
+lowers a binary's bytes and raises instructions is not taken to bring a size row back.
 
 ## The dedicated timing host
 
@@ -161,7 +188,8 @@ Timing on the shared workstation is not comparable between runs, so the timing r
   second run gets one third run under the same rule; a release candidate has at most three runs,
   and after the third every row refused in it stands. This is an operator procedure: no code
   enforces it. A release run takes at least 5 passes (`--passes`, `--bench-passes`; fewer is an error before
-  anything starts). No `decision` holds a row. A refused run's records are labelled `run`, and
+  anything starts). No `decision` holds a row, the size row 3.9 excepted ("Against plain
+  Rust", Releases). A refused run's records are labelled `run`, and
   the mode exits 1. Both trees are measured on the same host in the same run, so the refusal
   does not compare across machines.
 - **Cost.** The first run (BASE = HEAD, an A/A run) took 0.23 instance-hours from launch to
@@ -213,7 +241,13 @@ behaviour (`bench/native/`, rows 3.3, 3.7, 3.8 and 3.9), after the timing rows
   improvement is written into them (`IGNITE_BLESS=1`).
 - **Releases.** With `RUN=vX.Y.Z` a row whose HEAD ratio is worse than BASE's in the same run beyond
   the metric's tolerance (3.3 10 %, 3.7 20 %, 3.8 10 %, 3.9 5 %), or worse in every pass than
-  every pass of BASE, refuses the release, as a timing row does.
+  every pass of BASE, refuses the release, as a timing row does. Row 3.9 is a size row
+  (`"release_growth": "decision"`, section "`task quality` and releases"): a cell of it that
+  would be refused is held when its bar in `quality/baseline.json` carries a `decision`, and the
+  run prints it on stdout (`release vX.Y.Z: the size row above the base`: the cell, BASE's ratio,
+  HEAD's ratio, the decision text); without a decision on its bar it is refused, and the refusal
+  says that a `decision` naming the added code is missing. The run refuses to judge a baseline
+  that marks another of its rows or gives the field another value (`remote::judge`).
 - **First run.** BASE = HEAD (an A/A run, 2026-11-08, 5 benchmark passes), 0.65 instance-hours on
   spot, 0.63 USD, timing rows and benchmark together; its ratios are the bars (`quality/trend.md`,
   "Against plain Rust"). Within the run BASE and HEAD agreed within 1.7 % on every throughput, RSS

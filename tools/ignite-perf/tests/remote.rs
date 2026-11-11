@@ -479,6 +479,140 @@ fn a_row_whose_samples_touch_the_base_is_left_to_the_tolerance() {
     assert!(higher.is_empty(), "touching samples refused: {higher:?}");
 }
 
+/// The baseline of the size-row tests: 3.9 marked as the size row (`"release_growth":
+/// "decision"`), `rust/todo` with `decision` on its bar when one is given, `llvm/todo` without;
+/// 3.8 with the same decision on its bar and no mark; the timing row 6.2.
+fn size_baseline(decision: Option<&str>) -> Json {
+    let decided = decision.map_or(String::new(), |d| format!(r#""decision": "{d}", "#));
+    Json::parse(&format!(
+        r#"{{"metrics": {{
+            "3.9": {{"direction": "lower", "tolerance": "5%", "unit": "permille", "release_growth": "decision",
+                    "bars": {{"rust/todo": {{{decided}"value": 864}}, "llvm/todo": {{"value": 869}}}}}},
+            "3.8": {{"direction": "lower", "tolerance": "10%", "unit": "permille",
+                    "bars": {{"rust/todo/get-1": {{{decided}"value": 900}}}}}},
+            "6.2": {{"direction": "lower", "tolerance": "10%", "unit": "ms"}}}}}}"#
+    ))
+    .unwrap()
+}
+
+/// `AGENTS.md` § Releases (2026-11-11): a binary may grow when a release adds code. A cell of
+/// the size row 3.9 worse than BASE is not refused when its bar in `quality/baseline.json`
+/// carries a `decision`; the run lists it with BASE's value, HEAD's and the decision.
+#[test]
+fn a_grown_cell_of_the_size_row_passes_by_a_decision_and_is_listed() {
+    let decision = "story:x (2026-11-11): the TLS client session adds the bytes";
+    let baseline = size_baseline(Some(decision));
+    let grown = row("3.9", "rust/todo", &[723], &[864]);
+    assert_eq!(
+        remote::refusals(&baseline, std::slice::from_ref(&grown)).unwrap(),
+        Vec::<String>::new(),
+        "a size row grown by a decision was refused"
+    );
+    let judged = remote::judge(&baseline, &[grown]).unwrap();
+    assert_eq!(
+        judged.grown,
+        [format!(
+            "3.9 rust/todo: 0.723× at the base, 0.864× now; decision: {decision}"
+        )],
+        "the grown cell is not listed"
+    );
+    let one_more = remote::judge(&baseline, &[row("3.9", "rust/todo", &[723], &[724])]).unwrap();
+    assert!(
+        one_more.refused.is_empty() && one_more.grown.len() == 1,
+        "{one_more:?}"
+    );
+}
+
+/// Growth stays deliberate: a cell of the size row worse than BASE whose bar has no `decision`
+/// (none, a blank one, no bar at all) is refused, and the refusal says that a decision naming
+/// the added code is missing.
+#[test]
+fn a_grown_cell_of_the_size_row_without_a_decision_is_refused() {
+    for (baseline, target) in [
+        (size_baseline(Some("story:x: the bytes")), "llvm/todo"),
+        (size_baseline(Some("  ")), "rust/todo"),
+        (size_baseline(None), "rust/todo"),
+        (size_baseline(Some("story:x: the bytes")), "rust/terminal"),
+    ] {
+        let judged = remote::judge(&baseline, &[row("3.9", target, &[720], &[869])]).unwrap();
+        assert!(
+            judged.refused.len() == 1
+                && judged.refused[0]
+                    .starts_with(&format!("3.9 {target}: 0.720× at the base, 0.869× now"))
+                && judged.refused[0].contains("a `decision` naming the added code is missing"),
+            "{target}: {:?}",
+            judged.refused
+        );
+        assert!(judged.grown.is_empty(), "{target}: {:?}", judged.grown);
+    }
+}
+
+/// The rule is for the size row only: a timing row and a benchmark row that is no size row are
+/// judged as before, a `decision` on the bar or not, and listed nowhere.
+#[test]
+fn a_row_that_is_no_size_row_is_refused_with_a_decision_as_before() {
+    let baseline = size_baseline(Some("story:x: the bytes"));
+    let rows = [
+        row("3.8", "rust/todo/get-1", &[800], &[900]),
+        row("6.2", "rust", &[2000], &[2300]),
+    ];
+    let judged = remote::judge(&baseline, &rows).unwrap();
+    assert_eq!(
+        judged.refused,
+        [
+            r#"3.8 rust/todo/get-1: 0.800× at the base, 0.900× now (lower, "10%")"#,
+            r#"6.2 rust: 2000 ms at the base, 2300 ms now (lower, "10%")"#,
+        ]
+    );
+    assert!(judged.grown.is_empty(), "{:?}", judged.grown);
+}
+
+/// A size row at or below BASE needs nothing: no decision, no listing, no refusal.
+#[test]
+fn a_size_row_that_shrank_needs_no_decision() {
+    let baseline = size_baseline(None);
+    for head in [700, 723] {
+        let judged = remote::judge(&baseline, &[row("3.9", "rust/todo", &[723], &[head])]).unwrap();
+        assert_eq!(judged, remote::Judged::default(), "0.723× to {head}");
+    }
+}
+
+/// The mark is validated where the run reads it: another value than `"decision"` is an error,
+/// and so is the mark on a timing row or a benchmark row other than 3.9, whose time and memory
+/// no decision holds.
+#[test]
+fn the_size_mark_is_validated_by_the_run() {
+    let marked = |id: &str, mark: &str| {
+        Json::parse(&format!(
+            r#"{{"metrics": {{"{id}": {{"direction": "lower", "tolerance": "5%", "release_growth": {mark},
+                "bars": {{"rust/todo": {{"decision": "story:x: the bytes", "value": 1}}}}}}}}}}"#
+        ))
+        .unwrap()
+    };
+    for mark in [r#""always""#, r#""""#, "true", "null"] {
+        let error = remote::judge(
+            &marked("3.9", mark),
+            &[row("3.9", "rust/todo", &[723], &[723])],
+        )
+        .unwrap_err();
+        assert!(
+            error.contains("3.9") && error.contains("`release_growth`"),
+            "release_growth {mark}: {error}"
+        );
+    }
+    for id in ["5.3", "6.1", "6.2", "3.3", "3.7", "3.8"] {
+        let error = remote::judge(
+            &marked(id, r#""decision""#),
+            &[row(id, "rust/todo", &[723], &[864])],
+        )
+        .unwrap_err();
+        assert!(
+            error.contains(id) && error.contains("`release_growth`"),
+            "{id} marked as a size row: {error}"
+        );
+    }
+}
+
 /// The dedicated host takes five samples (passes) of each tree by default, so two equal builds
 /// have disjoint samples by chance in 1 of 252 runs (C(10, 5)), not 1 of 20 (C(6, 3)).
 #[test]

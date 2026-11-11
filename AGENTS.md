@@ -517,7 +517,8 @@ without waiting for a person.
 - Quality gate (`docs/quality.md`): in the release commit, run `task quality RUN=vX.Y.Z`, which
   appends the run to `quality/history.jsonl` and regenerates `quality/trend.md` and the book's
   quality page. The release is refused, and not cut, when it fails: a count, size or
-  hill-climb row worse by any amount than at the last release (the nearest `v*` tag reachable
+  hill-climb row worse by any amount than at the last release (a binary-size row held by a
+  `decision` excepted, below; the nearest `v*` tag reachable
   from HEAD, as `git describe` finds it; its records in the history, never a refused
   candidate's; the bar before the first tag), or a bar a `decision` moved worse than the last
   release, whatever the value (a timing or benchmark bar against its bar in the tag's
@@ -540,20 +541,30 @@ without waiting for a person.
   release's row of `quality/trend.md`, its dedicated-host row and the run's cost (`machine` of
   its records).
 - No release is worse than the release before it on any row (Timo, 2026-11-10: "every release
-  should be an improvement in quality, not even allowed to accept 10% degregation"). A row that
+  should be an improvement in quality, not even allowed to accept 10% degregation"), the
+  binary-size rows excepted (next bullet). A row that
   `task quality RUN=vX.Y.Z` or `task quality-remote` reports worse than the last release is fixed
   before the release; it is not accepted by a `decision`, by an agent or by a threshold above the
   last release's value. A bar a `decision` made worse since the last release tag blocks the
   release until the value is back and the decision is withdrawn. The release waits; it is not cut
-  with the row open.
+  with the row open. None of this holds a binary-size row: there a `decision` is what lets a cell
+  grow.
 - Binary size is the one exception, and time comes before bytes (Timo, 2026-11-11: "increase in
   binary size isn't a big deal ... if we're adding more code and more logic, then obviously the
-  size will increase ... what would be bad is execution time, compile time"). A size row (3.2)
-  may end above the last release when the release added code. Bytes are never bought with time:
-  a change that lowers a binary's bytes and raises instructions per request, per connection, at
-  start, or in the build (compile or link) is not taken. `task quality RUN=vX.Y.Z` still refuses
-  a size row worse than the last release; a row that ends above is reported to Timo with the
-  code that added the bytes before the release is cut.
+  size will increase ... what would be bad is execution time, compile time"). A size row (3.2,
+  3.9) may end above the last release when the release added code. Bytes are never bought with
+  time: a change that lowers a binary's bytes and raises instructions per request, per
+  connection, at start, or in the build (compile or link) is not taken. The size rows are the
+  metrics `quality/baseline.json` marks `"release_growth": "decision"` (3.2 and 3.9, no other
+  row; `docs/quality.md` "`task quality` and releases"). `task quality RUN=vX.Y.Z` (3.2, against
+  the last release's record) and `task quality-remote` (3.9, HEAD against BASE in the run) do
+  not refuse a cell of them above the last release when the bar of that cell carries a
+  `decision` naming the code that added the bytes, and each run prints every such cell with its
+  value at the last release, its value now and the decision. A grown cell whose bar has no
+  `decision` is refused, and the refusal says the decision is missing, so a release does not
+  grow by accident. A merge is judged as before: a size is held against its bar, and a bar
+  moves worse against `main` only with a `decision` of its own. The cells a run prints are
+  reported to Timo with the code that added the bytes before the release is cut.
 - Timing and benchmark rows (5.3, 6.1, 6.2, 3.3, 3.7, 3.8, 3.9) are judged only on the records
   of the dedicated host (`host: ec2:*` in `quality/history.jsonl`, HEAD against BASE measured in
   the same run), never on `host: local` values (Timo, 2026-11-10: "you must check the results
