@@ -192,3 +192,42 @@ fn only_a_program_with_processes_or_pipes_turns_on_the_substrate_feature() {
         );
     }
 }
+
+/// Adversary pass 2. The entry `::ignite_io::Launcher` of the generator's
+/// list of process items is held by no other test: with it removed every
+/// test of this crate passes. A program can hold a launcher that it only
+/// passes on or keeps, naming no other process item; `ignite_io::Launcher`
+/// exists only under the feature, so without it the generated crate does
+/// not compile.
+#[test]
+fn a_program_that_names_only_a_launcher_turns_on_the_substrate_feature() {
+    let process = "ignite-io = { path = \"../ignite-io\", features = [\"process\"] }";
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("streams-launcher-feature");
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("keeper.ignite");
+    std::fs::write(
+        &file,
+        "type Keeper {\n  tools: Launcher\n  name: Text\n}\n\n\
+         fn Keeper.label(self: Keeper) -> Text = self.name\n",
+    )
+    .unwrap();
+    let (program, _) =
+        common::lower_typed(&file, &common::repository_std(), Path::new("../ignite-io"));
+    assert!(
+        program.lib_rs.contains("::ignite_io::Launcher"),
+        "{}",
+        program.lib_rs
+    );
+    for other in ["ChildProcess", "ChildExit", "Invocation", "Pipe"] {
+        assert!(
+            !program.lib_rs.contains(&format!("::ignite_io::{other}")),
+            "{other}: {}",
+            program.lib_rs
+        );
+    }
+    assert!(
+        program.cargo_toml.contains(process),
+        "a program that names only `::ignite_io::Launcher` gets no feature `process`: {}",
+        program.cargo_toml
+    );
+}
