@@ -11256,6 +11256,16 @@ Story `http-reply-cost-back` (rows 3.3 `rust/todo/get-1` and 3.8 `todo/get-1` of
   for its head (`HEAD_ROOM`, 128 bytes, and each header field) and its body (`text_with_room`):
   the head is written into it, the body is appended to it from the response instead of being
   copied first, and the buffer becomes the bytes sent. Rust target 36 now, LLVM target 0.
+- A task's stack overflow is reported on the worker's alternate signal stack. On the Rust target
+  that stack is std's, which every thread std starts has; `ignite-io` makes none. The LLVM
+  runtime, whose `main` is not Rust's, gives each worker its own
+  (`ignite_io::signal::give_workers_an_alternate_stack`, set by `init`). A program of the Rust
+  target started with `SIGSEGV` or `SIGBUS` ignored has no alternate stack (std then installs
+  nothing): `ignite-io` puts the ignore back over its handler, so the overflow ends the process
+  by the signal, with no report, as a v0.15.0 program started so did; other faults reach the
+  ignore too. The LLVM target reports the overflow in both starts
+  (`stack_overflow::` of `crates/ignite`, `scheduler::started_with_faults_ignored_*` of
+  `crates/ignite-io`).
 - `serve_listener` starts the register of held requests (`Holds.start()`, the task
   `keep_holds`) only when the application has a `reply`, the only way to hold a request:
   `reply_cost::a_server_without_reply_starts_no_task_for_held_requests` builds
