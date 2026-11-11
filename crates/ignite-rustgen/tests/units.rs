@@ -1269,6 +1269,18 @@ fn release_profile_checks_overflow_and_links_as_one_unit() {
     );
 }
 
+/// The release profile builds the substrate for size (story
+/// `binary-size-back`, rows 3.2 and 3.9 rust): `ignite-io` at
+/// `opt-level = "s"`, as the workspace builds it for the LLVM target.
+#[test]
+fn release_profile_builds_the_substrate_for_size() {
+    let project = try_generate(vec![]).expect("generates");
+    assert_eq!(
+        table(&project.cargo_toml, "profile.release.package.ignite-io"),
+        ["opt-level = \"s\""]
+    );
+}
+
 /// The lines of the table `[<name>]` of a manifest, up to the next table.
 fn table<'a>(manifest: &'a str, name: &str) -> Vec<&'a str> {
     manifest

@@ -772,7 +772,7 @@ For `ignite build terminal.ignite --target rust --out DIR` (the default target u
 
 ```
 DIR/Cargo.toml          [package] name = <package last segment>, edition 2024, [workspace] empty,
-                        [profile.release] overflow-checks = true, codegen-units = 1, lto = true (release size, `docs/quality.md` row 3.2)
+                        [profile.release] overflow-checks = true, codegen-units = 1, lto = true, [profile.release.package.ignite-io] opt-level = "s" (release size, `docs/quality.md` rows 3.2 and 3.9)
                         [profile.dev.package."*"] debug = false, [profile.dev.package.ignite-io] debug = "line-tables-only", [profile.dev.package."<package>"] and, with std, [profile.dev.package."ignite-std"] debug = "line-tables-only" (the crates from outside the project without debug information, `ignite-io` and the members with line tables for backtraces; build time, row 6.2)
                         [dependencies] ignite-io = { path = <substrate> }, ignite-std = { path = "std" } when the program imports a std module
                         one [[bin]] per component: name = executable, path = src/bin/<executable>.rs
