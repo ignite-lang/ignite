@@ -680,8 +680,12 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     }
 
     /// The inputs of the ownership rules of [`crate::own`] for this module.
-    fn own_cx(&self) -> crate::own::Cx<'a> {
-        crate::own::Cx::new(self.cx.types, self.cx.program, &self.cx.module)
+    fn own_cx<'x>(&self) -> crate::own::Cx<'x>
+    where
+        'a: 'x,
+        'e: 'x,
+    {
+        crate::own::Cx::new(self.cx.types, self.cx.program, &self.cx.module, self.env)
     }
 
     /// The `continue` (`next`) or `break` target of the innermost loop,

@@ -594,12 +594,21 @@ position, even with no buffer.
     a value whose arms keep what they bind, whose every later mention in the block keeps it
     inside the block: the receiver of a builtin method that does not hand it on, a value
     `put` in a store or sent on a channel, an argument of `spawn`, or a plain argument of a
-    call whose result type cannot hold a handle (no record, enum, fn value or type parameter
-    in it) or holds only fresh ones. A field or element of the binding counts as the
+    call whose result type cannot hold a handle (`own::handle_free`: no fn value, store,
+    capability or type parameter in it; a record or an enum is looked into, so
+    `Connection.of(stream)`, two endpoints and a flag, keeps `stream`) or holds only fresh
+    ones. A field or element of the binding counts as the
     binding, and a `let` of the binding or of a literal around it is an alias that keeps it
     while the alias is kept; such a binding is not handed over to a `spawn` that is its
     last mention. A `match` that is a `let`'s value and a `for` over such a value
     (`for s in senders.values()`) own it the same way, the loop's elements bound in place.
+    A name an arm or a loop binds to a value that holds no handle (`own::binds_plain`: the
+    `error` of `Err(error) => return Err(error)`, a tag beside a sender) lets none out
+    wherever it goes and does not decide the owner (story
+    `llvm-http-connection-closes-its-socket`: with that arm beside `Ok(stream) => { let
+    connection = Connection.of(stream); spawn serve_connection(stream, connection, ..) }`
+    the accept loop of `std.protocol.http` owned nothing, by either of the two, and kept
+    every accepted socket open).
     The block registers every handle of the value with `tcp_own`
     (`own_handles.<T>` for an aggregate) after
     an owner mark (`own_mark`, the length of the task's registration list) taken at its

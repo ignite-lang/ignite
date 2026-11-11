@@ -1,0 +1,57 @@
+package tests.http_owner
+
+import std.protocol.http.*
+import std.net.TcpStream
+
+// Built for both targets and run by tests/stream_ownership.rs (story
+// `llvm-http-connection-closes-its-socket`): an `HttpServer` whose
+// application is the owner of a connection for a while. `/hold` holds the
+// request until a request for `/release` answers every held one; `/take`
+// takes the connection over, greets and echoes what it reads until the
+// client ends it; any other path is answered at once.
+
+fn echo(state: Store<Sender<Response>>, request: Request, stream: TcpStream, early: Bytes) -> IoResult<Unit> requires [stream.read, stream.write] {
+  stream.write_all(b"taken\n")?
+  loop {
+    match stream.read(4096)? {
+      Eof => return Ok(())
+      Data(bytes) => stream.write_all(bytes)?
+    }
+  }
+}
+
+fn release(state: Store<Sender<Response>>) -> Int {
+  var released = 0
+  for tx in state.values() {
+    if tx.send(Response.plain(200, "released")) {
+      released = released + 1
+    }
+  }
+  released
+}
+
+fn answer(state: Store<Sender<Response>>, request: Request) -> Reply<Store<Sender<Response>>, TcpStream> {
+  if request.path == "/hold" {
+    let (tx, rx) = Channel.bounded(1)
+    state.put(state.next_id(), tx)
+    return Hold(rx, 60 seconds, Response.plain(504, "not released"))
+  }
+  if request.path == "/take" {
+    return Upgrade(Response { status = 101, headers = [("Upgrade", "echo"), ("Connection", "upgrade")] }, echo)
+  }
+  if request.path == "/release" {
+    return Respond(Response.plain(200, "{release(state)}"))
+  }
+  Respond(Response.plain(200, "ok"))
+}
+
+system Owner {
+  resource listener: TcpListener { address = "127.0.0.1", port = 0 }
+  resource waiters: Store<Sender<Response>>
+
+  component server: HttpServer {
+    listener = listener
+    application = HttpApp { state = waiters, reply = Some(answer) }
+    executable = "ownerd"
+  }
+}
