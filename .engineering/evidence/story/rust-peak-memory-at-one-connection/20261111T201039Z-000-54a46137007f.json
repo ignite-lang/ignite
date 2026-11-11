@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-11T20:10:39Z",
+  "actor": "human:timo",
+  "artifact": "story:rust-peak-memory-at-one-connection",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "cargo test -p ignite --test main -- rust_memory:: rust_memory_adversary:: at c2476a11: 8 passed, 0 failed (coordinator rerun 2026-11-11); dedicated host run w11-rss (ec2:c7i.metal-24xl, 5 passes): rust/todo/get-1 peak RSS 2776-2780 kib in every pass against 2792-2836 kib at v0.15.0; rust/terminal/rr-1 median 2408 kib against 2372 kib"
+  }
+}
