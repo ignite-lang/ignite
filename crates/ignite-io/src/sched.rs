@@ -9,11 +9,13 @@
 //! only through the [`Reactor`] interface) until a descriptor is ready, a
 //! timer is due or another thread wakes it. A worker creates its reactor
 //! (an epoll and an eventfd descriptor) when a task first waits for a
-//! descriptor and parks its thread until then. Workers start lazily, one per
-//! spawn up to [`worker_limit`] (`IGNITE_WORKERS`, default
+//! descriptor through it (a lone task that may block the worker does not,
+//! `wait_blocking`) and parks its thread until then. Workers start lazily,
+//! one per spawn up to [`worker_limit`] (`IGNITE_WORKERS`, default
 //! `std::thread::available_parallelism`), and a worker without a task for
-//! [`crate::LINGER`] ends, so an idle server runs `main` and the drain's
-//! thread only (`docs/readiness-io.md` section 6 row 6).
+//! [`crate::LINGER`] since its last task ended ends, so an idle server runs
+//! `main` and the drain's thread only (`docs/readiness-io.md` section 6
+//! row 6).
 //!
 //! A task is a stack (2 MiB reserved as a thread's, a guard page below it,
 //! touched pages only resident; stacks are pooled: a few stay with the
@@ -43,9 +45,11 @@
 //!
 //! A descriptor a task waits for (a socket, a listener, standard input)
 //! is registered once per worker, edge-triggered, through a
-//! [`Readiness`]: an event wakes the tasks waiting to read or to write it,
-//! and a sequence number per direction, taken before each attempt, keeps a
-//! readiness edge between the attempt and the park from being lost
+//! [`Readiness`], by the first wait there that parks its task (the only
+//! task of a worker waits on the thread instead, `wait_alone`): an event
+//! wakes the tasks waiting to read or to write it, and a sequence number
+//! per direction, taken before each attempt, keeps a readiness edge
+//! between the attempt and the park from being lost
 //! (`docs/readiness-io.md` K4).
 
 use std::cell::{Cell, RefCell};
@@ -59,6 +63,7 @@ use std::time::{Duration, Instant};
 
 use corosensei::stack::{DefaultStack, Stack};
 use corosensei::{Coroutine, CoroutineResult, Yielder};
+use nix::sys::eventfd::EventFd;
 
 use crate::reactor::{EpollReactor, Event, Interest, Reactor, Token};
 use crate::wait::{DescriptorWait, WaitList, Waiter, Woken, wake_ready};
@@ -585,7 +590,7 @@ pub(crate) fn spawn(job: Job) -> io::Result<()> {
                 give_stack(unused, None);
             }
             // Relaxed: a bound for `block_alone`, not an order with any data.
-            LIVE.fetch_add(1, Ordering::Relaxed);
+            escalate(LIVE.fetch_add(1, Ordering::Relaxed) + 1);
             shared.hand_over(|incoming| incoming.new.push((job, stack)));
             count(&COUNTERS.spawns);
             found.count();
@@ -631,7 +636,7 @@ fn start_worker(
             count(&COUNTERS.workers_started);
             workers.push(shared);
             // Relaxed: as above.
-            LIVE.fetch_add(1, Ordering::Relaxed);
+            escalate(LIVE.fetch_add(1, Ordering::Relaxed) + 1);
             Ok(())
         }
         Err(error) => {
@@ -1037,6 +1042,12 @@ fn work(shared: Arc<Shared>) {
             worker.resume(waiter);
             ran += 1;
         }
+        if ran > 0 {
+            // A task ran, so the worker was not without one since: a
+            // session that waits alone runs from its start to its end in
+            // one turn, and the worker lingers from its end on.
+            idle_since = None;
+        }
         let next_timer = worker.fire_timers();
         if runnable() {
             if ran >= BUDGET
@@ -1196,8 +1207,9 @@ extern "C" fn on_fault(signal: i32, info: *mut nix::libc::siginfo_t, context: *m
 
 /// The readiness of one descriptor for tasks on workers (module docs): a
 /// socket's or a listener's. Off a worker [`Readiness::wait`] is
-/// [`crate::wait::wait_descriptor`]. Deregistered from every worker when
-/// dropped, so it must be dropped before the descriptor closes.
+/// [`crate::wait::wait_descriptor`]. Forgotten by every worker when
+/// dropped, as its descriptor closes ([`Readiness::deregister`] takes it
+/// out of their epoll instances while it stays open).
 pub(crate) struct Readiness {
     waiter: Waiter,
 }
@@ -1214,6 +1226,12 @@ pub(crate) struct Descriptor {
     waiting: Mutex<Waiting>,
     /// The workers the descriptor is registered with, and its token there.
     registered: Mutex<Vec<(Arc<Shared>, Token)>>,
+    /// The registrations report room to write ([`sides`]): set, and every
+    /// registration changed, by the first wait for room that registers.
+    /// Until then a registration leaves room out, so registering a
+    /// socket, which has room, does not end its worker's next wait for
+    /// nothing. Changed only under `registered`.
+    write_armed: AtomicBool,
     /// The worker it was registered with first, compared only, never
     /// dereferenced: a wait there skips `registered`. The `Arc` in
     /// `registered` keeps that worker's address from being reused until
@@ -1238,6 +1256,13 @@ impl Waiting {
 }
 
 const READ_SIDE: Interest = Interest::READ;
+
+/// What a descriptor is registered for: input, urgent data and hang-up,
+/// and room to write once a task waited for it ([`Descriptor::write_armed`]).
+fn sides(write: bool) -> Interest {
+    let read = Interest::READ | Interest::URGENT | Interest::HANGUP;
+    if write { read | Interest::WRITE } else { read }
+}
 
 fn reads(ready: Interest) -> bool {
     ready.intersects(Interest::READ | Interest::URGENT | Interest::HANGUP | Interest::ERROR)
@@ -1291,6 +1316,7 @@ impl Readiness {
                 lasting: AtomicU8::new(0),
                 waiting: Mutex::new(Waiting::default()),
                 registered: Mutex::new(Vec::new()),
+                write_armed: AtomicBool::new(false),
                 home: AtomicPtr::new(std::ptr::null_mut()),
             }),
         }
@@ -1320,14 +1346,19 @@ impl Readiness {
 
     /// Wait until `descriptor` may be ready for `interest`, after an
     /// attempt begun at `mark` found it not ready, or until `deadline`.
-    /// `Woken` and `Ready` both mean: attempt again. The first wait of a
-    /// task on a worker registers the descriptor there and returns at once.
-    /// A worker that cannot create its reactor (no descriptor free for its
-    /// epoll and eventfd) looks at the descriptor without waiting and parks
-    /// the task for [`RETRY`], until it can: a session keeps running while
-    /// the process is out of descriptors. `now`: the instant `deadline`
-    /// was computed from just before, so this wait reads no clock to learn
-    /// how far it is.
+    /// `Woken` and `Ready` both mean: attempt again. The only task of a
+    /// worker waits on the worker's thread ([`wait_alone`]), registered or
+    /// not, so a session that stays alone on its worker registers nothing.
+    /// Any other wait registers the descriptor with the worker first, if it
+    /// is not, and parks: the registration reports what the descriptor is
+    /// ready for already as its first event. A wait for room to write
+    /// makes every registration report room from then on
+    /// ([`Descriptor::write_armed`]). A worker that cannot create its
+    /// reactor (no descriptor free for its epoll and eventfd) looks at the
+    /// descriptor without waiting and parks the task for [`RETRY`], until
+    /// it can: a session keeps running while the process is out of
+    /// descriptors. `now`: the instant `deadline` was computed from just
+    /// before, so this wait reads no clock to learn how far it is.
     pub(crate) fn wait(
         &self,
         descriptor: BorrowedFd<'_>,
@@ -1341,9 +1372,24 @@ impl Readiness {
             return crate::wait::wait_descriptor(descriptor.as_raw_fd(), interest, deadline);
         };
         let state = self.descriptor();
+        if let Some(waited) = wait_alone(task, state, descriptor, interest, mark, deadline, now)? {
+            return Ok(waited);
+        }
         let here = Arc::as_ptr(&task.worker).cast_mut();
-        if state.home.load(Ordering::Acquire) != here {
+        // Relaxed: a first look; it is read again under `registered`.
+        let arm =
+            interest.intersects(Interest::WRITE) && !state.write_armed.load(Ordering::Relaxed);
+        if arm || state.home.load(Ordering::Acquire) != here {
             let mut registered = lock(&state.registered);
+            // Relaxed (here and below): stored only under `registered`.
+            if arm && !state.write_armed.load(Ordering::Relaxed) {
+                for (shared, token) in registered.iter() {
+                    if let Some(reactor) = shared.reactor.get() {
+                        reactor.rearm(*token, descriptor, sides(true))?;
+                    }
+                }
+                state.write_armed.store(true, Ordering::Relaxed);
+            }
             if !registered
                 .iter()
                 .any(|(shared, _)| Arc::ptr_eq(shared, &task.worker))
@@ -1352,20 +1398,13 @@ impl Readiness {
                     drop(registered);
                     return without_reactor(&me, descriptor, interest, deadline);
                 };
-                let token = reactor.register(
-                    descriptor.as_raw_fd(),
-                    Interest::READ | Interest::WRITE | Interest::URGENT | Interest::HANGUP,
-                    self.waiter.clone(),
-                )?;
+                let sides = sides(state.write_armed.load(Ordering::Relaxed));
+                let token = reactor.register(descriptor.as_raw_fd(), sides, self.waiter.clone())?;
                 registered.push((Arc::clone(&task.worker), token));
                 if registered.len() == 1 {
                     state.home.store(here, Ordering::Release);
                 }
-                return Ok(DescriptorWait::Woken);
             }
-        }
-        if let Some(waited) = wait_alone(task, state, descriptor, interest, mark, deadline, now)? {
-            return Ok(waited);
         }
         {
             let mut waiting = lock(&state.waiting);
@@ -1389,9 +1428,14 @@ impl Readiness {
 /// worker's thread with [`EpollReactor::poll_one`], as a blocked thread
 /// would, instead of switching to the worker's loop. One `poll` of the
 /// descriptor and the worker's eventfd measured cheaper per reply than the
-/// worker's `epoll_wait` called from the task. The worker counts as
-/// sleeping meanwhile, so a hand-over ([`Shared::notify`]) ends the wait
-/// and the task then parks as usual. `None` when the worker has other work.
+/// worker's `epoll_wait` called from the task, and it needs no
+/// registration. The worker counts as sleeping, not busy, meanwhile, so a
+/// spawn may place a task here, and its hand-over ([`Shared::notify`])
+/// ends the wait. `None` when the worker has other work, or the
+/// hand-over ended the wait before the descriptor was ready: the task
+/// then parks as usual, so the worker runs what came instead of an
+/// attempt that finds nothing. A worker without a reactor waits
+/// ([`wait_blocking`]) without making one while it may.
 fn wait_alone(
     task: &Task,
     state: &Descriptor,
@@ -1407,9 +1451,20 @@ fn wait_alone(
     if shared.tasks.load(Ordering::Relaxed) != 1 || runnable() {
         return Ok(None);
     }
-    let Some(reactor) = shared.reactor.get() else {
+    if shared.reactor.get().is_none()
+        && let Some(waited) = wait_blocking(state, descriptor, interest, mark, deadline, now)
+    {
+        return waited.map(Some);
+    }
+    // Created here by the worker's first wait that may not block it: a
+    // task runs, and `sleeping` is not set yet ([`Shared::notify`]).
+    let Ok(reactor) = shared.reactor() else {
         return Ok(None);
     };
+    // Before `sleeping`: every wake written until then is one the worker
+    // took (it was awake since), and the hand-over check below sees what
+    // came with it.
+    reactor.forget_wakes();
     // SeqCst: the store-load pair with a hand-over (`Shared::hand_over`).
     shared.sleeping.store(true, Ordering::SeqCst);
     if shared.has_pending() {
@@ -1424,13 +1479,89 @@ fn wait_alone(
     }
     let ready = reactor.poll_one(descriptor, interest, deadline, now);
     shared.sleeping.store(false, Ordering::Relaxed);
-    Ok(Some(if ready? {
-        DescriptorWait::Ready(interest)
+    Ok(if ready? {
+        Some(DescriptorWait::Ready(interest))
     } else if deadline.is_some_and(|end| Instant::now() >= end) {
-        DescriptorWait::Deadline
+        Some(DescriptorWait::Deadline)
     } else {
-        DescriptorWait::Woken
-    }))
+        None
+    })
+}
+
+/// [`wait_alone`] on a worker that has no reactor: the task blocks the
+/// worker's thread in one `poll` of the descriptor, under the bounds of
+/// [`block_alone`], so a worker whose tasks only wait alone makes no epoll
+/// instance and no eventfd (`story:readiness-syscalls-per-connection`:
+/// six calls per worker started, which neither v0.15.0's threads nor a
+/// `recv` that blocks make). The worker counts as busy meanwhile: a spawn
+/// finds an idle worker or starts one, as for a blocking `recv`. The
+/// `poll` also watches [`ESCALATION`], so that once as many tasks live as
+/// workers may start ([`escalate`]), the wait ends and waits through the
+/// worker's reactor instead, where a hand-over ends it: a burst of
+/// sessions that wait before their first request does not leave all but
+/// one worker blocked while the last takes the rest. `None` when the task
+/// may not block its worker, or the escalation ended the wait before the
+/// descriptor was ready.
+fn wait_blocking(
+    state: &Descriptor,
+    descriptor: BorrowedFd<'_>,
+    interest: Interest,
+    mark: u64,
+    deadline: Option<Instant>,
+    now: Option<Instant>,
+) -> Option<io::Result<DescriptorWait>> {
+    // Relaxed: a hint that saves a `poll` that would end at once.
+    if ESCALATED.load(Ordering::Relaxed) {
+        return None;
+    }
+    let escalation = escalation()?;
+    let blocking = block_alone()?;
+    // Acquire: pairs with the event count's increment (`Descriptor::ready`).
+    if state.events(interest).load(Ordering::Acquire) != mark {
+        return Some(Ok(DescriptorWait::Woken));
+    }
+    let polled =
+        crate::reactor::poll_beside(descriptor, interest, escalation.as_fd(), deadline, now);
+    drop(blocking);
+    Some(match polled {
+        Ok((true, _)) => Ok(DescriptorWait::Ready(interest)),
+        Ok((false, true)) => return None,
+        Ok((false, false)) if deadline.is_some_and(|end| Instant::now() >= end) => {
+            Ok(DescriptorWait::Deadline)
+        }
+        Ok((false, false)) => Ok(DescriptorWait::Woken),
+        Err(error) => Err(error),
+    })
+}
+
+/// Written once and never read ([`escalate`]): readable from then on, it
+/// ends every `poll` of [`wait_blocking`]. `None` when no eventfd could be
+/// made; no task then blocks its worker in a `poll`.
+static ESCALATION: OnceLock<Option<EventFd>> = OnceLock::new();
+
+/// [`ESCALATION`] was written.
+static ESCALATED: AtomicBool = AtomicBool::new(false);
+
+/// [`ESCALATION`], made by the first wait that blocks its worker in a
+/// `poll`, or by [`escalate`] before it writes it.
+fn escalation() -> Option<&'static EventFd> {
+    ESCALATION
+        .get_or_init(|| crate::reactor::eventfd().ok())
+        .as_ref()
+}
+
+/// A spawn made `live` tasks live: once they are as many as workers may
+/// start, end every `poll` of [`wait_blocking`], now and later. A worker
+/// that blocks in it takes no task, and tasks do not move; without free
+/// workers to start, a spawn that passes it would place its task on a
+/// busier worker. Once per process: [`ESCALATION`] stays readable.
+fn escalate(live: usize) {
+    if live >= worker_limit()
+        && !ESCALATED.swap(true, Ordering::SeqCst)
+        && let Some(escalation) = escalation()
+    {
+        let _ = escalation.write(1);
+    }
 }
 
 /// Workers whose only task is in a blocking read ([`block_alone`]).
@@ -1531,6 +1662,14 @@ impl Readiness {
     /// Deregister the descriptor from every worker and wake its waiters;
     /// before the descriptor closes. A later wait registers it again.
     pub(crate) fn deregister(&self) {
+        self.release(true);
+    }
+
+    /// [`Readiness::deregister`]; without `delete` the workers' reactors
+    /// only forget the descriptor ([`EpollReactor::forget`]): its owner
+    /// closes it right after, and the close takes it out of their epoll
+    /// instances without an `epoll_ctl` each.
+    fn release(&self, delete: bool) {
         let registered = {
             let mut registered = lock(&self.descriptor().registered);
             self.descriptor()
@@ -1540,7 +1679,11 @@ impl Readiness {
         };
         for (shared, token) in registered {
             if let Some(reactor) = shared.reactor.get() {
-                let _ = reactor.deregister(token);
+                if delete {
+                    let _ = reactor.deregister(token);
+                } else {
+                    reactor.forget(token);
+                }
             }
         }
         // A new mark under the lock a waiter compares its mark under: a
@@ -1554,9 +1697,13 @@ impl Readiness {
     }
 }
 
+/// Its owner (a stream, a listener's slot) closes the descriptor right
+/// after, and no other descriptor refers to that socket (none is ever
+/// duplicated; a child process's copy closes at its `exec`), so the close
+/// deregisters it.
 impl Drop for Readiness {
     fn drop(&mut self) {
-        self.deregister();
+        self.release(false);
     }
 }
 

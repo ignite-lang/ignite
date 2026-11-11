@@ -4,25 +4,16 @@
 //! waits for readiness (IO mode `readiness`) has it as the deadline of its
 //! wait (a timer on a worker, `poll`'s timeout on a thread); a read that
 //! blocks in `recv` (mode `threads`, or the only task of a worker,
-//! `sched::block_alone`) has it as the socket's `SO_RCVTIMEO`, which is
-//! set in both modes. It belongs to the stream, so every clone shares it.
-
-use std::sync::atomic::Ordering;
-use std::time::Duration;
+//! `sched::block_alone`) has it as the socket's `SO_RCVTIMEO`, which the
+//! mode `threads` sets here and the mode `readiness` before the first
+//! `recv` that blocks. It belongs to the stream, so every clone shares it.
 
 use crate::{IoError, TcpStream};
 
 impl TcpStream {
     /// Set the idle timeout to `ms` milliseconds; 0 or less removes it.
     pub fn set_idle_timeout(&self, ms: i64) -> Result<(), IoError> {
-        let (idle, socket) = self.idle_ms();
-        idle.store(ms.max(0), Ordering::Release);
-        let timeout = u64::try_from(ms)
-            .ok()
-            .filter(|ms| *ms > 0)
-            .map(Duration::from_millis);
-        socket
-            .set_read_timeout(timeout)
+        self.store_idle(ms.max(0))
             .map_err(|e| IoError::new(format!("set idle timeout: {e}")))
     }
 }
