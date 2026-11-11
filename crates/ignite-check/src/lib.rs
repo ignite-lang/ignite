@@ -542,6 +542,13 @@ pub const IN_PLACE: [InPlace; 15] = [
     in_place_row("Store", "upsert", Change::Handle),
 ];
 
+/// Whether a call of `row` stores an argument into its receiver, so that
+/// the receiver takes the argument's roots: a `Value` row that keeps what
+/// it is given (`push`, `set`, `append`, `Map.put`).
+pub fn stores_argument(row: &InPlace) -> bool {
+    row.change == Change::Value && matches!(row.method, "push" | "set" | "append" | "put")
+}
+
 /// What the builtin `method` changes on a receiver of the builtin type
 /// `receiver` ([`IN_PLACE`]). For a receiver whose type is not known, the
 /// change every row of that method name agrees on: `push` is a `Value`
@@ -2456,6 +2463,17 @@ impl Checker {
         }
     }
 
+    /// [`Checker::builtin_method`] where it is certain: a receiver whose
+    /// type is unknown here, with a module-level fn of that name in scope,
+    /// may take either, so it is not. A call that stores an argument into
+    /// its receiver gives the receiver that argument's roots only when it
+    /// is the builtin; a user fn named `put` or `push` stores nothing.
+    fn surely_builtin_method(&self, receiver: &Expr, name: &Ident) -> bool {
+        self.builtin_method(receiver, name)
+            && (self.static_type(receiver).is_some()
+                || !self.symbols.functions.contains_key(&name.name))
+    }
+
     /// Whether binding `name` is captured by the closure being walked.
     fn captured(&self, name: &str) -> bool {
         let Some(&outside) = self.closure_scopes.last() else {
@@ -2930,9 +2948,12 @@ impl Checker {
         if mutating {
             self.mutable_receiver(expr, receiver, name);
         }
-        if matches!(name.name.as_str(), "push" | "set" | "append")
-            && let Some(list) = place_root(receiver)
-        {
+        let stores = IN_PLACE.iter().any(|row| {
+            row.method == name.name
+                && stores_argument(row)
+                && receiver_type.is_none_or(|ty| ty == row.receiver)
+        }) && self.surely_builtin_method(receiver, name);
+        if stores && let Some(list) = place_root(receiver) {
             let roots = self.arg_roots(args.iter());
             if let Some(local) = self
                 .scopes
@@ -4066,7 +4087,7 @@ impl Checker {
             }
             PatternKind::Or(alternatives) => {
                 for alternative in alternatives {
-                    if let Some(name) = first_binding(alternative) {
+                    if let Some(name) = alternative.bindings().first() {
                         self.error(
                             "E049",
                             name.span,
@@ -4500,23 +4521,6 @@ pub fn builtin_applies(ty: &Type, method: &str) -> bool {
         "Ratio" => method == "ppm",
         "IoError" => method == "with_exit_code",
         _ => false,
-    }
-}
-
-/// The first name `pattern` binds, if any.
-fn first_binding(pattern: &Pattern) -> Option<&Ident> {
-    match &pattern.kind {
-        PatternKind::Binding(name) => Some(name),
-        PatternKind::Rest(name) => name.as_ref(),
-        PatternKind::Tuple(items) | PatternKind::List(items) | PatternKind::Or(items) => {
-            items.iter().find_map(first_binding)
-        }
-        PatternKind::Variant { args, .. } => args.iter().find_map(first_binding),
-        PatternKind::Wildcard
-        | PatternKind::Range { .. }
-        | PatternKind::Int(_)
-        | PatternKind::Str(_)
-        | PatternKind::Bool(_) => None,
     }
 }
 

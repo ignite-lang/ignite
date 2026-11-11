@@ -237,7 +237,7 @@ release.
 
 | # | metric | kind | better | instrument | bar | target |
 |---|---|---|---|---|---|---|
-| 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | lower | `differential::corpus_agrees_across_rust_llvm_and_the_evaluator` (every merge): units of the corpus whose exit, stdout or failure text differs from the Rust target's | eval 4, llvm 4 |  |
+| 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | lower | `differential::corpus_agrees_across_rust_llvm_and_the_evaluator` (every merge): units of the corpus whose exit, stdout or failure text differs from the Rust target's | eval 4, llvm 0 |  |
 | 1.2 | differential corpus size | ratchet | higher | the differential runner: units (inline tests and executables) each consumer ran | eval 494, llvm 856, rust 856 |  |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | lower | `quality::static_metrics_hold_the_bar`: per consumer crate, `PatternKind::` mentions (patterns) and distinct `Builtin::` variants named (builtins) | eval/builtins 112, eval/patterns 13, llvm/builtins 12, llvm/patterns 30, rust/builtins 43, rust/patterns 71 | one implementation per rule: after story:mid-level-ir the backends name no `PatternKind` and no `Builtin` the IR lowers |
 | 1.4 | generated-code goldens changed without a `CODEGEN_REVISION` bump | gate | lower | `quality::static_metrics_hold_the_bar`: golden `.rs` and `.ll` outputs changed against the merge base with main while `CODEGEN_REVISION` is unchanged | all 0 |  |

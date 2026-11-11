@@ -1905,24 +1905,6 @@ fn byte_items(bytes: &[u8]) -> String {
     format!("[{}u8]", items.join("u8, "))
 }
 
-/// Whether `pattern` binds `name`.
-fn pattern_binds(pattern: &Pattern, name: &str) -> bool {
-    match &pattern.kind {
-        PatternKind::Binding(id) => id.name == name,
-        PatternKind::Rest(Some(id)) => id.name == name,
-        PatternKind::Or(items) | PatternKind::Tuple(items) | PatternKind::List(items) => {
-            items.iter().any(|p| pattern_binds(p, name))
-        }
-        PatternKind::Variant { args, .. } => args.iter().any(|p| pattern_binds(p, name)),
-        PatternKind::Range { start, end } => pattern_binds(start, name) || pattern_binds(end, name),
-        PatternKind::Wildcard
-        | PatternKind::Int(_)
-        | PatternKind::Str(_)
-        | PatternKind::Bool(_)
-        | PatternKind::Rest(None) => false,
-    }
-}
-
 fn borrow(expr: &Expr, text: String) -> String {
     format!("&{}", wrap(expr, text))
 }
@@ -3361,15 +3343,11 @@ impl<'a> Generator<'a> {
             ExprKind::Binary { op, .. } => self.is_text_add(expr, *op),
             _ => matches!(
                 self.callee(expr),
-                Some(Callee::Builtin(
-                    Builtin::IntToText
-                        | Builtin::IntToTextMethod
-                        | Builtin::ByteToText
-                        | Builtin::U32ToText
-                        | Builtin::BoolToText
-                        | Builtin::TextConcat
-                        | Builtin::TextTrim
-                ))
+                Some(Callee::Builtin(builtin)) if builtin.is_scalar_to_text()
+                    || matches!(
+                        builtin,
+                        Builtin::IntToText | Builtin::TextConcat | Builtin::TextTrim
+                    )
             ),
         }
     }
@@ -3451,7 +3429,7 @@ impl<'a> Generator<'a> {
         let types = self.types?;
         let rebinds = rest.iter().any(|s| match &s.kind {
             StmtKind::Let { name: other, .. } => other.name == name.name,
-            StmtKind::LetPattern { pattern, .. } => pattern_binds(pattern, &name.name),
+            StmtKind::LetPattern { pattern, .. } => pattern.binds(&name.name),
             _ => false,
         });
         let root = place_root(text)?;
@@ -4055,13 +4033,8 @@ impl<'a> Generator<'a> {
                 && none.is_empty()
                 && matches!(
                     self.callee(part),
-                    Some(Callee::Builtin(
-                        Builtin::TextToText
-                            | Builtin::IntToTextMethod
-                            | Builtin::ByteToText
-                            | Builtin::U32ToText
-                            | Builtin::BoolToText
-                    ))
+                    Some(Callee::Builtin(builtin))
+                        if *builtin == Builtin::TextToText || builtin.is_scalar_to_text()
                 )
                 && !self.place_in(receiver, modified)
             {
@@ -5068,12 +5041,7 @@ impl<'a> Generator<'a> {
                 let a = self.args(args);
                 return format!("({r}.{})({})", ident(field), a.join(", "));
             }
-            Some(Callee::Builtin(
-                Builtin::IntToTextMethod
-                | Builtin::ByteToText
-                | Builtin::U32ToText
-                | Builtin::BoolToText,
-            )) => {
+            Some(Callee::Builtin(builtin)) if builtin.is_scalar_to_text() => {
                 let r = self.receiver(receiver);
                 return format!("{r}.to_string()");
             }
@@ -5333,10 +5301,10 @@ impl<'a> Generator<'a> {
     /// place that needs the value copies it once there; any other is
     /// copied out at the start of the arm (pushed to `out`).
     fn lend_bindings(&mut self, pattern: &Pattern, out: &mut Vec<(String, String)>) {
-        let mut names = Vec::new();
-        pattern_bindings(pattern, &mut names);
         let scope = self.scopes.len() - 1;
-        for id in names {
+        for id in pattern.bindings() {
+            // An uppercase binding may name a variant: it is not in the
+            // arm's scope.
             if !self.scopes[scope].contains(&id.name) {
                 continue;
             }
@@ -6637,22 +6605,6 @@ fn binding_value(access: &str) -> String {
         access.to_string()
     } else {
         format!("({access}).clone()")
-    }
-}
-
-/// The names `pattern` binds, in order; an uppercase binding may name a
-/// variant and is told apart by the caller.
-fn pattern_bindings<'p>(pattern: &'p Pattern, out: &mut Vec<&'p Ident>) {
-    match &pattern.kind {
-        PatternKind::Binding(id) => out.push(id),
-        PatternKind::Rest(Some(id)) => out.push(id),
-        PatternKind::Or(items) | PatternKind::Tuple(items) | PatternKind::List(items) => {
-            items.iter().for_each(|item| pattern_bindings(item, out));
-        }
-        PatternKind::Variant { args, .. } => {
-            args.iter().for_each(|arg| pattern_bindings(arg, out));
-        }
-        _ => {}
     }
 }
 

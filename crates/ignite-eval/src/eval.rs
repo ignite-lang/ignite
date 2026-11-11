@@ -1530,70 +1530,18 @@ impl<'p> Evaluator<'p> {
             (Builtin::RatioPpm, Value::Quantity(QuantityKind::Ratio, ppm)) => {
                 plain(Value::Int(*ppm))
             }
-            (
-                Builtin::TcpListenerAccept
-                | Builtin::TcpListenerLocalPort
-                | Builtin::TcpStreamRead
-                | Builtin::TcpStreamWriteAll
-                | Builtin::TcpStreamClose
-                | Builtin::TcpStreamSetIdleTimeout
-                | Builtin::PipeStreamRead
-                | Builtin::PipeStreamWriteAll
-                | Builtin::PipeStreamClose
-                | Builtin::PipeStreamSetIdleTimeout
-                | Builtin::PipeStreamReceivedBatches
-                | Builtin::StreamRead
-                | Builtin::StreamWriteAll
-                | Builtin::StreamClose
-                | Builtin::StreamSetIdleTimeout
-                | Builtin::TcpStreamWriteUrgent
-                | Builtin::TcpStreamUrgentPending
-                | Builtin::PipeStreamWriteUrgent
-                | Builtin::PipeStreamUrgentPending
-                | Builtin::StreamWriteUrgent
-                | Builtin::StreamUrgentPending
-                | Builtin::StoreNextId
-                | Builtin::StoreGet
-                | Builtin::StorePut
-                | Builtin::StoreRemove
-                | Builtin::StoreValues
-                | Builtin::StoreUpdate
-                | Builtin::StoreUpsert
-                | Builtin::DirectoryReadFile
-                | Builtin::DirectoryWriteFile
-                | Builtin::DirectoryReadDirectory
-                | Builtin::DirectoryCreateDirectory
-                | Builtin::DirectoryRemove
-                | Builtin::DirectoryRemoveTree
-                | Builtin::DirectoryAbsolutePath
-                | Builtin::LauncherStart
-                | Builtin::LauncherExecute
-                | Builtin::ChildProcessId
-                | Builtin::ChildProcessWait
-                | Builtin::ChildProcessKill
-                | Builtin::EntropyRandomBytes
-                | Builtin::SettingValue
-                | Builtin::CommandLineArguments
-                | Builtin::EnvironmentGet
-                | Builtin::TcpStreamPeer
-                | Builtin::TcpStreamLocal
-                | Builtin::TcpStreamTimedOut
-                | Builtin::SenderSend
-                | Builtin::SenderTrySend
-                | Builtin::SenderClose
-                | Builtin::ReceiverReceive
-                | Builtin::ReceiverReceiveWithin
-                | Builtin::ReceiverClosed
-                | Builtin::ReceiverClose
-                | Builtin::TlsStreamAlpn,
-                _,
-            ) => Err(internal(format!(
-                "builtin `{builtin:?}` has no value at compile time"
-            ))),
-            (builtin, recv) => Err(internal(format!(
-                "builtin `{builtin:?}` on `{}`",
-                recv.debug_text()
-            ))),
+            // Any other: a builtin with no value at compile time, such as a
+            // method of a handle (the receiver a member or a model's
+            // handle); a receiver of another shape is named.
+            _ => {
+                let receiver = match recv {
+                    Value::Member { .. } | Value::Handle(_) => String::new(),
+                    other => format!(" (receiver: `{}`)", other.debug_text()),
+                };
+                Err(internal(format!(
+                    "builtin `{builtin:?}` has no value at compile time{receiver}"
+                )))
+            }
         }
     }
 

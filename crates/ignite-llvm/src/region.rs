@@ -4,7 +4,7 @@
 //! loop deep-copies across a release of its region, and the variable a
 //! place is rooted at are `ignite_types::ownership`'s.
 
-use ignite_syntax::ast::{Expr, ExprKind, Pattern, PatternKind, Stmt, StmtKind};
+use ignite_syntax::ast::{Expr, ExprKind, Pattern, Stmt, StmtKind};
 
 /// Whether the IR `text` (a function's definition, or what a loop emitted
 /// from its head to its back-edge) holds a call that can allocate in the
@@ -71,13 +71,19 @@ pub fn mentioned(stmts: &[Stmt], name: &str) -> bool {
 
 /// The arguments of the `spawn f(args)` at `stmts[index]` whose stream
 /// handle moves to the task (`docs/llvm.md` section 4): a plain name that a
-/// `let` earlier in the same block bound to a fresh value (a call, a method
-/// call, `?` or `match`, so not a parameter, a field or another variable)
-/// and that no later statement of the block mentions. The accept loop's
+/// `let` earlier in the same block bound to a value `fresh` accepts
+/// (`own::moves_fresh`: not a parameter, a field, another variable or a
+/// call that may return an argument another owner holds) and that no later
+/// statement of the block mentions. The accept loop's
 /// `let stream = listener.accept()?` followed by `spawn serve(stream, ..)`
 /// moves; a client role's `spawn forward_input(stream)` on its parameter,
 /// which the role keeps reading, does not.
-pub fn moved_to_task(stmts: &[Stmt], index: usize, call: &Expr) -> Vec<String> {
+pub fn moved_to_task(
+    stmts: &[Stmt],
+    index: usize,
+    call: &Expr,
+    fresh: impl Fn(&Expr) -> bool,
+) -> Vec<String> {
     let args: Vec<&Expr> = match &call.kind {
         ExprKind::Call { args, .. } => args.iter().collect(),
         ExprKind::Method { receiver, args, .. } => {
@@ -90,35 +96,26 @@ pub fn moved_to_task(stmts: &[Stmt], index: usize, call: &Expr) -> Vec<String> {
             ExprKind::Name(id) => Some(id.name.clone()),
             _ => None,
         })
-        .filter(|name| fresh_let(&stmts[..index], name) && !mentioned(&stmts[index + 1..], name))
+        .filter(|name| {
+            fresh_let(&stmts[..index], name, &fresh) && !mentioned(&stmts[index + 1..], name)
+        })
         .collect()
 }
 
-/// Whether the last `let` of `name` among `stmts` binds a fresh value. A
-/// `copy()` shares its receiver's handle, so it is not fresh: the task
-/// must not release the handle another binding still holds.
-fn fresh_let(stmts: &[Stmt], name: &str) -> bool {
+/// Whether the last `let` of `name` among `stmts` binds a value `fresh`
+/// accepts. A `copy()` or a call that may return an argument another owner
+/// holds shares a handle: the task must not release it.
+fn fresh_let(stmts: &[Stmt], name: &str, fresh: impl Fn(&Expr) -> bool) -> bool {
     stmts
         .iter()
         .rev()
         .find_map(|stmt| match &stmt.kind {
             StmtKind::Let {
                 name: bound, value, ..
-            } if bound.name == name => Some(fresh_value(value)),
+            } if bound.name == name => Some(fresh(value)),
             _ => None,
         })
         .unwrap_or(false)
-}
-
-fn fresh_value(value: &Expr) -> bool {
-    match &value.kind {
-        ExprKind::Method { name, .. } => name.name != "copy",
-        ExprKind::Try(inner) => {
-            !matches!(&inner.kind, ExprKind::Method { name, .. } if name.name == "copy")
-        }
-        ExprKind::Call { .. } | ExprKind::Match { .. } => true,
-        _ => false,
-    }
 }
 
 fn stmt_mentions(stmt: &Stmt, name: &str) -> bool {
@@ -151,20 +148,9 @@ fn stmt_mentions(stmt: &Stmt, name: &str) -> bool {
     }
 }
 
+/// Whether `pattern` binds `name` ([`Pattern::binds`]).
 pub fn pattern_binds(pattern: &Pattern, name: &str) -> bool {
-    match &pattern.kind {
-        PatternKind::Binding(id) => id.name == name,
-        PatternKind::Rest(id) => id.as_ref().is_some_and(|id| id.name == name),
-        PatternKind::Or(items)
-        | PatternKind::Tuple(items)
-        | PatternKind::List(items)
-        | PatternKind::Variant { args: items, .. } => items.iter().any(|p| pattern_binds(p, name)),
-        PatternKind::Wildcard
-        | PatternKind::Int(_)
-        | PatternKind::Str(_)
-        | PatternKind::Bool(_)
-        | PatternKind::Range { .. } => false,
-    }
+    pattern.binds(name)
 }
 
 /// Whether `e` mentions the name `name` (see [`mentioned`]).

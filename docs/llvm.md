@@ -602,6 +602,26 @@ position, even with no buffer.
     list, captured, assigned, `copy()`) is not owned and, as before, is not released before
     the process exits. A callee that keeps a handle it was passed beyond its return does so
     in a store, a channel or a task, each an owner of its own.
+  - an expression, for a temporary it consumes (`own::kept_temporaries`, `own::fresh`,
+    `docs/slice.md` 30.3): a value no one else owns that no binding holds, as an argument of
+    a call whose result cannot alias it (`senders.get(id).is_some()`), the value of a `put`,
+    `send` or `try_send`, an argument of `spawn` the task gets an owner of its own for, the
+    scrutinee of a `match` no statement claims, or a bare expression statement
+    (`senders.remove(id)`). `Lower::open_temporaries` takes an owner mark before the
+    expression and pushes it on the open blocks' marks, `Lower::expr` registers the
+    temporary with `own_handles.<T>` when it is made, and the mark is released when the
+    expression is done; a `return`, `?`, `break` or `continue` inside releases it with the
+    blocks', a failure with the task's registrations. A fn's result and a `let`'s value are
+    not temporaries: the caller or the block owns them.
+    Known gap (pre-existing, `story:llvm-temporaries-without-owner-rule`): a copied-out
+    value that no owning `let`, statement `match`, `for` or expression above holds keeps
+    that owner forever: the receiver of a builtin method (`senders.values().len()`), the
+    rest of a fresh value read for one field (`open(s).id`), the thrown-away value of a
+    `match` arm, a store read inside a record argument of a call, and a `match` binding
+    put in a store inside `Some`.
+    `leak::five_temporary_forms_are_not_released_on_llvm_yet`
+    (`crates/ignite/tests/soak/temporaries_unreleased.ignite`) holds these five as the
+    failing tests on LLVM; the Rust target passes all 5.
   - At a `spawn` that is the last use of an owned binding (`own::handovers`: in the
     binding's block or in an `if`, `else` or `match` arm nested in it that is itself the
     last use, up to a binding that shadows the name; not in a loop body), the block releases
@@ -612,9 +632,28 @@ position, even with no buffer.
     bound by `let (client, server) = Pipe.pair()` and spawned into a task that fails is
     closed by the failure while the block still runs (story
     `llvm-spawn-pattern-bound-streams`; the Rust target keeps the block's clone until the
-    block ends). A binding that is not owned but bound by name to a fresh value (a call, a
-    method call other than `copy()`, `?` or `match`) and not mentioned after the spawn
-    (`region::moved_to_task`) still passes its owner to the task without `tcp_retain`.
+    block ends). A handle moves to the task without `tcp_retain` only when the task takes
+    the only owner and its block does not release that owner: a binding its block does not
+    own, bound by name to a fresh value and not mentioned after the spawn
+    (`region::moved_to_task`, `Lower::spawn`). In every other case the task gets an owner
+    of its own and whoever held the original owner still releases it; an owned binding the
+    spawn does not hand over (an alias holds it) keeps its owner until its block is left.
+    Fresh is decided by `own::moves_fresh`: a value `own::produces` makes, the result of a
+    builtin other than `copy()`, `?` on one, a `match` of those, and the result of a fn or
+    role call whose every argument that can hold a handle is fresh as well (a fn argument
+    whose result holds none cannot): a temporary of that kind, or the one mention of a
+    binding to one that its block does not own and that runs at most once, in no loop and
+    no closure (`own::sole_mentions`), in the same block or a nested one
+    (`let b = end(write); spawn overflow(s, b)` with `write` from `Pipe.pair()`). A call
+    that may return a parameter or a binding with another mention (an alias, a record or a
+    closure made before, a later use; `let u = same(t)`), a fn-value call, a field and an
+    `if` are not fresh.
+  - Known gap (pre-existing, `story:llvm-task-move-aliases`): the result of a builtin
+    that reads a handle out of a value, such as `xs.at(0)`, counts as fresh, so a `spawn`
+    moves the element's owner to its task and the task's release closes the end the list
+    still holds. `leak::an_element_read_from_a_list_and_moved_to_a_task_is_closed_early_on_llvm_yet`
+    (`crates/ignite/tests/soak/moves_aliases.ignite`) holds it as the failing test on LLVM
+    (`is not a channel sender`); the Rust target passes.
   Until slice 10 the accept loop was generated and used a shallow `spawn_copy` without the
   handshake; from slice 10 to story spawn-without-handshake the Ignite loop paid it per
   connection.

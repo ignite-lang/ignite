@@ -177,6 +177,13 @@ pub struct Lower<'a, 'm, 'e> {
     /// (`own::owned_scrutinee`), by [`expr_key`]; recorded before the
     /// statement, taken when its scrutinee is lowered.
     owned_matches: Vec<usize>,
+    /// The temporaries an open owner scope registers when they are
+    /// lowered (`own::kept_temporaries`, `own::fresh`), by [`expr_key`].
+    owned_temps: Vec<usize>,
+    /// The mentions that take the only owner of a binding of an open block
+    /// (`own::sole_mentions`), by [`expr_key`]; recorded at the binding's
+    /// `let`, read by `own::moves_fresh`.
+    sole: Vec<usize>,
 }
 
 /// An owned stream binding `name` whose last use is the spawned call with
@@ -187,7 +194,7 @@ struct Handover {
 }
 
 /// The identity of an expression of the AST being lowered.
-fn expr_key(e: &Expr) -> usize {
+pub(crate) fn expr_key(e: &Expr) -> usize {
     e as *const Expr as usize
 }
 
@@ -232,6 +239,8 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             moved_streams: Vec::new(),
             handovers: Vec::new(),
             owned_matches: Vec::new(),
+            owned_temps: Vec::new(),
+            sole: Vec::new(),
         }
     }
 
@@ -604,6 +613,67 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             .and_then(|marks| marks.iter().flatten().next())
             .cloned();
         if let Some(mark) = mark {
+            self.f
+                .ins(format!("call void @ignite_rt_own_release(i64 {mark})"));
+        }
+    }
+
+    /// Open an owner scope around `e` when it consumes temporaries no one
+    /// else owns without handing them on: a call or a `spawn` that keeps
+    /// such arguments (`own::kept_temporaries`), or a `match` that owns its
+    /// scrutinee and is no statement of its block (`own::owned_scrutinee`).
+    /// The scope is an entry of `own_marks`, so `return`, `?`, `break` and
+    /// `continue` inside release it as they release a block's, and a
+    /// failure releases its registrations with the task's.
+    fn open_temporaries(&mut self, e: &Expr) -> bool {
+        if !matches!(
+            e.kind,
+            ExprKind::Call { .. }
+                | ExprKind::Method { .. }
+                | ExprKind::Match { .. }
+                | ExprKind::Spawn(_)
+        ) {
+            return false;
+        }
+        let cx = self.own_cx();
+        let temps: Vec<usize> = crate::own::kept_temporaries(e, &cx)
+            .into_iter()
+            .filter(|temp| self.env.holds_handles(&self.ty(temp)))
+            .map(expr_key)
+            .collect();
+        let owned_match = match &e.kind {
+            ExprKind::Match { scrutinee, .. } => {
+                !self.owned_matches.contains(&expr_key(e))
+                    && self.env.holds_handles(&self.ty(scrutinee))
+                    && crate::own::owned_scrutinee(e, &cx)
+            }
+            _ => false,
+        };
+        if temps.is_empty() && !owned_match {
+            return false;
+        }
+        self.open_scope();
+        self.owned_temps.extend(temps);
+        if owned_match {
+            self.owned_matches.push(expr_key(e));
+        }
+        true
+    }
+
+    /// An owner scope of its own: a mark taken now.
+    fn open_scope(&mut self) {
+        self.m.declare("ignite_rt_own_mark", "i64", &[]);
+        self.m
+            .declare("ignite_rt_own_release", "void", &["i64".into()]);
+        let mark = self.f.val("call i64 @ignite_rt_own_mark()");
+        self.own_marks.push(Some(mark));
+    }
+
+    /// Leave the owner scope [`Lower::open_scope`] opened.
+    fn close_temporaries(&mut self) {
+        if let Some(Some(mark)) = self.own_marks.pop()
+            && !self.f.is_terminated()
+        {
             self.f
                 .ins(format!("call void @ignite_rt_own_release(i64 {mark})"));
         }
@@ -1133,7 +1203,11 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             if let StmtKind::Expr(e) = &stmt.kind
                 && let ExprKind::Spawn(call) = &e.kind
             {
-                self.moved_streams = crate::region::moved_to_task(&block.stmts, i, call);
+                let cx = self.own_cx();
+                let sole = &self.sole;
+                self.moved_streams = crate::region::moved_to_task(&block.stmts, i, call, |v| {
+                    crate::own::moves_fresh(v, sole, &cx)
+                });
             }
             if let Some(e) = crate::own::owned_match(stmt, &self.own_cx())
                 && let ExprKind::Match { scrutinee, .. } = &e.kind
@@ -1157,7 +1231,10 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 StmtKind::Let { .. } | StmtKind::LetPattern { .. }
             ) && !self.f.is_terminated()
             {
-                let owned = crate::own::owned(&block.stmts, i, &self.own_cx());
+                let cx = self.own_cx();
+                let sole = crate::own::sole_mentions(&block.stmts, i, &self.sole, &cx);
+                self.sole.extend(sole.into_iter().map(expr_key));
+                let owned = crate::own::owned(&block.stmts, i, &cx);
                 if !owned.is_empty() {
                     for name in self.own_streams(&owned) {
                         if !self.lookup(&name).is_some_and(|local| is_stream(&local.ty)) {
@@ -1313,7 +1390,16 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 self.f.br(&next);
             }
             StmtKind::Expr(e) => {
+                let fresh =
+                    crate::own::fresh(e, &self.own_cx()) && self.env.holds_handles(&self.ty(e));
+                if fresh {
+                    self.open_scope();
+                    self.owned_temps.push(expr_key(e));
+                }
                 self.expr(e, false);
+                if fresh {
+                    self.close_temporaries();
+                }
             }
             StmtKind::Assert { cond, message } => {
                 self.assert(stmt.span.start, cond, message.as_ref())
@@ -1512,7 +1598,23 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             self.nested += 1;
         }
         let previous = self.locate(e.span.start);
+        let temps_before = self.owned_temps.len();
+        let scope = self.open_temporaries(e);
         let value = self.expr_kind(e, want);
+        if scope {
+            // A temporary of this scope that was not lowered through
+            // `expr` is forgotten; the scope ends before `e` itself is
+            // registered with the scope around it.
+            self.owned_temps.truncate(temps_before);
+            self.close_temporaries();
+        }
+        if let Some(at) = self.owned_temps.iter().position(|k| *k == expr_key(e)) {
+            self.owned_temps.remove(at);
+            if value != Val::Never {
+                let ty = self.ty(e);
+                self.own_value(&ty, &value);
+            }
+        }
         if let Some(previous) = previous {
             self.f.restore_location(previous);
         }
@@ -5618,9 +5720,15 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         // leaves a tombstone in the task's owner list (`ignite-rt`'s
         // `release`), so the mark a block between the binding's and this
         // one took before the spawn still releases that block's own
-        // streams. An unowned binding that `region::moved_to_task` names
-        // moves its handle to the task as before.
-        let moved = std::mem::take(&mut self.moved_streams);
+        // streams. A binding that `region::moved_to_task` names moves its
+        // handle to the task without an owner of the task's own only when
+        // its block does not own it: an owned binding the spawn does not
+        // hand over (an alias holds it) keeps its owner until the block is
+        // left, and the task gets one of its own.
+        let moved: Vec<String> = std::mem::take(&mut self.moved_streams)
+            .into_iter()
+            .filter(|name| !self.lookup(name).is_some_and(|local| local.owned))
+            .collect();
         let name_of = |arg: &Expr| match &arg.kind {
             ExprKind::Name(n) => Some(n.name.clone()),
             ExprKind::NamedArg { value, .. } => match &value.kind {
@@ -5639,8 +5747,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             }
         }
         self.handovers.retain(|h| h.call != key);
-        let moves =
-            |arg: &Expr| name_of(arg).is_some_and(|n| moved.contains(&n) && !owned.contains(&n));
+        let moves = |arg: &Expr| name_of(arg).is_some_and(|n| moved.contains(&n));
         let hands_over = |arg: &Expr| name_of(arg).is_some_and(|n| owned.contains(&n));
         let mut handed: Vec<(String, Val)> = Vec::new();
         let mut values = Vec::with_capacity(sig.params.len());
