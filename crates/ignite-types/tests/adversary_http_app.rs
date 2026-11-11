@@ -227,3 +227,68 @@ fn main() -> Int = go(Outer {{ stream = 7, inner = Box {{ state = \"s\" }} }}, B
     );
     assert_eq!(diagnostics_of(&program), None);
 }
+
+/// The mirror of the case above: the nested literal first, the sibling
+/// that binds the parameter it needs after it.
+#[test]
+fn a_nested_literal_before_the_sibling_that_binds_its_parameter_does_not_wait() {
+    let program = format!(
+        "{BOX}
+type Outer<S, T> {{
+  inner: Box<S, T>
+  stream: T
+}}
+
+fn go<S, T>(outer: Outer<S, T>, other: Box<S, T>) -> Int = 0
+
+fn main() -> Int = go(Outer {{ inner = Box {{ state = \"s\" }}, stream = 7 }}, Box {{ state = \"t\", touch = None }})
+"
+    );
+    assert_eq!(diagnostics_of(&program), None);
+}
+
+/// Two levels of nesting: the middle literal binds `T` by its sibling
+/// field, the innermost `S` by its own.
+#[test]
+fn a_literal_bound_through_two_levels_of_nesting_does_not_wait() {
+    let program = format!(
+        "{BOX}
+type Outer<S, T> {{
+  stream: T
+  inner: Box<S, T>
+}}
+
+type Wrap<S, T> {{
+  outer: Outer<S, T>
+}}
+
+fn go<S, T>(wrap: Wrap<S, T>, other: Box<S, T>) -> Int = 0
+
+fn main() -> Int = go(Wrap {{ outer = Outer {{ stream = 7, inner = Box {{ state = \"s\" }} }} }}, Box {{ state = \"t\", touch = None }})
+"
+    );
+    assert_eq!(diagnostics_of(&program), None);
+}
+
+/// The binding field in the outer literal, the literal that needs it two
+/// levels down.
+#[test]
+fn a_parameter_bound_in_the_outer_literal_reaches_a_literal_two_levels_down() {
+    let program = format!(
+        "{BOX}
+type Middle<S, T> {{
+  inner: Box<S, T>
+}}
+
+type Wrap<S, T> {{
+  stream: T
+  middle: Middle<S, T>
+}}
+
+fn go<S, T>(wrap: Wrap<S, T>, other: Box<S, T>) -> Int = 0
+
+fn main() -> Int = go(Wrap {{ stream = 7, middle = Middle {{ inner = Box {{ state = \"s\" }} }} }}, Box {{ state = \"t\", touch = None }})
+"
+    );
+    assert_eq!(diagnostics_of(&program), None);
+}

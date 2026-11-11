@@ -11039,7 +11039,9 @@ claimed, verified or reported as a gap; their behaviour here rests on the inline
 
 ### 37.7 Tests
 
-- `std/protocol/http.ignite` (both targets, over `Pipe.pair()` unless named): "the handler sees
+- `std/protocol/http/connection_tests.ignite` (`std/protocol/http.ignite` until wave 11, which
+  moved them to keep that file under 3,000 lines; both targets, over `Pipe.pair()` unless
+  named): "the handler sees
   its connection and an allow list refuses a peer with 403" (a pipe from a listed and an
   unlisted peer, a TCP stream through `Connection.of`, and `Http.serve`'s unknown connection);
   "a held request is answered by its message and the connection goes on"; "a held request is

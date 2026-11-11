@@ -2941,7 +2941,7 @@ impl Checker {
             row.method == name.name
                 && stores_argument(row)
                 && receiver_type.is_none_or(|ty| ty == row.receiver)
-        });
+        }) && self.builtin_method(receiver, name);
         if stores && let Some(list) = place_root(receiver) {
             let roots = self.arg_roots(args.iter());
             if let Some(local) = self

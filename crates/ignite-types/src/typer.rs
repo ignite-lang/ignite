@@ -662,7 +662,8 @@ impl<'a> Typer<'a> {
     /// Whether the record literal `arg`, typed now against `param`, leaves
     /// one of its own type parameters unbound: one that `param` leaves open
     /// and that no given field's declared type mentions. A field given a
-    /// record literal that waits by the same rule binds nothing.
+    /// record literal that waits by the same rule, with what `param` and the
+    /// other fields bind, binds nothing.
     fn literal_waits(&self, arg: &Expr, param: &Ty) -> bool {
         let ExprKind::Record { name, fields } = &arg.kind else {
             return false;
@@ -672,20 +673,35 @@ impl<'a> Typer<'a> {
         };
         let tparams = self.generics_of(q);
         let declared = self.record_fields(q).unwrap_or_default();
-        let known: Vec<Ty> = match param {
+        let mut known: Vec<Ty> = match param {
             Ty::GenericRecord(pq, args) if pq == q && args.len() == tparams.len() => args.clone(),
             _ => vec![Ty::Param("'".to_string()); tparams.len()],
         };
-        tparams.iter().zip(&known).any(|(p, k)| {
-            k.has_param(&is_var)
-                && !fields.iter().any(|f| {
-                    declared.iter().any(|(n, ty)| {
-                        *n == f.name.name
-                            && ty.has_param(&|x| x == p)
-                            && !self.literal_waits(&f.value, &ty.substitute(&tparams, &known))
-                    })
-                })
-        })
+        // A field binds the parameters its declared type mentions unless its
+        // value is a literal that waits with what is bound so far; what one
+        // field binds can let a nested literal in a sibling bind, so repeat
+        // until nothing changes. A bound parameter stands as `Unit` here:
+        // only whether it is open matters.
+        loop {
+            let mut changed = false;
+            for field in fields {
+                let Some((_, ty)) = declared.iter().find(|(n, _)| *n == field.name.name) else {
+                    continue;
+                };
+                if self.literal_waits(&field.value, &ty.substitute(&tparams, &known)) {
+                    continue;
+                }
+                for (p, k) in tparams.iter().zip(known.iter_mut()) {
+                    if k.has_param(&is_var) && ty.has_param(&|x| x == p) {
+                        *k = Ty::Unit;
+                        changed = true;
+                    }
+                }
+            }
+            if !changed {
+                return known.iter().any(|k| k.has_param(&is_var));
+            }
+        }
     }
 
     /// Arguments of a call of the generic `what` (E043 on a count

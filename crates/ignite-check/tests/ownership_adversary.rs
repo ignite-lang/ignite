@@ -180,3 +180,42 @@ fn f(a: TcpStream, b: TcpStream) -> Result<Input, IoError> requires [a.read] {
         "a user fn named `put` extended its receiver's roots:\n{out}"
     );
 }
+
+/// The case above for a user fn named `name`, declared with `params`
+/// after its receiver and called with `args`.
+fn assert_user_fn_stores_nothing(name: &str, params: &str, args: &str) {
+    let out = check(&format!(
+        r#"type Conn {{ stream: TcpStream }}
+
+fn {name}(c: Conn, {params}) -> Int = 0
+
+fn f(a: TcpStream, b: TcpStream) -> Result<Input, IoError> requires [a.read] {{
+  var c = Conn {{ stream = a }}
+  let n = c.{name}({args})
+  return c.stream.read(4096)
+}}
+"#
+    ));
+    assert_eq!(
+        out, "",
+        "a user fn named `{name}` extended its receiver's roots:\n{out}"
+    );
+}
+
+/// A user fn named `push` stores nothing in its receiver.
+#[test]
+fn a_user_fn_named_push_gives_its_receiver_no_roots() {
+    assert_user_fn_stores_nothing("push", "other: TcpStream", "b");
+}
+
+/// A user fn named `set` stores nothing in its receiver.
+#[test]
+fn a_user_fn_named_set_gives_its_receiver_no_roots() {
+    assert_user_fn_stores_nothing("set", "i: Int, other: TcpStream", "0, b");
+}
+
+/// A user fn named `append` stores nothing in its receiver.
+#[test]
+fn a_user_fn_named_append_gives_its_receiver_no_roots() {
+    assert_user_fn_stores_nothing("append", "other: TcpStream", "b");
+}
