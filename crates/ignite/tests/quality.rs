@@ -3695,3 +3695,118 @@ fn adversary2_an_intermittent_entry_naming_an_implemented_story_is_refused() {
         "an intermittent difference parked on an implemented story passed"
     );
 }
+
+/// Gate adversary pass 2: a bar that carries a `decision` and is equal to or
+/// better than the last release's value refuses nothing. The real baseline
+/// holds three such bars (4.2 llvm/rfc9110 and rust/rfc9110 at 2, 7.4 all at
+/// 38, each equal to v0.15.0's value); refusing them would hold a release
+/// that is worse on no row.
+#[test]
+fn gate_adv2_a_decision_on_a_bar_not_worse_than_the_last_release_refuses_nothing() {
+    let decided = |direction, bar: i64| {
+        let mut m = metric(direction, Tolerance::Count(0), &[("rust", bar)]);
+        m.bars.get_mut("rust").unwrap().decision =
+            Some("story:x (2026-11-01): kept from an earlier wave".to_string());
+        baseline_of(&[("4.2", m)])
+    };
+    let history = vec![release_record("v0.15.0", "b", 2)];
+    for (direction, bar) in [
+        (Direction::Lower, 2),
+        (Direction::Lower, 1),
+        (Direction::Higher, 2),
+        (Direction::Higher, 3),
+    ] {
+        let refused = release_refusals(
+            &decided(direction, bar),
+            &history,
+            &[gaps(2)],
+            Some("v0.15.0"),
+        );
+        assert!(
+            refused.is_empty(),
+            "{direction:?} bar {bar} by a decision, 2 at the last release, 2 now, refused: {refused:?}"
+        );
+    }
+    let refused = release_refusals(
+        &decided(Direction::Lower, 3),
+        &history,
+        &[gaps(2)],
+        Some("v0.15.0"),
+    );
+    assert!(
+        refused.len() == 1 && refused[0].contains("kept from an earlier wave"),
+        "{refused:?}"
+    );
+}
+
+/// Gate adversary pass 2: the reference is the history's *last* local run
+/// under the tag's label; a dedicated-host record under the same label is
+/// never it, and neither is an earlier local run of that label.
+#[test]
+fn gate_adv2_the_reference_is_the_last_local_run_under_the_tag() {
+    let baseline = baseline_of(&[(
+        "4.2",
+        metric(Direction::Lower, Tolerance::Count(0), &[("rust", 2)]),
+    )]);
+    let mut remote = release_record("v0.15.0", "c", 9);
+    remote.host = "ec2:c7i.metal-24xl".to_string();
+    let history = vec![
+        release_record("v0.15.0", "b", 1),
+        remote,
+        release_record("v0.15.0", "d", 2),
+        release_record("run", "e", 5),
+    ];
+    let refused = release_refusals(&baseline, &history, &[gaps(2)], Some("v0.15.0"));
+    assert!(
+        refused.is_empty(),
+        "an earlier local run of the tag's label was taken as the reference: {refused:?}"
+    );
+    let refused = release_refusals(&baseline, &history, &[gaps(3)], Some("v0.15.0"));
+    assert!(
+        refused.len() == 1 && refused[0].contains("2 at the last release, 3 now"),
+        "{refused:?}"
+    );
+}
+
+/// Gate adversary pass 2, red: `AGENTS.md` § Releases says a release is
+/// refused for "a bar a `decision` moved worse than the last release,
+/// whatever the value", and "A bar a `decision` made worse since the last
+/// release tag blocks the release until the value is back and the decision
+/// is withdrawn". The real baseline holds 3.9 llvm/terminal at 1820 by the
+/// decision "Accepted for v0.16.0 (Timo, 2026-11-09) ..." (1378 at
+/// v0.15.0, 1406 in v0.15.0's dedicated-host record), and three more 3.9
+/// bars and five 3.3/3.7 bars decided the same way. `task quality` measures
+/// no benchmark row and `release_refusals` skips timing rows, and
+/// `ignite-perf quality-remote` judges values against BASE and reads no
+/// decision: nothing refuses the release while the decision stands.
+#[test]
+fn gate_adv2_a_benchmark_bar_a_decision_moved_worse_refuses_the_release() {
+    let decision = "Accepted for v0.16.0 (Timo, 2026-11-09): the dedicated-host run refused this row";
+    let mut size = metric(
+        Direction::Lower,
+        Tolerance::Percent(5),
+        &[("llvm/terminal", 1820)],
+    );
+    size.source = Some("bench".to_string());
+    size.unit = "permille".to_string();
+    size.bars.get_mut("llvm/terminal").unwrap().decision = Some(decision.to_string());
+    let baseline = baseline_of(&[
+        ("3.9", size),
+        (
+            "4.2",
+            metric(Direction::Lower, Tolerance::Count(0), &[("rust", 1)]),
+        ),
+    ]);
+    let mut host = release_record("v0.15.0", "a", 1406);
+    host.host = "ec2:c7i.metal-24xl".to_string();
+    host.metric = "3.9".to_string();
+    host.target = "llvm/terminal".to_string();
+    host.base = Some("a".to_string());
+    host.base_value = Some(1406);
+    let history = vec![host, release_record("v0.15.0", "b", 1)];
+    let refused = release_refusals(&baseline, &history, &[gaps(1)], Some("v0.15.0"));
+    assert!(
+        refused.iter().any(|r| r.contains(decision)),
+        "a benchmark bar a decision moved worse than the last release (1406 -> 1820) is in the baseline, and the release was not refused: {refused:?}"
+    );
+}

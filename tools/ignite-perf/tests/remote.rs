@@ -536,3 +536,37 @@ fn a_release_run_takes_at_least_five_passes() {
         );
     }
 }
+
+/// Gate adversary pass 2: the pass check runs first in `remote::main`, before the profile, the
+/// git lookups and any AWS call. The repository named does not exist, so a `main` without the
+/// check fails on `git` instead, and still reaches no network.
+#[test]
+fn gate_adv2_quality_remote_refuses_a_one_pass_release_before_anything_else() {
+    let Mode::QualityRemote(args) = Cli::try_parse_from([
+        "ignite-perf",
+        "quality-remote",
+        "--repo",
+        "/nonexistent/ignite-perf-gate-adv2",
+        "--base",
+        "v0.15.0",
+        "--head",
+        "HEAD",
+        "--profile",
+        "none",
+        "--dry-run",
+        "--run",
+        "v0.16.0",
+        "--passes",
+        "1",
+    ])
+    .unwrap()
+    .mode
+    else {
+        panic!("quality-remote");
+    };
+    let refused = remote::main(&args);
+    assert!(
+        refused.as_ref().is_err_and(|e| e.contains("--passes 1")),
+        "a release run on one pass did not stop at the pass check: {refused:?}"
+    );
+}
