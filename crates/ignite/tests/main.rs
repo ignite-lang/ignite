@@ -23,6 +23,8 @@ mod control_trace;
 mod data_json;
 mod decode;
 mod default_target;
+mod dev_build;
+mod dev_build_adversary;
 mod differential;
 mod drain;
 mod eval;

@@ -396,6 +396,24 @@ fn the_host_runs_both_trees_interleaved_after_a_discarded_warm_up() {
     assert_eq!((args.passes, args.check_runs, args.build_runs), (3, 15, 3));
 }
 
+/// Row 6.2 llvm (story `build-time-back`): the host installs lld of the LLVM it installed, so
+/// `ld.lld` lies beside the clang `/usr/local/bin/clang` resolves to and a dev build on the LLVM
+/// target links with it, as on the workstation.
+#[test]
+fn the_host_installs_lld_beside_its_clang() {
+    let user_data = remote::user_data(180);
+    let clang = user_data
+        .find("ln -sf \"/usr/bin/clang-$installed\" /usr/local/bin/clang")
+        .expect("clang is linked");
+    let lld = user_data
+        .find("apt-get install -y -q --no-install-recommends \"lld-$installed\"")
+        .unwrap_or_else(|| panic!("lld is not installed:\n{user_data}"));
+    let checked = user_data
+        .find("test -x \"/usr/lib/llvm-$installed/bin/ld.lld\"")
+        .unwrap_or_else(|| panic!("ld.lld beside clang is not checked:\n{user_data}"));
+    assert!(lld < checked && checked < clang, "{user_data}");
+}
+
 /// A release row is refused beyond the tolerance (as before), and also within it when HEAD's
 /// median is worse and every HEAD sample is worse than every BASE sample: then the difference
 /// is shown, not noise. Overlapping samples leave the decision to the tolerance; a row with one

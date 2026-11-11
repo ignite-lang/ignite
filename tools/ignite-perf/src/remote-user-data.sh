@@ -20,6 +20,8 @@ for major in 23 22 21 20; do
   if bash /var/lib/ignite-quality/llvm.sh "$major"; then installed=$major; break; fi
 done
 test -n "$installed"
+apt-get install -y -q --no-install-recommends "lld-$installed"
+test -x "/usr/lib/llvm-$installed/bin/ld.lld"
 ln -sf "/usr/bin/clang-$installed" /usr/local/bin/clang
 sudo -u ubuntu -H sh -c 'curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable'
 echo off > /sys/devices/system/cpu/smt/control || true

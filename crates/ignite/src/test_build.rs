@@ -431,6 +431,7 @@ fn build_group(
             ignite_rustgen::write_project(&project, &out).map_err(io_error(&out))?;
             let std_out = out.join("std");
             ignite_rustgen::write_project(&std_project, &std_out).map_err(io_error(&std_out))?;
+            crate::seed_lock(&options.substrate_path, &out)?;
             let target_dir = build
                 .target_dir
                 .clone()
