@@ -626,6 +626,9 @@ fn start_worker(
     shared.tasks.store(1, Ordering::Relaxed);
     shared.hand_over(|incoming| incoming.new.push((job, stack)));
     let started = Arc::clone(&shared);
+    // Counted before the worker starts, which may end the task and count
+    // it out of `LIVE` before `spawn` returns here. Relaxed: as above.
+    let live = LIVE.fetch_add(1, Ordering::Relaxed) + 1;
     match std::thread::Builder::new()
         .name(String::from("worker"))
         .spawn(move || work(started))
@@ -635,11 +638,11 @@ fn start_worker(
             found.count();
             count(&COUNTERS.workers_started);
             workers.push(shared);
-            // Relaxed: as above.
-            escalate(LIVE.fetch_add(1, Ordering::Relaxed) + 1);
+            escalate(live);
             Ok(())
         }
         Err(error) => {
+            LIVE.fetch_sub(1, Ordering::Relaxed);
             let (job, stack) = lock(&shared.incoming)
                 .new
                 .pop()
