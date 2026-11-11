@@ -23,14 +23,29 @@ fn fixture(name: &str) -> PathBuf {
         .join(name)
 }
 
+/// A soak program outside the differential runner's corpus
+/// (`tests/soak/`): its tests read `Runtime.census()`, which the evaluator
+/// has no model of by design, so in `fixtures/` each would be a unit of
+/// `eval_cannot_run` (metric 1.6, `docs/quality.md`).
+fn soak_program(name: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/soak")
+        .join(name)
+}
+
 struct Run {
     status: i32,
     output: String,
 }
 
-/// `ignite test <file> <filter>` on `target`, with `IGNITE_DEBUG_LEAK` set
-/// to `leak` when given.
+/// `ignite test <file> <filter>` on `target` for a fixture of
+/// `fixtures/leak/`, with `IGNITE_DEBUG_LEAK` set to `leak` when given.
 fn ignite_test(target: &str, file: &str, filter: &str, leak: Option<&str>) -> Run {
+    ignite_test_at(target, &fixture(file), filter, leak)
+}
+
+/// `ignite test <path> <filter>` on `target` (see [`ignite_test`]).
+fn ignite_test_at(target: &str, path: &Path, filter: &str, leak: Option<&str>) -> Run {
     let index = TARGETS.iter().position(|t| *t == target).expect("a target");
     let _guard = LOCKS[index].lock().unwrap_or_else(|e| e.into_inner());
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
@@ -39,7 +54,7 @@ fn ignite_test(target: &str, file: &str, filter: &str, leak: Option<&str>) -> Ru
     let mut command = Command::new(env!("CARGO_BIN_EXE_ignite"));
     command
         .arg("test")
-        .arg(fixture(file))
+        .arg(path)
         .arg(filter)
         .args(["--target", target, "--out"])
         .arg(&dir)
@@ -312,46 +327,34 @@ fn reachable_handles_stay_usable_and_stored_reads_are_released() {
 /// reads through `for` (left by `break`, `continue`, `return`), nested
 /// `match`es, `is_some`, a bare `remove` or a record literal `put` keep the
 /// census flat.
-///
-/// Known gap, decided in wave 8: on LLVM four temporary forms still keep the
-/// owner `copy_from_heap` added (an unbraced arm-value `match`, a record
-/// literal passed to `put`, `get(..).is_some()`, a bare `remove` statement).
-/// They are pre-existing and filed as the backlog draft
-/// `story:llvm-release-handle-temporaries`; this test holds today's state so
-/// that a fix turns it red and is taken into the expectation.
 #[test]
 fn stored_ends_read_in_every_form_are_released() {
-    const KNOWN_ON_LLVM: [&str; 4] = [
-        "a nested match over stored ends is released (G30)",
-        "a record put as a literal and removed is released (G30)",
-        "a stored end looked at through is_some is released (G30)",
-        "a stored end removed by a bare statement is released (G30)",
-    ];
     on_both_targets(|target| {
         let run = ignite_test(target, "attack2.ignite", "", None);
-        if target == "llvm" {
-            assert_ne!(run.status, 0, "{target}:\n{}", run.output);
-            assert!(
-                run.output.contains("12 passed; 4 failed"),
-                "known gap, decided in wave 8 (story:llvm-release-handle-temporaries): \
-                 {target} changed:\n{}",
-                run.output
-            );
-            for name in KNOWN_ON_LLVM {
-                assert!(
-                    run.output
-                        .contains(&format!("test attack2/{name} ... FAILED")),
-                    "known gap, decided in wave 8: {name} no longer fails on {target}:\n{}",
-                    run.output
-                );
-            }
-        } else {
-            assert_eq!(run.status, 0, "{target}:\n{}", run.output);
-            assert!(
-                run.output.contains("16 passed; 0 failed"),
-                "{target}:\n{}",
-                run.output
-            );
-        }
+        assert_eq!(run.status, 0, "{target}:\n{}", run.output);
+        assert!(
+            run.output.contains("16 passed; 0 failed"),
+            "{target}:\n{}",
+            run.output
+        );
+    });
+}
+
+/// A stored end read into a temporary no binding holds
+/// (`tests/soak/temporaries.ignite`): consumed by a fn's result or
+/// returned by it, passed to `spawn`, read in a loop condition, taken by a
+/// call under `?` or beside a `?` that leaves, and pending in a task that
+/// fails. Each case fails on a copy never released (the soak's census) and
+/// on a copy released twice (the stored end stops delivering).
+#[test]
+fn stored_ends_read_into_temporaries_are_released_once() {
+    on_both_targets(|target| {
+        let run = ignite_test_at(target, &soak_program("temporaries.ignite"), "", None);
+        assert_eq!(run.status, 0, "{target}:\n{}", run.output);
+        assert!(
+            run.output.contains("5 passed; 0 failed"),
+            "{target}:\n{}",
+            run.output
+        );
     });
 }

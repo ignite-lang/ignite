@@ -13,7 +13,10 @@
 //! escape. A `match` whose scrutinee is such a value and whose arms keep
 //! what they bind is owned the same way ([`owned_scrutinee`], [`owned_match`]),
 //! and so is the value a `for` iterates when its body keeps what the loop
-//! binds ([`owned_iter`]).
+//! binds ([`owned_iter`]). Such a value that no binding holds is a
+//! temporary, owned by the expression that consumes it while that
+//! expression runs ([`kept_temporaries`], a `match` no statement claims, a
+//! bare expression statement, [`fresh`]).
 //!
 //! A mention keeps the handles inside the block when it is the receiver of
 //! a builtin method that does not hand the receiver on, a value `put` in a
@@ -96,6 +99,51 @@ pub fn owned_scrutinee(e: &Expr, cx: &Cx<'_>) -> bool {
                 .iter()
                 .all(|name| keeps(&arm.body, name, cx))
         })
+}
+
+/// Whether the expression statement `e` makes a value no one else owns
+/// ([`produces`]) and drops it: a bare `senders.remove(id)`.
+pub fn fresh(e: &Expr, cx: &Cx<'_>) -> bool {
+    produces(e, cx)
+}
+
+/// The arguments of `e` that are values no one else owns ([`produces`])
+/// and that `e` keeps, so the expression around them is their owner until
+/// `e` is done: the arguments of a call of a fn or role whose result cannot
+/// alias them ([`result_apart`]; the receiver of a fn called by UFCS
+/// included), the value arguments of a builtin that stores a heap copy of
+/// them ([`copies_arguments`]), and the arguments of a `spawn` that the
+/// task gets an owner of its own for ([`spawn_owns`]).
+/// `senders.get(id).is_some()`, `spawn ring(senders.get(id), done)`.
+pub fn kept_temporaries<'e>(e: &'e Expr, cx: &Cx<'_>) -> Vec<&'e Expr> {
+    let unwrap = |arg: &'e Expr| match &arg.kind {
+        ExprKind::NamedArg { value, .. } => &**value,
+        _ => arg,
+    };
+    let (args, fn_call): (Vec<&Expr>, bool) = match &e.kind {
+        ExprKind::Spawn(call) => (call_args(call, cx.types), false),
+        ExprKind::Call { .. } | ExprKind::Method { .. } => match cx.types.callee(e) {
+            Some(Callee::Fn(_) | Callee::Role { .. }) => (call_args(e, cx.types), true),
+            Some(Callee::Builtin(b)) if copies_arguments(*b) => match &e.kind {
+                ExprKind::Method { args, .. } => (args.iter().collect(), false),
+                _ => (Vec::new(), false),
+            },
+            _ => (Vec::new(), false),
+        },
+        _ => (Vec::new(), false),
+    };
+    let spawned = matches!(e.kind, ExprKind::Spawn(_));
+    let temps: Vec<&Expr> = args
+        .into_iter()
+        .map(unwrap)
+        .filter(|arg| !spawned || spawn_owns(cx.types.type_of(arg)))
+        .filter(|arg| produces(arg, cx))
+        .collect();
+    // The callee's result is looked at only when there is a temporary.
+    if fn_call && !temps.is_empty() && !result_apart(e, cx) {
+        return Vec::new();
+    }
+    temps
 }
 
 /// The `match` that the statement `stmt` evaluates as a temporary and its
@@ -875,6 +923,10 @@ fn keeps(e: &Expr, name: &str, cx: &Cx<'_>) -> bool {
     let types = cx.types;
     let block = |b: &Block| block_keeps(&b.stmts, name, cx);
     let arg_keeps = |arg: &Expr| is_path(arg, name) || keeps(arg, name, cx);
+    // The value argument of a builtin that stores a heap copy: the copy is
+    // an owner of its own, so a tuple or record literal around the binding
+    // (a temporary that owns nothing) keeps it as the binding itself does.
+    let copied_keeps = |arg: &Expr| aliases(arg, name, cx) || keeps(arg, name, cx);
     match &e.kind {
         ExprKind::Name(id) => id.name != name,
         ExprKind::Int(_)
@@ -898,13 +950,13 @@ fn keeps(e: &Expr, name: &str, cx: &Cx<'_>) -> bool {
                 && matches!(types.callee(e), Some(Callee::Builtin(b)) if keeps_receiver(*b)) =>
         {
             if matches!(types.callee(e), Some(Callee::Builtin(b)) if copies_arguments(*b)) {
-                args.iter().all(arg_keeps)
+                args.iter().all(copied_keeps)
             } else {
                 all_keep(args.iter(), name, cx)
             }
         }
         ExprKind::Method { receiver, args, .. } if matches!(types.callee(e), Some(Callee::Builtin(b)) if copies_arguments(*b)) => {
-            keeps(receiver, name, cx) && args.iter().all(arg_keeps)
+            keeps(receiver, name, cx) && args.iter().all(copied_keeps)
         }
         ExprKind::Call { .. } | ExprKind::Method { .. }
             if matches!(types.callee(e), Some(Callee::Fn(_) | Callee::Role { .. }))

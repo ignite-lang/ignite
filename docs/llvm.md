@@ -536,6 +536,17 @@ position, even with no buffer.
     list, captured, assigned, `copy()`) is not owned and, as before, is not released before
     the process exits. A callee that keeps a handle it was passed beyond its return does so
     in a store, a channel or a task, each an owner of its own.
+  - an expression, for a temporary it consumes (`own::kept_temporaries`, `own::fresh`,
+    `docs/slice.md` 30.3): a value no one else owns that no binding holds, as an argument of
+    a call whose result cannot alias it (`senders.get(id).is_some()`), the value of a `put`,
+    `send` or `try_send`, an argument of `spawn` the task gets an owner of its own for, the
+    scrutinee of a `match` no statement claims, or a bare expression statement
+    (`senders.remove(id)`). `Lower::open_temporaries` takes an owner mark before the
+    expression and pushes it on the open blocks' marks, `Lower::expr` registers the
+    temporary with `own_handles.<T>` when it is made, and the mark is released when the
+    expression is done; a `return`, `?`, `break` or `continue` inside releases it with the
+    blocks', a failure with the task's registrations. A fn's result and a `let`'s value are
+    not temporaries: the caller or the block owns them.
   - At a `spawn` that is the last use of an owned binding (`own::handovers`: in the
     binding's block or in an `if`, `else` or `match` arm nested in it that is itself the
     last use, up to a binding that shadows the name; not in a loop body), the block releases

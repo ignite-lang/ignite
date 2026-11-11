@@ -177,6 +177,9 @@ pub struct Lower<'a, 'm, 'e> {
     /// (`own::owned_scrutinee`), by [`expr_key`]; recorded before the
     /// statement, taken when its scrutinee is lowered.
     owned_matches: Vec<usize>,
+    /// The temporaries an open owner scope registers when they are
+    /// lowered (`own::kept_temporaries`, `own::fresh`), by [`expr_key`].
+    owned_temps: Vec<usize>,
 }
 
 /// An owned stream binding `name` whose last use is the spawned call with
@@ -232,6 +235,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             moved_streams: Vec::new(),
             handovers: Vec::new(),
             owned_matches: Vec::new(),
+            owned_temps: Vec::new(),
         }
     }
 
@@ -604,6 +608,67 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             .and_then(|marks| marks.iter().flatten().next())
             .cloned();
         if let Some(mark) = mark {
+            self.f
+                .ins(format!("call void @ignite_rt_own_release(i64 {mark})"));
+        }
+    }
+
+    /// Open an owner scope around `e` when it consumes temporaries no one
+    /// else owns without handing them on: a call or a `spawn` that keeps
+    /// such arguments (`own::kept_temporaries`), or a `match` that owns its
+    /// scrutinee and is no statement of its block (`own::owned_scrutinee`).
+    /// The scope is an entry of `own_marks`, so `return`, `?`, `break` and
+    /// `continue` inside release it as they release a block's, and a
+    /// failure releases its registrations with the task's.
+    fn open_temporaries(&mut self, e: &Expr) -> bool {
+        if !matches!(
+            e.kind,
+            ExprKind::Call { .. }
+                | ExprKind::Method { .. }
+                | ExprKind::Match { .. }
+                | ExprKind::Spawn(_)
+        ) {
+            return false;
+        }
+        let cx = self.own_cx();
+        let temps: Vec<usize> = crate::own::kept_temporaries(e, &cx)
+            .into_iter()
+            .filter(|temp| self.env.holds_handles(&self.ty(temp)))
+            .map(expr_key)
+            .collect();
+        let owned_match = match &e.kind {
+            ExprKind::Match { scrutinee, .. } => {
+                !self.owned_matches.contains(&expr_key(e))
+                    && self.env.holds_handles(&self.ty(scrutinee))
+                    && crate::own::owned_scrutinee(e, &cx)
+            }
+            _ => false,
+        };
+        if temps.is_empty() && !owned_match {
+            return false;
+        }
+        self.open_scope();
+        self.owned_temps.extend(temps);
+        if owned_match {
+            self.owned_matches.push(expr_key(e));
+        }
+        true
+    }
+
+    /// An owner scope of its own: a mark taken now.
+    fn open_scope(&mut self) {
+        self.m.declare("ignite_rt_own_mark", "i64", &[]);
+        self.m
+            .declare("ignite_rt_own_release", "void", &["i64".into()]);
+        let mark = self.f.val("call i64 @ignite_rt_own_mark()");
+        self.own_marks.push(Some(mark));
+    }
+
+    /// Leave the owner scope [`Lower::open_scope`] opened.
+    fn close_temporaries(&mut self) {
+        if let Some(Some(mark)) = self.own_marks.pop()
+            && !self.f.is_terminated()
+        {
             self.f
                 .ins(format!("call void @ignite_rt_own_release(i64 {mark})"));
         }
@@ -1313,7 +1378,16 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 self.f.br(&next);
             }
             StmtKind::Expr(e) => {
+                let fresh =
+                    crate::own::fresh(e, &self.own_cx()) && self.env.holds_handles(&self.ty(e));
+                if fresh {
+                    self.open_scope();
+                    self.owned_temps.push(expr_key(e));
+                }
                 self.expr(e, false);
+                if fresh {
+                    self.close_temporaries();
+                }
             }
             StmtKind::Assert { cond, message } => {
                 self.assert(stmt.span.start, cond, message.as_ref())
@@ -1512,7 +1586,23 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             self.nested += 1;
         }
         let previous = self.locate(e.span.start);
+        let temps_before = self.owned_temps.len();
+        let scope = self.open_temporaries(e);
         let value = self.expr_kind(e, want);
+        if scope {
+            // A temporary of this scope that was not lowered through
+            // `expr` is forgotten; the scope ends before `e` itself is
+            // registered with the scope around it.
+            self.owned_temps.truncate(temps_before);
+            self.close_temporaries();
+        }
+        if let Some(at) = self.owned_temps.iter().position(|k| *k == expr_key(e)) {
+            self.owned_temps.remove(at);
+            if value != Val::Never {
+                let ty = self.ty(e);
+                self.own_value(&ty, &value);
+            }
+        }
         if let Some(previous) = previous {
             self.f.restore_location(previous);
         }

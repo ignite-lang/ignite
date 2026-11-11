@@ -10144,12 +10144,25 @@ and `<Receiver>`.
     adds one for the copy it makes, so `remove` and `receive` hand the stored owner to their
     caller. A store's `update` and `upsert` call their fn on a copy that shares the stored
     handles.
-  - Known gap (wave 8, `story:llvm-release-handle-temporaries`): on LLVM a copied-out value
-    that no owning `let`, statement `match` or `for` holds keeps that owner forever: an arm's
-    value that is a `match` without braces, a record literal passed to `put`, a
-    `get(..).is_some()`, a bare `remove`, `get` or `receive` statement.
-    `leak::stored_ends_read_in_every_form_are_released` (`fixtures/leak/attack2.ignite`) holds
-    these four as the failing tests on LLVM; the Rust target passes all 16.
+  - A value no one else owns that no binding holds is a temporary, owned by the expression
+    that consumes it, as the Rust target drops it at the end of its statement
+    (`story:llvm-release-handle-temporaries`): an argument of a call whose result holds no
+    handle or only fresh ones (`senders.get(id).is_some()`, the receiver of a fn called by
+    UFCS included), the value of a `put`, `send` or `try_send`, an argument of `spawn` the
+    task gets an owner of its own for, the scrutinee of a `match` that no statement claims
+    and whose arms keep what they bind (an arm's value without braces), and a bare
+    expression statement (`senders.remove(id)`). That expression takes an owner mark, the
+    temporary registers its handles when it is made, and the mark is released when the
+    expression is done, or by the `return`, `?`, `break` or `continue` that leaves it, or by
+    the failure that ends the task. A temporary that is a fn's result or a `let`'s value is
+    not one: its caller or its block owns it. A tuple or record literal around a binding
+    passed to `put`, `send` or `try_send` keeps the binding, as the binding itself does: the
+    heap copy is an owner of its own. `leak::stored_ends_read_in_every_form_are_released`
+    (`fixtures/leak/attack2.ignite`, 16 tests) and
+    `leak::stored_ends_read_into_temporaries_are_released_once`
+    (`crates/ignite/tests/soak/temporaries.ignite`, 5 tests: a fn's result, `spawn`, a loop
+    condition, `?`, a failing task; each fails on a copy never released and on one released
+    twice) pass on both targets.
   - `spawn` adds an owner in the parent for every handle inside a tuple, record or enum
     argument (`retain_handles.<T>`); the task registers them and releases them when its fn
     returns, as it does a stream argument.
