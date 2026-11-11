@@ -923,6 +923,82 @@ fn the_first_session_costs_at_most_one_system_call_more_than_at_v0_15_0() {
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
+/// The processes running `executable` that no test holds any more: not a
+/// child of this test process, and not the child of a `strace` (the count
+/// of the first session, while it runs). A process that was killed and
+/// waits to be reaped is not counted.
+fn left_behind(executable: &Path) -> Vec<i32> {
+    let executable = std::fs::canonicalize(executable).expect("the built terminald");
+    let me = std::process::id().to_string();
+    let mut found = Vec::new();
+    for entry in std::fs::read_dir("/proc").expect("/proc").flatten() {
+        let name = entry.file_name();
+        let Some(pid) = name.to_str().and_then(|name| name.parse::<i32>().ok()) else {
+            continue;
+        };
+        if std::fs::read_link(entry.path().join("exe")).ok().as_deref() != Some(&*executable) {
+            continue;
+        }
+        let Ok(stat) = std::fs::read_to_string(entry.path().join("stat")) else {
+            continue;
+        };
+        let Some((_, after_name)) = stat.rsplit_once(") ") else {
+            continue;
+        };
+        let mut fields = after_name.split(' ');
+        let (state, parent) = (fields.next(), fields.next().unwrap_or(""));
+        let held_by = std::fs::read_to_string(format!("/proc/{parent}/comm")).unwrap_or_default();
+        if state != Some("Z") && parent != me && held_by.trim() != "strace" {
+            found.push(pid);
+        }
+    }
+    found
+}
+
+/// Adversary pass 1 on unit `session` of wave 11
+/// (`story:readiness-session-cost`): the count of the first session leaves
+/// no server behind. [`first_session_calls`] runs `terminald` under
+/// `strace -f` and ends the run by dropping its [`Server`], which kills the
+/// child it started: `strace`. A process traced by a `strace` that was
+/// killed runs on, so the `terminald` stays, listening on its port, with no
+/// parent that will end it: one more per target at every run of
+/// [`the_first_session_costs_at_most_one_system_call_more_than_at_v0_15_0`].
+/// What this test finds left behind it ends itself.
+#[test]
+fn the_count_of_the_first_session_leaves_no_server_running() {
+    let mut failures = Vec::new();
+    for target in [Target::Rust, Target::Llvm] {
+        let terminald = &executables(target).terminald;
+        let before = left_behind(terminald);
+        first_session_calls(target);
+        // A killed process is gone at once; the ceiling is for the reaping.
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let left = loop {
+            let left: Vec<i32> = left_behind(terminald)
+                .into_iter()
+                .filter(|pid| !before.contains(pid))
+                .collect();
+            if left.is_empty() || Instant::now() >= deadline {
+                break left;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        for pid in &left {
+            let _ = nix::sys::signal::kill(
+                nix::unistd::Pid::from_raw(*pid),
+                nix::sys::signal::Signal::SIGKILL,
+            );
+        }
+        if !left.is_empty() {
+            failures.push(format!(
+                "{target:?}: {} still runs after its session was counted, as process {left:?}",
+                terminald.display()
+            ));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
 /// The symbol names in `binary`, from `nm`.
 fn symbols(binary: &Path) -> String {
     let output = Command::new("nm").arg(binary).output().expect("run nm");
