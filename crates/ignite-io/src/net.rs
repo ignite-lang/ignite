@@ -154,9 +154,10 @@ impl Slot {
         {
             let guard = self.read();
             let listener = guard.as_ref()?;
-            // SAFETY: the descriptor belongs to `listener`, which the read
-            // lock keeps open for the call.
-            unsafe { nix::libc::shutdown(listener.as_raw_fd(), nix::libc::SHUT_RD) };
+            // The descriptor belongs to `listener`, which the read lock
+            // keeps open for the call.
+            let _ =
+                nix::sys::socket::shutdown(listener.as_raw_fd(), nix::sys::socket::Shutdown::Read);
             lock(&self.acceptors).wake_all();
         }
         let closed = self
@@ -525,53 +526,14 @@ impl Drop for Stream {
 
 /// One `accept4` on `listener`: the connection, close-on-exec, and the
 /// peer the call reported (one system call instead of `accept` and a
-/// `getpeername`). The socket blocks in both IO modes: in `readiness` its
-/// reads and sends are `MSG_DONTWAIT` unless a read may block its worker
+/// `getpeername`): std's `accept` is that call on Linux, retried on
+/// `EINTR`. The socket blocks in both IO modes: in `readiness` its reads
+/// and sends are `MSG_DONTWAIT` unless a read may block its worker
 /// (`sched::block_alone`).
 fn accept_socket(
     listener: &std::net::TcpListener,
 ) -> std::io::Result<(std::net::TcpStream, Option<std::net::SocketAddr>)> {
-    use nix::libc;
-    use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
-    use std::os::fd::{FromRawFd, OwnedFd};
-    let flags = libc::SOCK_CLOEXEC;
-    // SAFETY: `storage` is zeroed (a valid `sockaddr_storage`) and `length`
-    // holds its size, so `accept4` writes within it; a descriptor it
-    // returns is new and owned by nothing else, so `OwnedFd` takes it; the
-    // casts read `storage` as the address type its `ss_family` names, both
-    // smaller than `sockaddr_storage` and fully written by `accept4` then.
-    unsafe {
-        let mut storage: libc::sockaddr_storage = std::mem::zeroed();
-        let mut length = std::mem::size_of::<libc::sockaddr_storage>() as libc::socklen_t;
-        let descriptor = libc::accept4(
-            listener.as_raw_fd(),
-            (&raw mut storage).cast(),
-            &raw mut length,
-            flags,
-        );
-        if descriptor < 0 {
-            return Err(std::io::Error::last_os_error());
-        }
-        let socket = std::net::TcpStream::from(OwnedFd::from_raw_fd(descriptor));
-        let peer = match i32::from(storage.ss_family) {
-            libc::AF_INET => {
-                let v4 = &*(&raw const storage).cast::<libc::sockaddr_in>();
-                Some(SocketAddr::from((
-                    Ipv4Addr::from(u32::from_be(v4.sin_addr.s_addr)),
-                    u16::from_be(v4.sin_port),
-                )))
-            }
-            libc::AF_INET6 => {
-                let v6 = &*(&raw const storage).cast::<libc::sockaddr_in6>();
-                Some(SocketAddr::from((
-                    Ipv6Addr::from(v6.sin6_addr.s6_addr),
-                    u16::from_be(v6.sin6_port),
-                )))
-            }
-            _ => None,
-        };
-        Ok((socket, peer))
-    }
+    listener.accept().map(|(socket, peer)| (socket, Some(peer)))
 }
 
 impl TcpListener {
@@ -1363,17 +1325,12 @@ mod tests {
     fn fill(stream: &super::TcpStream) {
         let chunk = [0u8; 65536];
         loop {
-            // SAFETY: the descriptor belongs to `stream`, which outlives
-            // the call, and `chunk` is readable for its length.
-            let sent = unsafe {
-                nix::libc::send(
-                    stream.socket().as_raw_fd(),
-                    chunk.as_ptr().cast(),
-                    chunk.len(),
-                    nix::libc::MSG_DONTWAIT | nix::libc::MSG_NOSIGNAL,
-                )
-            };
-            if sent < 0 {
+            let sent = nix::sys::socket::send(
+                stream.socket().as_raw_fd(),
+                &chunk,
+                nix::sys::socket::MsgFlags::MSG_DONTWAIT | nix::sys::socket::MsgFlags::MSG_NOSIGNAL,
+            );
+            if sent.is_err() {
                 break;
             }
         }
