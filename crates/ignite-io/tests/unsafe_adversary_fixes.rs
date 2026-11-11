@@ -296,6 +296,9 @@ fn child_signal_outside_a_guard_page() {
         raise(Signal::SIGBUS).unwrap();
     });
     ignite_io::wait_for_tasks();
+    // Only a task on a worker (the mode `readiness`) installs the overflow
+    // handler; a task of the mode `threads` runs on a thread of its own.
+    let readiness = std::env::var("IGNITE_IO").as_deref() != Ok("threads");
     for (signal, handler) in [
         (nix::libc::SIGSEGV, segv_seen as extern "C" fn(_, _, _)),
         (nix::libc::SIGBUS, bus_seen),
@@ -306,10 +309,17 @@ fn child_signal_outside_a_guard_page() {
             unsafe { nix::libc::sigaction(signal, std::ptr::null(), &mut now) },
             0
         );
-        assert_ne!(
-            now.sa_sigaction, handler as usize,
-            "the overflow handler was not installed in front of the test's for signal {signal}"
-        );
+        if readiness {
+            assert_ne!(
+                now.sa_sigaction, handler as usize,
+                "the overflow handler was not installed in front of the test's for signal {signal}"
+            );
+        } else {
+            assert_eq!(
+                now.sa_sigaction, handler as usize,
+                "the mode threads replaced the test's handler for signal {signal}"
+            );
+        }
     }
     let segv = SEGV_SEEN.load(std::sync::atomic::Ordering::SeqCst);
     let bus = BUS_SEEN.load(std::sync::atomic::Ordering::SeqCst);
