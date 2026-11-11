@@ -14,7 +14,7 @@
 
 use std::ffi::{CStr, CString};
 use std::io::Read;
-use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
 use std::os::unix::fs::PermissionsExt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -23,7 +23,7 @@ use nix::dir::{Dir, Type};
 use nix::errno::Errno;
 use nix::fcntl::{AtFlags, OFlag, OpenHow, ResolveFlag, openat, openat2, renameat};
 use nix::sys::stat::{FileStat, Mode, SFlag, fstat, fstatat, mkdirat};
-use nix::unistd::{UnlinkatFlags, unlinkat};
+use nix::unistd::{UnlinkatFlags, close, unlinkat};
 
 use crate::IoError;
 
@@ -229,9 +229,17 @@ fn entries(
 }
 
 /// `descriptor`, a directory opened for reading, as a [`Dir`] that lists
-/// it ([`entries`]) and closes it when dropped.
+/// it ([`entries`]) and closes it when dropped. `Dir::from_fd` lets go of
+/// the descriptor before it calls `fdopendir`, and `fdopendir` leaves it
+/// open when it fails (no memory for its buffer, or not a directory): it
+/// is closed here by its number, which no other code can have been given
+/// while it is still open.
 fn listed(descriptor: OwnedFd, path: &Checked<'_>) -> Result<Dir, IoError> {
-    Dir::from_fd(descriptor).map_err(|e| path.os(e))
+    let number = descriptor.as_raw_fd();
+    Dir::from_fd(descriptor).map_err(|errno| {
+        let _ = close(number);
+        path.os(errno)
+    })
 }
 
 /// The OS reason of a `std::io::Error`, in the words of [`Errno::desc`].
@@ -1223,5 +1231,26 @@ mod tests {
         std::fs::write(scratch.root().join("plain"), b"").unwrap();
         let plain = scratch.root().join("plain");
         assert!(Directory::open(plain.to_str().unwrap(), false).is_err());
+    }
+
+    /// A descriptor that `fdopendir` refuses is closed, not left open:
+    /// `Dir::from_fd` lets go of it before the call, and the C library
+    /// leaves it open when the call fails. The descriptor's number may be
+    /// reused by another test at once, so the check is that it no longer
+    /// names this file.
+    #[test]
+    fn a_refused_listing_closes_its_descriptor() {
+        use std::os::fd::{AsRawFd, OwnedFd};
+        let scratch = Scratch::new("refused");
+        let file = scratch.root().join("plain");
+        std::fs::write(&file, b"").unwrap();
+        let file = std::fs::canonicalize(file).unwrap();
+        let descriptor = OwnedFd::from(std::fs::File::open(&file).unwrap());
+        let number = descriptor.as_raw_fd();
+        let path = super::check("plain").unwrap();
+        let refused = super::listed(descriptor, &path).unwrap_err().to_string();
+        assert!(refused.ends_with("Not a directory"), "{refused}");
+        let named = std::fs::read_link(format!("/proc/self/fd/{number}")).ok();
+        assert_ne!(named, Some(file), "the refused descriptor is still open");
     }
 }
