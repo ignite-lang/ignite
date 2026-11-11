@@ -5568,3 +5568,85 @@ fn the_release_run_reads_the_tags_decisions_and_returns_its_list() {
         "the list against the baseline at {tag}"
     );
 }
+
+// ---- rule adversary 1: a release that tracks its worse rows -------------
+
+/// What `record` prints and does for a release whose check compared no row:
+/// the tag of the last release could not be read, or the tag has no record in
+/// the history. `record` passes `Release::refused` to `tracked_section`,
+/// keeps the release's label and fails on `check`'s errors only, so a text
+/// here that says "tracked and not refused" is a release recorded under its
+/// label, exit 0, with no row measured against the release before it. Row 4.2
+/// stands at 9 here and at 1 at the last release, and nothing lists it.
+#[test]
+fn rule_adv1_a_release_that_compared_no_row_is_not_printed_as_tracked() {
+    let baseline = baseline_of(&[(
+        "4.2",
+        metric(Direction::Lower, Tolerance::Count(0), &[("rust", 1)]),
+    )]);
+    let released = vec![
+        release_record("bar", "a", 1),
+        release_record("v0.15.0", "b", 1),
+    ];
+    let unrecorded = vec![
+        release_record("bar", "a", 1),
+        release_record("v0.14.0", "b", 1),
+    ];
+    let cases = [
+        (
+            "the tag lookup failed",
+            &released,
+            LastRelease::Unreadable("git: No such file or directory".to_string()),
+        ),
+        ("no tag is fetched", &released, LastRelease::NoTag),
+        (
+            "the tag has no record in the history",
+            &unrecorded,
+            LastRelease::Tag("v0.15.0".to_string()),
+        ),
+    ];
+    let mut passed = Vec::new();
+    for (case, history, lookup) in cases {
+        let (release, _) = run_judged("v0.16.0", &baseline, history, &[gaps(9)], lookup);
+        assert_eq!(release.refused.len(), 1, "{case}: {release:?}");
+        let printed = tracked_section("v0.16.0", &release.refused);
+        if printed.contains("tracked and not refused") {
+            passed.push(format!("{case}: {printed:?}"));
+        }
+    }
+    assert!(
+        passed.is_empty(),
+        "a release whose check compared no row (4.2 rust: 1 at the last release, 9 now) is printed as a tracked row, recorded under its label and passed:\n  {}",
+        passed.join("\n  ")
+    );
+}
+
+/// A release label that is run twice (a candidate, then the release at a
+/// later commit; since 2026-11-11 every such run keeps the label, whatever
+/// it finds) gets a row of the trend each time. The release's row is the
+/// last one, and its changes are against the release before it, v0.15.0,
+/// as the release check's reference is: not against the candidate of the
+/// same label, where the row would read `none`.
+#[test]
+fn rule_adv1_a_second_run_of_a_release_label_is_compared_with_the_release_before() {
+    let baseline = baseline_of(&[(
+        "4.2",
+        metric(Direction::Lower, Tolerance::Count(0), &[("rust", 1)]),
+    )]);
+    let history = vec![
+        release_record("bar", "a", 1),
+        release_record("v0.15.0", "b", 1),
+        release_record("v0.16.0", "c", 3),
+        release_record("v0.16.0", "d", 3),
+    ];
+    let refused = release_refusals(&baseline, &history, &[gaps(3)], Some("v0.15.0"));
+    assert!(
+        refused.len() == 1 && refused[0].contains("1 at the last release, 3 now"),
+        "the release check's reference: {refused:?}"
+    );
+    let trend = render_trend(&baseline, &history);
+    assert!(
+        trend.contains("| v0.16.0 | d | 2026-11-10 | 1 | 0 |  | 4.2 rust 1→3 |"),
+        "the release's row of the trend does not show the row the release check lists as worse than v0.15.0:\n{trend}"
+    );
+}
