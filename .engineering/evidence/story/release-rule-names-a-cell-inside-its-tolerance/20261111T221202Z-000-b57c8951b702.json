@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-11T22:12:02Z",
+  "actor": "human:timo",
+  "artifact": "story:release-rule-names-a-cell-inside-its-tolerance",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "wave/11-rule at 43ed53d0: cargo test -p ignite-perf 73 passed; cargo test -p ignite --test main quality:: 52 passed, 1 ignored; cargo clippy --workspace --all-targets exit 0; cargo fmt --check exit 0"
+  }
+}
