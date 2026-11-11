@@ -6,9 +6,10 @@ package moves_attack
 // binding's owner to the task without an owner of its own. Each case lets
 // the task end and then uses the end through a holder the rule does not
 // see (an alias, a closure, a list, an arm's own binding, a later
-// statement), so a task that took that holder's owner closed the end
-// under it. The last two count growth over rounds: an owner nobody
-// releases. `crates/ignite/tests/leak.rs` runs them on both targets.
+// statement, a field), so a task that took that holder's owner
+// closed the end under it. Three count growth over rounds instead (the
+// `over_pipe` shape, an outer block's end, a role call's stream): an owner
+// nobody releases. `crates/ignite/tests/leak.rs` runs them on both targets.
 
 import std.runtime.{soak}
 
@@ -291,4 +292,71 @@ test fn inner_block(c: Bool) -> Unit {
 
 test "an end of an outer block a call passes to a task in an inner block is released" {
   assert soak(100, |run| inner_block(true)).growth == []
+}
+
+// A role call whose argument is a closure: the closure may hold a handle,
+// so the result is not fresh and the task gets an owner of its own; the
+// accepted stream the role returns is no temporary the call releases, so
+// its own owner must still go somewhere.
+protocol Pass {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> TcpStream requires [stream.write] {
+    return stream
+  }
+}
+
+test fn write_end(s: TcpStream, go: Receiver<Int>, done: Sender<Int>) -> Result<Unit, IoError> {
+  let g = go.receive_within(5 seconds)
+  let ok = match s.write_all(b"ok") {
+    Ok(_) => 1
+    Err(_) => 0
+  }
+  let d = done.send(ok)
+  Ok(())
+}
+
+test fn role_temporary() -> Result<Unit, IoError> {
+  let tasks = Runtime.census().tasks
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let client = TcpStream.connect("127.0.0.1", listener.local_port())?
+  let (gtx, grx) = Channel.bounded(1)
+  let (dtx, drx) = Channel.bounded(1)
+  let u = Pass.serve(listener.accept()?, |x| x)
+  spawn write_end(u, grx, dtx)
+  let g = gtx.send(1)
+  assert is(drx.receive_within(5 seconds), 1)
+  assert Runtime.settle(tasks, 5 seconds)
+  Ok(())
+}
+
+test fn role_temporary_run(run: Int) -> Unit {
+  let ok = match role_temporary() {
+    Ok(_) => true
+    Err(_) => false
+  }
+  assert ok
+}
+
+test "a stream a role call returns from an accepted temporary and a task takes is released" {
+  assert soak(50, role_temporary_run).growth == []
+}
+
+// A field of a parameter passed to a call: the argument is no temporary.
+test fn launch_held(h: Holder, go: Receiver<Int>, done: Sender<Int>) -> Unit {
+  let u = same(h.end)
+  spawn ring_end(u, go, done)
+}
+
+test fn held() -> Unit {
+  let tasks = Runtime.census().tasks
+  let (btx, brx) = Channel.bounded(1)
+  let (gtx, grx) = Channel.bounded(1)
+  let (dtx, drx) = Channel.bounded(1)
+  let a = made(btx)
+  launch_held(Holder { end = a }, grx, dtx)
+  let r = run_task(tasks, brx, gtx, drx)
+  both(r, a.try_send(4))
+}
+
+test "a field of a parameter a call passes to a task stays open for the caller" {
+  let runs = soak(5, |run| held())
 }
