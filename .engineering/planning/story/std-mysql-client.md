@@ -2,9 +2,12 @@
 format: aep.planning-md/3
 id: story:std-mysql-client
 kind: story
-status: draft
+status: active
 title: 'std.protocol.mysql: MySQL wire client with caching_sha2_password'
-revision: 2
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-11T10:51:19Z", actor: "human:timo", revision: 3, executor: "agent:claude-coordinator", correlation: "accepted-2026-11-11"}
+- {from: "proposed", to: "active", at: "2026-11-11T10:51:19Z", actor: "human:timo", revision: 4, executor: "agent:claude-coordinator", correlation: "accepted-2026-11-11"}
 ---
 # Story: std-mysql-client
 
