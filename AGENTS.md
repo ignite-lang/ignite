@@ -126,7 +126,11 @@ Rules of the layout:
 | check a catalogue against its source | `target/debug/ignite rfc check CATALOGUE [SOURCE]` (exit 0 silent when the digests match, 1 when they differ; without SOURCE prints `<CATALOGUE>: unchecked`) |
 | print a conformance matrix | `target/debug/ignite conformance FILE [--target llvm\|rust] [the build flags of ignite test]` (`docs/slice.md` 19.10: runs FILE's tests once, one block per protocol and spec, a claim line each; exit 0 every claim holds, 1 one does not, 2 a diagnostic or no conforming protocol, 3 a test build or run failure) |
 
-`task` is go-task. Rust toolchain: stable, edition 2024, `rustfmt` defaults. Every cargo
+`task` is go-task. `strace`, with ptrace allowed on a child, is a prerequisite of `task gate`:
+`scheduler::a_connection_costs_no_more_system_calls_than_at_v0_15_0` in `crates/ignite-io`
+counts the connection path with it and fails, naming it, without it. So is `valgrind`:
+`reply_cost::a_get_reply_allocates_no_more_than_at_v0_15_0` in `crates/ignite` counts the
+allocations of an HTTP reply with it. Rust toolchain: stable, edition 2024, `rustfmt` defaults. Every cargo
 invocation in automation sets `CARGO_INCREMENTAL=0`. `task test-ignite` honours
 `CARGO_TARGET_DIR` (binary, runtime and outputs under it); `task compile-llvm` and
 `task compile-todo-llvm` build and pass the runtime under it too, and write their programs to
@@ -511,14 +515,26 @@ without waiting for a person.
   with `gh release edit`.
 - Quality gate (`docs/quality.md`): in the release commit, run `task quality RUN=vX.Y.Z`, which
   appends the run to `quality/history.jsonl` and regenerates `quality/trend.md` and the book's
-  quality page. The release is refused, and not cut, when it fails: a count row worse than at
-  the last release (or the bar) beyond its tolerance, or worse than a bar a `decision` moved since
-  the last release. Timing rows there are `host: local` and
-  refuse nothing. Then run `task quality-remote BASE=<last release tag> HEAD=<release commit>
-  RUN=vX.Y.Z` with `IGNITE_PERF_AWS_PROFILE` set (spending on it is approved, about two thirds of an
-  instance-hour of a spot `c7i.metal-24xl`): it measures the timing rows and the native benchmark of both trees
-  interleaved on a dedicated EC2 host and refuses the release, exit 1, when a timing row of HEAD
-  is worse than BASE's beyond its tolerance; it fails when anything tagged by the run is left in
+  quality page. The release is refused, and not cut, when it fails: a count, size or
+  hill-climb row worse by any amount than at the last release (the nearest `v*` tag reachable
+  from HEAD, as `git describe` finds it; its records in the history, never a refused
+  candidate's; the bar before the first tag), or a bar a `decision` moved worse than the last
+  release, whatever the value (a timing or benchmark bar against its bar in the tag's
+  `quality/baseline.json`); the refusal names the decision to withdraw. Timing values there are
+  `host: local` and refuse nothing. Pre-release tags (`v*-rc*`) are not created: the check would
+  take one as the last release. Then run `task quality-remote BASE=<last release tag> HEAD=<release commit>
+  RUN=vX.Y.Z` with `IGNITE_PERF_AWS_PROFILE` set (spending on it is approved; one spot
+  `c7i.metal-24xl`, 5 passes of each tree by default, and the cost of a run with 5 timing passes
+  is not measured yet): it measures the timing rows and
+  the native benchmark of both trees interleaved on a dedicated EC2 host and refuses the
+  release, exit 1, when a row of HEAD is worse than BASE's beyond its tolerance, or worse in
+  every pass than every pass of BASE (a release run with fewer than 5 passes is an error). A
+  release needs every row unrefused. A row refused beyond its tolerance stands at once. A row
+  refused only by the every-pass rule, inside its tolerance, is measured in one further run with
+  the same BASE and HEAD; a row two runs refuse stands; a row refused for the first time in the
+  second run gets one third run under the same rule; a release candidate has at most three
+  runs, and after the third every row refused in it stands. This is an operator procedure: no
+  code enforces it. The mode fails when anything tagged by the run is left in
   the account. Commit the regenerated files with the release; the release notes carry the
   release's row of `quality/trend.md`, its dedicated-host row and the run's cost (`machine` of
   its records).

@@ -1,0 +1,143 @@
+package tests.http_reply_adversary
+
+// Adversary pass 1 on story `http-reply-cost-back`: since that story only
+// the request the application is asked carries the connection, the kept
+// one gets it for a `Streamed` response, and the first read of a request
+// becomes its bytes. These cases ask for the connection everywhere an
+// application sees a request (`handle`, `reply`, a held request, `piece`,
+// a takeover, `on_oversized`) and keep request bodies past their replies.
+// Run with `ignite test crates/ignite/tests/fixtures/http_reply_adversary.ignite`
+// on both targets.
+
+import std.protocol.http.*
+import std.net.{ByteStream, Pipe, PipeStream, TcpStream, Endpoint, Connection}
+import std.sync.*
+import std.text.*
+
+test fn pair() -> IoResult<(PipeStream, PipeStream)> {
+  let (client, server) = Pipe.pair()
+  client.set_idle_timeout(5000)?
+  server.set_idle_timeout(5000)?
+  Ok((client, server))
+}
+
+test fn all_of<T: ByteStream>(client: T) -> IoResult<Text> requires [client.read] {
+  var out = Bytes.empty()
+  loop {
+    match client.read(4096)? {
+      Eof => return Ok(out.to_text())
+      Data(bytes) => out.append(bytes)
+    }
+  }
+}
+
+test fn peer() -> Connection = Connection { peer = Endpoint { address = "10.0.0.7", port = 4000 }, local = Endpoint { address = "10.0.0.1", port = 80 }, tls = true }
+
+// What `serve_connection` sends for `input` from `peer()` until it closes.
+test fn from_peer<S>(input: Bytes, limits: HttpLimits, application: HttpApp<S, PipeStream>, holds: Holds) -> IoResult<Text> {
+  let (client, server) = pair()?
+  spawn serve_connection(server, peer(), limits, application, holds)
+  client.write_all(input)?
+  all_of(client)
+}
+
+test fn seen(request: Request) -> Text = "{request.method} {request.path} {request.connection.peer.address}:{request.connection.peer.port} {request.connection.local.address}:{request.connection.local.port} {request.connection.tls}"
+
+test fn ok(body: Text, connection: Text) -> Text = render(Response.plain(200, body), connection == "keep-alive").to_text()
+
+test fn sees(state: Unit, request: Request) -> Response = if request.path == "/stream" {
+  Response.streamed(200, [("Content-Type", "text/plain")])
+} else {
+  Response.plain(200, seen(request))
+}
+
+// One piece naming the connection, then the end (`state` holds one byte
+// per piece still to come).
+test fn piece_sees(state: PipeStream, request: Request) -> IoResult<Option<Bytes>> requires [state.read] = match state.read(1)? {
+  Eof => Ok(None)
+  Data(bytes) => Ok(Some("[{seen(request)}]".to_bytes()))
+}
+
+test fn sees_with_pipe(state: PipeStream, request: Request) -> Response = sees((), request)
+
+test fn reply_sees<T>(state: Unit, request: Request) -> Reply<Unit, T> = Respond(sees((), request))
+
+test fn reply_streams<T>(state: PipeStream, request: Request) -> Reply<PipeStream, T> = Respond(sees((), request))
+
+test fn take_sees<T: ByteStream>(state: Unit, request: Request, stream: T, early: Bytes) -> IoResult<Unit> requires [stream.read, stream.write] {
+  stream.write_all("[{seen(request)}|".to_bytes())?
+  stream.write_all(early)?
+  stream.write_all(b"]")
+}
+
+test fn upgrade_sees<T: ByteStream>(state: Unit, request: Request) -> Reply<Unit, T> = if request.path == "/up" {
+  Upgrade(Response { status = 101, headers = [("Upgrade", "echo"), ("Connection", "upgrade")] }, take_sees)
+} else {
+  Respond(sees((), request))
+}
+
+test fn oversized_sees(state: Unit, head: Request, limit: ByteSize) -> Response = Response.plain(413, seen(head))
+
+test "reply adv1: handle sees the whole connection, tls included, on every pipelined request" {
+  let app: HttpApp<Unit, PipeStream> = HttpApp { state = (), handle = sees }
+  let input = b"GET /a HTTP/1.1\r\nHost: h\r\n\r\nHEAD /b HTTP/1.1\r\nHost: h\r\n\r\nGET /c HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n"
+  let head = render_message(Response.plain(200, "GET /b 10.0.0.7:4000 10.0.0.1:80 true"), true, false).to_text()
+  assert from_peer(input, HttpLimits {}, app, Holds.none())? == ok("GET /a 10.0.0.7:4000 10.0.0.1:80 true", "keep-alive") + head + ok("GET /c 10.0.0.7:4000 10.0.0.1:80 true", "close")
+}
+
+test "reply adv1: reply sees the connection, with and without a register of held requests" {
+  let app: HttpApp<Unit, PipeStream> = HttpApp { state = (), reply = Some(reply_sees) }
+  let input = b"GET /a HTTP/1.1\r\nHost: h\r\n\r\nGET /b HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n"
+  let expected = ok("GET /a 10.0.0.7:4000 10.0.0.1:80 true", "keep-alive") + ok("GET /b 10.0.0.7:4000 10.0.0.1:80 true", "close")
+  assert from_peer(input, HttpLimits {}, app, Holds.none())? == expected
+  assert from_peer(input, HttpLimits {}, app, Holds.start())? == expected
+}
+
+test "reply adv1: piece sees the connection of a streamed response from handle and from reply, and the next request still does" {
+  let input = b"GET /stream HTTP/1.1\r\nHost: h\r\n\r\nGET /after HTTP/1.1\r\nHost: h\r\nConnection: close\r\n\r\n"
+  let piece = "[GET /stream 10.0.0.7:4000 10.0.0.1:80 true]"
+  let head = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\nConnection: keep-alive\r\n\r\n"
+  let expected = head + "{hex(piece.len())}\r\n{piece}\r\n0\r\n\r\n" + ok("GET /after 10.0.0.7:4000 10.0.0.1:80 true", "close")
+  let (control, source) = pair()?
+  control.write_all(b"x")?
+  _ = control.close()
+  let handled: HttpApp<PipeStream, PipeStream> = HttpApp { state = source, handle = sees_with_pipe, piece = piece_sees }
+  assert from_peer(input, HttpLimits {}, handled, Holds.none())? == expected
+  let (control2, source2) = pair()?
+  control2.write_all(b"x")?
+  _ = control2.close()
+  let replied: HttpApp<PipeStream, PipeStream> = HttpApp { state = source2, reply = Some(reply_streams), piece = piece_sees }
+  assert from_peer(input, HttpLimits {}, replied, Holds.start())? == expected
+}
+
+test "reply adv1: a takeover and on_oversized see the connection" {
+  let up: HttpApp<Unit, PipeStream> = HttpApp { state = (), reply = Some(upgrade_sees) }
+  let switching = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: echo\r\nConnection: upgrade\r\n\r\n"
+  assert from_peer(b"GET /up HTTP/1.1\r\nHost: h\r\nUpgrade: echo\r\nConnection: upgrade\r\n\r\nrest", HttpLimits {}, up, Holds.none())? == switching + "[GET /up 10.0.0.7:4000 10.0.0.1:80 true|rest]"
+  let big: HttpApp<Unit, PipeStream> = HttpApp { state = (), handle = sees, on_oversized = Some(oversized_sees) }
+  let out = from_peer(b"POST /big HTTP/1.1\r\nHost: h\r\nContent-Length: 9\r\nConnection: close\r\n\r\n123456789", HttpLimits { body = 4 bytes }, big, Holds.none())?
+  assert out == render(Response.plain(413, "POST /big 10.0.0.7:4000 10.0.0.1:80 true"), false).to_text(), out
+}
+
+// Bodies kept past their replies: `handle` sends each body to `state`,
+// which the test reads after every answer is in.
+test fn keep_body(state: Sender<Text>, request: Request) -> Response {
+  _ = state.send(request.body)
+  Response.plain(200, "{request.body.len()}")
+}
+
+test "reply adv1: bodies sent on by the handler stay whole after their replies, pipelined in one write and split over reads" {
+  let (bodies, kept) = Channel.bounded(16)
+  let app: HttpApp<Sender<Text>, PipeStream> = HttpApp { state = bodies, handle = keep_body }
+  let (client, server) = pair()?
+  spawn serve_connection(server, peer(), HttpLimits {}, app, Holds.none())
+  client.write_all(b"POST /a HTTP/1.1\r\nHost: h\r\nContent-Length: 5\r\n\r\nfirstPOST /b HTTP/1.1\r\nHost: h\r\nContent-Length: 6\r\n\r\nsec")?
+  Clock.sleep(20 ms)
+  client.write_all(b"ondPOST /c HTTP/1")?
+  Clock.sleep(20 ms)
+  client.write_all(b".1\r\nHost: h\r\nContent-Length: 5\r\nConnection: close\r\n\r\nthird")?
+  assert all_of(client)? == ok("5", "keep-alive") + ok("6", "keep-alive") + ok("5", "close")
+  assert kept.receive() == Some("first")
+  assert kept.receive() == Some("second")
+  assert kept.receive() == Some("third")
+}

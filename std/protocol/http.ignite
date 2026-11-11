@@ -206,9 +206,14 @@ fn HttpServer.main<S>(self: HttpServer<S>) -> IoResult<Unit> = serve_listener(se
 // the application seeing the stream's `Connection.of`. When `accept`
 // fails, as it does once the drain began (`docs/slice.md` 16.13), every
 // held request is answered at once (`drain_holds`) and the error
-// returned, so `main` ends while the open connections finish.
+// returned, so `main` ends while the open connections finish. Only a
+// `reply` holds a request: without one the server starts no register of
+// held requests, and no task for it.
 fn serve_listener<S>(listener: TcpListener, limits: HttpLimits, application: HttpApp<S, TcpStream>) -> IoResult<Unit> {
-  let holds = Holds.start()
+  let holds = match application.reply {
+    Some(_) => Holds.start()
+    None => Holds.none()
+  }
   loop {
     match listener.accept() {
       Ok(stream) => {
@@ -1399,12 +1404,22 @@ fn read_head<T: ByteStream>(stream: T, limits: HttpLimits, buffer: Bytes) -> IoR
       return Ok((TooLarge, data))
     }
     from = if data.len() > 3 { data.len() - 3 } else { 0 }
-    match stream.read(READ_SIZE)? {
+    match read_once(stream)? {
       Eof => return Ok((Closed, data))
-      Data(more) => data.append(more)
+      Data(more) => if data.is_empty() {
+        data = more
+      } else {
+        data.append(more)
+      }
     }
   }
 }
+
+// One read of `stream`. Returned by a fn, the bytes of `Data` are the
+// caller's to move (`stream.read` matched in place is a borrow of the
+// stream to the last-use analysis), so the first read of a request
+// becomes its bytes as it is, not copied again.
+fn read_once<T: ByteStream>(stream: T) -> IoResult<Input> = stream.read(READ_SIZE)
 
 // Reads until `data` holds at least `end` bytes; `None` when the peer
 // closed first. The length was checked against `limits.body` already.
@@ -1812,22 +1827,29 @@ fn session<T: ByteStream, S>(stream: T, connection: Connection, limits: HttpLimi
         }
       }
       Got(request, rest) => {
+        // The copy the application is asked carries the connection; the
+        // request kept for the answer gets it only for `piece`, so the
+        // connection is copied once per request, and the answer is not.
         var seen = request
-        seen.connection = connection
-        let question = asked(seen)
-        let answer = match application.reply {
-          Some(reply) => reply(application.state, question)
-          None => Respond(application.handle(application.state, question))
-        }
-        let keep = match answer {
-          Respond(response) => respond(stream, application, seen, response, keep_alive(seen))?
-          Hold(receiver, deadline, on_timeout) => {
-            let response = wait_held(holds, receiver, deadline, on_timeout)
-            respond(stream, application, seen, response, keep_alive(seen))?
+        let keep_open = keep_alive(seen)
+        var question = asked(seen)
+        question.connection = connection
+        let response = match application.reply {
+          None => application.handle(application.state, question)
+          Some(reply) => match reply(application.state, question) {
+            Respond(response) => response
+            Hold(receiver, deadline, on_timeout) => wait_held(holds, receiver, deadline, on_timeout)
+            Upgrade(response, takeover) => {
+              var taken = asked(seen)
+              taken.connection = connection
+              return upgrade(stream, limits, application, taken, response, takeover, rest)
+            }
           }
-          Upgrade(response, takeover) => return upgrade(stream, limits, application, question, response, takeover, rest)
         }
-        if !keep {
+        if response.content == Streamed {
+          seen.connection = connection
+        }
+        if !respond(stream, application, seen, response, keep_open)? {
           return Ok(())
         }
         buffer = rest
@@ -1859,7 +1881,8 @@ fn respond<T: ByteStream, S>(stream: T, application: HttpApp<S, T>, request: Req
 // The requests a server holds (`Reply.Hold`), so that the drain answers
 // them: `events` goes to the task `keep_holds` started by `Holds.start()`,
 // which keeps every held receiver until it is answered. `serve_listener`
-// starts one for all its connections; `Http.serve` has none
+// starts one for all its connections when the application has a `reply`
+// (without one it holds nothing and has none); `Http.serve` has none
 // (`Holds.none()`), since no drain reaches a stream it is given. A program
 // creates no `Store` (E051), so the register is a task, not a store.
 type Holds {

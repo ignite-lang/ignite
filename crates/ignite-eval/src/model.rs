@@ -810,6 +810,7 @@ fn unencodable(value: &Value) -> Option<String> {
             Some(format!("a closure ({module} at byte {offset})"))
         }
         Value::IoError { message, .. } => Some(format!("an IoError ({message:?})")),
+        Value::Handle(handle) => Some(format!("a `{}` handle", handle.kind().name())),
         Value::List(items) | Value::Tuple(items) | Value::Enum { fields: items, .. } => {
             items.iter().find_map(unencodable)
         }
@@ -1701,6 +1702,7 @@ pub fn value_json(value: &Value) -> Json {
                 ("message", Json::Str(message.clone())),
             ],
         ),
+        Value::Handle(handle) => tagged(handle.kind().name(), Vec::new()),
     }
 }
 

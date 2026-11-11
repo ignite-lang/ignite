@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-11T05:15:05Z",
+  "actor": "human:timo",
+  "artifact": "story:unsafe-sites-back",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "coordinator, tree w11-unsafe at 02a28821, 2026-11-11: cargo test -p ignite-io (113 + 217 passed) under the scheduler and with IGNITE_IO=threads; the four scheduler count tests 3 of 3 rounds; cargo test -p ignite-rt (73 passed); cargo test -p ignite-llvm (41 passed); cargo test -p ignite --test main terminal:: drain:: todo:: leak:: quality::unsafe_sites_are_no_more_than_at_v0_15_0 (196 passed); quality::static_metrics_hold_the_bar prints 3.6 rust 11 and llvm 81"
+  }
+}

@@ -29,9 +29,9 @@
 //!
 //! A wait for a descriptor goes through the reactor interface
 //! ([`crate::reactor::Reactor`]): off a worker, [`wait_descriptor`]
-//! registers the descriptor with the thread's own
-//! [`crate::reactor::PollReactor`] (`poll` on the descriptor and the
-//! thread's `eventfd`), so a [`wake`] from any thread ends the wait as it
+//! waits in the thread's own [`crate::reactor::PollReactor`] (one `poll`
+//! of the descriptor and the thread's `eventfd`, no registration), so a
+//! [`wake`] from any thread ends the wait as it
 //! ends a [`park`]; on a worker it registers with the worker's reactor and
 //! parks the task. That is how the drain wakes `main` in `accept`.
 //!
@@ -43,13 +43,13 @@ use std::collections::VecDeque;
 use std::fmt;
 use std::io;
 use std::ops::{Deref, DerefMut};
-use std::os::fd::RawFd;
+use std::os::fd::BorrowedFd;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError, TryLockError};
 use std::thread::Thread;
 use std::time::{Duration, Instant};
 
-use crate::reactor::{Event, Interest, PollReactor, Reactor};
+use crate::reactor::{Interest, PollReactor, Reactor};
 use crate::sched;
 
 /// Why a [`park`] returned.
@@ -406,9 +406,9 @@ pub enum DescriptorWait {
 /// the thread's own [`PollReactor`]: `poll` on the descriptor and the
 /// thread's `eventfd`, which a wake writes. On a worker the descriptor is
 /// registered with the worker's reactor for the wait and the task parks.
-/// The descriptor stays open for the call.
+/// The borrow keeps the descriptor open for the call.
 pub fn wait_descriptor(
-    descriptor: RawFd,
+    descriptor: BorrowedFd<'_>,
     interest: Interest,
     deadline: Option<Instant>,
 ) -> io::Result<DescriptorWait> {
@@ -427,8 +427,6 @@ pub fn wait_descriptor(
             reactor.get_or_init(|| made)
         }
     };
-    let token = reactor.register(descriptor, interest, me.clone())?;
-    let mut events: Vec<Event> = Vec::new();
     let outcome = loop {
         me.inner.state.fetch_or(POLLING, Ordering::SeqCst);
         if me.take_wake() {
@@ -437,16 +435,13 @@ pub fn wait_descriptor(
         if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
             break Ok(DescriptorWait::Deadline);
         }
-        events.clear();
-        if let Err(error) = reactor.wait(deadline, &mut events) {
-            break Err(error);
-        }
-        if let Some(event) = events.iter().find(|event| event.token == token) {
-            break Ok(DescriptorWait::Ready(event.ready));
+        match reactor.poll_one(descriptor, interest, deadline) {
+            Err(error) => break Err(error),
+            Ok(ready) if !ready.is_empty() => break Ok(DescriptorWait::Ready(ready)),
+            Ok(_) => {}
         }
     };
     me.inner.state.fetch_and(!POLLING, Ordering::SeqCst);
-    let _ = reactor.deregister(token);
     outcome
 }
 
