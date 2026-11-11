@@ -231,8 +231,25 @@ const READ_ONLY: Text = "SET SESSION TRANSACTION READ ONLY"
 const SHORT: Text = "a packet shorter than its fields"
 const TRAILING: Text = "bytes after the reply"
 
+// The printable ASCII among the first 64 bytes of `name`: a name the
+// server chose, without the line breaks, the escape sequences and the
+// length it could put into a caller's log.
+fn printable(name: Text) -> Text {
+  let bytes = name.to_bytes()
+  var out = Bytes.with_capacity(64)
+  var i = 0
+  while i < bytes.len() && i < 64 {
+    if bytes[i] >= b' ' && bytes[i] <= b'~' {
+      out.push(bytes[i])
+    }
+    i = i + 1
+  }
+  out.to_text()
+}
+
 // What `error` is, in words that hold neither a statement nor a
-// credential: of the server's error the code and the SQL state only.
+// credential: of the server's error the code and the SQL state only, of a
+// refused plugin the printable start of its name.
 fn describe(error: MysqlError) -> Text = match error {
   Server(failed) => if failed.sql_state == "" { "server error {failed.code}" } else { "server error {failed.code} ({failed.sql_state})" }
   Io(message) => message
@@ -244,7 +261,7 @@ fn describe(error: MysqlError) -> Text = match error {
   TooManyColumns => "a result set with more columns than the limit"
   Malformed(what) => what
   Unsupported(what) => "{what} is not supported"
-  UnsupportedPlugin(plugin) => "authentication plugin {plugin} is not supported"
+  UnsupportedPlugin(plugin) => "authentication plugin {printable(plugin)} is not supported"
   FullAuthenticationNeedsTls => "the server asks for the password itself (caching_sha2_password full authentication), which is sent over TLS only"
   TlsNotOffered => "the server offers no TLS"
   WrongParameterCount(expected, got) => "{got} parameters for a statement with {expected}"
@@ -779,14 +796,20 @@ fn settle<T: ByteStream, R>(client: Client<T>, outcome: Outcome<R>) -> Outcome<R
   }
 }
 
-// Sends `body` as a command: packet 0 of a new exchange.
-fn send<T: ByteStream>(client: Client<T>, body: Bytes) -> Outcome<Unit> = client.stream.write_all(frames(body, 0)).map_err(io)
+// Sends `body` as a command, packet 0 of a new exchange, and gives the
+// sequence number of the server's reply: the one after the command's last
+// frame, 1 for a command of one frame and 2 for one of 16 MiB - 1 bytes or
+// more, which travels as two.
+fn send<T: ByteStream>(client: Client<T>, body: Bytes) -> Outcome<Int> {
+  client.stream.write_all(frames(body, 0)).map_err(io)?
+  Ok(body.len() / MAX_FRAME + 1)
+}
 
 // Sends `body` and reads the one packet that answers it: OK or the
 // server's error.
 fn simple<T: ByteStream>(client: Client<T>, body: Bytes) -> Outcome<Done> {
-  send(client, body)?
-  let (payload, data, at, _) = read_packet(client.stream, client.limits.packet.to_int(), Bytes.empty(), 0, 1)?
+  let sequence = send(client, body)?
+  let (payload, data, at, _) = read_packet(client.stream, client.limits.packet.to_int(), Bytes.empty(), 0, sequence)?
   if at != data.len() {
     return Err(Malformed(TRAILING))
   }
@@ -813,7 +836,8 @@ fn ping<T: ByteStream>(client: Client<T>) -> Outcome<Unit> {
 fn quit<T: ByteStream>(client: Client<T>) -> Outcome<Unit> {
   let sent = send(client, b"\x01")
   _ = client.stream.close()
-  sent
+  _ = sent?
+  Ok(())
 }
 
 // ---- result sets ------------------------------------------------------------
@@ -1000,9 +1024,9 @@ fn read_row<T: ByteStream>(client: Client<T>, buffer: Bytes, at: Int, sequence: 
 // end mark, the rows of the text or the `binary` protocol, the end mark).
 // A request for a local file and a second result are refused.
 fn results<T: ByteStream>(client: Client<T>, body: Bytes, binary: Bool) -> Outcome<ResultSet> {
-  send(client, body)?
+  let sequence = send(client, body)?
   let maximum = client.limits.packet.to_int()
-  let (first, begun, offset, following) = read_packet(client.stream, maximum, Bytes.empty(), 0, 1)?
+  let (first, begun, offset, following) = read_packet(client.stream, maximum, Bytes.empty(), 0, sequence)?
   var data = begun
   var at = offset
   var number = following
@@ -1118,8 +1142,8 @@ fn skip_definitions<T: ByteStream>(client: Client<T>, count: Int, buffer: Bytes,
 fn prepared<T: ByteStream>(client: Client<T>, sql: Text) -> Outcome<Statement> {
   var body = b"\x16"
   body.append(sql.to_bytes())
-  send(client, body)?
-  let (first, begun, offset, following) = read_packet(client.stream, client.limits.packet.to_int(), Bytes.empty(), 0, 1)?
+  let sequence = send(client, body)?
+  let (first, begun, offset, following) = read_packet(client.stream, client.limits.packet.to_int(), Bytes.empty(), 0, sequence)?
   if first.is_empty() {
     return Err(Malformed(SHORT))
   }
@@ -1244,7 +1268,7 @@ fn execute<T: ByteStream>(client: Client<T>, statement: Statement, parameters: L
 // Releases `statement` on the server (`COM_STMT_CLOSE`), which sends no
 // reply.
 fn close<T: ByteStream>(client: Client<T>, statement: Statement) -> Outcome<Unit> {
-  settle(client, send(client, put_int(b"\x19", statement.id, 4)))?
+  _ = settle(client, send(client, put_int(b"\x19", statement.id, 4)))?
   Process.flush()
   Ok(())
 }
@@ -2459,4 +2483,98 @@ test "adversary: the description of a refused plugin holds no line break, no esc
   assert !said.contains("\n") && !said.contains("\x1b"), said
   let long = describe(UnsupportedPlugin(filled(100000).to_text()))
   assert long.len() < 1000
+}
+
+// ---- tests: boundaries no other test held (adversary pass 1, finding 6) ---------
+
+test "prepare accepts a statement of 4,096 columns and refuses one of 4,097" {
+  // 256 definitions numbered 2 to 255, 0 and 1; sixteen such runs are the
+  // 4,096 definitions after the reply's first packet, and their end mark
+  // is numbered 2 again.
+  var run = Bytes.empty()
+  var number = 2
+  while number < 258 {
+    run.append(frames(column_of("c", 3, 11, 0, 63, 0), number))
+    number = number + 1
+  }
+  var definitions = run
+  while definitions.len() < run.len() * 16 {
+    let more = definitions
+    definitions.append(more)
+  }
+  let widest = frames(b"\x00\x07\x00\x00\x00\x00\x10\x00\x00\x00\x00\x00", 1) + definitions + frames(eof(), 2)
+  let client = session([(command(0x16, "S"), widest), (frames(b"\x0e", 0), ok_packet(1))])?
+  assert prepare(client, "S") == Ok(Statement { id = 7, parameters = 0, columns = 4096 })
+  assert ping(client) == Ok(())
+  let wider = session([(command(0x16, "S"), reply([b"\x00\x07\x00\x00\x00\x01\x10\x00\x00\x00\x00\x00"]))])?
+  assert prepare(wider, "S") == Err(TooManyColumns)
+  assert shut(wider)
+}
+
+test "a server without CLIENT_SECURE_CONNECTION is refused and gets no answer" {
+  let old = greeting_with(NATIVE, nonce(), with_tls() - CLIENT_SECURE_CONNECTION)
+  let (stream, counts) = counted([(Bytes.empty(), frames(old, 0))])?
+  assert refusal(start(stream, account())) == Some(Unsupported("a server without protocol 41 and authentication plugins"))
+  assert counts.receive() == Some(0)
+}
+
+test "an authentication of eight packets is followed, its ninth packet refused" {
+  var seven = Bytes.empty()
+  var number = 2
+  while number < 9 {
+    seven.append(frames(b"\x01\x03", number))
+    number = number + 1
+  }
+  let eight = scripted([hello(CACHING_SHA2), (sha2_response(), seven + ok_packet(9))])?
+  assert refusal(start(eight, account())) == None
+  let nine = scripted([hello(CACHING_SHA2), (sha2_response(), seven + frames(b"\x01\x03", 9) + ok_packet(10))])?
+  assert refusal(start(nine, account())) == Some(Malformed("an authentication of more than 8 packets"))
+}
+
+test "bytes after the packet that ends the authentication are refused" {
+  let stream = scripted([hello(NATIVE), (native_response(), ok_packet(2) + ok_packet(3))])?
+  assert refusal(start(stream, account())) == Some(Malformed("bytes after the authentication"))
+}
+
+// A server on TCP for one connection: sends `greeting`, reads until the
+// stream ends and says on `ended` whether the client closed it (true) or
+// the idle timeout of 5 s ended the read (false). A pipe's end does not
+// tell the two apart.
+test fn greet_until_the_end(listener: TcpListener, greeting: Bytes, ended: Sender<Bool>) -> Result<Unit, IoError> {
+  let stream = listener.accept()?
+  stream.set_idle_timeout(5000)?
+  stream.write_all(greeting)?
+  var open = true
+  while open {
+    match stream.read(READ_SIZE)? {
+      Data(_) => {
+        open = true
+      }
+      Eof => {
+        open = false
+      }
+    }
+  }
+  ended.send(!stream.timed_out())
+  stream.close()
+}
+
+test "a failed handshake closes the stream: the server sees its end, not a timeout" {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let (ended, ends) = Channel.bounded(1)
+  spawn greet_until_the_end(listener, frames(greeting_with("sha256_password", nonce(), with_tls()), 0), ended)
+  let stream = TcpStream.connect_within("127.0.0.1", listener.local_port(), 2 seconds)?
+  stream.set_idle_timeout(5000)?
+  assert refusal(start(stream, account())) == Some(UnsupportedPlugin("sha256_password"))
+  assert ends.receive() == Some(true)
+  // The stream is still held here, so its end was the close and not the
+  // release of the last handle.
+  assert stream.peer().port == listener.local_port()
+}
+
+test "a NUL in the database name is refused and nothing is sent" {
+  let (stream, counts) = counted([hello(NATIVE)])?
+  let options = MysqlOptions { user = "app", password = "secret", database = "sh\x00op" }
+  assert refusal(start(stream, options)) == Some(Unsupported("a NUL in the user or the database name"))
+  assert counts.receive() == Some(0)
 }
