@@ -280,3 +280,68 @@ fn every_name_std_protocol_http_exported_at_v0_15_0_is_still_importable() {
         panic!("a name of std.protocol.http at v0.15.0 no longer imports:\n{e}");
     }
 }
+
+/// Each `test fn` of `text` by name: its head line and the lines after it
+/// up to the first blank line, with the comment lines directly above.
+fn test_fns(text: &str) -> std::collections::BTreeMap<String, String> {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut items = std::collections::BTreeMap::new();
+    for (i, line) in lines.iter().enumerate() {
+        let Some(rest) = line.strip_prefix("test fn ") else {
+            continue;
+        };
+        let name: String = rest
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
+        let mut start = i;
+        while start > 0 && lines[start - 1].starts_with("//") {
+            start -= 1;
+        }
+        let end = (i..lines.len())
+            .find(|&j| lines[j].trim().is_empty())
+            .unwrap_or(lines.len());
+        items.insert(name, lines[start..end].join("\n"));
+    }
+    items
+}
+
+/// Fix round 2 on unit counts (wave 11): the test-only helpers that
+/// `std/protocol/http/connection_tests.ignite` copies from
+/// `std/protocol/http.ignite` (a test-only item is not exported) are the
+/// same text, comments included, in both files: a fix to one reaches the
+/// other.
+#[test]
+fn the_helpers_copied_into_the_connection_tests_equal_their_originals() {
+    let std = standard_library();
+    let read = |path: &str| {
+        std::fs::read_to_string(std.join(path)).unwrap_or_else(|e| panic!("{path}: {e}"))
+    };
+    let originals = test_fns(&read("protocol/http.ignite"));
+    let copies = test_fns(&read("protocol/http/connection_tests.ignite"));
+    let shared: Vec<&String> = copies
+        .keys()
+        .filter(|name| originals.contains_key(*name))
+        .collect();
+    assert_eq!(
+        shared,
+        [
+            "answer",
+            "chunked",
+            "connected",
+            "every_byte",
+            "pause",
+            "read_at_least",
+            "read_to_end",
+            "reply",
+            "served_with",
+        ],
+        "the helpers both files declare"
+    );
+    for name in shared {
+        assert_eq!(
+            copies[name], originals[name],
+            "`{name}` in connection_tests.ignite differs from std/protocol/http.ignite"
+        );
+    }
+}

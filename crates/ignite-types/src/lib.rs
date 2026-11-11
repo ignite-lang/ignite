@@ -93,6 +93,7 @@ pub use builtins::{
     tls_options_name,
 };
 pub use ignite_check::RFC_MODULE;
+pub use typer::literal_wait_steps;
 
 /// The module of the reducers (`docs/slice.md` 16.6): a kind's hook
 /// `K.machine` returns its `Machine`, and the run driver calls its `step`.

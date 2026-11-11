@@ -134,6 +134,98 @@ fn idents(params: &[Ident]) -> Vec<String> {
     params.iter().map(|p| p.name.clone()).collect()
 }
 
+thread_local! {
+    /// The record literals [`Typer::literal_waits`] has looked at on this
+    /// thread, read by [`literal_wait_steps`].
+    static LITERAL_WAIT_STEPS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+/// How many record literals the typer has looked at on this thread to
+/// decide whether a literal argument waits for the arguments after it: a
+/// count of work, so a test bounds that cost without a clock (row 2.6 of
+/// `docs/quality.md`).
+pub fn literal_wait_steps() -> u64 {
+    LITERAL_WAIT_STEPS.with(|steps| steps.get())
+}
+
+/// Counts one record literal looked at by [`Typer::literal_waits`].
+fn literal_wait_step() {
+    LITERAL_WAIT_STEPS.with(|steps| steps.set(steps.get() + 1));
+}
+
+/// What binds a type parameter of a record literal from around it, for
+/// [`Typer::wait_rules`]: the parameter of the call it is an argument of,
+/// or the declared type `ty` of the field it is the value of, whose
+/// parameters `tparams` of the literal around it have the facts `facts`.
+enum Outside<'a> {
+    Param(&'a Ty),
+    Field {
+        ty: &'a Ty,
+        tparams: &'a [String],
+        facts: &'a [usize],
+    },
+}
+
+/// The rules of [`Typer::literal_waits`]: each type parameter of each
+/// record literal walked is a fact, bound or not, and a rule binds its
+/// conclusions once all of its premises are bound. [`WaitRules::propagate`]
+/// looks at each rule once per premise, so the cost is linear in the rules.
+#[derive(Default)]
+struct WaitRules {
+    bound: Vec<bool>,
+    /// Per rule, how many of its premises are not bound yet, and its
+    /// conclusions.
+    rules: Vec<(usize, Vec<usize>)>,
+    /// Per fact, the rules it is a premise of.
+    watchers: Vec<Vec<usize>>,
+    /// Facts bound and not yet propagated.
+    ready: Vec<usize>,
+}
+
+impl WaitRules {
+    fn fact(&mut self) -> usize {
+        self.bound.push(false);
+        self.watchers.push(Vec::new());
+        self.bound.len() - 1
+    }
+
+    fn bind(&mut self, fact: usize) {
+        if !self.bound[fact] {
+            self.bound[fact] = true;
+            self.ready.push(fact);
+        }
+    }
+
+    fn rule(&mut self, mut premises: Vec<usize>, conclusions: Vec<usize>) {
+        premises.sort_unstable();
+        premises.dedup();
+        if premises.is_empty() {
+            for fact in conclusions {
+                self.bind(fact);
+            }
+            return;
+        }
+        let id = self.rules.len();
+        for &fact in &premises {
+            self.watchers[fact].push(id);
+        }
+        self.rules.push((premises.len(), conclusions));
+    }
+
+    fn propagate(&mut self) {
+        while let Some(fact) = self.ready.pop() {
+            for id in std::mem::take(&mut self.watchers[fact]) {
+                self.rules[id].0 -= 1;
+                if self.rules[id].0 == 0 {
+                    for bound in std::mem::take(&mut self.rules[id].1) {
+                        self.bind(bound);
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Whether `name` is an inference variable of [`Typer::infer`].
 fn is_var(name: &str) -> bool {
     name.starts_with('\'')
@@ -661,47 +753,92 @@ impl<'a> Typer<'a> {
 
     /// Whether the record literal `arg`, typed now against `param`, leaves
     /// one of its own type parameters unbound: one that `param` leaves open
-    /// and that no given field's declared type mentions. A field given a
-    /// record literal that waits by the same rule, with what `param` and the
-    /// other fields bind, binds nothing.
+    /// and that no given field binds. A field binds the parameters its
+    /// declared type mentions, unless its value is a record literal that
+    /// waits by the same rule, with what `param` and the other fields bind.
+    /// One walk of the literal collects these as rules ([`WaitRules`]) and
+    /// one pass propagates them, so the cost is linear in the literal.
     fn literal_waits(&self, arg: &Expr, param: &Ty) -> bool {
+        let mut rules = WaitRules::default();
+        let Some(facts) = self.wait_rules(arg, Outside::Param(param), &mut rules) else {
+            return false;
+        };
+        rules.propagate();
+        facts.iter().any(|&fact| !rules.bound[fact])
+    }
+
+    /// The facts of the record literal `arg`, one per type parameter of its
+    /// record, with the rules of its fields added to `rules`; `None` when
+    /// `arg` is no literal of a known record, which waits for nothing.
+    /// `outside` says what binds a parameter from around the literal.
+    fn wait_rules(
+        &self,
+        arg: &Expr,
+        outside: Outside<'_>,
+        rules: &mut WaitRules,
+    ) -> Option<Vec<usize>> {
         let ExprKind::Record { name, fields } = &arg.kind else {
-            return false;
+            return None;
         };
-        let Some(q) = self.records.get(&name.name) else {
-            return false;
-        };
+        let q = self.records.get(&name.name)?;
+        literal_wait_step();
         let tparams = self.generics_of(q);
-        let declared = self.record_fields(q).unwrap_or_default();
-        let mut known: Vec<Ty> = match param {
-            Ty::GenericRecord(pq, args) if pq == q && args.len() == tparams.len() => args.clone(),
-            _ => vec![Ty::Param("'".to_string()); tparams.len()],
-        };
-        // A field binds the parameters its declared type mentions unless its
-        // value is a literal that waits with what is bound so far; what one
-        // field binds can let a nested literal in a sibling bind, so repeat
-        // until nothing changes. A bound parameter stands as `Unit` here:
-        // only whether it is open matters.
-        loop {
-            let mut changed = false;
-            for field in fields {
-                let Some((_, ty)) = declared.iter().find(|(n, _)| *n == field.name.name) else {
-                    continue;
-                };
-                if self.literal_waits(&field.value, &ty.substitute(&tparams, &known)) {
-                    continue;
-                }
-                for (p, k) in tparams.iter().zip(known.iter_mut()) {
-                    if k.has_param(&is_var) && ty.has_param(&|x| x == p) {
-                        *k = Ty::Unit;
-                        changed = true;
+        let facts: Vec<usize> = tparams.iter().map(|_| rules.fact()).collect();
+        if tparams.is_empty() {
+            return Some(facts);
+        }
+        match outside {
+            Outside::Param(Ty::GenericRecord(pq, args))
+                if pq == q && args.len() == tparams.len() =>
+            {
+                for (fact, arg) in facts.iter().zip(args) {
+                    if !arg.has_param(&is_var) {
+                        rules.rule(Vec::new(), vec![*fact]);
                     }
                 }
             }
-            if !changed {
-                return known.iter().any(|k| k.has_param(&is_var));
+            Outside::Field {
+                ty: Ty::GenericRecord(pq, args),
+                tparams: around,
+                facts: around_facts,
+            } if pq == q && args.len() == tparams.len() => {
+                for (fact, arg) in facts.iter().zip(args) {
+                    let premises = around
+                        .iter()
+                        .zip(around_facts)
+                        .filter(|(p, _)| arg.has_param(&|x| x == p.as_str()))
+                        .map(|(_, f)| *f)
+                        .collect();
+                    rules.rule(premises, vec![*fact]);
+                }
             }
+            _ => {}
         }
+        let declared = self.record_fields(q).unwrap_or_default();
+        for field in fields {
+            let Some((_, ty)) = declared.iter().find(|(n, _)| *n == field.name.name) else {
+                continue;
+            };
+            let binds: Vec<usize> = tparams
+                .iter()
+                .zip(&facts)
+                .filter(|(p, _)| ty.has_param(&|x| x == p.as_str()))
+                .map(|(_, f)| *f)
+                .collect();
+            if binds.is_empty() {
+                continue;
+            }
+            let inner = Outside::Field {
+                ty,
+                tparams: &tparams,
+                facts: &facts,
+            };
+            let premises = self
+                .wait_rules(&field.value, inner, rules)
+                .unwrap_or_default();
+            rules.rule(premises, binds);
+        }
+        Some(facts)
     }
 
     /// Arguments of a call of the generic `what` (E043 on a count

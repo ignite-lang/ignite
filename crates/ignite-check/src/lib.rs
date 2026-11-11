@@ -2463,6 +2463,17 @@ impl Checker {
         }
     }
 
+    /// [`Checker::builtin_method`] where it is certain: a receiver whose
+    /// type is unknown here, with a module-level fn of that name in scope,
+    /// may take either, so it is not. A call that stores an argument into
+    /// its receiver gives the receiver that argument's roots only when it
+    /// is the builtin; a user fn named `put` or `push` stores nothing.
+    fn surely_builtin_method(&self, receiver: &Expr, name: &Ident) -> bool {
+        self.builtin_method(receiver, name)
+            && (self.static_type(receiver).is_some()
+                || !self.symbols.functions.contains_key(&name.name))
+    }
+
     /// Whether binding `name` is captured by the closure being walked.
     fn captured(&self, name: &str) -> bool {
         let Some(&outside) = self.closure_scopes.last() else {
@@ -2941,7 +2952,7 @@ impl Checker {
             row.method == name.name
                 && stores_argument(row)
                 && receiver_type.is_none_or(|ty| ty == row.receiver)
-        }) && self.builtin_method(receiver, name);
+        }) && self.surely_builtin_method(receiver, name);
         if stores && let Some(list) = place_root(receiver) {
             let roots = self.arg_roots(args.iter());
             if let Some(local) = self

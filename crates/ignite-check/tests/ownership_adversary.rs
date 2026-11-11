@@ -247,3 +247,62 @@ fn f(a: TcpStream, b: TcpStream, flag: Bool) -> Result<Input, IoError> requires 
         "a user fn named `put` on a receiver of unknown type extended its roots:\n{out}"
     );
 }
+
+/// Fix round 2 on unit counts (wave 11): the case above for a user fn
+/// named `push` (a false E016 at the unit's base already).
+#[test]
+fn a_user_fn_named_push_on_a_receiver_of_unknown_type_gives_it_no_roots() {
+    let out = check(
+        r#"type Conn { stream: TcpStream }
+
+fn push(c: Conn, other: TcpStream) -> Int = 0
+
+fn f(a: TcpStream, b: TcpStream, flag: Bool) -> Result<Input, IoError> requires [a.read] {
+  var c = if flag { Conn { stream = a } } else { Conn { stream = a } }
+  let n = c.push(b)
+  return c.stream.read(4096)
+}
+"#,
+    );
+    assert_eq!(
+        out, "",
+        "a user fn named `push` on a receiver of unknown type extended its roots:\n{out}"
+    );
+}
+
+/// The builtins keep the roots of what they store when the checker does
+/// not know the receiver's type and no fn of that name is in scope: a
+/// `TcpStream` pushed onto a `List` bound from an `if` and read back, or
+/// put into a `Map` bound from an `if` and handed to a fn that reads it,
+/// needs `s.read` (E016). (`get` on a `Map` of unknown type carries no
+/// roots, a rule of its own, so the `Map` case reads through a parameter.)
+#[test]
+fn a_builtin_put_or_push_on_a_receiver_of_unknown_type_keeps_the_roots() {
+    let out = check(
+        r#"fn via_list(s: TcpStream, flag: Bool) -> Result<Input, IoError> requires [stdin.read] {
+  var ls = if flag { [] } else { [] }
+  ls.push(s)
+  return ls[0].read(4096)
+}
+
+fn read_first(m: Map<Text, TcpStream>) -> Result<Input, IoError> requires [m.read] = match m.get("a") {
+  Some(t) => t.read(4096)
+  None => Err(IoError.new("none"))
+}
+
+fn via_map(s: TcpStream, flag: Bool) -> Result<Input, IoError> requires [stdin.read] {
+  var m = if flag { Map.empty() } else { Map.empty() }
+  m.put("a", s)
+  return read_first(m)
+}
+"#,
+    );
+    assert!(
+        out.contains("add it to the `requires` of `via_list`"),
+        "a TcpStream pushed onto a List of unknown type lost its roots:\n{out}"
+    );
+    assert!(
+        out.contains("add it to the `requires` of `via_map`"),
+        "a TcpStream put into a Map of unknown type lost its roots:\n{out}"
+    );
+}

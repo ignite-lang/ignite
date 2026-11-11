@@ -1,6 +1,7 @@
 //! Cost bounds of the type checker: match exhaustiveness over many literal
 //! and `_` columns stays polynomial; a long `+` chain neither overflows the
-//! stack nor takes quadratic time (`docs/slice.md` section 13, row 14).
+//! stack nor takes quadratic time (`docs/slice.md` section 13, row 14);
+//! deciding whether a nested record literal waits stays polynomial.
 
 use std::time::{Duration, Instant};
 
@@ -118,4 +119,49 @@ fn failure_site_positions_of_the_long_chain_are_cheap() {
         elapsed < DEADLINE,
         "{sites} failure-site positions took {elapsed:?}"
     );
+}
+
+/// A generic record literal nested `depth` deep as the argument of a
+/// generic fn: `keep(Pair { a = Pair { a = .. Pair { a = 1, b = 2 } .., b = 2 }, b = 2 })`.
+fn nested_pairs(depth: usize) -> String {
+    let mut literal = "Pair { a = 1, b = 2 }".to_string();
+    for _ in 1..depth {
+        literal = format!("Pair {{ a = {literal}, b = 2 }}");
+    }
+    format!(
+        "package demo\n\ntype Pair<A, B> {{\n  a: A\n  b: B\n}}\n\nfn keep<X>(x: X) -> Int = 0\n\nfn main() -> Int = keep({literal})\n"
+    )
+}
+
+/// Whether a record literal argument waits for the arguments after it
+/// (`docs/slice.md` 37.1) is decided by one walk of the literal, linear in
+/// its size: typing a chain of `depth` nested generic literals asks it once
+/// for the literal of every call and every literal around a literal, so the
+/// literals looked at stay within `depth * (depth + 1)`. Counted, not
+/// timed (`ignite_types::literal_wait_steps`); a walk that asks the nested
+/// literals again for each field that binds looks at about 2^(depth + 3).
+#[test]
+fn deciding_whether_a_nested_record_literal_waits_is_polynomial_in_depth() {
+    let mut counts = Vec::new();
+    for depth in [10, 14, 18, 24] {
+        let source = SourceFile::new("t.ignite", nested_pairs(depth));
+        let program = ignite_syntax::parse(&source)
+            .unwrap_or_else(|d| panic!("parse failed:\n{}", source.render_all(&d)));
+        let symbols = check_module(&program, &Modules::new())
+            .unwrap_or_else(|d| panic!("check failed:\n{}", source.render_all(&d)));
+        let before = ignite_types::literal_wait_steps();
+        if let Err(d) = type_module(&program, &symbols, &TypedModules::new()) {
+            panic!("type failed:\n{}", source.render_all(&d));
+        }
+        let steps = ignite_types::literal_wait_steps() - before;
+        eprintln!("depth {depth}: {steps} record literals looked at");
+        counts.push((depth, steps));
+    }
+    for (depth, steps) in counts {
+        let bound = (depth * (depth + 1)) as u64;
+        assert!(
+            steps <= bound,
+            "depth {depth}: {steps} record literals looked at, over {bound}"
+        );
+    }
 }
