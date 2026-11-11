@@ -330,8 +330,8 @@ fn another_descriptor_is_refused<H: Harness>(harness: H) {
 
 /// A registration after a deregistration has a token of its own: the
 /// earlier token, deregistered again, leaves the new registration in place
-/// (a reactor that reused the storage of an ended registration must still
-/// tell the two apart, story `binary-size-back`).
+/// (an `EpollReactor` reuses the slot of an ended registration, story
+/// `binary-size-back`).
 fn a_reused_registration_has_a_token_of_its_own<H: Harness>(harness: H) {
     let reactor = harness.reactor();
     let first = reactor
