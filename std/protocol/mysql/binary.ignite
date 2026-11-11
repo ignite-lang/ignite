@@ -147,7 +147,8 @@ fn scaled(a: List<Int>, places: Int) -> List<Int> {
 // as far away as the number above (the lowest mantissa of a binade). The
 // free-format algorithm of Burger and Dybvig, "Printing Floating-Point
 // Numbers Quickly and Accurately" (1996), with a reader that rounds to
-// even.
+// even; where two last digits are equally near, the even one, as David
+// Gay's `dtoa` ends, which the server prints with.
 fn shortest(mantissa: Int, exponent: Int, narrow: Bool) -> (Bytes, Int) {
   let even = mantissa % 2 == 0
   let widen = if narrow { 1 } else { 0 }
@@ -206,14 +207,26 @@ fn shortest(mantissa: Int, exponent: Int, narrow: Bool) -> (Bytes, Int) {
     }
     let low = compare(rest, below)
     let high = compare(plus(rest, above), scale)
-    let ends_low = low < 0 || (low == 0 && even)
-    let ends_high = high > 0 || (high == 0 && even)
-    if !ends_low && !ends_high {
+    if high == 0 && even {
+      // The digit above is the upper end of what reads back, itself
+      // included: taken unless this digit reads back too.
+      if low > 0 {
+        digit = digit + 1
+      }
+    } else if low < 0 || (low == 0 && even) {
+      // This digit reads back; when the one above does too, the nearer of
+      // the two, and of two equally near the even one.
+      if high > 0 {
+        let half = compare(times(rest, 2), scale)
+        if half > 0 || (half == 0 && digit % 2 == 1) {
+          digit = digit + 1
+        }
+      }
+    } else if high > 0 {
+      digit = digit + 1
+    } else {
       digits.push(b'0' + digit.wrap_byte())
       continue
-    }
-    if ends_high && (!ends_low || compare(times(rest, 2), scale) >= 0) {
-      digit = digit + 1
     }
     digits.push(b'0' + digit.wrap_byte())
     break
@@ -229,16 +242,18 @@ fn zeros(count: Int) -> Bytes {
   out
 }
 
-// `digits` with the decimal point `place` digits in: plain digits when the
-// point is at most 21 places in and at most six zeros follow it, else one
-// digit, the others as a fraction and the exponent of ten.
+// `digits` with the decimal point `place` digits in, as the server's text
+// protocol writes a DOUBLE (`my_gcvt` with room for every digit): plain
+// digits when the point is at most 15 places in or has a digit after it,
+// and when at most 14 zeros follow it; else one digit, the others as a
+// fraction and the exponent of ten, which has no plus sign.
 fn notation(negative: Bool, digits: Bytes, place: Int) -> Text {
   let count = digits.len()
   var out = Bytes.with_capacity(32)
   if negative {
     out.push(b'-')
   }
-  if place > 0 && place <= 21 {
+  if place > 0 && (place <= 15 || count > place) {
     if place >= count {
       out.append(digits)
       out.append(zeros(place - count))
@@ -249,7 +264,7 @@ fn notation(negative: Bool, digits: Bytes, place: Int) -> Text {
     }
     return out.to_text()
   }
-  if place > 0 - 6 && place <= 0 {
+  if place > 0 - 15 && place <= 0 {
     out.append(b"0.")
     out.append(zeros(0 - place))
     out.append(digits)
@@ -298,9 +313,10 @@ fn floating(bits: Int, width: Int, exponent_bits: Int) -> Option<Text> {
 }
 
 // The eight bytes of a DOUBLE, least significant first, as the shortest
-// decimal digits that read back as it: plain digits (`0.1`, `123456.789`,
-// `100000000000000000000`) from 0.000001 up to 21 digits before the point,
-// one digit, a fraction and an exponent beyond (`1e21`, `1.5e-10`). Zero
+// decimal digits that read back as it, of two equally near the even one,
+// written as the server's text protocol writes the column: plain digits
+// (`0.1`, `123456.789`, `0.000000000000001`) from 1e-15 to below 1e15,
+// one digit, a fraction and an exponent beyond (`1e15`, `1.5e-16`). Zero
 // keeps its sign. `None` for an infinity, for what is no number and for
 // any other count of bytes.
 fn double_text(data: Bytes) -> Option<Text> = if data.len() == 8 { floating(little_endian(data), 64, 11) } else { None }
@@ -428,7 +444,7 @@ test "a double prints as the shortest digits that read back as it" {
   assert double_text(b"\x00\x00\x00\x00\x00\x00\xe0\x3f") == Some("0.5")
   assert double_text(b"\x66\x66\x66\x66\x66\x66\x11\x40") == Some("4.35")
   assert double_text(b"\x00\x00\x00\x00\x00\x00\x59\x40") == Some("100")
-  assert double_text(b"\x00\x00\x00\x00\x00\x00\x40\x43") == Some("9007199254740992")
+  assert double_text(b"\x00\x00\x00\x00\x00\x00\x40\x43") == Some("9.007199254740992e15")
 }
 
 test "the largest, the smallest and the lowest normal double print in full" {
@@ -438,15 +454,23 @@ test "the largest, the smallest and the lowest normal double print in full" {
   assert double_text(b"\xf6\x4a\xe1\xc7\x02\x2d\xb5\x44") == Some("1e23")
 }
 
-test "plain digits up to 21 places and down to six zeros, an exponent beyond" {
-  assert double_text(b"\x40\x8c\xb5\x78\x1d\xaf\x15\x44") == Some("100000000000000000000")
-  assert double_text(b"\xda\xbc\x04\x7e\x3a\xc5\x1a\x44") == Some("123456789012345680000")
+test "plain digits where the server's text protocol prints them: below 1e15 and down to 1e-15, an exponent beyond" {
+  assert double_text(b"\x00\x00\x90\x1e\xc4\xbc\xd6\x42") == Some("100000000000000")
+  assert double_text(b"\xff\xff\x33\x26\xf5\x6b\x0c\x43") == Some("999999999999999.9")
+  assert double_text(b"\x66\xde\x77\x83\x21\x12\xdc\x42") == Some("123456789012345.6")
+  assert double_text(b"\x00\x00\x34\x26\xf5\x6b\x0c\x43") == Some("1e15")
+  assert double_text(b"\x00\x80\xe0\x37\x79\xc3\x41\x43") == Some("1e16")
+  assert double_text(b"\x40\x8c\xb5\x78\x1d\xaf\x15\x44") == Some("1e20")
+  assert double_text(b"\xda\xbc\x04\x7e\x3a\xc5\x1a\x44") == Some("1.2345678901234568e20")
   assert double_text(b"\x50\xef\xe2\xd6\xe4\x1a\x4b\x44") == Some("1e21")
   assert double_text(b"\x92\xd5\x4d\x06\xcf\xf0\x80\x44") == Some("1e22")
   assert double_text(b"\x8d\xed\xb5\xa0\xf7\xc6\xb0\x3e") == Some("0.000001")
-  assert double_text(b"\x48\xaf\xbc\x9a\xf2\xd7\x7a\x3e") == Some("1e-7")
-  assert double_text(b"\x26\x10\xc0\x17\x70\xe0\xaf\x3e") == Some("9.5e-7")
-  assert double_text(b"\x4c\xce\x61\xe3\xa7\x9d\xe4\x3d") == Some("1.5e-10")
+  assert double_text(b"\x48\xaf\xbc\x9a\xf2\xd7\x7a\x3e") == Some("0.0000001")
+  assert double_text(b"\x26\x10\xc0\x17\x70\xe0\xaf\x3e") == Some("0.00000095")
+  assert double_text(b"\x4c\xce\x61\xe3\xa7\x9d\xe4\x3d") == Some("0.00000000015")
+  assert double_text(b"\x16\x56\xe7\x9e\xaf\x03\xd2\x3c") == Some("0.000000000000001")
+  assert double_text(b"\x20\x01\x5b\x6e\x87\x05\xdb\x3c") == Some("0.0000000000000015")
+  assert double_text(b"\xbc\x89\xd8\x97\xb2\xd2\x9c\x3c") == Some("1e-16")
 }
 
 test "zero keeps its sign, and what is no number or no eight bytes prints as nothing" {
