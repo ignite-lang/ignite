@@ -43,18 +43,23 @@ opt-level = 1
 
 [profile.dev.package.rustls]
 opt-level = 2
+debug = false
 
 [profile.dev.package.rustls-webpki]
 opt-level = 2
+debug = false
 
 [profile.dev.package.rustls-pki-types]
 opt-level = 2
+debug = false
 
 [profile.dev.package.ring]
 opt-level = 2
+debug = false
 
 [profile.dev.package.untrusted]
 opt-level = 2
+debug = false
 
 [profile.dev.package.subtle]
 opt-level = 2
