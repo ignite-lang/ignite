@@ -1411,6 +1411,43 @@ fn a_connection_makes_none_of_the_calls_the_story_removed() {
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
+/// The first session of a process, counted as the run serving one
+/// connection less the run serving none (`story:readiness-session-cost`):
+/// it makes none of the calls a process makes once however many sessions
+/// it serves, which the process makes when it starts to listen
+/// (`TcpListener::bind`) instead. Those are the worker limit, for which
+/// `std::thread::available_parallelism` reads the cgroup files (`openat`,
+/// `statx`, `read`, `lseek` and `close`: 26 calls on a machine four cgroups
+/// deep), the handler of a task's stack overflow (`rt_sigaction` twice) and
+/// the eventfd that ends the lone waits of a burst (`eventfd2`). With them
+/// the first session of `terminald` made 60 calls where v0.15.0's made 30
+/// (`terminal::the_first_session_costs_no_more_system_calls_than_at_v0_15_0`
+/// of `crates/ignite` holds the total, on both targets).
+#[test]
+fn the_first_session_makes_no_call_a_process_makes_once() {
+    strace_works();
+    let (shape, _, served, none) = count_shape(None, 1, 1, None);
+    println!("{shape}");
+    let mut failures = Vec::new();
+    for name in [
+        "openat",
+        "statx",
+        "read",
+        "lseek",
+        "rt_sigaction",
+        "eventfd2",
+    ] {
+        let count = |traced: &Traced| traced.calls.get(name).copied().unwrap_or(0) as i64;
+        let calls = count(&served) - count(&none);
+        if calls > 0 {
+            failures.push(format!(
+                "{calls} {name} in the first session, none expected"
+            ));
+        }
+    }
+    assert!(failures.is_empty(), "{shape}\n{}", failures.join("\n"));
+}
+
 /// The count of [`a_connection_costs_no_more_system_calls_than_at_v0_15_0`]
 /// over a `terminald` binary named by `SCHEDULER_COUNT_SERVER` (started
 /// with `--port`, ended with SIGTERM), for the shape

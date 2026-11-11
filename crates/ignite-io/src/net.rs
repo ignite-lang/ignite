@@ -604,6 +604,9 @@ impl TcpListener {
         if !kept {
             crate::drain::register(&slot);
         }
+        // A process that listens serves sessions on workers: what it does
+        // once for them, it does before its first connection.
+        crate::sched::prepare();
         Ok(TcpListener { slot })
     }
 

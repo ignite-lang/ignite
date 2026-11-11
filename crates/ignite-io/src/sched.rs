@@ -112,6 +112,22 @@ pub fn worker_limit() -> usize {
     })
 }
 
+/// What a process whose tasks run on workers does once, however many
+/// tasks it starts, done now: the worker limit (without `IGNITE_WORKERS`,
+/// `std::thread::available_parallelism` reads the process' cgroup files),
+/// the handler of a task's stack overflow and the eventfd that ends the
+/// lone waits ([`escalation`]). Called when the process starts to listen
+/// (`crate::net`), so that its first session does not wait for 30 system
+/// calls no later session makes (`story:readiness-session-cost`). A
+/// process that spawns without listening does each at its first use.
+pub(crate) fn prepare() {
+    if readiness() {
+        worker_limit();
+        crate::signal::install_overflow_handler();
+        escalation();
+    }
+}
+
 /// Stack reserved per task: a thread's default, so recursion depth does not
 /// change with the IO mode.
 pub const TASK_STACK: usize = 2 * 1024 * 1024;
