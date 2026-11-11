@@ -488,9 +488,9 @@ fn main_baseline() -> Option<Baseline> {
     Some(read_baseline(&parse(&text, "main:quality/baseline.json")).expect("main's baseline"))
 }
 
-/// The last release that was published: the newest `v*` tag reachable from
-/// HEAD other than `run` (the candidate itself); `None` before the first
-/// tag. A label in the history without a tag (a candidate the release gate
+/// The last release that was published: the nearest `v*` tag reachable from
+/// HEAD other than `run` (the candidate itself), as `git describe` finds it;
+/// `NoTag` before the first tag, `Unreadable` when git fails. A label in the history without a tag (a candidate the release gate
 /// refused) is never the last release.
 fn last_release_tag(run: &str) -> LastRelease {
     let output = match Command::new("git")
@@ -2142,8 +2142,8 @@ fn civil_date(secs: u64) -> String {
 }
 
 /// The release check against the last release that was published:
-/// `last_release` is its tag (the newest `v*` tag, [`last_release_tag`]),
-/// and its reference is the history's last local run carrying that label.
+/// `last_release` is its tag (the nearest `v*` tag reachable from HEAD,
+/// [`last_release_tag`]), and its reference is the history's last local run carrying that label.
 /// Without a readable tag the `bar` run is the reference only when the
 /// history holds no `v*` run; otherwise the release is refused with the
 /// lookup's reason and `git fetch --tags`. A record under any
@@ -2158,10 +2158,35 @@ fn civil_date(secs: u64) -> String {
 /// `decision` holds a row for a release (`AGENTS.md` § Releases): a bar a
 /// decision moved worse than the reference refuses the release, whatever
 /// the value, until the decision is withdrawn, and the refusal names it.
-/// Timing rows are left out here: `ignite-perf quality-remote` refuses them
-/// against BASE on the dedicated host.
+/// Timing and benchmark values are left out here: `ignite-perf
+/// quality-remote` refuses them against BASE on the dedicated host. Their
+/// bars are judged here against the bars in the baseline at the tag (`git
+/// show <tag>:quality/baseline.json`): a bar a decision moved worse than the
+/// tag's refuses the release ([`decided_against_the_tag`]).
 pub fn release_refusals(
     baseline: &Baseline,
+    history: &[Record],
+    values: &[Value],
+    last_release: impl Into<LastRelease>,
+) -> Vec<String> {
+    let last_release = last_release.into();
+    let at_tag = match &last_release {
+        LastRelease::Tag(tag) => baseline_at(tag),
+        _ => None,
+    };
+    release_refusals_against(baseline, at_tag.as_ref(), history, values, last_release)
+}
+
+/// The baseline at the revision `rev`, when it can be read.
+fn baseline_at(rev: &str) -> Option<Baseline> {
+    read_baseline(&Json::parse(&baseline_text_at(rev)?).ok()?).ok()
+}
+
+/// [`release_refusals`] with the baseline at the last release's tag given
+/// (`None` when it cannot be read).
+pub fn release_refusals_against(
+    baseline: &Baseline,
+    at_tag: Option<&Baseline>,
     history: &[Record],
     values: &[Value],
     last_release: impl Into<LastRelease>,
@@ -2235,7 +2260,54 @@ pub fn release_refusals(
             decided.unwrap_or_default()
         ));
     }
+    if let LastRelease::Tag(tag) = &last_release {
+        refused.extend(decided_against_the_tag(baseline, at_tag, tag));
+    }
     refused
+}
+
+/// The timing and benchmark bars a `decision` moved worse than the bar of
+/// the same row in `at_tag`, the baseline at the last release's `tag`: these
+/// rows are measured only on the dedicated host, so their bars are the
+/// reference here. A row without a bar at the tag refuses nothing; a tag
+/// whose baseline cannot be read while such a decided bar stands is one
+/// refusal.
+fn decided_against_the_tag(
+    baseline: &Baseline,
+    at_tag: Option<&Baseline>,
+    tag: &str,
+) -> Vec<String> {
+    let decided = baseline
+        .metrics
+        .iter()
+        .filter(|(id, _)| is_timing(id) || is_bench(id))
+        .flat_map(|(id, metric)| {
+            metric.bars.iter().filter_map(move |(target, bar)| {
+                let decision = bar.decision.as_deref()?.trim();
+                (!decision.is_empty()).then_some((id, metric, target, bar.value, decision))
+            })
+        });
+    let Some(at_tag) = at_tag else {
+        return match decided.count() {
+            0 => Vec::new(),
+            n => vec![format!(
+                "the baseline at the last release {tag} could not be read, so {n} timing and benchmark bars a decision holds are not compared: run `git fetch --tags`"
+            )],
+        };
+    };
+    decided
+        .filter_map(|(id, metric, target, now, decision)| {
+            let then = at_tag.metrics.get(id)?.bars.get(target)?.value;
+            metric
+                .direction
+                .worse(then, now, Tolerance::Count(0))
+                .then(|| {
+                    format!(
+                        "{id} {target}: bar {then} at {tag}, {now} now by the decision `{decision}`, which holds no row for a release: withdraw it"
+                    )
+                })
+        })
+        .collect()
 }
 
 /// `task quality`: read every source's measured values from
@@ -2904,7 +2976,7 @@ fn gaps(value: i64) -> Value {
 }
 
 /// The reference of the release check is the last release that was
-/// published (the newest `v*` tag, passed in), not the last `v*` label in
+/// published (the nearest `v*` tag, passed in), not the last `v*` label in
 /// the history: the records of a candidate the gate refused after it, here
 /// a `v0.16.0` at two commits, are never the reference. Before the first
 /// tag the reference is the `bar` run.
@@ -3810,4 +3882,168 @@ fn gate_adv2_a_benchmark_bar_a_decision_moved_worse_refuses_the_release() {
         refused.iter().any(|r| r.contains(decision)),
         "a benchmark bar a decision moved worse than the last release (1406 -> 1820) is in the baseline, and the release was not refused: {refused:?}"
     );
+}
+
+/// A timing or benchmark bar is measured only on the dedicated host, so the
+/// release check holds it against the bar of the same row in the baseline at
+/// the last release's tag: a bar a `decision` moved worse than that refuses
+/// the release, naming the row, both bars and the decision. A decided bar
+/// equal to or better than the tag's, and a row with no bar at the tag,
+/// refuse nothing. A tag whose baseline cannot be read leaves decided
+/// timing and benchmark bars uncompared, which is a refusal, not a pass.
+#[test]
+fn a_release_refuses_a_timing_or_benchmark_bar_a_decision_moved_worse_than_at_the_tag() {
+    let decision = "story:x (2026-11-09): accepted for the release";
+    let row = |source: &str, direction, tolerance, bars: &[(&str, i64)], decided: bool| {
+        let mut m = metric(direction, tolerance, bars);
+        m.source = Some(source.to_string());
+        m.unit = if source == "bench" { "permille" } else { "ms" }.to_string();
+        if decided {
+            for bar in m.bars.values_mut() {
+                bar.decision = Some(decision.to_string());
+            }
+        }
+        m
+    };
+    let lower = Direction::Lower;
+    let at_tag = baseline_of(&[
+        (
+            "3.9",
+            row(
+                "bench",
+                lower,
+                Tolerance::Percent(5),
+                &[("llvm/terminal", 1378)],
+                false,
+            ),
+        ),
+        (
+            "3.3",
+            row(
+                "bench",
+                Direction::Higher,
+                Tolerance::Percent(10),
+                &[("llvm/todo/get-1", 1015)],
+                false,
+            ),
+        ),
+        (
+            "3.7",
+            row(
+                "bench",
+                lower,
+                Tolerance::Percent(20),
+                &[("rust/todo/get-1", 1044)],
+                false,
+            ),
+        ),
+        (
+            "3.8",
+            row(
+                "bench",
+                lower,
+                Tolerance::Percent(10),
+                &[("llvm/todo/get-1", 819)],
+                false,
+            ),
+        ),
+        (
+            "6.2",
+            row(
+                "perf",
+                lower,
+                Tolerance::Percent(10),
+                &[("llvm", 993)],
+                false,
+            ),
+        ),
+        (
+            "4.2",
+            metric(Direction::Lower, Tolerance::Count(0), &[("rust", 1)]),
+        ),
+    ]);
+    let now = baseline_of(&[
+        (
+            "3.9",
+            row(
+                "bench",
+                lower,
+                Tolerance::Percent(5),
+                &[("llvm/terminal", 1820), ("llvm/todo", 869)],
+                true,
+            ),
+        ),
+        (
+            "3.3",
+            row(
+                "bench",
+                Direction::Higher,
+                Tolerance::Percent(10),
+                &[("llvm/todo/get-1", 900)],
+                true,
+            ),
+        ),
+        (
+            "3.7",
+            row(
+                "bench",
+                lower,
+                Tolerance::Percent(20),
+                &[("rust/todo/get-1", 1044)],
+                true,
+            ),
+        ),
+        (
+            "3.8",
+            row(
+                "bench",
+                lower,
+                Tolerance::Percent(10),
+                &[("llvm/todo/get-1", 800)],
+                true,
+            ),
+        ),
+        (
+            "6.2",
+            row(
+                "perf",
+                lower,
+                Tolerance::Percent(10),
+                &[("llvm", 1200)],
+                true,
+            ),
+        ),
+        (
+            "4.2",
+            metric(Direction::Lower, Tolerance::Count(0), &[("rust", 1)]),
+        ),
+    ]);
+    let history = vec![release_record("v0.15.0", "b", 1)];
+    let refused =
+        release_refusals_against(&now, Some(&at_tag), &history, &[gaps(1)], Some("v0.15.0"));
+    assert_eq!(refused.len(), 3, "{refused:?}");
+    for (row, then, bar) in [
+        ("3.3 llvm/todo/get-1", "1015", "900"),
+        ("3.9 llvm/terminal", "1378", "1820"),
+        ("6.2 llvm", "993", "1200"),
+    ] {
+        assert!(
+            refused.iter().any(|r| r.starts_with(row)
+                && r.contains(then)
+                && r.contains(bar)
+                && r.contains("v0.15.0")
+                && r.contains(decision)),
+            "{row}: a bar a decision moved from {then} at the tag to {bar} was not refused: {refused:?}"
+        );
+    }
+
+    let unread = release_refusals_against(&now, None, &history, &[gaps(1)], Some("v0.15.0"));
+    assert!(
+        unread.len() == 1
+            && unread[0].contains("v0.15.0")
+            && unread[0].contains("could not be read"),
+        "a tag whose baseline cannot be read let decided benchmark bars pass: {unread:?}"
+    );
+    let plain = release_refusals_against(&at_tag, None, &history, &[gaps(1)], Some("v0.15.0"));
+    assert!(plain.is_empty(), "{plain:?}");
 }

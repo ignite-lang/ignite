@@ -89,8 +89,8 @@ with its host and regenerates `quality/trend.md`, the table below and the book p
 timing row without a bar its first value. With `RUN=vX.Y.Z` the run is a release:
 `quality::record` refuses it when a row is worse than at the last release by any amount, and
 then records the run as `run`, not as the release. The last release is the one that was
-published: the newest `v*` tag reachable from HEAD other than the candidate, and its values are
-the history's last local run under that label; records under any other `v*` label (a candidate
+published: the nearest `v*` tag reachable from HEAD (`git describe`) other than the candidate,
+and its values are the history's last local run under that label; records under any other `v*` label (a candidate
 the gate refused, the candidate itself) are never the reference, a tag without a record in the
 history refuses the release, and so does a history with a `v*` run whose tag cannot be read
 (no tags fetched, a shallow clone, git failing: the refusal says so and names
@@ -100,10 +100,14 @@ is 0, whatever the metric's tolerance for a merge; a hill-climb row is judged li
 No `decision` holds a row for a release (no release is worse than the release before it on any
 row, `AGENTS.md` § Releases): a merge may still move a bar worse with a `decision`, but a bar a
 decision moved worse than the last release refuses the release, whatever the measured value,
-until the decision is withdrawn, and the refusal names the decision. Timing and benchmark
-rows are not part of that refusal: they are judged only on the dedicated host's records, where
-`task quality-remote` refuses them (next section). The release steps in `AGENTS.md` § Releases
-run both.
+until the decision is withdrawn, and the refusal names the decision. The values of timing and
+benchmark rows are not part of that refusal: they are judged only on the dedicated host's
+records, where `task quality-remote` refuses them (next section). Their bars are: a timing or
+benchmark bar a `decision` moved worse than the bar of the same row in the baseline at the last
+release's tag (`git show <tag>:quality/baseline.json`) refuses the release, naming the row, both
+bars and the decision; a row without a bar at the tag refuses nothing, and a tag whose baseline
+cannot be read while such a decided bar stands refuses the release. The release steps in
+`AGENTS.md` § Releases run both.
 
 ## The dedicated timing host
 
@@ -150,9 +154,13 @@ Timing on the shared workstation is not comparable between runs, so the timing r
   decides; where they do not, the row is worse. With 5 passes two equal builds have disjoint
   samples on one row by chance in 1 of 252 runs (1 of 20 with 3). A run judges 41 noisy rows (5
   timing rows, 36 llvm and rust benchmark rows), so if the rows are independent two equal
-  builds are refused by this rule in about 15 % of runs. A release run refused only by this
-  rule, on rows inside their tolerance, is run once more; a row refused in both runs stands. A
-  release run takes at least 5 passes (`--passes`, `--bench-passes`; fewer is an error before
+  builds are refused by this rule in about 15 % of runs. A release needs every row unrefused.
+  A row refused beyond its tolerance stands at once. A row refused only by the every-sample-worse
+  rule, inside its tolerance, is measured in one further run of `task quality-remote` with the
+  same BASE and HEAD; a row two runs refuse stands; a row refused for the first time in the
+  second run gets one third run under the same rule; a release candidate has at most three runs,
+  and after the third every row refused in it stands. This is an operator procedure: no code
+  enforces it. A release run takes at least 5 passes (`--passes`, `--bench-passes`; fewer is an error before
   anything starts). No `decision` holds a row. A refused run's records are labelled `run`, and
   the mode exits 1. Both trees are measured on the same host in the same run, so the refusal
   does not compare across machines.
