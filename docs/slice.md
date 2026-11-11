@@ -7854,8 +7854,14 @@ the root). When that call fails for any reason the operation walks as above, whi
 succeeds (the path changed in between) or gives the error this section words, naming the
 component; the walk is also the whole resolution once `openat2` answered `ENOSYS` or `EPERM` (a
 kernel before 5.6, a seccomp filter). A listing reads the directory with `readdir` through
-`nix::dir::Dir` (story `unsafe-sites-back`: `fdopendir` adds an `fstat` and an `fcntl` per
-listing, the end of its iteration a `lseek`). Every behaviour above, its errors included, is the same in both resolutions; the substrate's
+`nix::dir::Dir` (story `unsafe-sites-back`). The calls of a listing, as `strace` shows them:
+an `fstat`, an `fcntl(F_GETFL)` and an `fcntl(F_SETFD, FD_CLOEXEC)` (`fdopendir`), the
+`getdents64` calls, an `lseek` back to the start (the end of the iteration) and the `close` of
+the descriptor. `remove_tree` lists each level through that level's own descriptor. A level it
+descends from then duplicates the descriptor (`fcntl(F_DUPFD_CLOEXEC)`) and closes the listing
+before it goes deeper. The deepest level keeps its listing until it is emptied. So the walk
+holds one descriptor per level and one listing at a time. Level `k` holds `k + 1` descriptors
+while it makes its duplicate, and a tree 256 levels deep needs 256 descriptors. Every behaviour above, its errors included, is the same in both resolutions; the substrate's
 tests run on both (`fs::tests`, `Scratch::both`). Measured with `strace -c` on the todo example's
 patch workload (16 connections on one todo, LLVM, release): 108.5 syscalls per reply before,
 45.8 after, the plain-Rust reference 16.0. Of the 45.8, 8.1 are failed `remove`s of versions a

@@ -182,13 +182,18 @@ fn reopen(parent: BorrowedFd<'_>, path: &Checked<'_>) -> Result<OwnedFd, IoError
 /// The names in `directory` without `.` and `..`, as the raw bytes the OS
 /// gave, each with whether it is a directory (never following a link), in
 /// byte order; at most `limit` when one is given. Read with `readdir`
-/// through [`Dir`], the directory wrapper of `nix`: `fdopendir` adds an
-/// `fstat` and an `fcntl` to a listing, and the end of its iteration a
-/// `lseek` back to the start, beside the `getdents64` calls a listing
-/// makes anyway. A directory removed before it is listed is the error
-/// `getdents64` gives for it (`ENOENT`), which `readdir` reads as the end
-/// of the directory: a listing that read no entry at all, not even `.`
-/// and `..`, looks at the directory's link count (one `fstat`, only then).
+/// through [`Dir`], the directory wrapper of `nix`. The calls of a listing,
+/// as `strace` shows them: `fdopendir` makes an `fstat`, an
+/// `fcntl(F_GETFL)` and an `fcntl(F_SETFD, FD_CLOEXEC)`; then come the
+/// `getdents64` calls; the end of the iteration makes an `lseek` back to
+/// the start; and dropping the [`Dir`] makes the `close` of its
+/// descriptor. A level of [`Directory::remove_tree`] that the walk
+/// descends from also duplicates its descriptor (`fcntl(F_DUPFD_CLOEXEC)`)
+/// before that `close` (see [`Level`]). A directory removed before it is
+/// listed is the error `getdents64` gives for it (`ENOENT`), which
+/// `readdir` reads as the end of the directory: a listing that read no
+/// entry at all, not even `.` and `..`, looks at the directory's link
+/// count (one `fstat`, only then).
 fn entries(
     directory: &mut Dir,
     path: &Checked<'_>,
