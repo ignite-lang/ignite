@@ -2059,25 +2059,47 @@ pub fn build(file: &Path, options: &BuildOptions) -> Result<BuildOutput, Error> 
     });
     let emitted = generate(parsed, &library, substrate.clone())?;
     let project = emitted.program;
-    ignite_rustgen::write_project(&project, &out).map_err(io_error(&out))?;
+    let target_dir = target_dir_of(&out);
+    let layout = if options.release && release_layout(&target_dir) {
+        ignite_rustgen::write_release_project(&project, &out).map_err(io_error(&out))?;
+        let triple = triple.clone().unwrap_or_else(host_triple);
+        Some(ignite_rustgen::release_layout_config(&triple, &out).map_err(io_error(&out))?)
+    } else {
+        ignite_rustgen::write_project(&project, &out).map_err(io_error(&out))?;
+        None
+    };
     let std_out = out.join("std");
     ignite_rustgen::write_project(&emitted.std, &std_out).map_err(io_error(&std_out))?;
     seed_lock(&substrate, &out)?;
-    let target_dir = target_dir_of(&out);
     prebuild.finish();
     eprintln!(
         "note: building the generated Rust project in {}; compiler messages refer to generated code",
         out.display()
     );
     test_build::claim_target_dir(&out, &target_dir)?;
-    cargo_build(
-        &out,
-        &target_dir,
-        options.release,
-        triple.as_deref(),
-        false,
-        options.offline,
-    )?;
+    let cargo = |layout: Option<&str>| {
+        cargo_build(
+            &out,
+            &target_dir,
+            options.release,
+            triple.as_deref(),
+            false,
+            options.offline,
+            layout,
+        )
+    };
+    match cargo(layout.as_deref()) {
+        Err(Error::Cargo { .. }) if layout.is_some() => {
+            eprintln!(
+                "note: the release build failed with the linker script of the release layout; building without it, which a linker that reads no such script needs"
+            );
+            ignite_rustgen::write_project(&project, &out).map_err(io_error(&out))?;
+            cargo(None)?;
+            let marker = target_dir.join(NO_RELEASE_LAYOUT);
+            std::fs::write(&marker, "").map_err(io_error(&marker))?;
+        }
+        built => built?,
+    }
     let built = cargo_output_dir(&target_dir, options.release, triple.as_deref());
     let executables = project
         .executables
@@ -2094,6 +2116,37 @@ pub fn build(file: &Path, options: &BuildOptions) -> Result<BuildOutput, Error> 
         project_dir: out,
         executables,
     })
+}
+
+/// The file in a cargo target directory that says a release build into it
+/// links without the release layout: the linker of an earlier build did
+/// not read its script.
+const NO_RELEASE_LAYOUT: &str = "ignite-no-release-layout";
+
+/// Whether a release build into `target_dir` links its executables with
+/// the release layout (`ignite_rustgen::RELEASE_LAYOUT`, row 3.8 of
+/// `docs/quality.md`): on Linux, whose linkers read the script, unless a
+/// build into the directory failed with it. The LLVM linker, which rustc
+/// links with on x86-64, and GNU ld read it; a linker that does not (gold,
+/// which has no `INSERT`) fails the link, and `build` then builds again
+/// without it and leaves [`NO_RELEASE_LAYOUT`], so the next build does not
+/// try.
+fn release_layout(target_dir: &Path) -> bool {
+    cfg!(target_os = "linux") && !target_dir.join(NO_RELEASE_LAYOUT).exists()
+}
+
+/// The target triple of a build without `--target`, by which cargo reads
+/// the link arguments of the release layout: the driver's own
+/// architecture and C library, as [`musl::triple`] names the musl one.
+/// Where cargo's host is another, it runs the project's build script
+/// instead, which gives the same arguments.
+fn host_triple() -> String {
+    let libc = if cfg!(target_env = "musl") {
+        "musl"
+    } else {
+        "gnu"
+    };
+    format!("{}-unknown-linux-{libc}", std::env::consts::ARCH)
 }
 
 /// Give a generated project at `out` that has no `Cargo.lock` the lock of
@@ -2210,7 +2263,10 @@ mod c_flags_tests {
 /// relative relocations, which the LLVM target links with, raised the
 /// start of a Rust executable (story `binary-size-back`), and a dev build
 /// compresses no debug section, its line tables split out of the objects
-/// by the generated dev profile (rows 3.2 and 6.2).
+/// by the generated dev profile (rows 3.2 and 6.2). `layout` is the
+/// `--config` value of a release project's link arguments
+/// (`ignite_rustgen::release_layout_config`): arguments of the
+/// executables' links only, no `rustflags`.
 /// Cargo is `$CARGO` when set, else `cargo` from `PATH`.
 fn cargo_build(
     out: &Path,
@@ -2219,6 +2275,7 @@ fn cargo_build(
     triple: Option<&str>,
     quiet: bool,
     offline: bool,
+    layout: Option<&str>,
 ) -> Result<(), Error> {
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let mut command = Command::new(&cargo);
@@ -2238,6 +2295,9 @@ fn cargo_build(
             .arg(triple)
             .arg("--config")
             .arg(format!("target.{triple}.rustflags={STATIC_RUSTFLAGS}"));
+    }
+    if let Some(layout) = layout {
+        command.arg("--config").arg(layout);
     }
     if quiet {
         command.arg("--quiet");

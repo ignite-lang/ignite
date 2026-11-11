@@ -55,6 +55,7 @@ mod resp;
 mod rfc;
 mod rollout_repeat;
 mod run;
+mod rust_memory;
 mod siblings;
 mod site;
 mod size_adversary;

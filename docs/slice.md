@@ -795,6 +795,32 @@ line per built executable: `built TARGET/debug/<executable>`. Exit status: 0 bui
 diagnostics (in any file, rendered with that file's path), 2 cargo failed (its output passed
 through), 3 a file could not be read or written.
 
+A release build on Linux (`--release`) writes two more files and links the executables with
+the first (`story:rust-peak-memory-at-one-connection`, row 3.8 of `docs/quality.md`):
+
+```
+DIR/layout.ld           a linker script added to the linker's own layout (`INSERT`): in `.text`, the functions of the
+                        standard library's backtrace symbolizer (`std::backtrace_rs`, `gimli`, `addr2line`,
+                        `rustc_demangle`, `miniz_oxide`; about 170 kB that run only to print a backtrace) in one run
+                        before every other function, `.init` after `.text`
+DIR/layout.rs           a build script that gives `-T DIR/layout.ld` as link arguments of the executables
+DIR/Cargo.toml          [package] also has links = "ignite-layout" and build = "layout.rs"
+```
+
+Fat LTO leaves the symbolizer between functions a server runs at its start, and the kernel
+maps the pages of a file around each page a process touches (64 KiB by default), so without
+the script the symbolizer is resident memory of every process. `ignite build` gives cargo the
+same link arguments itself (`--config target.<triple>.ignite-layout.rustc-link-arg-bins=[...]`),
+which overrides the build script: cargo neither compiles nor runs it, and the arguments are
+no `rustflags`, so they reach the executables' links only and replace nothing the user
+configured. The build script is for a `cargo build --release` by hand in `DIR`. The script
+changes no instruction; the size of an executable changes by the padding between its
+functions (tens of bytes, either way). The LLVM linker (rustc's on x86-64) and GNU ld read
+it. A linker that does not (gold, which has no `INSERT`) fails the link: the build then prints a note, writes
+the project without the three additions, builds again and leaves `TARGET/ignite-no-release-layout`,
+so later release builds into `TARGET` do not try. A dev build's manifest has neither key, so
+`cargo build` of it compiles nothing more.
+
 ## 7 Substrate `ignite-io`
 
 The only hand-written Rust a generated program runs, and the one implementation of IO for

@@ -1861,6 +1861,47 @@ fn write_project_creates_layout() {
     assert!(!out.join("src/bin").exists());
 }
 
+/// A release project is the project with the linker script of the release
+/// layout: its manifest names the script's link arguments by a `links` key
+/// and a build script in `[package]`, and `--config` gives cargo the same
+/// arguments with the script's absolute path. `write_project` over it
+/// leaves a manifest that names neither, as a dev build has it.
+#[test]
+fn write_release_project_adds_the_layout_script_and_its_link_arguments() {
+    let project = try_generate(user_decls()).unwrap();
+    let out = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("units-release-project");
+    ignite_rustgen::write_release_project(&project, &out).unwrap();
+    let manifest = std::fs::read_to_string(out.join("Cargo.toml")).unwrap();
+    assert!(
+        manifest
+            .starts_with("[package]\nlinks = \"ignite-layout\"\nbuild = \"layout.rs\"\nname = "),
+        "{manifest}"
+    );
+    assert_eq!(
+        manifest.replacen("links = \"ignite-layout\"\nbuild = \"layout.rs\"\n", "", 1),
+        project.cargo_toml
+    );
+    assert_eq!(
+        std::fs::read_to_string(out.join("layout.ld")).unwrap(),
+        ignite_rustgen::RELEASE_LAYOUT
+    );
+    let script = std::fs::read_to_string(out.join("layout.rs")).unwrap();
+    assert!(script.contains("cargo::rustc-link-arg-bins=-T"), "{script}");
+    let config = ignite_rustgen::release_layout_config("x86_64-unknown-linux-gnu", &out).unwrap();
+    assert_eq!(
+        config,
+        format!(
+            "target.x86_64-unknown-linux-gnu.ignite-layout.rustc-link-arg-bins=[\"-T\", \"{}\"]",
+            out.join("layout.ld").display()
+        )
+    );
+    ignite_rustgen::write_project(&project, &out).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(out.join("Cargo.toml")).unwrap(),
+        project.cargo_toml
+    );
+}
+
 fn ptuple(items: Vec<Pattern>) -> Pattern {
     pat(PatternKind::Tuple(items))
 }
