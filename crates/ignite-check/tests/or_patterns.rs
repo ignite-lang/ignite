@@ -42,3 +42,14 @@ fn an_uppercase_constant_in_an_or_pattern_is_no_binding() {
     let text = "const LIMIT: Int = 10\n\nfn f(n: Int) -> Int {\n  return match n {\n    LIMIT | 0 => 1\n    _ => 2\n  }\n}\n";
     assert_eq!(check(text), "");
 }
+
+/// A lowercase constant is a constant pattern as well ("whatever its
+/// case: `lowest` is a constant pattern when a constant `lowest` is in
+/// scope"), so the same or-pattern with `limit` binds nothing either. The
+/// checker reports E049 for it: `Pattern::bindings`, which E049 reads,
+/// lists every lowercase name, constants included.
+#[test]
+fn a_lowercase_constant_in_an_or_pattern_is_no_binding() {
+    let text = "const limit: Int = 10\n\nfn f(n: Int) -> Int {\n  return match n {\n    limit | 0 => 1\n    _ => 2\n  }\n}\n";
+    assert_eq!(check(text), "");
+}
