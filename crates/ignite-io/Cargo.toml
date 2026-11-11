@@ -8,8 +8,11 @@ autotests = false
 
 [dependencies]
 corosensei = "0.3.4"
-nix = { workspace = true, features = ["signal", "dir", "poll", "resource", "event", "feature", "socket"] }
+nix = { workspace = true, features = ["signal", "dir", "poll", "resource", "event", "socket"] }
 rustls = { workspace = true, optional = true }
+
+[target.'cfg(not(target_arch = "x86_64"))'.dependencies]
+nix = { workspace = true, features = ["feature"] }
 
 [dev-dependencies]
 ignite-io = { path = ".", features = ["tls"] }
