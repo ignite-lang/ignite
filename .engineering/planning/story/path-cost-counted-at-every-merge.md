@@ -2,12 +2,15 @@
 format: aep.planning-md/3
 id: story:path-cost-counted-at-every-merge
 kind: story
-status: draft
+status: active
 title: The cost of an existing path is counted at every merge
 relations:
 - informed_by: story:release-refuses-every-worse-row
 - informed_by: story:size-rows-grow-with-a-decision
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-11T13:47:21Z", actor: "human:timo", revision: 2, executor: "agent:claude-coordinator", correlation: "accepted-2026-11-11"}
+- {from: "proposed", to: "active", at: "2026-11-11T13:47:21Z", actor: "human:timo", revision: 3, executor: "agent:claude-coordinator", correlation: "accepted-2026-11-11"}
 ---
 # Story: the cost of an existing path is counted at every merge
 
