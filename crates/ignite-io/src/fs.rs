@@ -185,15 +185,20 @@ fn reopen(parent: BorrowedFd<'_>, path: &Checked<'_>) -> Result<OwnedFd, IoError
 /// through [`Dir`], the directory wrapper of `nix`: `fdopendir` adds an
 /// `fstat` and an `fcntl` to a listing, and the end of its iteration a
 /// `lseek` back to the start, beside the `getdents64` calls a listing
-/// makes anyway.
+/// makes anyway. A directory removed before it is listed is the error
+/// `getdents64` gives for it (`ENOENT`), which `readdir` reads as the end
+/// of the directory: a listing that read no entry at all, not even `.`
+/// and `..`, looks at the directory's link count (one `fstat`, only then).
 fn entries(
     directory: &mut Dir,
     path: &Checked<'_>,
     limit: Option<usize>,
 ) -> Result<Vec<(CString, bool)>, IoError> {
     let mut read: Vec<(CString, Option<Type>)> = Vec::new();
+    let mut any = false;
     for entry in directory.iter() {
         let entry = entry.map_err(|e| path.os(e))?;
+        any = true;
         let name = entry.file_name();
         if name.to_bytes() == b"." || name.to_bytes() == b".." {
             continue;
@@ -204,6 +209,9 @@ fn entries(
         read.push((name.to_owned(), entry.file_type()));
     }
     let descriptor = directory.as_fd();
+    if !any && fstat(descriptor).map_err(|e| path.os(e))?.st_nlink == 0 {
+        return Err(path.os(Errno::ENOENT));
+    }
     let mut found: Vec<(CString, bool)> = read
         .into_iter()
         .map(|(name, kind)| {
