@@ -10971,7 +10971,9 @@ the listener's queue, each dropped SYN blocked its worker until the retransmit, 
 worker was blocked so, the accepting task's among them, nothing was accepted for minutes.
 
 The drain (16.13). `serve_listener` keeps one `Holds` for all its connections,
-`Holds.start()`: a bounded channel of `HoldEvent`s to a register task, `keep_holds`. Each held
+`Holds.start()` when the application has a `reply` and `Holds.none()` otherwise (only a `reply`
+holds a request; story `http-reply-cost-back`, section NN). `Holds.start()` is
+a bounded channel of `HoldEvent`s to a register task, `keep_holds`. Each held
 receiver is sent to it (`Held`) before the wait; the register keeps the receivers not yet
 closed, dropping answered ones as the list grows. Once the drain begins, `accept` fails, and
 `serve_listener` calls `drain_holds` before it returns the error: `Drain` closes every kept
@@ -11173,3 +11175,35 @@ us (`rustls-native-certs` was not taken): the substrate reads the PEM bundle its
   against a server that never answers, a timeout that is not positive, a peer that speaks no
   TLS, an invalid server name, authorities without a certificate.
 - No network: every certificate is generated in the test.
+
+## NN An HTTP reply allocates no more than at v0.15.0, and a server without held requests starts no task for them
+
+Story `http-reply-cost-back` (rows 3.3 `rust/todo/get-1` and 3.8 `todo/get-1` of
+`docs/quality.md`).
+
+- Allocations per `GET /todos/1` reply of `todod`, counted by `valgrind --tool=memcheck
+  --trace-malloc=yes` over 200 replies after 50 on one connection
+  (`reply_cost::a_get_reply_allocates_no_more_than_at_v0_15_0`, the bounds measured by
+  `reply_cost::count_a_given_todod` over the v0.15.0 binaries): Rust target 37 at v0.15.0, 53
+  at wave 10, 37 now; LLVM target 1, 1, 0.
+- The 16 came with `Request.connection` (section 37): `session` copied the connection into the
+  request it kept for the answer (its two addresses, 2 allocations), `asked` copied it again (2),
+  the request asked was copied once more for `handle` or `reply` (8) and `Respond`'s response was
+  copied out of the reply (4). `session` now sets the connection on the copy the application is
+  asked only, moves that copy into `handle` or `reply` and the response into `respond`; the
+  request kept for the answer gets the connection only for a `Streamed` response, whose `piece`
+  sees it. An `Upgrade` copies the request again for its takeover. The connection is still copied
+  once per request (2 allocations).
+- Two allocations per reply that v0.15.0 made too pay for those 2: `read_head` takes the first
+  read of a request as the request's bytes instead of copying it (`read_once`: a binding of
+  `stream.read` matched in place is a borrow of the stream to the last-use analysis, so it was
+  copied), and `ignite_io::flush` gives the emptied list of streams to send back to the task
+  instead of dropping it, so the task's next write does not allocate it again (the one
+  allocation per reply of the LLVM target).
+- `serve_listener` starts the register of held requests (`Holds.start()`, the task
+  `keep_holds`) only when the application has a `reply`, the only way to hold a request:
+  `reply_cost::a_server_without_reply_starts_no_task_for_held_requests` builds
+  `tests/fixtures/http_census.ignite` on both targets and reads `Runtime.census().tasks` while
+  each of its servers answers its only connection: 1 without `reply` (2 before), 2 with one (as
+  before).
+- `valgrind` is a prerequisite of `reply_cost::`, as `strace` is of `scheduler::`.

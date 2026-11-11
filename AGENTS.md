@@ -128,7 +128,9 @@ Rules of the layout:
 
 `task` is go-task. `strace`, with ptrace allowed on a child, is a prerequisite of `task gate`:
 `scheduler::a_connection_costs_no_more_system_calls_than_at_v0_15_0` in `crates/ignite-io`
-counts the connection path with it and fails, naming it, without it. Rust toolchain: stable, edition 2024, `rustfmt` defaults. Every cargo
+counts the connection path with it and fails, naming it, without it. So is `valgrind`:
+`reply_cost::a_get_reply_allocates_no_more_than_at_v0_15_0` in `crates/ignite` counts the
+allocations of an HTTP reply with it. Rust toolchain: stable, edition 2024, `rustfmt` defaults. Every cargo
 invocation in automation sets `CARGO_INCREMENTAL=0`. `task test-ignite` honours
 `CARGO_TARGET_DIR` (binary, runtime and outputs under it); `task compile-llvm` and
 `task compile-todo-llvm` build and pass the runtime under it too, and write their programs to

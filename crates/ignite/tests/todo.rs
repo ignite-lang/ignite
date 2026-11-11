@@ -29,7 +29,7 @@ const LOADING: Duration = Duration::from_secs(300);
 
 /// `source` built once per build of the matrix and test binary under the
 /// cargo target directory; the executable named `name`.
-fn build(source: &Path, out: &str, target: Target, name: &str) -> PathBuf {
+pub(crate) fn build(source: &Path, out: &str, target: Target, name: &str) -> PathBuf {
     let options = target.options(&Path::new(env!("CARGO_TARGET_TMPDIR")).join(out));
     let output = ignite::build(source, &options).unwrap_or_else(|e| panic!("{e}"));
     let executable = output
@@ -54,7 +54,7 @@ fn cached(
     cells[target.index()].get_or_init(|| make(target))
 }
 
-fn todod(target: Target) -> &'static Path {
+pub(crate) fn todod(target: Target) -> &'static Path {
     static BUILT: [OnceLock<PathBuf>; 4] = [const { OnceLock::new() }; 4];
     cached(&BUILT, target, |target| {
         let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/todo/todo.ignite");

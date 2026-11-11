@@ -1,0 +1,34 @@
+package tests.http_census
+
+import std.protocol.http.*
+
+// Built for both targets and run by tests/reply_cost.rs (story
+// `http-reply-cost-back`): two `HttpServer`s that answer every request
+// with the live tasks and workers of their process, `censusd` through
+// `handle` and `censusreplyd` through `reply`. While the one connection is
+// answered its task is live, and the register of held requests
+// (`keep_holds`) only where the application has a `reply`.
+
+fn tasks(state: Unit, request: Request) -> Response {
+  let census = Runtime.census()
+  Response.plain(200, "tasks {census.tasks} workers {census.workers}")
+}
+
+fn tasks_reply<T>(state: Unit, request: Request) -> Reply<Unit, T> = Respond(tasks(state, request))
+
+system Census {
+  resource plain: TcpListener { address = "127.0.0.1", port = 0 }
+  resource replying: TcpListener { address = "127.0.0.1", port = 0 }
+
+  component handled: HttpServer {
+    listener = plain
+    application = HttpApp { state = (), handle = tasks }
+    executable = "censusd"
+  }
+
+  component replied: HttpServer {
+    listener = replying
+    application = HttpApp { state = (), reply = Some(tasks_reply) }
+    executable = "censusreplyd"
+  }
+}
