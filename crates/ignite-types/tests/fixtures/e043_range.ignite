@@ -19,3 +19,11 @@ fn f(n: Int, t: Text, b: Byte) -> Int {
     _ => 0
   }
 }
+
+// A bound that is a name binds nothing: no backend sees it (Pattern::bindings).
+fn g(n: Int) -> Int {
+  return match n {
+    low..=9 => 1
+    _ => 0
+  }
+}

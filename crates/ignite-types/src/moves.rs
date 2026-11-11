@@ -1325,20 +1325,8 @@ impl<'a> Walk<'a> {
     /// the pattern binds them afresh, so a later mention (in the next loop
     /// iteration) is of another value.
     fn unbind(&self, pattern: &Pattern, st: &mut State) {
-        match &pattern.kind {
-            PatternKind::Binding(name) | PatternKind::Rest(Some(name)) => {
-                self.unbind_name(name, st)
-            }
-            PatternKind::Or(items) | PatternKind::Tuple(items) | PatternKind::List(items) => {
-                items.iter().for_each(|item| self.unbind(item, st))
-            }
-            PatternKind::Variant { args, .. } => args.iter().for_each(|arg| self.unbind(arg, st)),
-            PatternKind::Range { .. }
-            | PatternKind::Rest(None)
-            | PatternKind::Wildcard
-            | PatternKind::Int(_)
-            | PatternKind::Str(_)
-            | PatternKind::Bool(_) => {}
+        for name in pattern.bindings() {
+            self.unbind_name(name, st);
         }
     }
 

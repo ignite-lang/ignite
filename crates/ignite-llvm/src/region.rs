@@ -4,7 +4,7 @@
 //! loop deep-copies across a release of its region, and the variable a
 //! place is rooted at are `ignite_types::ownership`'s.
 
-use ignite_syntax::ast::{Expr, ExprKind, Pattern, PatternKind, Stmt, StmtKind};
+use ignite_syntax::ast::{Expr, ExprKind, Pattern, Stmt, StmtKind};
 
 /// Whether the IR `text` (a function's definition, or what a loop emitted
 /// from its head to its back-edge) holds a call that can allocate in the
@@ -151,20 +151,9 @@ fn stmt_mentions(stmt: &Stmt, name: &str) -> bool {
     }
 }
 
+/// Whether `pattern` binds `name` ([`Pattern::binds`]).
 pub fn pattern_binds(pattern: &Pattern, name: &str) -> bool {
-    match &pattern.kind {
-        PatternKind::Binding(id) => id.name == name,
-        PatternKind::Rest(id) => id.as_ref().is_some_and(|id| id.name == name),
-        PatternKind::Or(items)
-        | PatternKind::Tuple(items)
-        | PatternKind::List(items)
-        | PatternKind::Variant { args: items, .. } => items.iter().any(|p| pattern_binds(p, name)),
-        PatternKind::Wildcard
-        | PatternKind::Int(_)
-        | PatternKind::Str(_)
-        | PatternKind::Bool(_)
-        | PatternKind::Range { .. } => false,
-    }
+    pattern.binds(name)
 }
 
 /// Whether `e` mentions the name `name` (see [`mentioned`]).
