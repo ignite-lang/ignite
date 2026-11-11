@@ -10,7 +10,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::sync::{Once, PoisonError, RwLock};
 
 use ignite_io::IoError;
-use nix::sys::signal::{SigHandler, Signal, signal};
+use nix::sys::signal::Signal;
 
 use crate::{IgniteEndpoint, IgniteIoError, IgniteList, bytes, get, put, status};
 
@@ -23,8 +23,11 @@ static ARGS: RwLock<Option<Vec<OsString>>> = RwLock::new(None);
 
 static HOOKS: Once = Once::new();
 
+// SAFETY: glibc's `atexit` has this signature; it takes a plain function
+// to call at exit, which an `extern "C" fn` of Rust always is, and no
+// pointer to data, so every call of it is safe.
 unsafe extern "C" {
-    fn atexit(callback: extern "C" fn()) -> c_int;
+    safe fn atexit(callback: extern "C" fn()) -> c_int;
 }
 
 extern "C" fn restore_at_exit() {
@@ -89,15 +92,17 @@ pub(crate) fn die(message: &str) -> ! {
 /// `SIGPIPE` (a write to a closed socket or pipe is an error, as in a Rust
 /// program), and installs, once per process, a panic hook (exit status
 /// 101, terminal restored), wrapped by `ignite-io`'s (`crate::contain`),
-/// and an `atexit` terminal restore.
+/// and an `atexit` terminal restore. First of all it has `ignite-io`
+/// give every worker [`alternate_signal_stack`], before any task starts
+/// one.
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_init(argc: i32, argv: *const *const c_char) {
+    ignite_io::signal::give_workers_an_alternate_stack(alternate_signal_stack);
     store_args(decode_args(argc, argv));
     ignite_io::raise_open_files_limit();
     ignite_io::drain();
     HOOKS.call_once(|| {
-        // SAFETY: ignoring a signal installs no handler code.
-        let _ = unsafe { signal(Signal::SIGPIPE, SigHandler::SigIgn) };
+        let _ = ignite_io::signal::ignore(Signal::SIGPIPE);
         std::panic::set_hook(Box::new(|info| {
             let message = info
                 .payload()
@@ -120,9 +125,47 @@ pub extern "C" fn ignite_rt_init(argc: i32, argv: *const *const c_char) {
         // `ignite-io`'s hook wraps the one above; installed here, at
         // start, rather than by the first guarded entry.
         ignite_io::install_hook();
-        // SAFETY: `restore_at_exit` is a plain function that never unwinds.
-        unsafe { atexit(restore_at_exit) };
+        // `restore_at_exit` is a plain function that never unwinds.
+        atexit(restore_at_exit);
     });
+}
+
+/// A worker's alternate signal stack, given by `ignite-io` to each worker
+/// as it starts: the overflow handler cannot run on the stack that
+/// overflowed, and std gives no thread of a program whose `main` is not
+/// Rust's an alternate stack. A thread that has one already keeps it.
+fn alternate_signal_stack() {
+    use nix::libc;
+    const SIZE: usize = 64 * 1024;
+    // SAFETY: `sigaltstack` reads and writes the `stack_t` values given;
+    // the new stack is a fresh private mapping of `SIZE` bytes that stays
+    // mapped for the life of the process (a worker's stack is never given
+    // back, so a signal on it can never land in unmapped memory).
+    unsafe {
+        let mut current: libc::stack_t = std::mem::zeroed();
+        if libc::sigaltstack(std::ptr::null(), &mut current) != 0
+            || current.ss_flags & libc::SS_DISABLE == 0
+        {
+            return;
+        }
+        let memory = libc::mmap(
+            std::ptr::null_mut(),
+            SIZE,
+            libc::PROT_READ | libc::PROT_WRITE,
+            libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
+            -1,
+            0,
+        );
+        if memory == libc::MAP_FAILED {
+            return;
+        }
+        let stack = libc::stack_t {
+            ss_sp: memory,
+            ss_flags: 0,
+            ss_size: SIZE,
+        };
+        libc::sigaltstack(&stack, std::ptr::null_mut());
+    }
 }
 
 /// `i32 args_port(i64* out_port, i32* present, IoError* err)`: `--port N`
@@ -413,8 +456,7 @@ pub extern "C" fn ignite_rt_exit(code: i32) -> ! {
 pub extern "C" fn ignite_rt_fail(error: *const IgniteIoError) -> ! {
     crate::entry_never(move || {
         let (message, code) = match get(error) {
-            // SAFETY: the argument is valid for the call (crate docs).
-            Some(error) => (unsafe { error.message.as_bytes() }, error.exit_code),
+            Some(error) => (bytes(&error.message), error.exit_code),
             None => (&b""[..], 1),
         };
         ignite_io::flush();

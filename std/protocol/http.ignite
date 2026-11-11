@@ -546,10 +546,38 @@ fn checked(response: Response) -> Response satisfies [
 // not at all since the response has none.
 enum Framing { Length(Int), Chunks, UntilClose, NoBody }
 
+// The bytes a head takes besides its header fields: the status line
+// (a reason has 31 bytes at most), `Content-Length` or
+// `Transfer-Encoding`, and `Connection` with the blank line.
+const HEAD_ROOM: Int = 128
+
+// The room the head of `response` takes, `HEAD_ROOM` and each header
+// field with its separator and CRLF.
+fn head_room(response: Response) -> Int {
+  var room = HEAD_ROOM
+  for header in response.headers {
+    room = room + header.0.len() + header.1.len() + 4
+  }
+  room
+}
+
+// An empty text with room for `length` bytes: what is appended to it
+// within that length stays in its one buffer, which is never moved to a
+// larger one (a move is an allocation of its own). The bytes' buffer
+// becomes the text's, not copied.
+fn text_with_room(length: Int) -> Text {
+  let room = Bytes.with_capacity(length)
+  room.to_text()
+}
+
 // The status line, the application's header fields and the field
 // `framing` needs, each ending in CRLF.
-fn render_fields(response: Response, framing: Framing) -> Text {
-  var head = "HTTP/1.1 {response.status} {reason(response.status)}\r\n"
+fn render_fields(response: Response, framing: Framing) -> Text = fields_after(text_with_room(head_room(response)), response, framing)
+
+// `render_fields` appended to `start`.
+fn fields_after(start: Text, response: Response, framing: Framing) -> Text {
+  var head = start
+  head = head + "HTTP/1.1 {response.status} {reason(response.status)}\r\n"
   for header in response.headers {
     head = head + "{header.0}: {header.1}\r\n"
   }
@@ -567,14 +595,18 @@ fn render_fields(response: Response, framing: Framing) -> Text {
 
 // The status line, the application's header fields, the field `framing`
 // needs and `Connection`, then the blank line.
-fn render_head(response: Response, framing: Framing, keep_alive: Bool) -> Bytes {
-  var head = render_fields(response, framing)
+fn render_head(response: Response, framing: Framing, keep_alive: Bool) -> Bytes = render_head_with_room(response, framing, keep_alive, 0)
+
+// The text of `render_head`, in a buffer with room for `after` bytes
+// more: the body a message appends to it.
+fn head_text(response: Response, framing: Framing, keep_alive: Bool, after: Int) -> Text {
+  var head = fields_after(text_with_room(head_room(response) + after), response, framing)
   if keep_alive {
     head = head + "Connection: keep-alive\r\n\r\n"
   } else {
     head = head + "Connection: close\r\n\r\n"
   }
-  head.to_bytes()
+  head
 }
 
 // The head and body of `response`, `body` or the bytes of `Binary`. A
@@ -600,16 +632,36 @@ fn inline_length(response: Response) -> Int = match response.content {
 
 // The head of `response` framed by `framing`, then its body unless
 // `with_body` is false or `framing` is `NoBody`; the body is appended
-// from the response, not copied first.
+// from the response, not copied first, to a head made with room for it.
 fn render_framed(response: Response, framing: Framing, keep_alive: Bool, with_body: Bool) -> Bytes {
-  var out = render_head(response, framing, keep_alive)
-  if with_body && framing != NoBody {
-    match response.content {
-      Binary(bytes) => out.append(bytes)
-      _ => out.append(response.body.to_bytes())
-    }
+  if !with_body || framing == NoBody {
+    return render_head(response, framing, keep_alive)
   }
+  match response.content {
+    Binary(bytes) => framed_bytes(response, framing, keep_alive, bytes)
+    _ => framed_text(response, framing, keep_alive)
+  }
+}
+
+// `render_framed` of a response whose body is `body`: one buffer, the
+// head's and then the body's.
+fn framed_text(response: Response, framing: Framing, keep_alive: Bool) -> Bytes {
+  var message = head_text(response, framing, keep_alive, response.body.len())
+  message = message + response.body
+  message.to_bytes()
+}
+
+// `render_framed` of a `Binary` response, its bytes `bytes`.
+fn framed_bytes(response: Response, framing: Framing, keep_alive: Bool, bytes: Bytes) -> Bytes {
+  var out = render_head_with_room(response, framing, keep_alive, bytes.len())
+  out.append(bytes)
   out
+}
+
+// `render_head` with room for `after` bytes more.
+fn render_head_with_room(response: Response, framing: Framing, keep_alive: Bool, after: Int) -> Bytes {
+  let head = head_text(response, framing, keep_alive, after)
+  head.to_bytes()
 }
 
 // How an `Inline` or `Binary` response to `request` is framed: none for a
