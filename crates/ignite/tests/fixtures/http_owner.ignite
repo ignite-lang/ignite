@@ -10,7 +10,14 @@ import std.net.TcpStream
 // takes the connection over, greets and echoes what it reads until the
 // client ends it; any other path is answered at once.
 
-fn echo(state: Store<Sender<Response>>, request: Request, stream: TcpStream, early: Bytes) -> IoResult<Unit> requires [stream.read, stream.write] {
+// A held request: the end its answer is sent to, under its id in the
+// store.
+type Waiting {
+  id: Int
+  wake: Sender<Response>
+}
+
+fn echo(state: Store<Waiting>, request: Request, stream: TcpStream, early: Bytes) -> IoResult<Unit> requires [stream.read, stream.write] {
   stream.write_all(b"taken\n")?
   loop {
     match stream.read(4096)? {
@@ -20,20 +27,26 @@ fn echo(state: Store<Sender<Response>>, request: Request, stream: TcpStream, ear
   }
 }
 
-fn release(state: Store<Sender<Response>>) -> Int {
+// Answers every held request and forgets it; how many took their answer.
+// An end is sent to once: a held request closes its receiver a moment
+// after it has taken its answer (`wait_held`), and until then a second
+// send would be taken too, counted, and answer nobody.
+fn release(state: Store<Waiting>) -> Int {
   var released = 0
-  for tx in state.values() {
-    if tx.send(Response.plain(200, "released")) {
+  for waiting in state.values() {
+    if waiting.wake.send(Response.plain(200, "released")) {
       released = released + 1
     }
+    _ = state.remove(waiting.id)
   }
   released
 }
 
-fn answer(state: Store<Sender<Response>>, request: Request) -> Reply<Store<Sender<Response>>, TcpStream> {
+fn answer(state: Store<Waiting>, request: Request) -> Reply<Store<Waiting>, TcpStream> {
   if request.path == "/hold" {
     let (tx, rx) = Channel.bounded(1)
-    state.put(state.next_id(), tx)
+    let id = state.next_id()
+    state.put(id, Waiting { id, wake = tx })
     return Hold(rx, 60 seconds, Response.plain(504, "not released"))
   }
   if request.path == "/take" {
@@ -47,7 +60,7 @@ fn answer(state: Store<Sender<Response>>, request: Request) -> Reply<Store<Sende
 
 system Owner {
   resource listener: TcpListener { address = "127.0.0.1", port = 0 }
-  resource waiters: Store<Sender<Response>>
+  resource waiters: Store<Waiting>
 
   component server: HttpServer {
     listener = listener

@@ -4,7 +4,7 @@
 //! and `test_body_spawn.ignite`
 //! run on both targets; `inline_server.ignite`, built with the LLVM
 //! target, answers 2,000 connections on one task without `spawn` and must
-//! not keep a descriptor per connection. `closes::` counts the descriptors
+//! not keep a descriptor per connection. `closes::` counts the sockets
 //! of an HTTP server (`todod`, and `fixtures/http_owner.ignite` whose
 //! application holds or takes its connections) before and after 40
 //! connections on both targets; `streams/match_arm_owner.ignite` holds
@@ -302,79 +302,56 @@ impl HttpProcess {
             .count()
     }
 
-    /// The server's open descriptors without the scheduler's own: an epoll
-    /// instance and an event descriptor per worker (`anon_inode:`), which
-    /// come and go with the workers and belong to no connection.
-    fn descriptors(&self) -> usize {
-        self.open()
-            .iter()
-            .filter(|target| !target.starts_with("anon_inode:"))
-            .count()
-    }
-
-    /// What the server has open, by kind and without the scheduler's own,
-    /// for a failure's message: `2 socket, 1 pipe, 2 null`. A file is
-    /// named by its last component.
-    fn kinds(&self) -> String {
-        let mut counts: std::collections::BTreeMap<String, usize> = Default::default();
-        for target in self.open() {
-            if target.starts_with("anon_inode:") {
-                continue;
-            }
-            let kind = match target.split_once(":[") {
-                Some((kind, _)) => kind.to_string(),
-                None => target.rsplit('/').next().unwrap_or(&target).to_string(),
-            };
-            *counts.entry(kind).or_default() += 1;
-        }
-        counts
-            .iter()
-            .map(|(kind, count)| format!("{count} {kind}"))
-            .collect::<Vec<_>>()
-            .join(", ")
-    }
-
-    /// The server's descriptors ([`Self::descriptors`]) at rest, the count
-    /// a test compares with at its end: taken after one connection was
-    /// served and closed. After its `listening` line the server reads how
-    /// many workers it may start, once, from files it has open for that
-    /// moment only (`std::thread::available_parallelism` reads the cgroup's
-    /// CPU quota); a count taken beside that read is one too high, and the
-    /// first accepted connection comes after it.
-    fn at_rest(&self) -> usize {
-        let sockets = self.sockets();
-        self.health();
-        let deadline = Instant::now() + TIMEOUT;
-        while self.sockets() != sockets && Instant::now() < deadline {
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        self.descriptors()
-    }
-
     /// Fails unless the server, still running, comes back to `start`
-    /// descriptors ([`Self::descriptors`]) after the `served` connections
-    /// of `what`: each task ends on its own time after its client left,
-    /// and a connection whose end the server has not noticed is closed by
-    /// its idle timeout ([`IDLE`]) at the latest, so the wait's ceiling is
-    /// past that. A run that needed the timeout says so.
-    fn holds_as_before(&mut self, start: usize, served: usize, what: &str) {
+    /// sockets (its listener) after the `served` connections of `what`:
+    /// each task ends on its own time after its client left. The wait ends
+    /// on the read that shows `start` sockets and on no other, so the
+    /// state it ends on is the state it found. The caller has an answer
+    /// that says every one of its connections was accepted: until then a
+    /// server at `start` sockets may have connections waiting in the
+    /// listener's queue, each a socket once it is accepted.
+    fn has_closed(&mut self, start: usize, served: usize, what: &str) {
         let begun = Instant::now();
-        while self.descriptors() != start && begun.elapsed() < IDLE + SERVED {
+        loop {
+            let open = self.open();
+            let sockets = open
+                .iter()
+                .filter(|target| target.starts_with("socket:"))
+                .count();
+            if sockets == start {
+                break;
+            }
+            assert!(
+                begun.elapsed() < SERVED,
+                "{sockets} sockets open after {served} connections ({what}), {start} before; open: {}",
+                kinds(&open)
+            );
             std::thread::sleep(Duration::from_millis(10));
         }
-        if begun.elapsed() >= SERVED {
-            eprintln!(
-                "note: {what}: the server was back at {start} descriptors only once its idle timeout had run"
-            );
-        }
-        let open = self.descriptors();
-        let kinds = self.kinds();
-        assert_eq!(
-            open, start,
-            "{open} descriptors open after {served} connections ({what}), {start} before; open now: {kinds}"
-        );
         assert!(self.child.try_wait().expect("try_wait").is_none());
     }
+}
+
+/// What a server has open (`open`, [`HttpProcess::open`]), by kind and
+/// without the scheduler's own descriptors, for a failure's message:
+/// `41 socket, 1 pipe, 2 null`. A file is named by its last component.
+fn kinds(open: &[String]) -> String {
+    let mut counts: std::collections::BTreeMap<String, usize> = Default::default();
+    for target in open {
+        if target.starts_with("anon_inode:") {
+            continue;
+        }
+        let kind = match target.split_once(":[") {
+            Some((kind, _)) => kind,
+            None => target.rsplit('/').next().unwrap_or(target),
+        };
+        *counts.entry(kind.to_string()).or_default() += 1;
+    }
+    counts
+        .iter()
+        .map(|(kind, count)| format!("{count} {kind}"))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 impl Drop for HttpProcess {
@@ -387,11 +364,6 @@ impl Drop for HttpProcess {
 /// The longest a test below waits for an answer, or for the server to
 /// close what it served: a ceiling on a wait that returns at its event.
 const SERVED: Duration = Duration::from_secs(30);
-
-/// The idle time after which the servers below close a connection: the
-/// default of `HttpLimits` (`std/protocol/http.ignite`), which `todod` and
-/// `ownerd` keep.
-const IDLE: Duration = Duration::from_secs(30);
 
 /// The connections each test below serves.
 const CONNECTIONS: usize = 40;
@@ -460,28 +432,28 @@ fn connections_served_in_a_task_of_the_http_server_are_closed() {
     assert!(server.child.try_wait().expect("try_wait").is_none());
 }
 
-/// Story `llvm-http-connection-closes-its-socket`: `todod` holds as many
-/// descriptors after 40 connections as before them, however a connection
-/// ends. Each connection is opened after the one before it was closed by
-/// this client: a count, not a load.
+/// Story `llvm-http-connection-closes-its-socket`: an HTTP server holds as
+/// many sockets after 40 connections as before them (its listener),
+/// however a connection ends. Each connection is opened after the one
+/// before it was closed by this client: a count, not a load.
 mod closes {
     use super::*;
 
     /// One request answered, then the client closes.
     pub fn closed_by_the_client(target: common::Target) {
         let mut server = HttpProcess::todod(target);
-        let start = server.at_rest();
+        let start = server.sockets();
         for _ in 0..CONNECTIONS {
             server.health();
         }
-        server.holds_as_before(start, CONNECTIONS, "one request each, closed by the client");
+        server.has_closed(start, CONNECTIONS, "one request each, closed by the client");
     }
 
     /// Three requests on one connection, each answered, then the client
     /// closes.
     pub fn kept_alive(target: common::Target) {
         let mut server = HttpProcess::todod(target);
-        let start = server.at_rest();
+        let start = server.sockets();
         for _ in 0..CONNECTIONS {
             let mut stream = server.connect();
             for _ in 0..3 {
@@ -493,14 +465,14 @@ mod closes {
                 assert!(reply.contains("\r\nConnection: keep-alive\r\n"), "{reply}");
             }
         }
-        server.holds_as_before(start, CONNECTIONS, "three requests each, kept alive");
+        server.has_closed(start, CONNECTIONS, "three requests each, kept alive");
     }
 
     /// One request with `Connection: close`: the server ends the
     /// connection after its answer.
     pub fn asked_to_close(target: common::Target) {
         let mut server = HttpProcess::todod(target);
-        let start = server.at_rest();
+        let start = server.sockets();
         for _ in 0..CONNECTIONS {
             let mut stream = server.connect();
             stream
@@ -511,14 +483,20 @@ mod closes {
             assert!(reply.contains("\r\nConnection: close\r\n"), "{reply}");
             ended(&mut stream);
         }
-        server.holds_as_before(start, CONNECTIONS, "`Connection: close`");
+        server.has_closed(start, CONNECTIONS, "`Connection: close`");
     }
 
     /// The client leaves inside a request: inside the head on every other
-    /// connection, inside the announced body on the others.
+    /// connection, inside the announced body on the others. No answer says
+    /// when the server has accepted such a connection, and it accepts them
+    /// on its own time: its sockets fall to the listener alone and rise
+    /// again while some still wait in the listener's queue. So one more
+    /// connection is made after the 40 and its request answered: the
+    /// queue hands connections out in the order they were made, and the
+    /// answer says each of the 40 was accepted.
     pub fn dropped_inside_a_request(target: common::Target) {
         let mut server = HttpProcess::todod(target);
-        let start = server.at_rest();
+        let start = server.sockets();
         for round in 0..CONNECTIONS {
             let mut stream = server.connect();
             let part: &[u8] = if round % 2 == 0 {
@@ -528,17 +506,18 @@ mod closes {
             };
             stream.write_all(part).unwrap();
         }
-        server.holds_as_before(start, CONNECTIONS, "dropped inside a request");
+        server.health();
+        server.has_closed(start, CONNECTIONS, "dropped inside a request");
     }
 
     /// The application holds each request (`Reply.Hold`) until another
     /// connection has it released; on every other connection the client
     /// has left by then. The held connection is the application's until
     /// its answer is given: 40 of them, and the 40 or more that asked for
-    /// the release, leave no descriptor.
+    /// the release, leave no socket.
     pub fn held_by_the_application(target: common::Target) {
         let mut server = HttpProcess::ownerd(target);
-        let start = server.at_rest();
+        let start = server.sockets();
         let mut served = 0;
         for round in 0..CONNECTIONS {
             let mut held = server.connect();
@@ -547,8 +526,9 @@ mod closes {
             let stays = round % 2 == 0;
             let mut held = stays.then_some(held);
             served += 1;
-            // The release answers with how many held requests took it: 0
-            // until the server has read this round's request and holds it.
+            // The release answers with how many held requests took it, and
+            // forgets each: 0 until the server has read this round's
+            // request and holds it, then 1, this round's and no other.
             let deadline = Instant::now() + SERVED;
             loop {
                 let mut other = server.connect();
@@ -570,7 +550,7 @@ mod closes {
                 assert!(reply.ends_with("\r\n\r\nreleased"), "{reply}");
             }
         }
-        server.holds_as_before(start, served, "held by the application, then released");
+        server.has_closed(start, served, "held by the application, then released");
     }
 
     /// The application takes each connection over (`Reply.Upgrade`) and
@@ -578,7 +558,7 @@ mod closes {
     /// takeover's while it runs and is closed when it returns.
     pub fn taken_over_by_the_application(target: common::Target) {
         let mut server = HttpProcess::ownerd(target);
-        let start = server.at_rest();
+        let start = server.sockets();
         for _ in 0..CONNECTIONS {
             let mut stream = server.connect();
             stream
@@ -602,7 +582,7 @@ mod closes {
             stream.shutdown(std::net::Shutdown::Write).unwrap();
             ended(&mut stream);
         }
-        server.holds_as_before(start, CONNECTIONS, "taken over by the application");
+        server.has_closed(start, CONNECTIONS, "taken over by the application");
     }
 
     macro_rules! on_each_target {
