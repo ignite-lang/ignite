@@ -38,10 +38,10 @@
 //! are exchanged whenever a different task resumes, through [`TaskLocals`].
 //!
 //! Stack overflow: a task's guard page is recognised by the `SIGSEGV`
-//! handler installed with the first worker (on an alternate signal stack
-//! each worker sets up), which prints `thread 'worker' has overflowed its
-//! stack` and aborts, as a thread's overflow does; any other fault goes to
-//! the handler that was installed before.
+//! handler (`crate::signal`) installed with the first worker (on an
+//! alternate signal stack each worker sets up), which prints `thread
+//! 'worker' has overflowed its stack` and aborts, as a thread's overflow
+//! does; any other fault goes to the handler that was installed before.
 //!
 //! A descriptor a task waits for (a socket, a listener, standard input)
 //! is registered once per worker, edge-triggered, through a
@@ -54,11 +54,10 @@
 
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, VecDeque};
-use std::ffi::c_void;
 use std::io;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU8, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, Once, OnceLock, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
 
 use corosensei::stack::{DefaultStack, Stack};
@@ -556,7 +555,7 @@ pub(crate) fn wait_descriptor(
 /// could be reserved or no worker thread started. Called with the task
 /// already counted live (`crate::task`).
 pub(crate) fn spawn(job: Job) -> io::Result<()> {
-    install_overflow_handler();
+    crate::signal::install_overflow_handler();
     let here = HERE.with(Cell::get);
     // A stack mapped while `WORKERS` was not held, because no free one
     // was found under it; the next look places the task with it.
@@ -1114,24 +1113,12 @@ fn page_size() -> usize {
     })
 }
 
-/// The handlers of `SIGSEGV` and `SIGBUS` before [`on_fault`].
-static PREVIOUS: OnceLock<[nix::sys::signal::SigAction; 2]> = OnceLock::new();
-
-/// Install [`on_fault`] for `SIGSEGV` and `SIGBUS` once, keeping the
-/// handlers before it for every fault outside a task's guard page.
-fn install_overflow_handler() {
-    use crate::signal::{Disposition, dispose};
-    use nix::sys::signal::Signal;
-    static INSTALL: Once = Once::new();
-    INSTALL.call_once(|| {
-        let previous = [
-            dispose(Signal::SIGSEGV, Disposition::Overflow),
-            dispose(Signal::SIGBUS, Disposition::Overflow),
-        ];
-        if let [Ok(segv), Ok(bus)] = previous {
-            let _ = PREVIOUS.set([segv, bus]);
-        }
-    });
+/// The guard page of the running task's stack, `start..end`, `(0, 0)` off
+/// a task: what the stack overflow handler (`crate::signal`) compares a
+/// fault's address with. Reads a `const` thread-local cell only, so it is
+/// async-signal-safe.
+pub(crate) fn guard_page() -> (usize, usize) {
+    GUARD.try_with(Cell::get).unwrap_or((0, 0))
 }
 
 /// A worker's alternate signal stack: the overflow handler cannot run on
@@ -1169,42 +1156,6 @@ fn alternate_signal_stack() {
             ss_size: SIZE,
         };
         libc::sigaltstack(&stack, std::ptr::null_mut());
-    }
-}
-
-/// The `SIGSEGV` and `SIGBUS` handler (module docs). Async-signal-safe,
-/// which `crate::signal::dispose` relies on: it reads a `const`
-/// thread-local cell, writes to stderr with `write`, aborts, hands the
-/// signal to the handler that was installed before, or restores the
-/// default action with `dispose`, which allocates nothing and takes no
-/// lock.
-pub(crate) extern "C" fn on_fault(
-    signal: i32,
-    info: *mut nix::libc::siginfo_t,
-    context: *mut c_void,
-) {
-    use crate::signal::{Disposition, dispose};
-    use nix::sys::signal::{SigHandler, Signal};
-    // SAFETY: the kernel passes a valid `siginfo_t` to a handler installed
-    // with `SA_SIGINFO`; `si_addr` is defined for SIGSEGV and SIGBUS.
-    let address = unsafe { (*info).si_addr() } as usize;
-    let (start, end) = GUARD.try_with(Cell::get).unwrap_or((0, 0));
-    if start <= address && address < end {
-        let message = b"\nthread 'worker' has overflowed its stack\nfatal runtime error: stack overflow, aborting\n";
-        let _ = nix::unistd::write(std::io::stderr().as_fd(), message);
-        std::process::abort();
-    }
-    let which = usize::from(signal != Signal::SIGSEGV as i32);
-    match PREVIOUS.get().map(|previous| previous[which].handler()) {
-        Some(SigHandler::SigAction(previous)) => previous(signal, info, context),
-        Some(SigHandler::Handler(previous)) => previous(signal),
-        _ => {
-            if let Ok(signal) = Signal::try_from(signal) {
-                // The fault repeats on return and ends the process with
-                // the default action.
-                let _ = dispose(signal, Disposition::Default);
-            }
-        }
     }
 }
 

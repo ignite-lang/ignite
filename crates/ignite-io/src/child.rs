@@ -328,7 +328,7 @@ static SIGCHLD_DEFAULT: Once = Once::new();
 /// before every spawn, which covers the test runner.
 pub(crate) fn default_sigchld() {
     SIGCHLD_DEFAULT.call_once(|| {
-        let _ = crate::signal::dispose(Signal::SIGCHLD, crate::signal::Disposition::Default);
+        crate::signal::restore_default(Signal::SIGCHLD);
     });
 }
 
