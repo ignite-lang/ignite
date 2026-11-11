@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-11T03:09:28Z",
+  "actor": "human:timo",
+  "artifact": "story:readiness-syscalls-per-connection",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "coordinator, tree w11-connect at c521792b, 2026-11-11: cargo test -p ignite-io (112 + 203 passed, both IO modes); the four scheduler count tests 10 of 10 rounds; cargo test -p ignite --test main terminal:: drain:: todo:: quality::static_metrics_hold_the_bar (191 passed)"
+  }
+}
