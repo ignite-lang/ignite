@@ -296,10 +296,36 @@ unsafe impl GlobalAlloc for Counting {
         heap_add(-(layout.size() as i64));
     }
 
+    /// The system allocator's reallocation: the C allocator's `realloc`
+    /// where the system allocator calls it, a new allocation, a copy and a
+    /// free where it does those (an alignment over `malloc`'s or the new
+    /// size's). Written out, not called through `System`, so that a program
+    /// does not carry std's copy of the second branch next to this one;
+    /// inlined into the allocator's entry point, so it has no symbol of its
+    /// own.
+    #[inline]
     unsafe fn realloc(&self, pointer: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
         called(0, 1);
-        // SAFETY: as the caller's contract.
-        let moved = unsafe { System.realloc(pointer, layout, new_size) };
+        // SAFETY: as the caller's contract, which the system allocator's
+        // `alloc` and `dealloc` take over for the new layout (`new_size`
+        // with the old alignment, valid by that contract) and the old one.
+        // `realloc` returns memory aligned for `max_align_t` and so for the
+        // alignment of the first branch; the second branch's two pointers
+        // are distinct allocations of at least the bytes copied.
+        let moved = unsafe {
+            if layout.align() <= align_of::<nix::libc::max_align_t>() && layout.align() <= new_size
+            {
+                nix::libc::realloc(pointer.cast(), new_size).cast::<u8>()
+            } else {
+                let new_layout = Layout::from_size_align_unchecked(new_size, layout.align());
+                let moved = System.alloc(new_layout);
+                if !moved.is_null() {
+                    std::ptr::copy_nonoverlapping(pointer, moved, layout.size().min(new_size));
+                    System.dealloc(pointer, layout);
+                }
+                moved
+            }
+        };
         if !moved.is_null() {
             heap_add(new_size as i64 - layout.size() as i64);
         }
