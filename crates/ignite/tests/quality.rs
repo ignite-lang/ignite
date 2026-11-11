@@ -1899,6 +1899,10 @@ fn change(metric: &Metric, from: i64, to: i64) -> String {
     format!("{sign}{}{verdict}", delta.abs())
 }
 
+/// A held cell as [`held_cells`] collects it: its value at the last
+/// release where one is recorded, its value now and its decision.
+type HeldCell<'a> = (Option<i64>, i64, &'a str);
+
 /// The size cells above the last release that a decision holds in the
 /// release `(run, commit, date)` of `history`, grouped by decision in the
 /// order of the cells: the records of the release that carry a `decision`
@@ -1912,7 +1916,7 @@ fn held_cells(
     (run, commit, date): (&str, &str, &str),
     previous: &BTreeMap<(String, String), i64>,
 ) -> Vec<(String, Vec<String>)> {
-    let mut cells: BTreeMap<(bool, &str, &str), (Option<i64>, i64, &str)> = BTreeMap::new();
+    let mut cells: BTreeMap<(bool, &str, &str), HeldCell> = BTreeMap::new();
     for record in history {
         let Some(decision) = record.decision.as_deref() else {
             continue;
