@@ -11441,7 +11441,7 @@ asks for, and nothing it returns as a description of an error holds a statement 
 | `type MysqlLimits` | `packet` 64 MiB (one packet, frames joined), `row` 16 MiB (one row's packet), `rows` 1,000,000 (rows of one result set), `columns` 4,096 (its columns) |
 | `enum MysqlError` | `Server(ServerError)`, `Io(Text)`, `Closed`, `OutOfOrder(Int, Int)`, `PacketTooLarge`, `RowTooLarge`, `TooManyRows`, `TooManyColumns`, `Malformed(Text)`, `Unsupported(Text)`, `UnsupportedPlugin(Text)`, `FullAuthenticationNeedsTls`, `TlsNotOffered`, `WrongParameterCount(Int, Int)`, `NoConnection` |
 | `type ServerError` | the server's error packet: `code`, `sql_state` (empty when the server sent none), `message` |
-| `describe(error) -> Text`, `io_error(error) -> IoError` | the error in words; of `Server` the code and the SQL state only (`server error 1064 (42000)`), since the server's message can quote the statement and name the account |
+| `describe(error) -> Text`, `io_error(error) -> IoError` | the error in words; of `Server` the code and the SQL state only (`server error 1064 (42000)`), since the server's message can quote the statement and name the account; of `UnsupportedPlugin` the printable ASCII among the first 64 bytes of the name, which the server chose |
 
 Every call returns `Result<_, MysqlError>`. `Server` leaves the connection usable, as does
 `WrongParameterCount`, which is found before anything is sent. Every other error of a call on a
@@ -11462,7 +11462,11 @@ and set the stream's idle timeout to `read_timeout`. `start(stream, options)` au
 any stream already connected (the tests' `PipeStream`); `request_tls` and `authenticate` are the
 two steps of `connect_tls` for a caller with a stream of its own. Whether a connection uses TLS
 is the caller's choice of function, because the two give different stream types; there is no
-"TLS when offered" mode.
+"TLS when offered" mode. On the LLVM target a connection's descriptor is released when the
+process exits: `quit` and every failure close the stream, but a client record that a function
+returns is owned by no block (`docs/llvm.md`, section 4), so a program that opens connections
+without end runs out of descriptors there. The Rust target releases the descriptor when the
+client is dropped or quit.
 
 | the server | the client |
 |---|---|
@@ -11492,7 +11496,9 @@ then refuses every write of the session (1792, `25006`).
 statement, parameters)` is `COM_STMT_EXECUTE` over the binary protocol with one
 `Option<MysqlValue>` per `?` mark; `close(client, statement)` is `COM_STMT_CLOSE`;
 `execute_once(client, sql, parameters)` does the three. `ping` is `COM_PING`, `quit` is
-`COM_QUIT` and closes the stream. `query`, `execute` and `execute_once` give a `ResultSet
+`COM_QUIT` and closes the stream. A command of 16 MiB - 1 bytes or more (a long statement, a
+large parameter) travels as two frames or more, and its reply is read at the sequence number
+after its last frame. `query`, `execute` and `execute_once` give a `ResultSet
 { columns, rows, affected, last_insert_id, warnings }`: the `Column`s (`schema`, `table`,
 `name`, `charset`, `length`, `kind`, `flags`, `decimals`) and the rows, each a
 `List<Option<MysqlValue>>` with `None` for NULL, or for a statement without a result set its
@@ -11518,13 +11524,16 @@ sent.
 The two protocols give the same value for the same column. The binary protocol sends a FLOAT and
 a DOUBLE as their four and eight bytes; `std.protocol.mysql.binary` (`float_text`,
 `double_text`) prints them as the shortest decimal digits that read back as the same number, by
-Burger and Dybvig's free-format algorithm over natural numbers in base 10^9: plain digits from
-0.000001 up to 21 digits before the point (`0.1`, `123456.789`), one digit, a fraction and an
-exponent beyond (`1e21`, `1.5e-10`), `-0` for a negative zero. The text protocol carries the
-server's own text, which for a FLOAT is rounded to six significant digits, so the same FLOAT can
-print with more digits from `execute` than from `query`; a DOUBLE prints alike. The module also
-prints the binary dates and times as the text protocol does (`date_text`, `time_text`, the
-fraction's digits from the column's decimals) and an unsigned 64-bit integer (`unsigned_text`).
+Burger and Dybvig's free-format algorithm over natural numbers in base 10^9, of two last digits
+equally near the even one, and in the notation of the server's text protocol: plain digits from
+1e-15 to below 1e15 (`0.1`, `123456.789`, `0.000000000000001`; `1000000000000000.2`, whose point
+has a digit after it), one digit, a fraction and an exponent beyond (`1e15`, `1.5e-16`), `-0` for
+a negative zero. The text protocol carries the server's own text, which for a FLOAT is rounded
+to six significant digits, so the same FLOAT can print with more digits from `execute` than from
+`query`; a DOUBLE prints alike (tested with values of no declared number of decimals). The
+module also prints the binary dates and times as the text protocol does (`date_text`,
+`time_text`, the fraction's digits from the column's decimals) and an unsigned 64-bit integer
+(`unsigned_text`).
 
 Refused, each as a typed error that closes the connection: the server's request for a local file
 (`LOAD DATA LOCAL INFILE`, `Unsupported`; the client never reads a file and sends nothing in
@@ -11559,9 +11568,11 @@ nothing.
 
 ### NN.6 Tests
 
-- `std/protocol/mysql.ignite`, both targets, 47 tests over `Pipe.pair()` with a scripted server
-  (`play`: reads each expected request byte for byte, writes its reply; the requests are written
-  out by hand, the scrambles are known answers computed outside the module):
+- `std/protocol/mysql.ignite`, both targets, 55 tests with a scripted server (`play`: reads each
+  expected request byte for byte, writes its reply; the requests are written out by hand, the
+  scrambles are known answers computed outside the module), over `Pipe.pair()` but for two over
+  TCP: a command of two frames, which a pipe does not hold, and the close of a failed handshake,
+  which only a `TcpStream` tells from its idle timeout:
   - packets: integers and lengths at every width; a packet over many small deliveries; a
     payload of 16 MiB - 1 with its empty frame, and one longer, joined when read; a frame out of
     sequence; a packet one byte above the limit, refused at its header; a cut packet;
@@ -11570,23 +11581,27 @@ nothing.
     server's default; the fast path; full authentication on a plain stream (the typed error, and
     no byte sent after it); full authentication after the SSLRequest at sequence 2; a switch in
     either direction; `sha256_password`, `mysql_clear_password` and the pre-4.1 switch refused
-    by name; a refused account; a read-only session, and that no other session sends a
-    statement;
+    by name, and what `describe` keeps of a forged name; a refused account; a server without
+    `SECURE_CONNECTION`; eight authentication packets followed and the ninth refused; bytes
+    after the authentication; a NUL in the database name; the stream closed by a failed
+    handshake; a read-only session, and that no other session sends a statement;
   - statements: a column definition from the protocol's documentation; a result set of 31
     columns, one per supported type, with a row of values and a row of NULLs, over the text and
     over the binary protocol with the same expected values; OK, an empty result set, a server
     error first and between rows; the local-file request; a second result; each limit at the
     bound and one past it; every cut, out-of-sequence and out-of-shape reply; `prepare` with
-    and without parameters and columns; the bytes of `execute` for one, six, nine and no
-    parameters, a hostile text among them; the NULL bitmap's offset; `close`; a wrong
-    parameter count;
+    and without parameters and columns, with 4,096 columns and refused with 4,097; the bytes
+    of `execute` for one, six, nine and no parameters, a hostile text among them; a parameter
+    of 16 MiB - 1 bytes, whose command is two frames and whose reply is read at sequence 2;
+    the NULL bitmap's offset; `close`; a wrong parameter count;
   - the pool: one caller per connection, the wait, a full pool, a connection returned after a
     result and after a server error, a failed one taken out and replaced, three tasks on one
     connection.
-- `std/protocol/mysql/binary.ignite`, both targets, 8 tests: 25 doubles and 13 floats against
-  the digits Python's `repr` and NumPy's `float32` print (the largest, the smallest and the
-  lowest normal number, both notations at their bounds, the zeros, what is no number), unsigned
-  integers up to 2^64 - 1, dates and times at every length the protocol sends.
+- `std/protocol/mysql/binary.ignite`, both targets, 9 tests: 36 doubles and 13 floats against
+  the digits Python's `repr` and NumPy's `float32` print, in the server's notation (the largest,
+  the smallest and the lowest normal number, both notations at their bounds, a tie between two
+  last digits, the zeros, what is no number), unsigned integers up to 2^64 - 1, dates and times
+  at every length the protocol sends.
 - `mysql::real_servers_with_both_plugins_on_both_targets` in `crates/ignite/tests/mysql.rs`:
   two containers of `mysql:8.0` on free loopback ports, one whose default plugin is
   `caching_sha2_password` and one whose default is `mysql_native_password`, both with TLS under
@@ -11599,4 +11614,10 @@ nothing.
   it runs where `docker version` succeeds and the image is present (`docker pull mysql:8.0`),
   and says on standard error why it did nothing anywhere else; it pulls nothing itself.
   `IGNITE_MYSQL_IMAGE` names another image, `IGNITE_CONTAINER_LABEL` a label for the containers.
+- `mysql_adversary::` in `crates/ignite/tests/mysql_adversary.rs`, two tests. One runs as
+  `mysql::` does, against one container: a parameter of 16 MiB - 1 bytes and a statement of
+  16 MiB, each a command of two frames, and 17 DOUBLE values that print alike from `query` and
+  from `execute`. The other needs no container: 40 connections quit, 40 refused, 40 refused
+  TLS requests and 40 pools of three leave no descriptor on the Rust target and keep one each
+  on the LLVM target, which the test pins exactly (NN.2).
 - `layering::`, with `mysql` in the protocol names it reads from std.
