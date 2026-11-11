@@ -11277,11 +11277,17 @@ and for a configured `debug` alike.
   passes last (a `CFLAGS` of the environment wins). A dev executable on the LLVM target holds no compile
   unit of a third-party crate (`dev_build::dev_todod_links_no_third_party_debug_information`,
   with the archive built as configured and with `CARGO_PROFILE_DEV_DEBUG=2`). The driver gives
-  its own cargo runs (the build ahead and the program's build) `CFLAGS=-g0` wherever it stands,
-  unless `CFLAGS`, `TARGET_CFLAGS`, `HOST_CFLAGS` or a `CFLAGS_<target>` is set
-  (`c_flags_tests::the_driver_sets_cflags_only_where_the_user_set_none`), so a TLS program built
-  outside the repository holds no third-party compile unit either
+  its own cargo runs (the build ahead and the program's build) `HOST_CFLAGS=-g0` and
+  `TARGET_CFLAGS=-g0` wherever it stands, unless `CFLAGS`, `TARGET_CFLAGS`, `HOST_CFLAGS` or a
+  `CFLAGS_<target>` is set (`c_flags_tests::the_driver_sets_cflags_only_where_the_user_set_none`),
+  so a TLS program built outside the repository holds no third-party compile unit either
   (`dev_build_adversary::a_tls_program_built_outside_the_repository_holds_no_third_party_debug_information`).
+  `cc` passes them after `CFLAGS`, and the driver leaves `CFLAGS` alone: a user's `[env]
+  CFLAGS` of a cargo configuration, which cargo does not apply over a `CFLAGS` of its
+  environment, reaches the C compiler
+  (`dev_build_adversary::c_flags_of_the_users_cargo_configuration_reach_the_c_compiler`). A
+  profile without debug information for the crates that compile C would not do: `ring` asks
+  for `-g3` whatever cargo's `DEBUG`.
 - Linker. A dev build on the LLVM target without `--triple` and `--static` links with
   `-fuse-ld=lld` when `ld.lld` lies beside the clang it runs, its symbolic links resolved, and
   with clang's default linker otherwise (`docs/llvm.md` section 1); both carry a build id

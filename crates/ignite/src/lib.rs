@@ -2135,46 +2135,62 @@ fn cargo_output_dir(target_dir: &Path, release: bool, triple: Option<&str>) -> P
 /// every configured `rustflags`.
 const STATIC_RUSTFLAGS: &str = r#"["-C", "relocation-model=static"]"#;
 
-/// Give a cargo run of the driver's `CFLAGS=-g0`, as the repository's
-/// `.cargo/config.toml` does for the cargo runs inside it, wherever the
-/// driver stands (story `build-time-back`): the C and assembly that build
-/// scripts compile through the `cc` crate (the TLS engine's) then carry no
-/// debug information into a dev executable, like the Rust crates from
-/// outside the project. A user's own flags win: nothing is set when
-/// `CFLAGS`, `TARGET_CFLAGS`, `HOST_CFLAGS` or a `CFLAGS_<target>` is in
-/// the environment, the variables `cc` reads.
+/// Give a cargo run of the driver `-g0` for the C compiler, as the
+/// repository's `.cargo/config.toml` does with `CFLAGS` for the cargo runs
+/// inside it, wherever the driver stands (story `build-time-back`): the C
+/// and assembly that build scripts compile through the `cc` crate (the TLS
+/// engine's, which asks for `-g3` itself) then carry no debug information
+/// into a dev executable, like the Rust crates from outside the project.
 pub(crate) fn without_c_debug_information(command: &mut Command) {
-    if let Some(flags) = c_flags_given(std::env::vars_os().map(|(name, _)| name)) {
-        command.env("CFLAGS", flags);
-    }
+    command.envs(c_debug_flags().iter().copied());
 }
 
-/// The `CFLAGS` of [`without_c_debug_information`] for an environment
-/// with the variables `names`: none when one of them is a flags variable
-/// of `cc`.
-fn c_flags_given(mut names: impl Iterator<Item = std::ffi::OsString>) -> Option<&'static str> {
+/// The variables of [`without_c_debug_information`]: `HOST_CFLAGS` and
+/// `TARGET_CFLAGS`, which `cc` passes after `CFLAGS` (the one of its kind,
+/// whether the build compiles for the host or another target), so a
+/// user's `CFLAGS`, also one of `[env]` in a cargo configuration (which
+/// cargo would not apply over a `CFLAGS` of its environment), still
+/// reaches the compiler. A user's own flags win: none is set when
+/// `CFLAGS`, `TARGET_CFLAGS`, `HOST_CFLAGS` or a `CFLAGS_<target>` is in
+/// the environment, the variables `cc` reads.
+pub(crate) fn c_debug_flags() -> &'static [(&'static str, &'static str)] {
+    c_debug_flags_for(std::env::vars_os().map(|(name, _)| name))
+}
+
+/// [`c_debug_flags`] for an environment with the variables `names`.
+fn c_debug_flags_for(
+    mut names: impl Iterator<Item = std::ffi::OsString>,
+) -> &'static [(&'static str, &'static str)] {
     let set = names.any(|name| {
         let name = name.to_string_lossy();
         matches!(name.as_ref(), "CFLAGS" | "TARGET_CFLAGS" | "HOST_CFLAGS")
             || name.starts_with("CFLAGS_")
     });
-    (!set).then_some("-g0")
+    if set {
+        &[]
+    } else {
+        &[("HOST_CFLAGS", "-g0"), ("TARGET_CFLAGS", "-g0")]
+    }
 }
 
 #[cfg(test)]
 mod c_flags_tests {
-    use super::c_flags_given;
+    use super::c_debug_flags_for;
 
-    fn given(names: &[&str]) -> Option<&'static str> {
-        c_flags_given(names.iter().map(|name| (*name).into()))
+    fn given(names: &[&str]) -> Option<&'static [(&'static str, &'static str)]> {
+        let flags = c_debug_flags_for(names.iter().map(|name| (*name).into()));
+        (!flags.is_empty()).then_some(flags)
     }
 
+    const G0: Option<&[(&str, &str)]> = Some(&[("HOST_CFLAGS", "-g0"), ("TARGET_CFLAGS", "-g0")]);
+
     /// The driver's cargo runs get `-g0` unless the user set flags of
-    /// their own in any variable `cc` reads.
+    /// their own in any variable `cc` reads, and never in `CFLAGS`, which
+    /// a cargo configuration's `[env]` may set.
     #[test]
     fn the_driver_sets_cflags_only_where_the_user_set_none() {
-        assert_eq!(given(&[]), Some("-g0"));
-        assert_eq!(given(&["PATH", "CXXFLAGS", "RUSTFLAGS"]), Some("-g0"));
+        assert_eq!(given(&[]), G0);
+        assert_eq!(given(&["PATH", "CXXFLAGS", "RUSTFLAGS"]), G0);
         for user in [
             "CFLAGS",
             "TARGET_CFLAGS",
