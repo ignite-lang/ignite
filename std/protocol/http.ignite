@@ -9,7 +9,6 @@ import std.rfc.rfc9112.{RFC9112}
 import std.rfc.rfc9110.{RFC9110}
 import std.policy.{Restart, DrainRollout}
 import std.control.{Machine, Supervisor}
-import std.protocol.http.syntax.*
 
 // HTTP/1.1 server (RFC 9112) over one byte stream (a `TcpStream`, or a
 // `PipeStream` in tests): requests with a `Content-Length` or a chunked
@@ -349,6 +348,160 @@ fn method_not_allowed(allow: Text) -> Response {
   response
 }
 
+fn has_line_break(text: Text) -> Bool = text.contains("\r") || text.contains("\n")
+
+// The fields of RFC 9110 and RFC 9111 defined as a list (`#rule`, RFC 9110
+// section 5.6.1), by lower-case name: a response may repeat them (section
+// 5.3) and none of their elements may be empty (section 5.6.1.1).
+fn is_list_field(name: Text) -> Bool = match name {
+  "accept" | "accept-charset" | "accept-encoding" | "accept-language" | "accept-ranges" => true
+  "allow" | "authentication-info" | "cache-control" | "connection" | "content-encoding" => true
+  "content-language" | "expect" | "if-match" | "if-none-match" | "proxy-authenticate" => true
+  "proxy-authentication-info" | "te" | "trailer" | "upgrade" | "vary" | "via" | "www-authenticate" => true
+  _ => false
+}
+
+// The fields whose grammar has BWS (RFC 9110 section 5.6.3): the
+// `auth-param`s of the authentication fields (section 11).
+fn is_auth_field(name: Text) -> Bool = match name {
+  "www-authenticate" | "proxy-authenticate" | "authentication-info" | "proxy-authentication-info" => true
+  _ => false
+}
+
+// The fields defined as an HTTP-date (RFC 9110 sections 5.6.7, 6.6.1,
+// 8.8.2 and 10.2.3; RFC 9111 section 5.3).
+fn is_date_field(name: Text) -> Bool = match name {
+  "date" | "last-modified" | "expires" | "retry-after" => true
+  _ => false
+}
+
+// The elements of a list field value (RFC 9110 section 5.6.1): the parts
+// between the commas outside a quoted-string, each without its OWS.
+fn list_elements(value: Text) -> List<Text> {
+  let bytes = value.to_bytes()
+  var out = []
+  var start = 0
+  var quoted = false
+  var escaped = false
+  var at = 0
+  while at < bytes.len() {
+    let b = bytes.at(at)
+    if escaped {
+      escaped = false
+    } else if quoted && b == b'\\' {
+      escaped = true
+    } else if b == b'"' {
+      quoted = !quoted
+    } else if !quoted && b == b',' {
+      out.push(trim_ows(bytes.slice(start, at).to_text()))
+      start = at + 1
+    }
+    at = at + 1
+  }
+  out.push(trim_ows(bytes.slice(start, bytes.len()).to_text()))
+  out
+}
+
+// Whether a list field value holds an empty element; an empty value is
+// the empty list, not an empty element.
+fn has_empty_element(value: Text) -> Bool {
+  if trim_ows(value).is_empty() {
+    return false
+  }
+  for element in list_elements(value) {
+    if element.is_empty() {
+      return true
+    }
+  }
+  false
+}
+
+// Whether `value` has whitespace beside an `=` outside a quoted-string:
+// BWS of an `auth-param` (`token BWS "=" BWS value`). After the `=`
+// padding of a `token68`, whitespace before a comma or the end is OWS.
+fn has_bws(value: Text) -> Bool {
+  let bytes = value.to_bytes()
+  var quoted = false
+  var escaped = false
+  var at = 0
+  while at < bytes.len() {
+    let b = bytes.at(at)
+    if escaped {
+      escaped = false
+    } else if quoted && b == b'\\' {
+      escaped = true
+    } else if b == b'"' {
+      quoted = !quoted
+    } else if !quoted && b == b'=' {
+      if at > 0 && is_ows(bytes.at(at - 1)) {
+        return true
+      }
+      var next = at + 1
+      while next < bytes.len() && is_ows(bytes.at(next)) {
+        next = next + 1
+      }
+      if next > at + 1 && next < bytes.len() && bytes.at(next) != b',' {
+        return true
+      }
+    }
+    at = at + 1
+  }
+  false
+}
+
+fn is_digits(bytes: Bytes) -> Bool {
+  for b in bytes {
+    if !is_digit(b) {
+      return false
+    }
+  }
+  !bytes.is_empty()
+}
+
+// An IMF-fixdate (RFC 9110 section 5.6.7), the one form a sender
+// generates, with no whitespace beyond its single SPs:
+// `Sun, 06 Nov 1994 08:49:37 GMT`.
+fn is_imf_fixdate(value: Text) -> Bool {
+  let bytes = value.to_bytes()
+  if bytes.len() != 29 {
+    return false
+  }
+  let day = match bytes.slice(0, 3).to_text() {
+    "Mon" | "Tue" | "Wed" | "Thu" | "Fri" | "Sat" | "Sun" => true
+    _ => false
+  }
+  let month = match bytes.slice(8, 11).to_text() {
+    "Jan" | "Feb" | "Mar" | "Apr" | "May" | "Jun" | "Jul" | "Aug" | "Sep" | "Oct" | "Nov" | "Dec" => true
+    _ => false
+  }
+  let spaces = bytes.slice(3, 5).to_text() == ", " && bytes.at(7) == b' ' && bytes.at(11) == b' ' && bytes.at(16) == b' '
+  let marks = bytes.at(19) == b':' && bytes.at(22) == b':' && bytes.slice(25, 29).to_text() == " GMT"
+  let date = is_digits(bytes.slice(5, 7)) && is_digits(bytes.slice(12, 16))
+  let time = is_digits(bytes.slice(17, 19)) && is_digits(bytes.slice(20, 22)) && is_digits(bytes.slice(23, 25))
+  day && month && spaces && marks && date && time
+}
+
+// Whether the application may send field `name` (lower case) with
+// `value`. Http frames every response itself, by its own `Content-Length`
+// or, for a streamed body, its own chunked coding, so `Transfer-Encoding`
+// and `Content-Length` are its own (RFC 9112 sections 6.1 and 6.2; RFC
+// 9110 section 5.3).
+fn is_allowed_field(name: Text, value: Text) -> Bool {
+  if name == "transfer-encoding" || name == "content-length" {
+    return false
+  }
+  if is_list_field(name) && has_empty_element(value) {
+    return false
+  }
+  if is_auth_field(name) && has_bws(value) {
+    return false
+  }
+  if is_date_field(name) {
+    return is_imf_fixdate(value) || name == "retry-after" && is_digits(value.to_bytes())
+  }
+  true
+}
+
 // `response`, or 500 when one of the application's header fields would
 // make the message break RFC 9112 or RFC 9110: a name that is not a token
 // (also one starting with whitespace) or a value holding CR or LF, which
@@ -493,6 +646,37 @@ fn streamed_framing(request: Request, status: Int) -> Framing satisfies [RFC9112
     return UntilClose
   }
   Chunks
+}
+
+const HEX_DIGITS: Text = "0123456789abcdef"
+
+// `n` in lower-case hexadecimal, the chunk-size of RFC 9112 section 7.1.
+fn hex(n: Int) -> Text {
+  let digits = HEX_DIGITS.to_bytes()
+  var out = Bytes.empty()
+  var rest = n
+  loop {
+    out.push(digits.at(rest % 16))
+    rest = rest / 16
+    if rest == 0 {
+      break
+    }
+  }
+  var reversed = Bytes.empty()
+  var at = out.len()
+  while at > 0 {
+    at = at - 1
+    reversed.push(out.at(at))
+  }
+  reversed.to_text()
+}
+
+// `piece` as one chunk: its size in hexadecimal, CRLF, the piece, CRLF.
+fn chunk(piece: Bytes) -> Bytes {
+  var out = "{hex(piece.len())}\r\n".to_bytes()
+  out.append(piece)
+  out.append(b"\r\n")
+  out
 }
 
 // Sends the `Streamed` `response` to `request` (`asked` for the
@@ -767,6 +951,60 @@ test "empty elements of a Connection list are ignored" verifies [RFC9110.R5_6_1_
   assert has_connection_option(get("HTTP/1.1", [("connection", "a, , b")]), "b")
 }
 
+// RFC 9110 `tchar`.
+fn is_token_byte(b: Byte) -> Bool = match b {
+  b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'*' | b'+' | b'-' | b'.' | b'^' | b'_' | b'`' => true
+  b'|' | b'~' | b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z' => true
+  _ => false
+}
+
+fn is_token(text: Text) -> Bool = is_token_in(text.to_bytes(), 0, text.len())
+
+// Whether bytes `start` to `end` of `bytes` are a token. The parser reads
+// the head in place with this and the other `_in` checks, so a field is
+// copied once, when it is kept.
+fn is_token_in(bytes: Bytes, start: Int, end: Int) -> Bool {
+  var at = start
+  while at < end {
+    if !is_token_byte(bytes.at(at)) {
+      return false
+    }
+    at = at + 1
+  }
+  end > start
+}
+
+fn is_ows(b: Byte) -> Bool = b == b' ' || b == b'\t'
+
+// `text` without the SP and HTAB at either end (OWS, RFC 9110 section
+// 5.6.3); every other byte stays, a Unicode space too.
+fn trim_ows(text: Text) -> Text = trimmed_in(text.to_bytes(), 0, text.len())
+
+// Bytes `start` to `end` of `bytes` without the OWS at either end, as text.
+fn trimmed_in(bytes: Bytes, start: Int, end: Int) -> Text {
+  var from = start
+  var to = end
+  while from < to && is_ows(bytes.at(from)) {
+    from = from + 1
+  }
+  while to > from && is_ows(bytes.at(to - 1)) {
+    to = to - 1
+  }
+  bytes.slice(from, to).to_text()
+}
+
+// Bytes `start` to `end` of `bytes` as text with ASCII letters in lower
+// case: a header name, copied once.
+fn lowered_in(bytes: Bytes, start: Int, end: Int) -> Text {
+  var out = bytes.slice(start, end)
+  var at = 0
+  while at < out.len() {
+    out[at] = lower_byte(out[at])
+    at = at + 1
+  }
+  out.to_text()
+}
+
 test "OWS is SP and HTAB only" verifies [RFC9112.R6_3_4, RFC9112.R6_3_5] {
   assert trim_ows(" \t a b \t ") == "a b"
   assert trim_ows("") == ""
@@ -784,6 +1022,127 @@ test "OWS is SP and HTAB only" verifies [RFC9112.R6_3_4, RFC9112.R6_3_5] {
 
 // A field value: no control byte except tab, so no bare CR or LF.
 fn is_field_value(text: Text) -> Bool satisfies [RFC9110.R5_5_4] = is_field_value_in(text.to_bytes(), 0, text.len())
+
+// Whether bytes `start` to `end` of `bytes` are a field value.
+fn is_field_value_in(bytes: Bytes, start: Int, end: Int) -> Bool {
+  var at = start
+  while at < end {
+    let b = bytes.at(at)
+    if b < b' ' && b != b'\t' || b == 127 {
+      return false
+    }
+    at = at + 1
+  }
+  true
+}
+
+// A request target: visible bytes only.
+fn is_target(text: Text) -> Bool = is_target_in(text.to_bytes(), 0, text.len())
+
+// Whether bytes `start` to `end` of `bytes` are a request target.
+fn is_target_in(bytes: Bytes, start: Int, end: Int) -> Bool {
+  var at = start
+  while at < end {
+    let b = bytes.at(at)
+    if b <= b' ' || b == 127 {
+      return false
+    }
+    at = at + 1
+  }
+  end > start
+}
+
+// An absolute-form request-target (RFC 9112 section 3.2.2) of the `http`
+// or `https` scheme, in any case: its authority and the rest as an
+// origin-form target, `/` when the path is empty. `None` for any other
+// form.
+fn absolute_form(target: Text) -> Option<(Text, Text)> {
+  let bytes = target.to_bytes()
+  let scheme = scheme_length(bytes, 0, bytes.len())
+  if scheme == 0 {
+    return None
+  }
+  var end = scheme
+  while end < bytes.len() && bytes.at(end) != b'/' && bytes.at(end) != b'?' {
+    end = end + 1
+  }
+  let rest = bytes.slice(end, bytes.len()).to_text()
+  let origin = if rest.starts_with("/") { rest } else { "/" + rest }
+  Some((bytes.slice(scheme, end).to_text(), origin))
+}
+
+// The length of the scheme `http://` or `https://`, in any case, that
+// bytes `start` to `end` of `bytes` start with; 0 for any other target.
+fn scheme_length(bytes: Bytes, start: Int, end: Int) -> Int {
+  if starts_lowered(bytes, start, end, b"http://") {
+    7
+  } else if starts_lowered(bytes, start, end, b"https://") {
+    8
+  } else {
+    0
+  }
+}
+
+// Whether bytes `start` to `end` of `bytes`, in lower case, start with
+// `prefix`.
+fn starts_lowered(bytes: Bytes, start: Int, end: Int, prefix: Bytes) -> Bool {
+  if end - start < prefix.len() {
+    return false
+  }
+  var at = 0
+  while at < prefix.len() {
+    if lower_byte(bytes.at(start + at)) != prefix.at(at) {
+      return false
+    }
+    at = at + 1
+  }
+  true
+}
+
+// RFC 3986 `unreserved`, `sub-delims` and `%`: the bytes of a `reg-name`.
+fn is_reg_name_byte(b: Byte) -> Bool = match b {
+  b'-' | b'.' | b'_' | b'~' | b'!' | b'$' | b'&' | b'\'' | b'(' | b')' | b'*' | b'+' | b',' | b';' | b'=' | b'%' => true
+  b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z' => true
+  _ => false
+}
+
+// A `Host` value (RFC 9110 section 7.2): `uri-host [ ":" port ]`, the host
+// a `reg-name`, an IPv4 address or an IP-literal in brackets, the port
+// digits. Empty is valid: the target URI has no authority.
+fn is_host(value: Text) -> Bool {
+  let bytes = value.to_bytes()
+  if bytes.is_empty() {
+    return true
+  }
+  var at = 0
+  if bytes.at(0) == b'[' {
+    at = 1
+    while at < bytes.len() && bytes.at(at) != b']' {
+      if !is_reg_name_byte(bytes.at(at)) && bytes.at(at) != b':' {
+        return false
+      }
+      at = at + 1
+    }
+    if at == bytes.len() || at == 1 {
+      return false
+    }
+    at = at + 1
+  } else {
+    while at < bytes.len() && bytes.at(at) != b':' {
+      if !is_reg_name_byte(bytes.at(at)) {
+        return false
+      }
+      at = at + 1
+    }
+    if at == 0 {
+      return false
+    }
+  }
+  if at == bytes.len() {
+    return true
+  }
+  bytes.at(at) == b':' && (at + 1 == bytes.len() || is_digits(bytes.slice(at + 1, bytes.len())))
+}
 
 // `request` once its `Host` is checked: `None` (400) when an HTTP/1.1
 // request has none, when it is repeated or its value is not a host. For an
@@ -890,6 +1249,80 @@ fn parse_head(head: Text) -> Option<Request> satisfies [RFC9112.R2_2_4, RFC9112.
     headers
     body = ""
   })
+}
+
+// Where the request line of a head ends (its CR LF, or the end of the
+// head) and the offsets of its two spaces; `None` unless it has exactly
+// two.
+type RequestLine {
+  end: Int
+  spaces: Option<(Int, Int)>
+}
+
+fn request_line(bytes: Bytes) -> RequestLine {
+  let end = match bytes.index_of(b"\r\n", 0) {
+    Some(at) => at
+    None => bytes.len()
+  }
+  let first = match bytes.index_of(b" ", 0) {
+    Some(at) => at
+    None => end
+  }
+  let second = match bytes.index_of(b" ", first + 1) {
+    Some(at) => at
+    None => end
+  }
+  let third = match bytes.index_of(b" ", second + 1) {
+    Some(at) => at
+    None => end
+  }
+  RequestLine { end, spaces = if second < end && third >= end { Some((first, second)) } else { None } }
+}
+
+// The path and query of the request target at bytes `start` to `end` of
+// `bytes`, an absolute-form target read as its origin form.
+fn target_parts(bytes: Bytes, start: Int, end: Int) -> Option<(Text, Text)> {
+  if scheme_length(bytes, start, end) == 0 {
+    return origin_parts(bytes, start, end)
+  }
+  match absolute_form(bytes.slice(start, end).to_text()) {
+    Some((_, rest)) => origin_parts(rest.to_bytes(), 0, rest.len())
+    None => None
+  }
+}
+
+// The path and query of the origin-form target at bytes `start` to `end`
+// of `bytes`: the path up to the first `?`, which must start with `/`, and
+// the text after it.
+fn origin_parts(bytes: Bytes, start: Int, end: Int) -> Option<(Text, Text)> {
+  if end <= start || bytes.at(start) != b'/' {
+    return None
+  }
+  match bytes.index_of(b"?", start) {
+    Some(at) => if at < end {
+      Some((bytes.slice(start, at).to_text(), bytes.slice(at + 1, end).to_text()))
+    } else {
+      Some((bytes.slice(start, end).to_text(), ""))
+    }
+    None => Some((bytes.slice(start, end).to_text(), ""))
+  }
+}
+
+// The authority of an absolute-form request target in `head`, `None` for
+// an origin-form one, read without copying the request line.
+fn head_authority(head: Text) -> Option<Text> {
+  let bytes = head.to_bytes()
+  match request_line(bytes).spaces {
+    Some((method_end, target_end)) => if scheme_length(bytes, method_end + 1, target_end) == 0 {
+      None
+    } else {
+      match absolute_form(bytes.slice(method_end + 1, target_end).to_text()) {
+        Some((host, _)) => Some(host)
+        None => None
+      }
+    }
+    None => None
+  }
 }
 
 test "tokens, field values and targets" verifies [RFC9110.R5_5_4] {
@@ -1071,6 +1504,14 @@ fn next_request<T: ByteStream>(stream: T, limits: HttpLimits, buffer: Bytes) -> 
       Ok(Got(full, all.slice(head_end + length, all.len())))
     }
   }
+}
+
+// The value of a hexadecimal digit byte, `None` for any other byte.
+fn hex_digit_value(b: Byte) -> Option<Int> = match b {
+  b'0'..=b'9' => Some((b - b'0').to_int())
+  b'a'..=b'f' => Some((b - b'a').to_int() + 10)
+  b'A'..=b'F' => Some((b - b'A').to_int() + 10)
+  _ => None
 }
 
 // What a chunk-size line says (RFC 9112 section 7.1): the size, a size over
