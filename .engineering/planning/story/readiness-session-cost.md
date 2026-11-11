@@ -2,12 +2,15 @@
 format: aep.planning-md/3
 id: story:readiness-session-cost
 kind: story
-status: draft
+status: active
 title: A connection and a session in readiness mode cost no more than a thread did
 relations:
 - informed_by: story:binary-size-back
 - informed_by: story:path-cost-counted-at-every-merge
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-11T18:03:55Z", actor: "human:timo", revision: 2, executor: "agent:claude-coordinator", correlation: "wave-11"}
+- {from: "proposed", to: "active", at: "2026-11-11T18:03:55Z", actor: "human:timo", revision: 3, executor: "agent:claude-coordinator", correlation: "wave-11"}
 ---
 # Story: a connection and a session in readiness mode cost no more than a thread did
 
