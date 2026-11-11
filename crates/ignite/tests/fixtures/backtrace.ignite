@@ -1,0 +1,22 @@
+package dev_backtrace
+
+// Built in dev for both targets by tests/dev_build.rs, which runs it under
+// gdb: the executable `overflow` adds past the range of `Int` in `add` and
+// fails there. The addend comes from the process, so no compiler folds it.
+
+type Overflow {
+  executable: Text
+}
+
+fn add(a: Int, b: Int) -> Int {
+  return a + b
+}
+
+fn Overflow.main(self: Overflow) -> Result<Unit, IoError> {
+  log("sum {add(9223372036854775807, Process.open_files_limit())}")
+  return Ok(Unit)
+}
+
+system Backtrace {
+  component overflow: Overflow { executable = "overflow" }
+}

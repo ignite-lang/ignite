@@ -28,10 +28,12 @@ std/**/*.ignite, program.ignite --parse--> --check--> --type (ignite-types)--> -
 writes `DIR/llvm/{std.ll, program.ll, main_<exe>.ll}`, runs
 `clang -c -O0 -g -ffunction-sections -fdata-sections -Werror=override-module --target=<triple>`
 (`-O2` with `--release`) on each, links each executable with
-`clang -o DIR/bin/<exe> --target=<triple> main_<exe>.o program.o std.o <runtime> -Wl,--gc-sections [-Wl,--strip-debug] -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc`
+`clang -o DIR/bin/<exe> --target=<triple> [-fuse-ld=lld] main_<exe>.o program.o std.o <runtime> -Wl,--gc-sections [-Wl,--strip-debug] -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc`
 (`-Wl,--strip-debug` with `--release` only, as cargo's release profile drops debug
 information; the libraries are the list `cargo rustc -p ignite-rt --print native-static-libs`
-prints, fixed in the driver), and prints `built DIR/bin/<exe>`. Exit statuses as for the Rust
+prints, fixed in the driver; `-fuse-ld=lld` on a build without `--release`, `--triple` and
+`--static` when `ld.lld` lies beside the clang the driver runs, its symbolic links resolved,
+else clang's default linker links), and prints `built DIR/bin/<exe>`. Exit statuses as for the Rust
 target; 2 also when clang fails (its output passed through). `--static` links against musl
 instead, with the kit of start files, `libc.a` and `libunwind.a` and none of these libraries
 (`docs/slice.md` 23).
@@ -44,6 +46,19 @@ runner archive that `task quality` links into row 3.2's LLVM release executables
 it stay within 10 % of v0.15.0's size (story `readiness-binary-size`; overflow checks and
 debug assertions stay on). A release driver's runtime is built in the release profile and is
 unchanged by it.
+
+Dev link (story `build-time-back`, rows 6.2 and 3.2). The linker copies and relocates the
+debug sections of every archive member it loads, and these were 80 % of a dev link's input
+on a host without cargo configuration, whose dev profile has full debug information. The
+dev profile therefore builds every crate from outside the workspace without debug
+information (`[profile.dev.package."*"] debug = false`) and `ignite-rt` and `ignite-io` with
+line tables (`debug = "line-tables-only"`) whatever the profile's own `debug`, and
+`.cargo/config.toml` sets `CFLAGS = "-g0"` for the C and assembly `ring` compiles, whose
+build script asks for `-g3` in every profile (a `CFLAGS` of the environment wins): a backtrace
+still names the files and lines of the Ignite source and of both crates' frames
+(`dev_build::` in `crates/ignite/tests/dev_build.rs`). lld, where it lies beside clang, links
+on all cores and maps the archive instead of reading it section by section; an executable
+it links carries a build id as one GNU ld links does.
 
 LTO (story `llvm-lto-runtime`). A `-linux-gnu` driver carries the runtime twice: the native
 archive and the same archive built with `-Clinker-plugin-lto`, whose Rust code is LLVM

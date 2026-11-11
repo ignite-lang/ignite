@@ -7380,6 +7380,17 @@ fn toml_string(text: &str) -> String {
 const RELEASE_PROFILE: &str =
     "\n[profile.release]\noverflow-checks = true\ncodegen-units = 1\nlto = true\n";
 
+/// The generated crate's dev profile: the crates from outside the project
+/// (`ignite-io` and what it needs: `nix`, `libc`, the scheduler's
+/// coroutines) carry no debug information whatever the profile's own
+/// `debug`, `ignite-io` line tables only, so a backtrace still names its
+/// frames' files and lines; the program and `ignite-std`, members of the
+/// project, keep the profile's. A fresh build compiles them all, and on a
+/// host without cargo configuration full debug information was a third of
+/// the work of compiling `ignite-io` (row 6.2 of `docs/quality.md`, story
+/// `build-time-back`).
+const DEV_PROFILE: &str = "\n[profile.dev.package.\"*\"]\ndebug = false\n\n[profile.dev.package.ignite-io]\ndebug = \"line-tables-only\"\n";
+
 fn cargo_toml(
     package_name: &str,
     lib_rs: &str,
@@ -7400,6 +7411,7 @@ fn cargo_toml(
     out.push_str("edition = \"2024\"\n");
     out.push_str("\n[workspace]\n");
     out.push_str(RELEASE_PROFILE);
+    out.push_str(DEV_PROFILE);
     out.push_str("\n[lib]\n");
     let lib = crate_name(package_name);
     if lib != package_name.replace('-', "_") {
