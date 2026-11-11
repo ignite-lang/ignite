@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-11T05:43:40Z",
+  "actor": "human:timo",
+  "artifact": "story:eval-substrate-model",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "coordinator run on 47ce752f (wave/11-eval): cargo test -p ignite-eval exit 0 (3 + 24 passed); cargo test -p ignite --test main -- eval_model eval:: differential::the_evaluator: 25 passed, 0 failed, 1 ignored; IGNITE_DIFFERENTIAL_SLOW=1 differential::corpus: 883 units, 4 LLVM differences, 2 evaluator differences, 153 the evaluator cannot run, refused only on the two eval_slow entries and the improved bars 1.1, 1.2, 1.6, 4.3 of eval; static metrics refused only on 7.2 improved to 26; fmt and clippy exit 0"
+  }
+}

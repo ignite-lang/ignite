@@ -165,10 +165,7 @@
     "std/tls.ignite::authorities without a certificate are refused": "builtin `TcpListenerBind` has no value at compile time",
     "std/tls.ignite::the handshake deadline bounds a server that never answers": "builtin `TcpListenerBind` has no value at compile time"
   },
-  "eval_slow": {
-    "crates/ignite/tests/fixtures/slice16/moves_scale.ignite::200000 steps through a call": "value-semantics copies make the evaluator quadratic here (50,000 steps measured 185 s); story:quality-ratchet, 2026-11-07: run by task quality only, with the 60 s limit",
-    "crates/ignite/tests/fixtures/slice16/moves_scale.ignite::50000 steps through a call": "value-semantics copies make the evaluator quadratic here (50,000 steps measured 185 s); story:quality-ratchet, 2026-11-07: run by task quality only, with the 60 s limit"
-  },
+  "eval_slow": {},
   "intermittent_decisions": {
     "crates/ignite/tests/fixtures/tests/store_load.ignite::values under updates of one shard: every id, values grow, no long wait, no lost write": "story:llvm-store-update-off-lock, 2026-11-07: the 500 ms wait assertion fails on LLVM at load 35 to 39, also when run alone, and passes at lower load"
   },
