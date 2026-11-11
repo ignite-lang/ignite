@@ -443,3 +443,52 @@ fn design_file_properties_evaluate_within_default_fuel() {
     );
     assert!(most.0 < Fuel::DEFAULT_LIMIT / 10, "{most:?}");
 }
+
+/// The handle methods the evaluator's model of a test runs (stores,
+/// settings, the command line, the environment, pipes, channels) have no
+/// value outside a test: called with no model, as in a constant or a plan,
+/// each is refused with the text of the arm `story:duplicated-rules-back`
+/// deleted, `builtin `X` has no value at compile time`.
+#[test]
+fn a_model_method_outside_a_test_has_no_value_at_compile_time() {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("eval-model-methods");
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("model_methods.ignite");
+    std::fs::write(
+        &file,
+        "package model_methods\n\n\
+         fn next(store: Store<Int>) -> Int = store.next_id()\n\n\
+         fn values(store: Store<Int>) -> List<Int> = store.values()\n\n\
+         fn value(setting: Setting) -> Text = setting.value()\n\n\
+         fn arguments(command_line: CommandLine) -> List<Text> = command_line.arguments()\n\n\
+         fn get(environment: Environment) -> Option<Text> = environment.get(\"HOME\")\n\n\
+         fn batches(pipe: PipeStream) -> Int = pipe.received_batches()\n\n\
+         fn send(sender: Sender<Int>) -> Bool = sender.send(1)\n\n\
+         fn closed(receiver: Receiver<Int>) -> Bool = receiver.closed()\n",
+    )
+    .unwrap();
+    let loaded = ignite::load(&file, None).unwrap_or_else(|e| panic!("{e}"));
+    let modules = loaded.modules();
+    let mut evaluator = Evaluator::new(&modules, Fuel::default());
+    for (name, builtin) in [
+        ("next", "StoreNextId"),
+        ("values", "StoreValues"),
+        ("value", "SettingValue"),
+        ("arguments", "CommandLineArguments"),
+        ("get", "EnvironmentGet"),
+        ("batches", "PipeStreamReceivedBatches"),
+        ("send", "SenderSend"),
+        ("closed", "ReceiverClosed"),
+    ] {
+        let member = Value::Member {
+            system: "S".to_string(),
+            member: "m".to_string(),
+        };
+        let report = failed(call(&mut evaluator, "model_methods", name, vec![member]));
+        assert_eq!(
+            report,
+            format!("evaluation failed: builtin `{builtin}` has no value at compile time"),
+            "{name}"
+        );
+    }
+}
