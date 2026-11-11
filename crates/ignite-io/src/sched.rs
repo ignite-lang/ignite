@@ -1117,23 +1117,14 @@ static PREVIOUS: OnceLock<[nix::sys::signal::SigAction; 2]> = OnceLock::new();
 /// Install [`on_fault`] for `SIGSEGV` and `SIGBUS` once, keeping the
 /// handlers before it for every fault outside a task's guard page.
 fn install_overflow_handler() {
-    use nix::sys::signal::{SaFlags, SigAction, SigHandler, SigSet, Signal, sigaction};
+    use crate::signal::{Disposition, dispose};
+    use nix::sys::signal::Signal;
     static INSTALL: Once = Once::new();
     INSTALL.call_once(|| {
-        let ours = SigAction::new(
-            SigHandler::SigAction(on_fault),
-            SaFlags::SA_ONSTACK | SaFlags::SA_SIGINFO,
-            SigSet::empty(),
-        );
-        // SAFETY: `on_fault` is async-signal-safe: it reads a `const`
-        // thread-local cell, writes to stderr with `write`, aborts, or
-        // hands the signal to the handler that was installed before.
-        let previous = unsafe {
-            [
-                sigaction(Signal::SIGSEGV, &ours),
-                sigaction(Signal::SIGBUS, &ours),
-            ]
-        };
+        let previous = [
+            dispose(Signal::SIGSEGV, Disposition::Overflow),
+            dispose(Signal::SIGBUS, Disposition::Overflow),
+        ];
         if let [Ok(segv), Ok(bus)] = previous {
             let _ = PREVIOUS.set([segv, bus]);
         }
@@ -1178,9 +1169,19 @@ fn alternate_signal_stack() {
     }
 }
 
-/// The `SIGSEGV` and `SIGBUS` handler (module docs).
-extern "C" fn on_fault(signal: i32, info: *mut nix::libc::siginfo_t, context: *mut c_void) {
-    use nix::sys::signal::{SaFlags, SigAction, SigHandler, SigSet, Signal, sigaction};
+/// The `SIGSEGV` and `SIGBUS` handler (module docs). Async-signal-safe,
+/// which `crate::signal::dispose` relies on: it reads a `const`
+/// thread-local cell, writes to stderr with `write`, aborts, hands the
+/// signal to the handler that was installed before, or restores the
+/// default action with `dispose`, which allocates nothing and takes no
+/// lock.
+pub(crate) extern "C" fn on_fault(
+    signal: i32,
+    info: *mut nix::libc::siginfo_t,
+    context: *mut c_void,
+) {
+    use crate::signal::{Disposition, dispose};
+    use nix::sys::signal::{SigHandler, Signal};
     // SAFETY: the kernel passes a valid `siginfo_t` to a handler installed
     // with `SA_SIGINFO`; `si_addr` is defined for SIGSEGV and SIGBUS.
     let address = unsafe { (*info).si_addr() } as usize;
@@ -1195,11 +1196,10 @@ extern "C" fn on_fault(signal: i32, info: *mut nix::libc::siginfo_t, context: *m
         Some(SigHandler::SigAction(previous)) => previous(signal, info, context),
         Some(SigHandler::Handler(previous)) => previous(signal),
         _ => {
-            let default = SigAction::new(SigHandler::SigDfl, SaFlags::empty(), SigSet::empty());
             if let Ok(signal) = Signal::try_from(signal) {
-                // SAFETY: restoring the default action is async-signal-safe;
-                // the fault repeats on return and ends the process with it.
-                let _ = unsafe { sigaction(signal, &default) };
+                // The fault repeats on return and ends the process with
+                // the default action.
+                let _ = dispose(signal, Disposition::Default);
             }
         }
     }
