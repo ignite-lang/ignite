@@ -24,13 +24,18 @@ fn fixture(name: &str) -> PathBuf {
 /// and checked. Tests running at once write the same text; each writes a
 /// file of its own and renames it into place.
 fn program(name: &str, source: &str) -> ignite::Loaded {
+    load(&write(name, source))
+}
+
+/// The path `source` is written to as `<name>.ignite`.
+fn write(name: &str, source: &str) -> PathBuf {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("eval_model");
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join(format!("{name}.ignite"));
     let own = dir.join(format!("{name}.{:?}.tmp", std::thread::current().id()));
     std::fs::write(&own, source).unwrap();
     std::fs::rename(&own, &path).unwrap();
-    load(&path)
+    path
 }
 
 fn load(path: &Path) -> ignite::Loaded {
@@ -170,6 +175,38 @@ fn outside_a_test_a_store_has_no_value() {
     );
 }
 
+const COMPILE_TIME: &str = r#"package model.compile_time
+
+type Holder {
+  size: Int
+}
+
+fn sized() -> Int {
+  let ends: (Sender<Int>, Receiver<Int>) = Channel.bounded(1)
+  1
+}
+
+system S {
+  component h: Holder { size = sized() }
+}
+"#;
+
+/// `ignite check` and the model `ignite plan` builds evaluate a property
+/// at compile time, where the model of a test is not there: a property
+/// that reaches `Channel.bounded` still has no value (E117).
+#[test]
+fn check_and_plan_still_find_no_value_at_compile_time() {
+    let path = write("compile_time", COMPILE_TIME);
+    let refusal = "builtin `ChannelBounded` has no value at compile time";
+    let checked = ignite::check(&path).expect_err("check evaluates the property");
+    assert!(checked.to_string().contains(refusal), "{checked}");
+    let loaded = ignite::load(&path, None).unwrap_or_else(|e| panic!("{e}"));
+    let planned = loaded
+        .model(&ignite::PlanOptions::default())
+        .expect_err("plan evaluates the property");
+    assert!(planned.to_string().contains(refusal), "{planned}");
+}
+
 const CAPABILITIES: &str = r#"package model.capabilities
 
 test "a test's capabilities give what they were made of" {
@@ -196,4 +233,75 @@ fn a_test_capability_gives_what_it_was_made_of() {
         run(&loaded, "a test's capabilities give what they were made of"),
         Ok(())
     );
+}
+
+const PIPES: &str = r#"package model.pipes
+
+import std.net.{Pipe, PipeStream}
+import std.io.IoError
+
+type IoResult<T> = Result<T, IoError>
+
+test "a pipe delivers a task's writes at its flush points, one batch each" {
+  let (a, b) = Pipe.pair()
+  a.write_all(b"he")?
+  a.write_all(b"llo")?
+  assert b.received_batches() == 0
+  assert b.read(3)? == Data(b"hel")
+  assert b.received_batches() == 1
+  assert b.read(100)? == Data(b"lo")
+  a.write_all(b"x")?
+  Process.flush()
+  a.write_all(b"y")?
+  a.close()?
+  assert b.received_batches() == 3
+  assert b.read(10)? == Data(b"xy")
+  assert b.read(10)? == Eof
+  assert failed(a.write_all(b"z")) == "write to a closed stream"
+}
+
+test fn failed(result: IoResult<Unit>) -> Text = match result {
+  Ok(_) => "no error"
+  Err(e) => e.message
+}
+
+test fn read_failed(result: IoResult<Input>) -> Text = match result {
+  Ok(_) => "no error"
+  Err(e) => e.message
+}
+
+test "an idle timeout reads as the end of the stream in virtual time" {
+  let (a, b) = Pipe.pair()
+  a.set_idle_timeout(50)?
+  assert a.read(1)? == Eof
+  b.write_urgent(b"ab")?
+  assert a.urgent_pending()?
+  assert a.read(10)? == Data(b"a")
+  assert a.read(10)? == Data(b"b")
+  assert !a.urgent_pending()?
+}
+
+test "a dropped end ends its peer's stream" {
+  let (a, _) = Pipe.pair()
+  a.write_all(b"z")?
+  Process.flush()
+  assert read_failed(a.read(1)) == "pipe peer is gone"
+  assert a.read(1)? == Eof
+}
+"#;
+
+/// `Pipe.pair()` under a test: writes wait in the send buffer until a flush
+/// point (a read, `Process.flush()`, `close`), each delivery one batch
+/// (`received_batches`), an idle timeout ends a read in virtual time, the
+/// urgent byte stops a read, and a dropped end ends its peer's stream.
+#[test]
+fn a_pipe_delivers_at_flush_points() {
+    let loaded = program("pipes", PIPES);
+    for test in [
+        "a pipe delivers a task's writes at its flush points, one batch each",
+        "an idle timeout reads as the end of the stream in virtual time",
+        "a dropped end ends its peer's stream",
+    ] {
+        assert_eq!(run(&loaded, test), Ok(()), "{test}");
+    }
 }

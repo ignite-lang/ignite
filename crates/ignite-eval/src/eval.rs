@@ -2510,6 +2510,17 @@ impl<'p> Evaluator<'p> {
                     .ok_or_else(|| internal("missing argument"))?;
                 Ok(Value::Handle(world.capability(kind, value).map_err(over)?))
             }
+            Builtin::PipePair => {
+                let (first, second) = world.pipe_pair().map_err(over)?;
+                Ok(Value::Tuple(vec![
+                    Value::Handle(first),
+                    Value::Handle(second),
+                ]))
+            }
+            Builtin::ProcessFlush => {
+                world.flush().map_err(over)?;
+                Ok(Value::Unit)
+            }
             other => Err(internal(format!(
                 "builtin `{other:?}` has no value at compile time"
             ))),
@@ -2613,11 +2624,68 @@ impl<'p> Evaluator<'p> {
                 });
                 Ok(Value::option(found))
             }
+            (Builtin::PipeStreamRead | Builtin::StreamRead, HandleKind::PipeStream) => {
+                let maximum = int(next()?)?;
+                let deadline = match world.read_start(id).map_err(over)? {
+                    Ok(deadline) => deadline,
+                    Err(message) => return Ok(io_failed(message)),
+                };
+                loop {
+                    match world.read_try(id, maximum, deadline).map_err(over)? {
+                        Some(Read::Data(bytes)) => {
+                            self.alloc(bytes.len() as u64 + 2)?;
+                            return Ok(Value::ok(input("Data", vec![Value::bytes(&bytes)])));
+                        }
+                        Some(Read::Eof) => return Ok(Value::ok(input("Eof", Vec::new()))),
+                        None => self.wait_on(world, Wait::Read(id), deadline)?,
+                    }
+                }
+            }
+            (Builtin::PipeStreamWriteAll | Builtin::StreamWriteAll, HandleKind::PipeStream) => {
+                let data = data_of(next()?)?;
+                Ok(io_unit(world.write(id, &data).map_err(over)?))
+            }
+            (
+                Builtin::PipeStreamWriteUrgent | Builtin::StreamWriteUrgent,
+                HandleKind::PipeStream,
+            ) => {
+                let data = data_of(next()?)?;
+                Ok(io_unit(world.write_urgent(id, &data).map_err(over)?))
+            }
+            (Builtin::PipeStreamClose | Builtin::StreamClose, HandleKind::PipeStream) => {
+                Ok(io_unit(world.close(id).map_err(over)?))
+            }
+            (
+                Builtin::PipeStreamSetIdleTimeout | Builtin::StreamSetIdleTimeout,
+                HandleKind::PipeStream,
+            ) => {
+                let ms = int(next()?)?;
+                world.set_idle_timeout(id, ms).map_err(over)?;
+                Ok(Value::ok(Value::Unit))
+            }
+            (
+                Builtin::PipeStreamUrgentPending | Builtin::StreamUrgentPending,
+                HandleKind::PipeStream,
+            ) => Ok(Value::ok(Value::Bool(
+                world.urgent_pending(id).map_err(over)?,
+            ))),
+            (Builtin::PipeStreamReceivedBatches, HandleKind::PipeStream) => {
+                Ok(Value::Int(world.received_batches(id).map_err(over)?))
+            }
             (builtin, kind) => Err(internal(format!(
                 "builtin `{builtin:?}` on a `{}` has no value in the model",
                 kind.name()
             ))),
         }
+    }
+
+    /// Block this task of `world` on `wait` until it is ready or the
+    /// virtual time reaches `deadline`; the fuel left goes with the turn.
+    fn wait_on(&mut self, world: &World, wait: Wait, deadline: Option<i64>) -> Eval<()> {
+        let mut units = self.units_left;
+        world.block(wait, deadline, &mut units).map_err(over)?;
+        self.units_left = units;
+        Ok(())
     }
 
     // ---- failure reports (14.8) -----------------------------------------
@@ -2670,11 +2738,49 @@ fn over(_: Over) -> Flow {
     internal("the test is over")
 }
 
+/// `Err(IoError(message))`, exit code 1 as `IoError.new` gives.
+fn io_failed(message: String) -> Value {
+    Value::err(Value::IoError {
+        message,
+        exit_code: 1,
+    })
+}
+
+/// The `Result<Unit, IoError>` of a model operation.
+fn io_unit(done: Result<(), String>) -> Value {
+    match done {
+        Ok(()) => Value::ok(Value::Unit),
+        Err(message) => io_failed(message),
+    }
+}
+
+/// The `Input` variant `variant`.
+fn input(variant: &str, fields: Vec<Value>) -> Value {
+    Value::Enum {
+        name: QualName::builtin("Input"),
+        variant: variant.to_string(),
+        fields,
+    }
+}
+
+/// The bytes of a `Bytes` value.
+fn data_of(value: Value) -> Eval<Vec<u8>> {
+    match value {
+        Value::List(items) => bytes_of(&items),
+        other => Err(internal(format!("`{}` is not Bytes", other.debug_text()))),
+    }
+}
+
 /// The statics that have a value in the model of a test (33.5).
 fn is_model_static(builtin: Builtin) -> bool {
     matches!(
         builtin,
-        Builtin::StoreNew | Builtin::SettingOf | Builtin::CommandLineOf | Builtin::EnvironmentOf
+        Builtin::StoreNew
+            | Builtin::SettingOf
+            | Builtin::CommandLineOf
+            | Builtin::EnvironmentOf
+            | Builtin::PipePair
+            | Builtin::ProcessFlush
     )
 }
 
@@ -2692,6 +2798,19 @@ fn is_model_method(builtin: Builtin) -> bool {
             | Builtin::SettingValue
             | Builtin::CommandLineArguments
             | Builtin::EnvironmentGet
+            | Builtin::PipeStreamRead
+            | Builtin::PipeStreamWriteAll
+            | Builtin::PipeStreamWriteUrgent
+            | Builtin::PipeStreamClose
+            | Builtin::PipeStreamSetIdleTimeout
+            | Builtin::PipeStreamUrgentPending
+            | Builtin::PipeStreamReceivedBatches
+            | Builtin::StreamRead
+            | Builtin::StreamWriteAll
+            | Builtin::StreamWriteUrgent
+            | Builtin::StreamClose
+            | Builtin::StreamSetIdleTimeout
+            | Builtin::StreamUrgentPending
     )
 }
 
