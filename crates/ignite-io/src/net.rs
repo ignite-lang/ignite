@@ -343,16 +343,33 @@ pub(crate) fn lock_until<T>(held: &Lock<T>, deadline: Instant) -> Option<LockGua
     }
 }
 
+/// The largest pending list [`flush`] gives back to its task: a
+/// connection's task writes to its one stream between flushes, and the
+/// list's first allocation already holds 4; 8 leaves room for a task that
+/// relays between a few streams. A larger list is dropped, so a task that
+/// wrote to many streams once does not keep it (128 bytes at most kept).
+const KEPT_PENDING: usize = 8;
+
 /// Send everything the current task wrote and has not sent yet, to
 /// sockets and to pipes. A failed send is kept with its stream and
-/// reported by the stream's next `read`, `write_all` or `close`.
+/// reported by the stream's next `read`, `write_all` or `close`. The
+/// emptied list goes back to the task while it is small ([`KEPT_PENDING`]),
+/// unless the task registered a stream meanwhile, so that its next write
+/// does not allocate a list again (an allocation per reply of a server,
+/// `story:http-reply-cost-back`).
 pub fn flush() {
-    let pending = PENDING
+    let mut pending = PENDING
         .try_with(|pending| std::mem::take(&mut pending.borrow_mut().0))
         .unwrap_or_default();
-    for stream in pending.into_iter().filter_map(|weak| weak.upgrade()) {
+    for stream in pending.drain(..).filter_map(|weak| weak.upgrade()) {
         stream.flush_kept();
     }
+    let _ = PENDING.try_with(|list| {
+        let mut list = list.borrow_mut();
+        if list.0.is_empty() && pending.capacity() <= KEPT_PENDING {
+            std::mem::swap(&mut list.0, &mut pending);
+        }
+    });
 }
 
 impl Stream {
@@ -1122,6 +1139,39 @@ mod tests {
     use std::os::fd::AsRawFd;
 
     use super::transient;
+
+    /// `flush` gives a small pending list back to the task, so a reply's
+    /// write allocates none, and drops a large one, so a task that wrote
+    /// to many streams once does not keep the list at that size until it
+    /// ends (adversary F2 on `story:http-reply-cost-back`: 10,000 pipe
+    /// pairs left 16,384 slots of 16 bytes). Counted as the capacity of
+    /// the running thread's list after the flush.
+    #[test]
+    fn a_flush_keeps_a_small_pending_list_and_drops_a_large_one() {
+        use std::sync::Weak;
+        for (written, kept) in [(1, true), (super::KEPT_PENDING, true), (10_000, false)] {
+            super::PENDING.with(|pending| {
+                let list = &mut pending.borrow_mut().0;
+                for _ in 0..written {
+                    let gone: Weak<dyn super::Buffered> = Weak::<super::Stream>::new();
+                    list.push(gone);
+                }
+            });
+            super::flush();
+            let capacity = super::PENDING.with(|pending| pending.borrow().0.capacity());
+            if kept {
+                assert!(
+                    (written..=super::KEPT_PENDING).contains(&capacity),
+                    "{written} streams written: a list of {capacity} kept"
+                );
+            } else {
+                assert_eq!(
+                    capacity, 0,
+                    "{written} streams written: a list of {capacity} kept"
+                );
+            }
+        }
+    }
 
     #[test]
     fn descriptor_and_memory_shortages_are_transient() {
