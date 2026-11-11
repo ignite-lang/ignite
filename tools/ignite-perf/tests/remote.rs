@@ -395,3 +395,95 @@ fn the_host_runs_both_trees_interleaved_after_a_discarded_warm_up() {
     };
     assert_eq!((args.passes, args.check_runs, args.build_runs), (3, 15, 3));
 }
+
+/// A release row is refused beyond the tolerance (as before), and also within it when HEAD's
+/// median is worse and every HEAD sample is worse than every BASE sample: then the difference
+/// is shown, not noise. Overlapping samples leave the decision to the tolerance; a row with one
+/// sample each is refused on any worse value. Both directions.
+#[test]
+fn a_row_worse_in_every_sample_is_refused_within_the_tolerance() {
+    let baseline = Json::parse(
+        r#"{"metrics": {"6.2": {"direction": "lower", "tolerance": "10%"}, "3.3": {"direction": "higher", "tolerance": "10%", "unit": "permille"}}}"#,
+    )
+    .unwrap();
+    let refused = |row: Row| remote::refusals(&baseline, &[row]).unwrap();
+
+    let base = [1000, 1004, 1008, 1002, 1006];
+    let disjoint = refused(row("6.2", "rust", &base, &[1030, 1034, 1038, 1032, 1036]));
+    assert!(
+        disjoint.len() == 1
+            && disjoint[0].starts_with("6.2 rust: 1004 ms at the base, 1034 ms now")
+            && disjoint[0].contains("every sample"),
+        "+3 % with disjoint samples was not refused: {disjoint:?}"
+    );
+    let overlap = refused(row("6.2", "rust", &base, &[1000, 1034, 1038, 1032, 1036]));
+    assert!(
+        overlap.is_empty(),
+        "+3 % with overlapping samples was refused: {overlap:?}"
+    );
+    let one = refused(row("6.2", "rust", &[100], &[101]));
+    assert_eq!(one.len(), 1, "one sample one unit worse: {one:?}");
+    assert!(refused(row("6.2", "rust", &[100], &[100])).is_empty());
+    assert!(refused(row("6.2", "rust", &base, &base)).is_empty());
+    assert!(refused(row("6.2", "rust", &[101], &[100])).is_empty());
+
+    let base = [1000, 996, 992, 998, 994];
+    let lower = refused(row(
+        "3.3",
+        "llvm/todo/get-1",
+        &base,
+        &[970, 966, 962, 968, 964],
+    ));
+    assert!(
+        lower.len() == 1
+            && lower[0].starts_with("3.3 llvm/todo/get-1: 0.996× at the base, 0.966× now")
+            && lower[0].contains("every sample"),
+        "−3 % of a higher-is-better row with disjoint samples was not refused: {lower:?}"
+    );
+    let overlap = refused(row(
+        "3.3",
+        "llvm/todo/get-1",
+        &base,
+        &[1000, 966, 962, 968, 964],
+    ));
+    assert!(overlap.is_empty(), "{overlap:?}");
+    let one = refused(row("3.3", "llvm/todo/get-1", &[900], &[899]));
+    assert_eq!(one.len(), 1, "one sample one unit worse: {one:?}");
+    assert!(refused(row("3.3", "llvm/todo/get-1", &[900], &[900])).is_empty());
+    assert!(refused(row("3.3", "llvm/todo/get-1", &[900], &[901])).is_empty());
+}
+
+/// The dedicated host takes five samples (passes) of each tree by default, so two equal builds
+/// have disjoint samples by chance in 1 of 252 runs (C(10, 5)), not 1 of 20 (C(6, 3)).
+#[test]
+fn the_host_takes_five_samples_of_each_tree() {
+    let Mode::QualityRemote(remote_args) = Cli::try_parse_from([
+        "ignite-perf",
+        "quality-remote",
+        "--base",
+        "a",
+        "--head",
+        "b",
+    ])
+    .unwrap()
+    .mode
+    else {
+        panic!("quality-remote");
+    };
+    let Mode::QualityHost(host_args) =
+        Cli::try_parse_from(["ignite-perf", "quality-host", "--root", "/q"])
+            .unwrap()
+            .mode
+    else {
+        panic!("quality-host");
+    };
+    assert_eq!((remote_args.passes, host_args.passes), (5, 5));
+    let measured = remote::schedule(remote_args.passes);
+    let count = |tree: &str| {
+        measured
+            .iter()
+            .filter(|(t, pass)| *t == tree && *pass > 0)
+            .count()
+    };
+    assert_eq!((count("base"), count("head")), (5, 5));
+}

@@ -14,8 +14,8 @@
 //! On the host: the trees of BASE and HEAD (`git archive`), each with its compiler and runtime
 //! built, and a third tree, the commit of the checkout running the mode, whose `ignite-perf`
 //! runs `quality --timing-only` over each tree (so BASE and HEAD may predate this mode): one
-//! discarded warm-up of HEAD, then `--passes` passes in ABBA order (base, head; head, base;
-//! …). The values are fetched, the instance terminated, and the mode checks by the run tag
+//! discarded warm-up of HEAD, then `--passes` passes (default 5) in ABBA order (base, head;
+//! head, base; …). The values are fetched, the instance terminated, and the mode checks by the run tag
 //! that no instance, security group or key pair is left; any one left is an error. The
 //! instance, group and key pair are cleaned up on every exit path: success, failure and an
 //! interrupt (SIGINT, SIGTERM, SIGHUP; the commands it starts run in their own process
@@ -27,7 +27,8 @@
 //! BASE's median as `base_value`. The record names no instance, account or zone. With
 //! `--run vX.Y.Z` the run is a release: a row whose HEAD median is worse than BASE's (the last
 //! release, measured on the same host in the same run) beyond the metric's tolerance in
-//! `quality/baseline.json` refuses it, and the records are labelled `run`.
+//! `quality/baseline.json`, or worse in every pass than every pass of BASE, refuses it, and the
+//! records are labelled `run`.
 //!
 //! `--dry-run` makes the read-only calls, makes every call that creates with EC2's
 //! `--dry-run` (the answer `DryRunOperation` is success) and prints the rest without making
@@ -85,7 +86,7 @@ pub struct RemoteArgs {
     #[arg(long, default_value_t = 3.0)]
     pub max_hours: f64,
     /// Measured passes of each tree after the warm-up, interleaved ABBA.
-    #[arg(long, default_value_t = 3)]
+    #[arg(long, default_value_t = 5)]
     pub passes: usize,
     #[arg(long, default_value_t = 15)]
     pub check_runs: usize,
@@ -295,7 +296,7 @@ pub struct HostArgs {
     /// The directory holding the trees `base` and `head`; `out` and `work` are made in it.
     #[arg(long)]
     pub root: PathBuf,
-    #[arg(long, default_value_t = 3)]
+    #[arg(long, default_value_t = 5)]
     pub passes: usize,
     #[arg(long, default_value_t = 15)]
     pub check_runs: usize,
@@ -1603,7 +1604,11 @@ pub fn shown(value: i64, unit: &str) -> String {
 }
 
 /// The refusals of a release: a row whose HEAD median is worse than BASE's beyond the
-/// tolerance of its metric in `baseline` (`quality/baseline.json`).
+/// tolerance of its metric in `baseline` (`quality/baseline.json`), or worse by any amount when
+/// every HEAD sample is worse than every BASE sample (a row of one sample each: any worse value).
+/// The tolerance is a bound on noise only: where the samples overlap the difference is not
+/// shown and the tolerance decides; where they do not, the row is worse. No `decision` holds a
+/// row for a release.
 pub fn refusals(baseline: &Json, rows: &[Row]) -> R<Vec<String>> {
     let mut out = Vec::new();
     for row in rows {
@@ -1625,15 +1630,27 @@ pub fn refusals(baseline: &Json, rows: &[Row]) -> R<Vec<String>> {
             }
             _ => 0,
         };
-        let worse = match direction {
-            "lower" => head > base + slack,
-            "higher" => head < base - slack,
+        let (heads, bases) = (row.head.iter(), row.base.iter());
+        let (beyond, apart) = match direction {
+            "lower" => (
+                head > base + slack,
+                head > base && matches!((heads.min(), bases.max()), (Some(h), Some(b)) if h > b),
+            ),
+            "higher" => (
+                head < base - slack,
+                head < base && matches!((heads.max(), bases.min()), (Some(h), Some(b)) if h < b),
+            ),
             other => return Err(format!("{}: direction {other:?}", row.metric)),
         };
-        if worse {
+        if beyond || apart {
             let unit = metric.field("unit").as_str().unwrap_or("ms");
+            let shown_apart = if beyond {
+                ""
+            } else {
+                "; every sample worse than every sample of the base"
+            };
             out.push(format!(
-                "{} {}: {} at the base, {} now ({direction}, {})",
+                "{} {}: {} at the base, {} now ({direction}, {}{shown_apart})",
                 row.metric,
                 row.target,
                 shown(base, unit),
