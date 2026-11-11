@@ -1213,6 +1213,98 @@ fn close<T: ByteStream>(client: Client<T>, statement: Statement) -> Outcome<Unit
   Ok(())
 }
 
+// Runs `sql` once with `parameters` for its `?` marks: prepares it,
+// executes it and closes the statement.
+fn execute_once<T: ByteStream>(client: Client<T>, sql: Text, parameters: List<Option<MysqlValue>>) -> Outcome<ResultSet> {
+  let statement = prepare(client, sql)?
+  let outcome = execute(client, statement, parameters)
+  match outcome {
+    Ok(_) => close(client, statement)?
+    Err(error) => {
+      if reusable(error) {
+        close(client, statement)?
+      }
+    }
+  }
+  outcome
+}
+
+// ---- several connections ----------------------------------------------------
+
+// Connections of one server for the tasks of a program. A connection
+// carries one statement at a time, so each caller takes one out, uses it
+// and puts it back; `pool_query` and `pool_execute` do the three. A caller
+// waits up to `wait` for a free connection.
+type Pool<T> {
+  idle: Sender<Client<T>>
+  free: Receiver<Client<T>>
+  wait: Duration
+}
+
+// A pool of `clients`, which holds as many connections as it starts with
+// (one when it starts empty).
+fn pool_of<T: ByteStream>(clients: List<Client<T>>, wait: Duration) -> Pool<T> {
+  let (idle, free) = Channel.bounded(if clients.is_empty() { 1 } else { clients.len() })
+  for client in clients {
+    _ = idle.try_send(client)
+  }
+  Pool { idle, free, wait }
+}
+
+// Takes a connection out of `pool`: `NoConnection` when none is free
+// within the pool's wait.
+fn checkout<T: ByteStream>(pool: Pool<T>) -> Outcome<Client<T>> = match pool.free.receive_within(pool.wait) {
+  Some(client) => Ok(client)
+  None => Err(NoConnection)
+}
+
+// Puts `client` into `pool`: a connection taken out before, or a new one
+// in the place of one that failed. A pool that is full quits it.
+fn checkin<T: ByteStream>(pool: Pool<T>, client: Client<T>) -> Unit {
+  if !pool.idle.try_send(client) {
+    _ = quit(client)
+  }
+}
+
+// `outcome` of a call on `client`, which goes back into `pool` unless the
+// call failed in a way that closed it: a failed connection is out of the
+// pool.
+fn release<T: ByteStream, R>(pool: Pool<T>, client: Client<T>, outcome: Outcome<R>) -> Outcome<R> {
+  match outcome {
+    Ok(_) => checkin(pool, client)
+    Err(error) => {
+      if reusable(error) {
+        checkin(pool, client)
+      }
+    }
+  }
+  outcome
+}
+
+// `query` on a connection of `pool`.
+fn pool_query<T: ByteStream>(pool: Pool<T>, sql: Text) -> Outcome<ResultSet> {
+  let client = checkout(pool)?
+  release(pool, client, query(client, sql))
+}
+
+// `execute_once` on a connection of `pool`.
+fn pool_execute<T: ByteStream>(pool: Pool<T>, sql: Text, parameters: List<Option<MysqlValue>>) -> Outcome<ResultSet> {
+  let client = checkout(pool)?
+  release(pool, client, execute_once(client, sql, parameters))
+}
+
+// Quits the connections of `pool` that are free now.
+fn quit_idle<T: ByteStream>(pool: Pool<T>) -> Unit {
+  loop {
+    match pool.free.receive_within(0 ms) {
+      Some(client) => {
+        _ = quit(client)
+      }
+      None => break
+    }
+  }
+}
+
 // ---- tests ------------------------------------------------------------------
 
 // A connected pair of pipe ends; each gives up on a peer silent for 5 s,
@@ -2178,4 +2270,111 @@ test "a server error answers execute and keeps the connection; close sends the s
   assert ping(client) == Ok(())
   assert quit(client) == Ok(())
   assert counts.receive() == Some(1 + 4)
+}
+
+// ---- tests: several connections ----------------------------------------------
+
+// The reply to `SELECT 1`: one BIGINT column, one row.
+test fn one_row() -> Bytes = reply([b"\x01", column_of("1", 8, 2, 129, 63, 0), eof(), text_row([Some(b"1")]), eof()])
+
+test fn is_one(outcome: Outcome<ResultSet>) -> Bool = match outcome {
+  Ok(result) => result.rows == [[Some(Int(1))]]
+  Err(_) => false
+}
+
+test fn none_free<T: ByteStream>(pool: Pool<T>) -> Bool = match checkout(pool) {
+  Err(NoConnection) => true
+  _ => false
+}
+
+test fn asks(pool: Pool<PipeStream>, done: Sender<Bool>) -> Result<Unit, IoError> {
+  done.send(is_one(pool_query(pool, "SELECT 1")))
+  Ok(())
+}
+
+test "a pool hands each connection to one caller at a time and waits no longer than its wait" {
+  let first = session([(frames(b"\x0e", 0), ok_packet(1)), (frames(b"\x01", 0), Bytes.empty())])?
+  let second = session([(frames(b"\x0e", 0), err_packet(1, 1053, "08S01", "Server shutdown in progress"))])?
+  let pool = pool_of([first, second], 50 ms)
+  let a = checkout(pool)?
+  let b = checkout(pool)?
+  assert none_free(pool)
+  assert describe(NoConnection) == "no connection of the pool was free in time"
+  assert ping(a) == Ok(())
+  assert ping(b) == Err(Server(ServerError { code = 1053, sql_state = "08S01", message = "Server shutdown in progress" }))
+  checkin(pool, a)
+  let again = checkout(pool)?
+  assert none_free(pool)
+  checkin(pool, again)
+  checkin(pool, b)
+  // A pool that is full quits the connection it is handed.
+  let third = session([(frames(b"\x01", 0), Bytes.empty())])?
+  checkin(pool, third)
+  assert shut(third)
+  quit_idle(pool)
+  assert shut(a) && shut(b)
+  assert none_free(pool)
+}
+
+test "a pooled statement returns its connection after a result and after a server error, and a failed connection is taken out" {
+  let client = session([
+    (command(3, "SELECT 1"), one_row()),
+    (command(3, "SELEC"), reply([err_payload(1064, "42000", "near 'SELEC'")])),
+    (command(3, "SELECT 1"), frames(b"\x01", 5))
+  ])?
+  let pool = pool_of([client], 50 ms)
+  assert is_one(pool_query(pool, "SELECT 1"))
+  assert pool_query(pool, "SELEC") == Err(Server(ServerError { code = 1064, sql_state = "42000", message = "near 'SELEC'" }))
+  assert pool_query(pool, "SELECT 1") == Err(OutOfOrder(1, 5))
+  assert shut(client)
+  assert pool_query(pool, "SELECT 1") == Err(NoConnection)
+  // A new connection takes the place of the failed one.
+  checkin(pool, session([(command(3, "SELECT 1"), one_row())])?)
+  assert is_one(pool_query(pool, "SELECT 1"))
+}
+
+test "a pooled statement with parameters is prepared, executed and closed on one connection" {
+  let sql = "SELECT a FROM t WHERE b = ?"
+  let ready = reply([b"\x00\x07\x00\x00\x00\x01\x00\x01\x00\x00\x00\x00", column_of("?", 253, 0, 0, 63, 0), eof(), column_of("a", 3, 11, 0, 63, 0), eof()])
+  let run = frames(b"\x17\x07\x00\x00\x00\x00\x01\x00\x00\x00\x00\x01\x08\x00\x05\x00\x00\x00\x00\x00\x00\x00", 0)
+  let closed = b"\x05\x00\x00\x00\x19\x07\x00\x00\x00"
+  let client = session([
+    (command(0x16, sql), ready),
+    (run, reply([b"\x01", column_of("a", 3, 11, 0, 63, 0), eof(), b"\x00\x00\x2a\x00\x00\x00", eof()])),
+    (closed, Bytes.empty()),
+    (command(0x16, sql), ready),
+    (run, reply([err_payload(1317, "70100", "Query execution was interrupted")])),
+    (closed, Bytes.empty()),
+    (command(0x16, sql), ready),
+    (closed, Bytes.empty()),
+    (command(0x16, "SELEC ?"), reply([err_payload(1064, "42000", "near 'SELEC'")])),
+    (frames(b"\x0e", 0), ok_packet(1))
+  ])?
+  let pool = pool_of([client], 50 ms)
+  assert pool_execute(pool, sql, [Some(Int(5))])?.rows == [[Some(Int(42))]]
+  assert pool_execute(pool, sql, [Some(Int(5))]) == Err(Server(ServerError { code = 1317, sql_state = "70100", message = "Query execution was interrupted" }))
+  assert pool_execute(pool, sql, []) == Err(WrongParameterCount(1, 0))
+  assert pool_execute(pool, "SELEC ?", [Some(Int(5))]) == Err(Server(ServerError { code = 1064, sql_state = "42000", message = "near 'SELEC'" }))
+  let back = checkout(pool)?
+  assert ping(back) == Ok(())
+}
+
+test "tasks share the connections of a pool: with one connection each waits for the one before" {
+  let client = session([(command(3, "SELECT 1"), one_row()), (command(3, "SELECT 1"), one_row()), (command(3, "SELECT 1"), one_row())])?
+  let pool = pool_of([client], 5 seconds)
+  let (done, results) = Channel.bounded(3)
+  spawn asks(pool, done)
+  spawn asks(pool, done)
+  spawn asks(pool, done)
+  assert results.receive() == Some(true)
+  assert results.receive() == Some(true)
+  assert results.receive() == Some(true)
+}
+
+test "an empty pool has no connection until one is handed to it" {
+  let none: List<Client<PipeStream>> = []
+  let pool = pool_of(none, 10 ms)
+  assert pool_query(pool, "SELECT 1") == Err(NoConnection)
+  checkin(pool, session([(command(3, "SELECT 1"), one_row())])?)
+  assert is_one(pool_query(pool, "SELECT 1"))
 }
