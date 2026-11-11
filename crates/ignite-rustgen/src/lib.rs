@@ -7330,10 +7330,12 @@ fn toml_string(text: &str) -> String {
 /// 10 % of its v0.15.0 size with the readiness scheduler linked (row 3.2
 /// of `docs/quality.md`, story `readiness-binary-size`). The crates
 /// `ignite-io` calls the system and switches stacks through, `nix` and
-/// `corosensei`, are optimised for size (`opt-level = "s"`; row 3.9 rust,
-/// story `binary-size-back`): their instruction counts per request and
-/// session stayed within noise. `ignite-io` itself keeps the default
-/// level, which costs fewer instructions per request.
+/// `corosensei`, are built at `opt-level = "s"` (story `binary-size-back`):
+/// it makes an executable's start about 200 instructions shorter, and its
+/// counts per request and session stay within noise; it does not make the
+/// executable smaller (about 570 bytes larger stripped). `ignite-io`
+/// itself keeps the default level, which costs fewer instructions per
+/// request.
 const RELEASE_PROFILE: &str = "\n[profile.release]\noverflow-checks = true\ncodegen-units = 1\nlto = true\n\n[profile.release.package.nix]\nopt-level = \"s\"\n\n[profile.release.package.corosensei]\nopt-level = \"s\"\n";
 
 /// The generated crate's dev profile: the crates from outside the project

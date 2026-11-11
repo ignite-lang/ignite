@@ -1270,11 +1270,12 @@ fn release_profile_checks_overflow_and_links_as_one_unit() {
 }
 
 /// The release profile builds the crates `ignite-io` calls the system and
-/// switches stacks through, `nix` and `corosensei`, for size (story
-/// `binary-size-back`, row 3.9 rust); `ignite-io` itself keeps the
-/// default level, which runs fewer instructions per request.
+/// switches stacks through, `nix` and `corosensei`, at `opt-level = "s"`,
+/// which makes the start shorter (story `binary-size-back`); `ignite-io`
+/// itself keeps the default level, which runs fewer instructions per
+/// request.
 #[test]
-fn release_profile_builds_the_substrate_for_size() {
+fn release_profile_builds_nix_and_corosensei_at_opt_level_s() {
     let project = try_generate(vec![]).expect("generates");
     for package in ["nix", "corosensei"] {
         assert_eq!(
