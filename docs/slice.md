@@ -11313,10 +11313,19 @@ and for a configured `debug` alike.
   (`dev_build::a_type_error_stops_the_build_ahead`), and so does a panic as it unwinds
   (`prebuild::tests::a_panic_stops_the_build_ahead_and_what_it_started`). While it runs, SIGTERM,
   SIGINT and SIGHUP sent to the driver alone are taken by a thread of the driver's, which stops
-  it the same way and ends the driver by that signal; the driver's main thread keeps them
-  blocked, and a signal the driver ignores stays ignored
+  it the same way and ends the driver by that signal, also one it takes while it is being
+  stopped (`prebuild::tests::a_signal_the_watcher_takes_while_it_stops_ends_the_driver`); for
+  that time every other thread blocks them, the main thread too, which waits for the compiling
+  thread and blocks them when asked. A signal the driver ignores stays ignored, one it was
+  started with blocked stays blocked
   (`dev_build_adversary::a_driver_ended_by_sigterm_leaves_no_build_ahead`, `_sigint_`,
-  `_sighup_`). SIGKILL cannot be taken: the build ahead then runs to its end, and the next build
+  `_sighup_`, `a_driver_started_with_an_ending_signal_blocked_keeps_it_blocked`). The cargo
+  starts (`posix_spawn`) with the signal mask the driver was started with, so it and what it
+  starts block none of the three
+  (`dev_build_adversary::the_build_ahead_blocks_no_signal_and_ends_on_sigterm`). A command that
+  builds nothing ahead makes no signal call for it and reads no `/proc/self/status`
+  (`dev_build_adversary::a_command_without_a_build_ahead_makes_no_system_call_for_its_signals`).
+  SIGKILL cannot be taken: the build ahead then runs to its end, and the next build
   finds what it built fresh (or waits for it on cargo's lock of the target directory). Row 6.2 rust: the driver's own work then
   runs beside the longest chain of the dependency build (`libc`, `nix`) instead of before it.
 - Substrate. `nix` is built without `term`: standard input's raw mode reads and sets the

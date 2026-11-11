@@ -18,7 +18,7 @@ mod embedded_runtime;
 mod llvm_build;
 mod musl;
 mod prebuild;
-pub use prebuild::{block_ending_signals, unblock_ending_signals};
+pub use prebuild::compile_on_thread;
 pub mod rfc;
 pub mod run;
 mod test_build;
