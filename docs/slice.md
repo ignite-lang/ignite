@@ -773,7 +773,7 @@ For `ignite build terminal.ignite --target rust --out DIR` (the default target u
 ```
 DIR/Cargo.toml          [package] name = <package last segment>, edition 2024, [workspace] empty,
                         [profile.release] overflow-checks = true, codegen-units = 1, lto = true (release size, `docs/quality.md` row 3.2)
-                        [profile.dev.package."*"] debug = false, [profile.dev.package.ignite-io] debug = "line-tables-only" (the crates from outside the project without debug information, `ignite-io` with line tables for backtraces; build time, row 6.2)
+                        [profile.dev.package."*"] debug = false, [profile.dev.package.ignite-io] debug = "line-tables-only", [profile.dev.package."<package>"] and, with std, [profile.dev.package."ignite-std"] debug = "line-tables-only" (the crates from outside the project without debug information, `ignite-io` and the members with line tables for backtraces; build time, row 6.2)
                         [dependencies] ignite-io = { path = <substrate> }, ignite-std = { path = "std" } when the program imports a std module
                         one [[bin]] per component: name = executable, path = src/bin/<executable>.rs
 DIR/src/lib.rs          the program's imports as `use`, every type, enum, protocol and fn
@@ -11207,7 +11207,8 @@ and for a configured `debug` alike.
   installs `lld-<major>` of the LLVM it installs (`tools/ignite-perf/src/remote-user-data.sh`,
   `remote::the_host_installs_lld_beside_its_clang`).
 - Rust target. The generated `Cargo.toml` builds the crates from outside the project without
-  debug information and `ignite-io` with line tables (section 6.2); a build or a test build into
+  debug information and `ignite-io`, the program and `ignite-std` with line tables (section
+  6.2), whatever the profile's own `debug`; a build or a test build into
   a directory without `Cargo.lock` starts from the substrate workspace's lock, so cargo makes no
   index request (`dev_build::fresh_rust_build_makes_no_index_request`).
 - Loader. The dependencies of each module (`module_dependencies`) are computed once per load

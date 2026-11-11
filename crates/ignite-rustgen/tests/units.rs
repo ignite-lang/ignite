@@ -1283,8 +1283,11 @@ fn table<'a>(manifest: &'a str, name: &str) -> Vec<&'a str> {
 /// The dev profile of the generated crate (story `build-time-back`, row
 /// 6.2 rust): the crates from outside the project are built without debug
 /// information, `ignite-io` with line tables, so a backtrace still names
-/// its frames' files and lines; the program and `ignite-std`, members of
-/// the project, keep the profile's own.
+/// its frames' files and lines; the program, a member of the project, has
+/// line tables too, by name, which the dev profile's own `debug` (full on
+/// a host without cargo configuration, or `CARGO_PROFILE_DEV_DEBUG`) does
+/// not override. A program without std names no `ignite-std` table, which
+/// cargo would warn about.
 #[test]
 fn dev_profile_builds_dependencies_without_debug_information() {
     let project = try_generate(vec![]).expect("generates");
@@ -1295,6 +1298,17 @@ fn dev_profile_builds_dependencies_without_debug_information() {
     assert_eq!(
         table(&project.cargo_toml, "profile.dev.package.ignite-io"),
         ["debug = \"line-tables-only\""]
+    );
+    assert_eq!(
+        table(&project.cargo_toml, "profile.dev.package.\"demo\""),
+        ["debug = \"line-tables-only\""]
+    );
+    assert!(
+        !project
+            .cargo_toml
+            .contains("[profile.dev.package.\"ignite-std\"]"),
+        "{}",
+        project.cargo_toml
     );
 }
 
