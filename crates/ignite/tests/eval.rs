@@ -336,6 +336,46 @@ fn ioerror_equality_inside_assert() {
     );
 }
 
+/// A builtin method with no value at compile time (a handle's) is refused
+/// as `evaluation failed: builtin `X` has no value at compile time`, the
+/// reason `eval_cannot_run` records for the statics that make handles;
+/// the receiver is a member, the one handle the evaluator holds.
+#[test]
+fn a_handle_method_has_no_value_at_compile_time() {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("eval-handle-methods");
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("handle_methods.ignite");
+    std::fs::write(
+        &file,
+        "package handle_methods\n\n\
+         fn port(listener: TcpListener) -> Int = listener.local_port()\n\n\
+         fn timed_out(stream: TcpStream) -> Bool = stream.timed_out()\n\n\
+         fn alpn(stream: TlsStream) -> Text = stream.alpn()\n\n\
+         fn id(child: ChildProcess) -> Int = child.id()\n",
+    )
+    .unwrap();
+    let loaded = ignite::load(&file, None).unwrap_or_else(|e| panic!("{e}"));
+    let modules = loaded.modules();
+    let mut evaluator = Evaluator::new(&modules, Fuel::default());
+    for (name, builtin) in [
+        ("port", "TcpListenerLocalPort"),
+        ("timed_out", "TcpStreamTimedOut"),
+        ("alpn", "TlsStreamAlpn"),
+        ("id", "ChildProcessId"),
+    ] {
+        let member = Value::Member {
+            system: "S".to_string(),
+            member: "m".to_string(),
+        };
+        let report = failed(call(&mut evaluator, "handle_methods", name, vec![member]));
+        assert_eq!(
+            report,
+            format!("evaluation failed: builtin `{builtin}` has no value at compile time"),
+            "{name}"
+        );
+    }
+}
+
 #[test]
 fn e118_closures_are_unencodable() {
     let loaded = ignite::load(&fixture("e118_unencodable_value.ignite"), None)
