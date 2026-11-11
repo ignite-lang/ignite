@@ -161,6 +161,9 @@ pub struct SchedulerCounts {
     /// Notifies that found the worker asleep and woke it (an eventfd write
     /// or an unpark): the system calls of the hand-overs above.
     pub notifies_sent: u64,
+    /// Waits for a connection made around an `accept`: a `poll` off a
+    /// worker, a wait through the reactor on one. Counted in both IO modes.
+    pub accept_waits: u64,
 }
 
 /// The counts behind [`scheduler_counts`].
@@ -174,6 +177,7 @@ struct Counters {
     workers_started: AtomicU64,
     wakes_across: AtomicU64,
     notifies_sent: AtomicU64,
+    accept_waits: AtomicU64,
 }
 
 static COUNTERS: Counters = Counters {
@@ -186,6 +190,7 @@ static COUNTERS: Counters = Counters {
     workers_started: AtomicU64::new(0),
     wakes_across: AtomicU64::new(0),
     notifies_sent: AtomicU64::new(0),
+    accept_waits: AtomicU64::new(0),
 };
 
 fn count(counter: &AtomicU64) {
@@ -193,8 +198,14 @@ fn count(counter: &AtomicU64) {
     counter.fetch_add(1, Ordering::Relaxed);
 }
 
+/// An `accept` waits for a connection outside its `accept4`
+/// ([`SchedulerCounts::accept_waits`]).
+pub(crate) fn count_accept_wait() {
+    count(&COUNTERS.accept_waits);
+}
+
 /// The scheduler's counts so far ([`SchedulerCounts`]); all zero in the IO
-/// mode `threads`.
+/// mode `threads`, but for [`SchedulerCounts::accept_waits`].
 pub fn scheduler_counts() -> SchedulerCounts {
     let read = |counter: &AtomicU64| counter.load(Ordering::Relaxed);
     let c = &COUNTERS;
@@ -208,6 +219,7 @@ pub fn scheduler_counts() -> SchedulerCounts {
         workers_started: read(&c.workers_started),
         wakes_across: read(&c.wakes_across),
         notifies_sent: read(&c.notifies_sent),
+        accept_waits: read(&c.accept_waits),
     }
 }
 

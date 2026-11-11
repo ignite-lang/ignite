@@ -796,6 +796,132 @@ fn child_connect_8() {
     );
 }
 
+/// Connections the accept loops of the two tests below serve.
+const ACCEPTED: usize = 20;
+
+/// An `accept` off a worker (the main thread's accept loop of a compiled
+/// server, a task of the IO mode `threads`) waits for its connection in
+/// the `accept4` itself, as a thread of v0.15.0 did
+/// (`story:readiness-session-cost`): no wait for a connection comes first
+/// ([`ignite_io::SchedulerCounts::accept_waits`]). Before, a `poll` came
+/// before every `accept4`: one system call more per connection, on the one
+/// thread every connection passes.
+#[test]
+fn an_accept_off_a_worker_waits_in_its_one_call() {
+    for mode in ["readiness", "threads"] {
+        passed(&child(
+            "scheduler::child_accept_off_a_worker",
+            &[("IGNITE_IO", mode)],
+        ));
+    }
+}
+
+#[test]
+fn child_accept_off_a_worker() {
+    use std::io::Read;
+    if !in_child() {
+        return;
+    }
+    let listener = TcpListener::bind(LOCALHOST.to_string(), 0).unwrap();
+    let port = listener.local_port() as u16;
+    let client = std::thread::spawn(move || {
+        for _ in 0..ACCEPTED {
+            let mut peer = std::net::TcpStream::connect((LOCALHOST, port)).unwrap();
+            peer.set_read_timeout(Some(LIMIT)).unwrap();
+            let mut reply = Vec::new();
+            peer.read_to_end(&mut reply).unwrap();
+            assert_eq!(reply, b"hello");
+        }
+    });
+    for _ in 0..ACCEPTED {
+        let stream = listener.accept().unwrap();
+        spawn(move || {
+            let _ = stream.write_all(b"hello".to_vec());
+            let _ = stream.close();
+        });
+    }
+    client.join().unwrap();
+    wait_for_tasks();
+    let counts = ignite_io::scheduler_counts();
+    println!("{counts:?}");
+    assert_eq!(
+        counts.accept_waits, 0,
+        "waits for a connection beside the {ACCEPTED} accepts: {counts:?}"
+    );
+}
+
+/// A listener the main thread blocks in `accept` on is also accepted on by
+/// a task: the task's `accept` parks the task, not its worker (another
+/// task on the one worker runs meanwhile), the main thread's `accept`
+/// already under way still returns its connection, and every connection
+/// is accepted by one of the two.
+#[test]
+fn a_task_accepts_beside_a_thread_blocked_in_accept() {
+    passed(&child(
+        "scheduler::child_accept_beside_a_blocked_thread",
+        &[("IGNITE_WORKERS", "1")],
+    ));
+}
+
+#[test]
+fn child_accept_beside_a_blocked_thread() {
+    use std::io::Read;
+    if !in_child() {
+        return;
+    }
+    let listener = TcpListener::bind(LOCALHOST.to_string(), 0).unwrap();
+    let port = listener.local_port() as u16;
+    let main_thread = nix::unistd::gettid();
+    let on_task = listener.clone();
+    let (accepted, by_task) = mpsc::channel();
+    let helper = std::thread::spawn(move || {
+        // The main thread sleeps only in its `accept`.
+        let state = || {
+            let stat = std::fs::read_to_string(format!("/proc/self/task/{main_thread}/stat"));
+            stat.ok().and_then(|stat| {
+                let (_, after_name) = stat.rsplit_once(") ")?;
+                after_name.chars().next()
+            })
+        };
+        assert!(
+            until(|| state() == Some('S')),
+            "the main thread never waited in accept"
+        );
+        let (ran, other) = mpsc::channel();
+        spawn(move || {
+            let stream = on_task.accept();
+            let _ = accepted.send(stream.is_ok());
+            if let Ok(stream) = stream {
+                let _ = stream.write_all(b"task".to_vec());
+                let _ = stream.close();
+            }
+        });
+        spawn(move || {
+            let _ = ran.send(());
+        });
+        assert!(
+            other.recv_timeout(LIMIT).is_ok(),
+            "a task's accept without a connection blocked its worker"
+        );
+        let mut replies = Vec::new();
+        for _ in 0..2 {
+            let mut peer = std::net::TcpStream::connect((LOCALHOST, port)).unwrap();
+            peer.set_read_timeout(Some(LIMIT)).unwrap();
+            let mut reply = Vec::new();
+            peer.read_to_end(&mut reply).unwrap();
+            replies.push(String::from_utf8(reply).unwrap());
+        }
+        replies.sort();
+        replies
+    });
+    let stream = listener.accept().unwrap();
+    stream.write_all(b"main".to_vec()).unwrap();
+    stream.close().unwrap();
+    assert_eq!(by_task.recv_timeout(LIMIT), Ok(true));
+    assert_eq!(helper.join().unwrap(), ["main", "task"]);
+    wait_for_tasks();
+}
+
 /// In-process clients of an in-process echo server, every one a task
 /// sharing workers with the others: each is answered. An end of stream
 /// that arrives with the reply raises no readiness edge of its own, so a
@@ -1221,7 +1347,7 @@ const V0_15_0_STARTS_SEQUENTIAL: u64 = 3;
 /// that one of them coming back fails even while the total stays under
 /// v0.15.0's: no `setsockopt` per connection (the idle timeout is set before
 /// a `recv` that blocks, and no session here blocks in one), one `accept4`
-/// per connection (a `poll` comes first, no `accept4` fails), one
+/// per connection (it waits for its connection itself, so none fails), one
 /// `recvfrom` per connection (the first read waits before it reads), and,
 /// with sessions in sequence, each alone on its worker, no `epoll_ctl` of a
 /// socket (a wake already taken does not end the lone wait and make its

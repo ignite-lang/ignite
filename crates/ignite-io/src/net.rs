@@ -105,6 +105,11 @@ pub(crate) struct Slot {
     /// in its `accept`, or in a read of a stream it accepted, is idle for
     /// the drain's wait (`crate::task::idle_on_kept`).
     kept: bool,
+    /// The listener was made non-blocking: by the first `accept` of a task
+    /// on a worker, which may not block its worker's thread. Until then an
+    /// `accept` off a worker blocks in its `accept4`
+    /// ([`TcpListener::accept`]).
+    nonblocking: AtomicBool,
     /// Waiters in `accept`, which [`Slot::release`] wakes.
     acceptors: Mutex<WaitList>,
     /// The listener's readiness for tasks on workers (`crate::sched`).
@@ -127,6 +132,7 @@ impl Slot {
         listener: &std::net::TcpListener,
         mark: u64,
     ) -> Result<(), IoError> {
+        crate::sched::count_accept_wait();
         let me = Waiter::current();
         lock(&self.acceptors).push(me.clone());
         let wait = || {
@@ -573,9 +579,6 @@ impl TcpListener {
         let target = socket_address("bind", &address, port)?;
         let listener = std::net::TcpListener::bind(&target)
             .map_err(|e| IoError::new(format!("bind {target}: {e}")))?;
-        listener
-            .set_nonblocking(true)
-            .map_err(|e| IoError::new(format!("bind {target}: {e}")))?;
         // A socket Linux accepts has its listener's `TCP_NODELAY` and
         // `SO_OOBINLINE`, so `accept` sets neither: two system calls less
         // per connection, on the one thread every connection passes.
@@ -594,6 +597,7 @@ impl TcpListener {
             address,
             port,
             kept,
+            nonblocking: AtomicBool::new(false),
             acceptors: Mutex::new(WaitList::new()),
             readiness: Readiness::new(),
         });
@@ -628,21 +632,49 @@ impl TcpListener {
         };
         let kept = self.slot.kept;
         // Off a worker (the main thread's accept loop of a compiled server,
-        // a task of the IO mode `threads`) the wait is a `poll`, which sees
-        // a connection already waiting: it comes first, so no `accept4`
-        // fails before it (`poll` and `accept4` per connection, not a
-        // failed `accept4` as well whenever the next has not arrived yet).
-        if crate::sched::running().is_none() {
+        // a task of the IO mode `threads`) the `accept4` itself waits for
+        // the connection, as a thread of v0.15.0 did: one system call per
+        // connection on the one thread every connection passes
+        // (`story:readiness-session-cost`; a `poll` came first before).
+        // The drain ends that wait: [`Slot::release`] shuts the listener's
+        // read side down, and the call fails. A task on a worker may not
+        // block its worker's thread: its first `accept` makes the listener
+        // non-blocking, for good; from then on a wait off a worker is a
+        // `poll`, which comes first, so that no `accept4` fails before it,
+        // and an `accept4` under way off a worker goes on waiting.
+        let off_worker = crate::sched::running().is_none();
+        // Acquire and Release: a thread that reads `true` finds the
+        // listener non-blocking; one that reads a stale `false` meets
+        // `EAGAIN` below and waits there.
+        let mut blocks = false;
+        if off_worker {
             if !kept && crate::drain::draining() {
                 return Err(IoError::new(crate::drain::DRAINING));
             }
-            self.slot.wait_for_connection(listener, 0)?;
+            if self.slot.nonblocking.load(Ordering::Acquire) {
+                self.slot.wait_for_connection(listener, 0)?;
+            } else {
+                blocks = true;
+            }
+        } else if !self.slot.nonblocking.load(Ordering::Acquire) {
+            listener
+                .set_nonblocking(true)
+                .map_err(|e| IoError::new(format!("accept: {e}")))?;
+            self.slot.nonblocking.store(true, Ordering::Release);
         }
         let mut pause = ACCEPT_BACKOFF_FIRST;
         let mut failing = false;
         loop {
             let mark = self.slot.readiness.mark(Interest::READ);
-            match accept_socket(listener) {
+            // A task of the IO mode `threads` that blocks here on a
+            // listener kept through the drain does not hold up the drain's
+            // wait for live tasks, as in `Slot::wait_for_connection`.
+            let accepted = if blocks && kept {
+                crate::task::idle_on_kept(|| accept_socket(listener))
+            } else {
+                accept_socket(listener)
+            };
+            match accepted {
                 Ok((socket, peer)) => return Ok(TcpStream::over(socket, peer, kept)),
                 // The two codes every accept loop meets compared as numbers,
                 // not through `ErrorKind`'s decoding of every code.
