@@ -14,7 +14,8 @@
 //! backend and no compiled program. Slice 15 (19.7): `claims.rs` is the
 //! claim model and E090 to E092, computed first by [`Model::check`].
 //! `substrate.rs` is the model of the substrate a test runs over
-//! (`docs/slice.md` 33.5), active only in [`Evaluator::run_test`].
+//! (`docs/slice.md` 33.5), active only in [`Evaluator::run_test`], and
+//! `eval/world.rs` the evaluator's side of it.
 
 use std::collections::BTreeMap;
 

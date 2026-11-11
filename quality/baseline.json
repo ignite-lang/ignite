@@ -67,8 +67,6 @@
     "crates/ignite/tests/fixtures/process_builtins/case_gaps.ignite::main g2": "a main does IO; the evaluator has none",
     "crates/ignite/tests/fixtures/process_builtins/case_gaps.ignite::main g3": "a main does IO; the evaluator has none",
     "crates/ignite/tests/fixtures/process_builtins/case_gaps.ignite::main g8": "a main does IO; the evaluator has none",
-    "crates/ignite/tests/fixtures/slice16/moves_scale.ignite::200000 steps through a call": "over the time limit of 60 s",
-    "crates/ignite/tests/fixtures/slice16/moves_scale.ignite::50000 steps through a call": "over the time limit of 60 s",
     "crates/ignite/tests/fixtures/slice17/command_line.ignite::main todo": "a main does IO; the evaluator has none",
     "crates/ignite/tests/fixtures/streams/handed_on.ignite::an accepted stream handed on to a second task outlives the first task": "builtin `TcpListenerBind` has no value at compile time",
     "crates/ignite/tests/fixtures/tests/basics.ignite::exit code 3": "builtin `ProcessExit` has no value at compile time",
