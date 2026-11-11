@@ -74,7 +74,7 @@
 
       <div class="wrap hero-grid">
         <div class="hero-copy">
-          <p class="eyebrow"><span class="pulse" aria-hidden="true"></span> v0.15.0 &middot; an early prototype</p>
+          <p class="eyebrow"><span class="pulse" aria-hidden="true"></span> v0.16.0 &middot; an early prototype</p>
           <h1 id="hero-title">Say what your program is for. <span class="flame-text">One file, one build, one native executable.</span></h1>
           <p class="lede">A compiled, intent-oriented language for fast, resource-efficient software development by humans and AI agents. One typed file holds the program, its components, its contracts and its policies; the compiler turns it into native executables, then runs and checks them.</p>
           <div class="cta">
@@ -191,7 +191,7 @@ bye</code></pre>
           <p class="kicker">Build speed</p>
           <h2 id="speed-title">Built for many agents compiling at once</h2>
           <p>Ignite exists in part as a replacement for Rust, because rustc takes a long time to compile. In agentic software development many agents work at the same time and each of them runs compilations; with rustc, that grinds the machine to a halt. Compilation caches did not solve it.</p>
-          <p>In Ignite a whole program can be one file. It compiles in one step, and on the LLVM target clang compiles and links the result: no cargo, no crate graph, and the binary is there. In the measurement below, of 2026-11-04, the todo HTTP service built in 0.22&nbsp;s (dev) and 0.75&nbsp;s (release) on the LLVM target, and in 2.5 to 3.2&nbsp;s on the Rust target, built by cargo. At release v0.15.0 the dev build took 1.30&nbsp;s on the LLVM target against 4.12&nbsp;s on the Rust target, on the dedicated timing host (the book's Quality page). LLVM is the default target; the Rust target stays as the differential check (<code>--target rust</code>).</p>
+          <p>In Ignite a whole program can be one file. It compiles in one step, and on the LLVM target clang compiles and links the result: no cargo, no crate graph. The table below is one measurement on a shared workstation, of 2026-11-04. The build times of each release, measured on a dedicated host, are on the book's <a href="book/quality.html#6-compiler-speed">Quality page</a>. LLVM is the default target. The Rust target stays as the differential check (<code>--target rust</code>).</p>
           <p>For many agents the figure that adds up is CPU time, not wall time: N builds at once need about N times the CPU seconds of one. In the same measurement, eight LLVM-target builds of the todo service started together finished in 0.34&nbsp;s and used 2.4 CPU seconds between them.</p>
         </div>
         <figure class="speed-figure">
@@ -363,14 +363,14 @@ task ended with error: + failed at &lt;file&gt;:&lt;line&gt;:&lt;column&gt;: 922
       <div class="wrap">
         <p class="kicker">Quickstart</p>
         <h2 id="qs-title">From a clone to your first Ignite system</h2>
-        <p class="section-lede">You need git, Rust (stable, with cargo) and clang. The default LLVM target builds programs with clang; the Rust target builds them with cargo. The examples are in the clone, and this installs the compiler from it too; a pre-built <code>ignite</code> for Linux x86_64 comes with each release.</p>
+        <p class="section-lede">The examples are in the repository, so this path starts from a clone. You need git, Rust (stable, with cargo) and clang. On Linux x86_64 you can instead unpack the pre-built <code>ignite</code> of a release, as the book's Install page shows, and still clone for the examples.</p>
         <ol class="steps">
           <li>
             <h3>Install the compiler from a clone</h3>
 <pre class="copyable"><code class="language-sh">git clone https://github.com/ignite-lang/ignite
 cd ignite
 cargo install --locked --path crates/ignite</code></pre>
-            <p>This puts <code>ignite</code> on your <code>PATH</code>. Keep the clone: <code>ignite</code> reads the standard library from it.</p>
+            <p>This puts <code>ignite</code> on your <code>PATH</code>. Keep the clone: an <code>ignite</code> installed this way reads the standard library from it.</p>
           </li>
           <li>
             <h3>Compile the terminal system</h3>
@@ -406,17 +406,17 @@ ignite explain examples/terminal/terminal.design.ignite local</code></pre>
           <a class="doc-card" href="book/guide/install.html">
             <span class="doc-num">01</span>
             <h3>Guide</h3>
-            <p>Install, write a first program, walk through the terminal system, test, build for both targets, plan, run, replay and apply.</p>
+            <p>Install, write a first program, build the terminal and HTTP examples, test, plan, run, replay and apply. Then one how-to per task, from a container build to a host recovery.</p>
           </a>
           <a class="doc-card" href="book/design/index.html">
             <span class="doc-num">02</span>
-            <h3>Language design</h3>
-            <p>The ideas behind Ignite: intents and properties, effects, protocols and roles, components, systems and assemblies, the substrate and the evaluator.</p>
+            <h3>Concepts</h3>
+            <p>The ideas behind Ignite: intent and properties, effects, protocols and roles, components, systems, contracts, the run-time model, the evaluator and the substrate.</p>
           </a>
           <a class="doc-card" href="book/reference/index.html">
             <span class="doc-num">03</span>
             <h3>Reference</h3>
-            <p>Syntax and grammar, types, effects, modules, the standard library module by module, every CLI command and every diagnostic code.</p>
+            <p>Syntax and grammar, types, effects, modules, system declarations, the standard library module by module, every CLI command and every diagnostic code.</p>
           </a>
         </div>
       </div>
@@ -446,6 +446,7 @@ ignite explain examples/terminal/terminal.design.ignite local</code></pre>
           <li><span class="tag">v0.13.0</span> <span>stream ends handed to <code>spawn</code> inside branches and match arms, program names that shadow Rust primitives, a website checked for layout and accessibility on every merge</span></li>
           <li><span class="tag">v0.14.0</span> <span>environment variables, sleep, wall clock and peer addresses for programs, a clean exit after a drain, quality metrics every release must hold, a toolchain image</span></li>
           <li><span class="tag">v0.15.0</span> <span>bitwise operators, channels and timers, the shared data value model, and the examples answering at about the speed of plain Rust</span></li>
+          <li><span class="tag">v0.16.0</span> <span>tasks on a readiness scheduler, no leaked handles in a long-running server, RESP3, NATS, MySQL and TLS clients, SHA-1, SHA-256 and base64 in std</span></li>
           <li><span class="tag tag-next">next</span> <span>the waves and designs below, not released</span></li>
         </ul>
       </div>
@@ -455,24 +456,24 @@ ignite explain examples/terminal/terminal.design.ignite local</code></pre>
       <div class="wrap">
         <p class="kicker">What's next</p>
         <h2 id="outlook-title">What is being built, and what is designed</h2>
-        <p class="outlook-lead">Being built now: an IO scheduler that waits on readiness instead of running one thread per connection, and a long-running server that leaks nothing. Planned next: WebSocket, RESP3 and NATS clients and codecs, one mid-level IR for both targets, then YAML and <code>ignite fmt</code>. These are plans, not dates.</p>
+        <p class="outlook-lead">Since v0.16.0 spawned tasks run on epoll workers instead of one thread per connection, a long-running server leaks nothing, and std has RESP3, NATS, MySQL and TLS clients. Planned next: WebSocket, an HTTP client and codecs, one mid-level IR for both targets, then YAML and <code>ignite fmt</code>. These are plans, not dates.</p>
         <div class="doc-cards doc-cards-pair">
-          <a class="doc-card" href="book/planned/web.html">
+          <a class="doc-card" href="book/roadmap.html#xweb-the-web-app-is-part-of-the-system-design">
             <span class="doc-num">design</span>
             <h3>x.web</h3>
             <p>A web framework that is part of the system: routes, JSON, live pages, caching, sign-in and health checks derived from the declaration.</p>
           </a>
-          <a class="doc-card" href="book/planned/data.html">
+          <a class="doc-card" href="book/roadmap.html#data-formats-json-yaml-and-toml-from-one-value-model-design">
             <span class="doc-num">wave 9 to 11</span>
             <h3>Data formats</h3>
-            <p>JSON, YAML and TOML from one value model, with codecs the compiler writes for your types.</p>
+            <p>JSON, YAML and TOML from one value model, with codecs the compiler writes for your types. The value model is released in v0.15.0.</p>
           </a>
-          <a class="doc-card" href="book/planned/clients.html">
+          <a class="doc-card" href="book/roadmap.html#protocol-clients-websocket-resp3-nats-design">
             <span class="doc-num">wave 9</span>
             <h3>Protocols and clients</h3>
-            <p>WebSocket, RESP3 with Sentinel and NATS in the standard library, tested over in-memory pipes.</p>
+            <p>WebSocket next; RESP3 with Sentinel and NATS are released in v0.16.0, tested over in-memory pipes.</p>
           </a>
-          <a class="doc-card" href="book/planned/simulation.html">
+          <a class="doc-card" href="book/roadmap.html#fault-injection-and-deterministic-simulation-design">
             <span class="doc-num">design</span>
             <h3>Fault injection and simulation</h3>
             <p>Resets, partitions and crashes injected from inside the program, with failures that replay from one seed.</p>

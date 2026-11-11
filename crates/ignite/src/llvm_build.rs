@@ -355,8 +355,121 @@ fn check_runtime_target(runtime: &Path, triple: &str) -> Result<(), Error> {
 pub const LINK_FLAGS: &[&str] = &["-Wl,--gc-sections"];
 
 /// Debug information is dropped from release executables, as cargo's
-/// release profile does (`strip = "debuginfo"`).
-pub const RELEASE_LINK_FLAGS: &[&str] = &["-Wl,--strip-debug"];
+/// release profile does (`strip = "debuginfo"`), and so are local symbols
+/// (`--discard-all`): the runtime's internal functions and its exception
+/// table labels, about a tenth of the executable (row 3.2 of
+/// `docs/quality.md`, story `binary-size-back`). Global symbols stay, the
+/// names a profiler or a debugger shows for the runtime's functions.
+pub const RELEASE_LINK_FLAGS: &[&str] = &["-Wl,--strip-debug", "-Wl,--discard-all"];
+
+/// A dev executable linked without lld has its debug sections written
+/// compressed with zlib, which gdb, lldb, binutils and the standard
+/// library's symbolizer read (zstd the last does not): about half of the
+/// executable's bytes (row 3.2 of `docs/quality.md`, story
+/// `binary-size-back`). The linker reads the same input and compresses what
+/// it writes, at zlib's fastest level.
+pub const DEV_LINK_FLAGS: &[&str] = &["-Wl,--compress-debug-sections=zlib"];
+
+/// What a dev link with lld compresses instead of [`DEV_LINK_FLAGS`]: the
+/// address tables only, `.debug_aranges` and `.debug_addr`, which shrink
+/// to about a fifth. The runtime's own line tables are split out of its
+/// objects (`split-debuginfo = "unpacked"` in the workspace's dev profile),
+/// so the link copies and relocates less than it did uncompressed, and
+/// compressing the two tables keeps it there (`todod` 10.2 to 8.0 MB, the
+/// link's instructions 270 to 255 M); the debug strings, the standard
+/// library's, would cost the link half its instructions again (row 6.2 of
+/// `docs/quality.md`, story `binary-size-back`).
+pub const DEV_LLD_COMPRESSION: &[&str] = &[
+    "-Wl,--compress-sections=.debug_aranges=zlib",
+    "-Wl,--compress-sections=.debug_addr=zlib",
+];
+
+/// Link flag of every dynamic executable: its relative relocations are
+/// packed into `.relr.dyn` (`DT_RELR`), about 24 bytes each to a bit, and
+/// the executable needs the loader version `GLIBC_ABI_DT_RELR` (glibc 2.36
+/// or newer), which a loader without it refuses by name (rows 3.2 and 3.9
+/// of `docs/quality.md`, story `binary-size-back`). A static link
+/// (`--static`) has no dynamic relocations and takes none.
+pub const PACKED_RELOCATIONS: &str = "-Wl,-z,pack-relative-relocs";
+
+/// Link flag before [`RUNTIME_LIBS`] of every dynamic executable: a library
+/// none of whose symbols the executable takes is not loaded (`libm`, unless
+/// a program calls a math function), as rustc links the Rust target; the
+/// loader would otherwise map and relocate it at every start, resident
+/// memory of every process (row 3.8 of `docs/quality.md`, story
+/// `binary-size-back`).
+pub const AS_NEEDED: &str = "-Wl,--as-needed";
+
+/// Link flags of a dev build that finds lld ([`dev_lld`]), before the
+/// inputs. A dev link copies and relocates the debug sections of every
+/// archive member it loads; lld maps the archive and works on all cores
+/// where GNU ld reads it section by section on one (`docs/llvm.md`
+/// section 1, row 6.2 of `docs/quality.md`).
+pub const DEV_LLD_FLAGS: &[&str] = &["-fuse-ld=lld"];
+
+/// Whether a build links with lld without LTO: a dev build without
+/// `--triple` and `--static` whose clang (`clang`, resolved on `PATH` and
+/// through its symbolic links, as clang finds its own tools) has `ld.lld`
+/// beside it. Every other build links with clang's default linker.
+fn dev_lld(options: &BuildOptions, clang: &Path) -> bool {
+    if options.release || options.triple.is_some() || options.static_link {
+        return false;
+    }
+    let resolved = resolve_program(clang);
+    let canonical = std::fs::canonicalize(&resolved).unwrap_or(resolved);
+    canonical
+        .parent()
+        .is_some_and(|dir| dir.join("ld.lld").is_file())
+}
+
+/// The arguments of every link of a build before its objects: the musl
+/// kit's start files with `--static`, ThinLTO with the bitcode runtime
+/// ([`LTO_LINK_FLAGS`]), else lld on a dev build that finds it
+/// ([`DEV_LLD_FLAGS`]) with [`DEV_LLD_COMPRESSION`], else on a dev build
+/// [`DEV_LINK_FLAGS`].
+fn link_flags_before(
+    options: &BuildOptions,
+    kit: Option<&crate::musl::Kit>,
+    lto: bool,
+    ir_dir: &Path,
+    clang: &Path,
+) -> Vec<OsString> {
+    let mut args: Vec<OsString> = Vec::new();
+    if let Some(kit) = kit {
+        args.extend(kit.before());
+    }
+    if lto {
+        args.extend(LTO_LINK_FLAGS.iter().map(Into::into));
+        let cache = ir_dir.join(LTO_CACHE);
+        args.push(format!("-Wl,--thinlto-cache-dir={}", cache.display()).into());
+    } else if kit.is_none() && dev_lld(options, clang) {
+        args.extend(DEV_LLD_FLAGS.iter().map(Into::into));
+        args.extend(DEV_LLD_COMPRESSION.iter().map(Into::into));
+    } else if !options.release {
+        args.extend(DEV_LINK_FLAGS.iter().map(Into::into));
+    }
+    args
+}
+
+/// The arguments of every link of a build after its objects and the
+/// runtime archive: [`LINK_FLAGS`], [`RELEASE_LINK_FLAGS`] with
+/// `--release`, then the musl kit's end files or [`PACKED_RELOCATIONS`],
+/// [`AS_NEEDED`] and [`RUNTIME_LIBS`].
+fn link_flags_after(options: &BuildOptions, kit: Option<&crate::musl::Kit>) -> Vec<OsString> {
+    let mut args: Vec<OsString> = LINK_FLAGS.iter().map(Into::into).collect();
+    if options.release {
+        args.extend(RELEASE_LINK_FLAGS.iter().map(Into::into));
+    }
+    match kit {
+        Some(kit) => args.extend(kit.after()),
+        None => {
+            args.push(PACKED_RELOCATIONS.into());
+            args.push(AS_NEEDED.into());
+            args.extend(RUNTIME_LIBS.iter().map(Into::into));
+        }
+    }
+    args
+}
 
 /// Run one clang command; its output is inherited.
 fn clang(clang: &Path, args: &[OsString]) -> Result<(), Error> {
@@ -541,6 +654,8 @@ pub(crate) fn link(
         object_stamps.insert(name.clone(), expected);
     }
     let runtime_identity = runtime_identity(&runtime)?;
+    let before = link_flags_before(options, kit.as_ref(), lto.is_some(), &ir_dir, &clang_path);
+    let after = link_flags_after(options, kit.as_ref());
     let mut executables = Vec::new();
     for main in &generated.mains {
         let executable = bin_dir.join(&main.executable);
@@ -549,14 +664,7 @@ pub(crate) fn link(
             executable.clone().into(),
             format!("--target={}", spec.triple).into(),
         ];
-        if let Some(kit) = &kit {
-            args.extend(kit.before());
-        }
-        if lto.is_some() {
-            args.extend(LTO_LINK_FLAGS.iter().map(Into::into));
-            let cache = ir_dir.join(LTO_CACHE);
-            args.push(format!("-Wl,--thinlto-cache-dir={}", cache.display()).into());
-        }
+        args.extend(before.iter().cloned());
         let mut inputs = String::new();
         for unit in [
             format!("main_{}", main.executable),
@@ -567,14 +675,7 @@ pub(crate) fn link(
             inputs.push_str(&object_stamps[&unit]);
         }
         args.push(runtime.clone().into_os_string());
-        args.extend(LINK_FLAGS.iter().map(Into::into));
-        if options.release {
-            args.extend(RELEASE_LINK_FLAGS.iter().map(Into::into));
-        }
-        match &kit {
-            Some(kit) => args.extend(kit.after()),
-            None => args.extend(RUNTIME_LIBS.iter().map(Into::into)),
-        }
+        args.extend(after.iter().cloned());
         inputs.push_str(&runtime_identity);
         let expected = stamp(&clang_path, &args, &inputs);
         let stamp_path = ir_dir.join(format!("{}.link.stamp", main.executable));

@@ -118,10 +118,24 @@ pub extern "C" fn ignite_rt_tcp_retain(handle: i64) {
             return;
         };
         let mut entry = lock(&slot.entry);
+        // Saturating: an owner a program never releases (a store `get`
+        // whose copy no block owns) keeps the handle open instead of
+        // wrapping the count to an early close.
         if entry.generation == generation && entry.handle.is_some() {
-            entry.owners += 1;
+            entry.owners = entry.owners.saturating_add(1);
         }
     })
+}
+
+/// `void handle_release(i64 handle)`: drop one owner of `handle` that no
+/// block or task registered: the owner a heap copy in a store or a channel
+/// holds (`docs/slice.md` 30.3), dropped when the copy is freed. Unlike
+/// [`ignite_rt_tcp_release`] it leaves the current task's registrations
+/// alone, so a block that owns the same handle still releases its own.
+/// Nothing for a released or unknown handle.
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_handle_release(handle: i64) {
+    crate::entry(move || release_owner(handle, None))
 }
 
 #[derive(Clone)]
@@ -130,6 +144,11 @@ pub(crate) enum Handle {
     Stream(TcpStream),
     /// An end of an in-memory pipe (`crate::pipe`).
     Pipe(PipeStream),
+    /// A TLS client session (`crate::tls`), its type erased: the session's
+    /// drop and clone are reached through the vtable only
+    /// `ignite_rt_tls_client` makes, so a program that opens no session
+    /// links no TLS engine (`docs/slice.md` 38.2).
+    Tls(crate::tls::Session),
     /// A root directory (`crate::fs`, `docs/slice.md` 21.4).
     Directory(Directory),
     /// The authority to start children (`crate::child`, 21.5).
@@ -413,6 +432,12 @@ fn listener(handle: i64) -> Result<TcpListener, IoError> {
     }
 }
 
+/// The TCP stream `handle` names; any other handle is "`<h>` is not a TCP
+/// stream".
+pub(crate) fn tcp_stream(handle: i64) -> Result<TcpStream, IoError> {
+    stream(handle)
+}
+
 fn stream(handle: i64) -> Result<TcpStream, IoError> {
     match lookup(handle)? {
         Handle::Stream(stream) => Ok(stream),
@@ -522,6 +547,24 @@ pub extern "C" fn ignite_rt_tcp_connect_within(
 pub extern "C" fn ignite_rt_tcp_peer(out: *mut crate::IgniteEndpoint, handle: i64) {
     crate::entry(move || {
         let (address, port) = stream(handle).map(|s| s.peer()).unwrap_or_default();
+        crate::put(
+            out,
+            crate::IgniteEndpoint {
+                address: IgniteList::from_bytes(address.as_bytes()),
+                port,
+            },
+        );
+    })
+}
+
+/// `void tcp_local(Endpoint* out, i64 stream)`: this end of the stream,
+/// its address allocated in the task's arena (`ignite_io::TcpStream::local`);
+/// an empty address and port 0 when the
+/// handle is not a stream, as `tcp_peer` gives.
+#[unsafe(no_mangle)]
+pub extern "C" fn ignite_rt_tcp_local(out: *mut crate::IgniteEndpoint, handle: i64) {
+    crate::entry(move || {
+        let (address, port) = stream(handle).map(|s| s.local()).unwrap_or_default();
         crate::put(
             out,
             crate::IgniteEndpoint {
@@ -1007,8 +1050,12 @@ mod tests {
         let (used, uses) = channel();
         let (check, checks) = channel::<()>();
         let other = std::thread::spawn(move || {
-            used.send(read(handle)).unwrap();
+            let got = read(handle);
+            // Released before the main thread hears of the read: its
+            // release is then the last one, and its next read cannot block
+            // on an open socket.
             ignite_rt_tcp_release(handle);
+            used.send(got).unwrap();
             checks.recv().unwrap();
             read(handle)
         });

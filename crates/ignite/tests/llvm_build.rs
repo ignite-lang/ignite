@@ -398,22 +398,41 @@ fn release_with_another_llvm_links_the_native_runtime_without_lto() {
 
 /// Story `llvm-lto-runtime`: `ignite test --release` with no `--runtime`
 /// probes the target with the native runtime it links, so its IR and its
-/// objects agree on one triple and the tests pass, without LTO.
+/// objects agree on one triple and the tests pass, without LTO. The
+/// driver runs copied alone, so the runtime it links is the one it
+/// carries: a `cargo build --workspace` (`task build`) leaves a
+/// `libignite_rt.a` without the test runner beside `target/debug/ignite`,
+/// which the driver would take first.
 #[test]
 fn release_tests_link_the_native_runtime() {
     let dir = tmp("llvm-lto-tests");
     let log = dir.join("clang.log");
     let clang = logging_clang(&dir, &log);
-    let output = Command::new(env!("CARGO_BIN_EXE_ignite"))
-        .args(["test", "--target", "llvm", "--release"])
-        .arg(workspace().join("std/option.ignite"))
-        .arg("--out")
-        .arg(dir.join("out"))
-        .arg("--clang")
-        .arg(&clang)
-        .env("XDG_CACHE_HOME", dir.join("cache"))
-        .output()
-        .unwrap();
+    let bin = dir.join("bin");
+    let home = dir.join("home");
+    for path in [&bin, &home] {
+        std::fs::create_dir_all(path).unwrap();
+    }
+    let driver = bin.join("ignite");
+    std::fs::copy(env!("CARGO_BIN_EXE_ignite"), &driver).unwrap();
+    let source = workspace().join("std/option.ignite");
+    let out = dir.join("out");
+    let output = run_copied(
+        &driver,
+        &[
+            "test".as_ref(),
+            "--target".as_ref(),
+            "llvm".as_ref(),
+            "--release".as_ref(),
+            source.as_os_str(),
+            "--out".as_ref(),
+            out.as_os_str(),
+            "--clang".as_ref(),
+            clang.as_os_str(),
+        ],
+        &dir.join("cache"),
+        &home,
+    );
     assert!(
         output.status.success(),
         "{}{}",
@@ -422,6 +441,43 @@ fn release_tests_link_the_native_runtime() {
     );
     let text = std::fs::read_to_string(&log).unwrap();
     assert!(!text.contains("-flto"), "{text}");
+}
+
+/// `docs/slice.md` 38.2: the runtime archive carries the TLS engine, and a
+/// program that opens no TLS session links none of it, so the size rows of
+/// `docs/quality.md` (3.2) do not pay for TLS in every LLVM executable: no
+/// symbol it defines names the engine's crate, neither the engine's own
+/// code nor a generic instance the engine's crate compiled and shared.
+#[test]
+fn a_program_without_tls_links_no_tls_engine() {
+    let mentions = |path: &Path| {
+        let listed = run(Command::new("nm").arg("--defined-only").arg(path));
+        String::from_utf8_lossy(&listed.stdout)
+            .lines()
+            .filter(|line| line.contains("rustls"))
+            .count()
+    };
+    let runtime = common::runtime_archive();
+    assert!(
+        mentions(&runtime) > 0,
+        "{} holds no TLS engine, so this case checks nothing",
+        runtime.display()
+    );
+    let dir = tmp("llvm-no-tls");
+    let out = dir.join("out");
+    run(&mut llvm_build(
+        &terminal_source(),
+        &out,
+        &which("clang"),
+        false,
+    ));
+    let terminald = out.join("bin/terminald");
+    assert_eq!(
+        mentions(&terminald),
+        0,
+        "{} links the TLS engine without opening a session",
+        terminald.display()
+    );
 }
 
 /// `docs/llvm.md` section 1, target: a runtime archive built for another

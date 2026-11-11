@@ -28,17 +28,98 @@ std/**/*.ignite, program.ignite --parse--> --check--> --type (ignite-types)--> -
 writes `DIR/llvm/{std.ll, program.ll, main_<exe>.ll}`, runs
 `clang -c -O0 -g -ffunction-sections -fdata-sections -Werror=override-module --target=<triple>`
 (`-O2` with `--release`) on each, links each executable with
-`clang -o DIR/bin/<exe> --target=<triple> main_<exe>.o program.o std.o <runtime> -Wl,--gc-sections [-Wl,--strip-debug] -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc`
-(`-Wl,--strip-debug` with `--release` only, as cargo's release profile drops debug
-information; the libraries are the list `cargo rustc -p ignite-rt --print native-static-libs`
-prints, fixed in the driver), and prints `built DIR/bin/<exe>`. Exit statuses as for the Rust
+`clang -o DIR/bin/<exe> --target=<triple> [-fuse-ld=lld -Wl,--compress-sections=.debug_aranges=zlib -Wl,--compress-sections=.debug_addr=zlib | -Wl,--compress-debug-sections=zlib] main_<exe>.o program.o std.o <runtime> -Wl,--gc-sections [-Wl,--strip-debug -Wl,--discard-all] -Wl,-z,pack-relative-relocs -Wl,--as-needed -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc`
+(`-Wl,--strip-debug -Wl,--discard-all` with `--release` only, as cargo's release profile drops debug
+information, and the local symbols with it (internal functions and exception table labels, a tenth
+of `todod`; the global names a profiler shows stay; story `binary-size-back`); the compression
+without `--release`, below; the libraries are the list `cargo rustc -p ignite-rt --print native-static-libs`
+prints, fixed in the driver; `-fuse-ld=lld` on a build without `--release`, `--triple` and
+`--static` when `ld.lld` lies beside the clang the driver runs, its symbolic links resolved,
+else clang's default linker links), and prints `built DIR/bin/<exe>`. Exit statuses as for the Rust
 target; 2 also when clang fails (its output passed through). `--static` links against musl
 instead, with the kit of start files, `libc.a` and `libunwind.a` and none of these libraries
+or `-z pack-relative-relocs`
 (`docs/slice.md` 23).
 
 Size. Every function and datum is in its own section (rustc emits the runtime's code that
 way by default), so `--gc-sections` drops what no executable reaches. The workspace builds `ignite-rt` with `codegen-units = 1` in the release
-profile.
+profile. Its dev profile builds `ignite-io` at `opt-level = 1`. That setting affects only
+runtimes built in the dev profile: the runtime a debug driver carries, and the dev-profile
+runner archive that `task quality` links into row 3.2's LLVM release executables, which with
+it stay within 10 % of v0.15.0's size (story `readiness-binary-size`; overflow checks and
+debug assertions stay on). A release driver's runtime is built in the release profile and is
+unchanged by it.
+
+Dev link (story `build-time-back`, rows 6.2 and 3.2). The linker copies and relocates the
+debug sections of every archive member it loads, and these were 80 % of a dev link's input
+on a host without cargo configuration, whose dev profile has full debug information. The
+dev profile therefore builds every crate from outside the workspace without debug
+information (`[profile.dev.package."*"] debug = false`) and `ignite-rt` and `ignite-io` with
+line tables (`debug = "line-tables-only"`) whatever the profile's own `debug`, and
+`.cargo/config.toml` sets `CFLAGS = "-g0"` for the C and assembly `ring` compiles, whose
+build script asks for `-g3` in every profile (a `CFLAGS` of the environment wins): a backtrace
+still names the files and lines of the Ignite source and of both crates' frames
+(`dev_build::` in `crates/ignite/tests/dev_build.rs`). lld, where it lies beside clang, links
+on all cores and maps the archive instead of reading it section by section; an executable
+it links carries a build id as one GNU ld links does.
+
+Split line tables (story `binary-size-back`, rows 3.2 and 6.2). The dev profile builds
+`ignite-rt` and `ignite-io` with `split-debuginfo = "unpacked"`: their line tables are in
+`.dwo` files beside the objects in the target directory, and each object keeps a skeleton
+unit naming its file, so the linker neither copies nor relocates them. With lld a dev link
+then compresses the two address tables only, zlib at its fastest level
+(`-Wl,--compress-sections=.debug_aranges=zlib -Wl,--compress-sections=.debug_addr=zlib`):
+`todod` 10.2 to 8.0 MB, the link's instructions 270 to 255 M (compressing the debug strings
+too, the standard library's, would cost 351 M; the archive's line tables in the executable,
+270 M uncompressed and 428 M with its strings compressed). Another linker compresses every
+debug section (`-Wl,--compress-debug-sections=zlib`, which GNU ld knows). gdb, lldb,
+binutils and the standard library's symbolizer read `.dwo` files and zlib sections (zstd the
+last does not), so a backtrace keeps its files and lines as long as the target directory
+holds the `.dwo` files
+(`dev_build::dev_backtrace_names_ignite_and_substrate_lines_on_both_targets` asserts both).
+A driver built in the release profile carries a runtime without debug information, so an
+installed `ignite` is unaffected. A dev build on the Rust target compresses nothing (its
+linker is the toolchain's choice or the user's): the generated dev profile splits the line
+tables of `ignite-io`, of the program and of `ignite-std` the same way (`docs/slice.md` 6.2):
+`todod` 8.4 to 7.7 MB, the link's instructions 176 to 163 M; a backtrace names the files and
+lines of the standard library's frames.
+
+Packed relative relocations (story `binary-size-back`, rows 3.2 and 3.9). Every dynamic
+executable of the LLVM target, dev and release, is linked with `-z pack-relative-relocs`: its
+relative relocations, 24 bytes each in `.rela.dyn`, are packed into a bitmap in `.relr.dyn`
+(`DT_RELR`; stripped `todod` and `terminald` about 37 KB smaller on this target). The
+executable then needs the loader version `GLIBC_ABI_DT_RELR`, so it runs on glibc 2.36 or
+newer (before: 2.34, the newest version any of its symbols names); an older loader refuses
+it by that name instead of running it unrelocated. The toolchain image (Debian trixie,
+glibc 2.41) and the dedicated host (Ubuntu 24.04, glibc 2.39) have it. A `--static` build
+has no dynamic relocations and links without it. The Rust target links without it and
+runs on glibc 2.34 as before: there the packed relocations made the start of `todod` 614
+instructions longer and that of `terminald` 151, and the `target.'cfg(all())'.rustflags`
+that carried the flag took the place of the user's `build.rustflags`; on the LLVM target they
+make the start about 2,900 instructions shorter (`binary_size::` in
+`crates/ignite/tests/binary_size.rs`).
+
+Libraries as needed (story `binary-size-back`, row 3.8). The LLVM target links its runtime
+libraries after `-Wl,--as-needed`, as rustc links the Rust target: a library none of whose
+symbols the executable takes is not loaded. `libm` was loaded by every executable before,
+mapped and relocated at each start, though only a program calling a math function uses it
+(`binary_size::an_llvm_executable_loads_no_library_it_does_not_call`).
+
+Release runtime without the backtrace symbolizer (story `binary-size-back`, row 3.9). A
+release runtime archive, native and bitcode, is built on the standard library compiled from
+its source (the toolchain's `rust-src` component) with `-Zbuild-std=std,panic_unwind
+-Zbuild-std-features=panic-unwind`: every feature of the standard library but `backtrace`, whose
+symbolizer (`gimli`, `addr2line`, `miniz_oxide`) is about 130 KB of every executable. A stable
+cargo takes the flags with `RUSTC_BOOTSTRAP=1`. One recipe, `crates/ignite-rt/release_std.rs`,
+builds every such archive: the driver's build script in the release profile (`task dist`,
+`cargo install`), and `ignite-perf runtime`, which `task bench-throughput` and the dedicated
+host's benchmark run. An Ignite program reports its failures itself, so its failure report is
+unchanged (`binary_size::a_release_failure_report_is_the_dev_one_on_both_targets`); a panic
+inside the runtime prints its message and location and an unsymbolized backtrace. A toolchain
+without `rust-src` builds the archive on the prebuilt standard library and says so
+(`cargo::warning`, `ignite-perf runtime` on stderr; `runtime::` in
+`tools/ignite-perf/tests/runtime.rs`). Dev archives, the test runner's included, keep the
+prebuilt standard library.
 
 LTO (story `llvm-lto-runtime`). A `-linux-gnu` driver carries the runtime twice: the native
 archive and the same archive built with `-Clinker-plugin-lto`, whose Rust code is LLVM
@@ -497,12 +578,39 @@ position, even with no buffer.
     returned). When no thread can start, `ignite_rt_spawn` returns 0 without running the
     thunk and the parent releases the task's owners at once; the substrate logs the failure
     once per run of failures and the service keeps accepting.
-  - a block, for a stream binding it owns (`own::owned`): a `let` that creates the stream
-    (`let stream = listener.accept()?`, `TcpStream.connect(..)?`, `let (a, b) =
-    Pipe.pair()`) whose every later mention in the block keeps it inside the block: the
-    receiver of a builtin stream method other than `copy()`, an argument of `spawn`, or a
-    plain argument of a call whose result type cannot hold a stream (no record, enum, fn
-    value or type parameter in it). The block registers the binding with `tcp_own` after
+  - a task, for every handle inside a tuple, record or enum argument: the parent adds an
+    owner with `retain_handles.<T>` before the start (and drops it with
+    `release_handles.<T>` when no thread can start), the thunk registers each above an
+    owner mark of its own and releases them when the callee returns.
+  - a heap copy in a store or a channel: `copy_to_heap` adds an owner to every handle in it,
+    `free_heap` drops it with `handle_release` (which leaves the task's registrations
+    alone), and `copy_from_heap` adds one for the copy it makes, so a `remove` or a
+    `receive` hands the stored owner to its caller (`docs/slice.md` 30.3).
+  - a block, for a binding it owns (`own::owned`, `docs/slice.md` 30.3, every handle kind
+    since case study gap G30): a `let` of a value no one else owns (a builtin that creates
+    handles such as `let stream = listener.accept()?`, `TcpListener.bind(..)`, `let (a, b) =
+    Pipe.pair()`, `Launcher.new()`; a copy out of a store or a channel; a call of a fn of
+    the module whose result holds only handles it created), or a `match` statement on such
+    a value whose arms keep what they bind, whose every later mention in the block keeps it
+    inside the block: the receiver of a builtin method that does not hand it on, a value
+    `put` in a store or sent on a channel, an argument of `spawn`, or a plain argument of a
+    call whose result type cannot hold a handle (`own::handle_free`: no fn value, store,
+    capability or type parameter in it; a record or an enum is looked into, so
+    `Connection.of(stream)`, two endpoints and a flag, keeps `stream`) or holds only fresh
+    ones. A field or element of the binding counts as the
+    binding, and a `let` of the binding or of a literal around it is an alias that keeps it
+    while the alias is kept; such a binding is not handed over to a `spawn` that is its
+    last mention. A `match` that is a `let`'s value and a `for` over such a value
+    (`for s in senders.values()`) own it the same way, the loop's elements bound in place.
+    A name an arm or a loop binds to a value that holds no handle (`own::binds_plain`: the
+    `error` of `Err(error) => return Err(error)`, a tag beside a sender) lets none out
+    wherever it goes and does not decide the owner (story
+    `llvm-http-connection-closes-its-socket`: with that arm beside `Ok(stream) => { let
+    connection = Connection.of(stream); spawn serve_connection(stream, connection, ..) }`
+    the accept loop of `std.protocol.http` owned nothing, by either of the two, and kept
+    every accepted socket open).
+    The block registers every handle of the value with `tcp_own`
+    (`own_handles.<T>` for an aggregate) after
     an owner mark (`own_mark`, the length of the task's registration list) taken at its
     first owned binding, and `own_release(mark)` releases every registration since the mark
     when the block is left: at its end, before a `return` or the return of `?` (from the
@@ -511,9 +619,28 @@ position, even with no buffer.
     without `spawn` closes it at the end of the iteration (the review's L1 kept one socket
     per connection). A binding with any other mention (returned, stored in a field or a
     list, captured, assigned, `copy()`) is not owned and, as before, is not released before
-    the process exits. A callee that keeps a stream it was passed beyond its return other
-    than through its result (in a `Store`) would see it closed; no std module or example
-    does.
+    the process exits. A callee that keeps a handle it was passed beyond its return does so
+    in a store, a channel or a task, each an owner of its own.
+  - an expression, for a temporary it consumes (`own::kept_temporaries`, `own::fresh`,
+    `docs/slice.md` 30.3): a value no one else owns that no binding holds, as an argument of
+    a call whose result cannot alias it (`senders.get(id).is_some()`), the value of a `put`,
+    `send` or `try_send`, an argument of `spawn` the task gets an owner of its own for, the
+    scrutinee of a `match` no statement claims, or a bare expression statement
+    (`senders.remove(id)`). `Lower::open_temporaries` takes an owner mark before the
+    expression and pushes it on the open blocks' marks, `Lower::expr` registers the
+    temporary with `own_handles.<T>` when it is made, and the mark is released when the
+    expression is done; a `return`, `?`, `break` or `continue` inside releases it with the
+    blocks', a failure with the task's registrations. A fn's result and a `let`'s value are
+    not temporaries: the caller or the block owns them.
+    Known gap (pre-existing, `story:llvm-temporaries-without-owner-rule`): a copied-out
+    value that no owning `let`, statement `match`, `for` or expression above holds keeps
+    that owner forever: the receiver of a builtin method (`senders.values().len()`), the
+    rest of a fresh value read for one field (`open(s).id`), the thrown-away value of a
+    `match` arm, a store read inside a record argument of a call, and a `match` binding
+    put in a store inside `Some`.
+    `leak::five_temporary_forms_are_not_released_on_llvm_yet`
+    (`crates/ignite/tests/soak/temporaries_unreleased.ignite`) holds these five as the
+    failing tests on LLVM; the Rust target passes all 5.
   - At a `spawn` that is the last use of an owned binding (`own::handovers`: in the
     binding's block or in an `if`, `else` or `match` arm nested in it that is itself the
     last use, up to a binding that shadows the name; not in a loop body), the block releases
@@ -524,9 +651,28 @@ position, even with no buffer.
     bound by `let (client, server) = Pipe.pair()` and spawned into a task that fails is
     closed by the failure while the block still runs (story
     `llvm-spawn-pattern-bound-streams`; the Rust target keeps the block's clone until the
-    block ends). A binding that is not owned but bound by name to a fresh value (a call, a
-    method call other than `copy()`, `?` or `match`) and not mentioned after the spawn
-    (`region::moved_to_task`) still passes its owner to the task without `tcp_retain`.
+    block ends). A handle moves to the task without `tcp_retain` only when the task takes
+    the only owner and its block does not release that owner: a binding its block does not
+    own, bound by name to a fresh value and not mentioned after the spawn
+    (`region::moved_to_task`, `Lower::spawn`). In every other case the task gets an owner
+    of its own and whoever held the original owner still releases it; an owned binding the
+    spawn does not hand over (an alias holds it) keeps its owner until its block is left.
+    Fresh is decided by `own::moves_fresh`: a value `own::produces` makes, the result of a
+    builtin other than `copy()`, `?` on one, a `match` of those, and the result of a fn or
+    role call whose every argument that can hold a handle is fresh as well (a fn argument
+    whose result holds none cannot): a temporary of that kind, or the one mention of a
+    binding to one that its block does not own and that runs at most once, in no loop and
+    no closure (`own::sole_mentions`), in the same block or a nested one
+    (`let b = end(write); spawn overflow(s, b)` with `write` from `Pipe.pair()`). A call
+    that may return a parameter or a binding with another mention (an alias, a record or a
+    closure made before, a later use; `let u = same(t)`), a fn-value call, a field and an
+    `if` are not fresh.
+  - Known gap (pre-existing, `story:llvm-task-move-aliases`): the result of a builtin
+    that reads a handle out of a value, such as `xs.at(0)`, counts as fresh, so a `spawn`
+    moves the element's owner to its task and the task's release closes the end the list
+    still holds. `leak::an_element_read_from_a_list_and_moved_to_a_task_is_closed_early_on_llvm_yet`
+    (`crates/ignite/tests/soak/moves_aliases.ignite`) holds it as the failing test on LLVM
+    (`is not a channel sender`); the Rust target passes.
   Until slice 10 the accept loop was generated and used a shallow `spawn_copy` without the
   handshake; from slice 10 to story spawn-without-handshake the Ignite loop paid it per
   connection.

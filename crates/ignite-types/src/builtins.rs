@@ -12,6 +12,21 @@ pub(crate) struct Sig {
     pub ret: Ty,
 }
 
+impl Builtin {
+    /// The `to_text` method of a scalar (`Int`, `Byte`, `U32`, `Bool`):
+    /// the decimal digits, or `true` and `false`, as Rust's `Display`
+    /// writes them.
+    pub fn is_scalar_to_text(self) -> bool {
+        matches!(
+            self,
+            Builtin::IntToTextMethod
+                | Builtin::ByteToText
+                | Builtin::U32ToText
+                | Builtin::BoolToText
+        )
+    }
+}
+
 pub(crate) fn bytes() -> Ty {
     Ty::List(Box::new(Ty::Byte))
 }
@@ -107,7 +122,10 @@ pub(crate) fn method(receiver: &Ty, name: &str) -> Option<Sig> {
         (Ty::PipeStream, "write_urgent") => sig(PipeStreamWriteUrgent, vec![bytes()], io(Ty::Unit)),
         (Ty::PipeStream, "urgent_pending") => sig(PipeStreamUrgentPending, vec![], io(Ty::Bool)),
         (Ty::TcpStream, "peer") => sig(TcpStreamPeer, vec![], endpoint()),
+        (Ty::TcpStream, "local") => sig(TcpStreamLocal, vec![], endpoint()),
         (Ty::TcpStream, "timed_out") => sig(TcpStreamTimedOut, vec![], Ty::Bool),
+        (Ty::TlsStream, "alpn") => sig(TlsStreamAlpn, vec![], Ty::Text),
+        (Ty::TlsStream, _) => stream_method(name),
         (Ty::Capability(kind), _) => capability_method(*kind, name),
         (Ty::Sender(item), _) => sender_method(item, name),
         (Ty::Receiver(item), _) => receiver_method(item, name),
@@ -200,12 +218,17 @@ pub(crate) fn std_modules_of(name: &str) -> BTreeSet<String> {
 }
 
 /// [`crate::builtin_std_modules`] of the builtin method `name`: the modules
-/// of the records and enums in its signatures on `TcpStream`, `TcpListener`
-/// and `PipeStream` (`peer`: `std.net`, `docs/slice.md` 26.1).
+/// of the records and enums in its signatures on `TcpStream`, `TcpListener`,
+/// `PipeStream` and `TlsStream` (`peer`: `std.net`, `docs/slice.md` 26.1).
 pub(crate) fn substrate_method_std_modules(name: &str) -> BTreeSet<String> {
     let mut modules = BTreeSet::new();
     let mut capabilities = Vec::new();
-    for receiver in [Ty::TcpStream, Ty::TcpListener, Ty::PipeStream] {
+    for receiver in [
+        Ty::TcpStream,
+        Ty::TcpListener,
+        Ty::PipeStream,
+        Ty::TlsStream,
+    ] {
         if let Some(sig) = method(&receiver, name) {
             for ty in sig.params.iter().chain(std::iter::once(&sig.ret)) {
                 named_in(ty, &mut modules, &mut capabilities);
@@ -385,6 +408,11 @@ pub(crate) fn static_fn(owner: &str, name: &str) -> Option<Sig> {
             vec![Ty::Text, Ty::Int],
             io(Ty::TcpListener),
         ),
+        ("TcpListener", "bind_kept") => sig(
+            TcpListenerBindKept,
+            vec![Ty::Text, Ty::Int],
+            io(Ty::TcpListener),
+        ),
         ("TcpStream", "connect") => {
             sig(TcpStreamConnect, vec![Ty::Text, Ty::Int], io(Ty::TcpStream))
         }
@@ -443,8 +471,23 @@ pub(crate) fn static_fn(owner: &str, name: &str) -> Option<Sig> {
             vec![Ty::Text, Ty::Int, Ty::Quantity(QuantityKind::Duration)],
             io(Ty::TcpStream),
         ),
+        ("Tls", "client") => sig(
+            TlsClient,
+            vec![Ty::TcpStream, Ty::Text, tls_options()],
+            io(Ty::TlsStream),
+        ),
         _ => None,
     }
+}
+
+/// The name of the record `std.tls.TlsOptions` (`docs/slice.md` 38).
+pub fn tls_options_name() -> crate::QualName {
+    crate::QualName::new("std.tls", "TlsOptions")
+}
+
+/// The record `std.tls.TlsOptions`: the options of `Tls.client`.
+pub fn tls_options() -> Ty {
+    Ty::Record(tls_options_name())
 }
 
 /// The name of the record `std.net.Endpoint` (`docs/slice.md` 14.14 item
@@ -508,6 +551,7 @@ mod tests {
                 ("Endpoint", vec!["std.net".to_string()]),
                 ("Launcher", process),
                 ("Runtime", vec!["std.runtime".to_string()]),
+                ("Tls", vec!["std.tls".to_string()]),
             ]
         );
     }
@@ -518,6 +562,12 @@ mod tests {
             .into_iter()
             .map(|(name, modules)| (name, modules.into_iter().collect()))
             .collect();
-        assert_eq!(modules, [("peer", vec!["std.net".to_string()])]);
+        assert_eq!(
+            modules,
+            [
+                ("local", vec!["std.net".to_string()]),
+                ("peer", vec!["std.net".to_string()])
+            ]
+        );
     }
 }

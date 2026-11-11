@@ -271,6 +271,7 @@
 - Kind: missing-feature.
 - Since wave 7: bitwise operators (`story:bitwise-operators`); `std.data` has a `base64` helper (`story:data-value-model`).
 - Story: `story:std-digest` (wave 8): SHA-1 and SHA-256, base64 and base64url as std modules with the RFC test vectors.
+- Since wave 8: `std.digest` (`sha1`, `sha256`, the incremental `Digest`) and `std.encoding` (`base64`, `base64url`, their decoders, `hex`); `std.data.base64` moved to `std.encoding` (`docs/slice.md` 34).
 - Blocks: no.
 
 ## G23 No NATS client
@@ -304,6 +305,7 @@
 - What happens: `ignite --version` prints `0.13.0` with no commit, so a build from source cannot be told apart from the release.
 - Story: `story:version-names-commit`.
 - Blocks: no.
+- Closed in wave 8 by story `version-names-commit`: a build from a checkout prints `ignite X.Y.Z+g<12 hex>` (`.dirty` for a modified tree), a clean build of the tag `vX.Y.Z` prints `ignite X.Y.Z`, a build from an archive names its `COMMIT` file's commit or `+unknown`.
 
 ## G27 A static build from source needs the musl target and the network
 
@@ -349,8 +351,10 @@
   ```
 
 - Not reproduced on `main` (05574a7c8, no runtime change since v0.15.0), 2026-11-08: that example spawned one at a time and 1,000 at once, and the three lines looped 200,000 times inside one task, peak at 2.0 to 6.5 MB on both targets, dev, `--release` and `--static`, the same as the control without a channel. The leak needs something the reduced form does not have; the service's own shape is the next reproducer.
+- Cause (the case study's reproducer, 2026-11-08, LLVM target): a channel end's handle-table entry was released only while the end stayed in a plain `let (tx, rx) = Channel.bounded(n)` binding used through methods. Four forms left it unowned, about 490 B per end and per task: `alias` (`let r: Receiver<Int> = rx`), `typed` (`let ends: (Sender<Int>, Receiver<Int>) = Channel.bounded(1)`), `field` (the receiver in a record field), `server` (the sender in a `Store<Sender<Int>>`, the receiver returned in a record, the sender removed and closed). The Rust target drops by Rust ownership and never leaked. G32's annotation workaround is the `alias` form.
+- Fixed (`story:channel-release-on-close`, `story:llvm-release-all-handles`): on the LLVM target a block owns every handle of a binding whose value no one else owns, through aliases, fields, tuples and stores; heap copies in stores and channels and tasks spawned with a record are owners of their own (`docs/slice.md` 30.3). Tests: the soaks "a channel end bound a second time is released (G30)", "a channel end kept in a record field is released (G30)", "an annotated pair of channel ends is released (G30)" and "a channel end put in a store and taken out is released (G30)" in `std/sync.ignite` (2,000 runs each, both targets); `leak::g30_reproducer_stays_flat_in_every_mode` (`crates/ignite/tests/fixtures/leak/repro.ignite`, every mode at `N=20000` within 2 MB of `none` on both targets); `leak::every_soak_passes_without_a_seeded_leak` (the listener, stream, child, directory and capability soaks, both targets).
 - Workaround in the service: closed channels go on an idle list and are reused.
-- Code: `crates/ignite-io/src/channel.rs` (`Shared` behind the two ends' `Arc<End>`, freed when both ends' handles are dropped); `crates/ignite-rt/src/channel.rs` (`ignite_rt_channel_bounded` registers each end as `Handle::Sender` or `Handle::Receiver`); the handle table in `crates/ignite-rt/src/net.rs` (`register`, `release_owner`, the task's `OWNED` list with its tombstones, `ignite_rt_own_release`; segments are never freed, slots are reused through `FREE`); the LLVM target's ownership of ends in `crates/ignite-llvm/src/lower.rs` (`own_streams`, `release_owned`, `is_stream`) and `own.rs`; `docs/slice.md` 30.3 (an end sent as a value on another channel is never released).
+- Code: `crates/ignite-io/src/channel.rs` (`Shared` behind the two ends' `Arc<End>`, freed when both ends' handles are dropped); `crates/ignite-rt/src/channel.rs` (`ignite_rt_channel_bounded` registers each end as `Handle::Sender` or `Handle::Receiver`); the handle table in `crates/ignite-rt/src/net.rs` (`register`, `release_owner`, the task's `OWNED` list with its tombstones, `ignite_rt_own_release`; segments are never freed, slots are reused through `FREE`); the LLVM target's ownership of ends in `crates/ignite-llvm/src/lower.rs` (`own_streams`, `own_value`, `release_owned`, `spawn_with`), `own.rs` and the handle glue in `crates/ignite-llvm/src/glue.rs` (`own_handles`, `retain_handles`, `release_handles`); `docs/slice.md` 30.3.
 - Story: `story:channel-release-on-close`.
 - Blocks: no (with the workaround).
 
@@ -392,6 +396,7 @@
 - Code: the effect check takes a receiver's type from declarations alone (`docs/slice.md` 11.7): `static_type` in `crates/ignite-check/src/lib.rs` resolves no call of a declared fn (`ExprKind::Call` covers only `Owner.constructor(..)`), and `pattern` binds a `PatternKind::Binding` without a type from the scrutinee (`Option<T>` of `Store.get`). The type checker reports the missing effect site: `effect_site` and `unchecked_effects` in `crates/ignite-types/src/typer.rs`. Same class as G15.
 - Story: `story:infer-channel-ends`.
 - Blocks: no (with the workaround).
+- Closed in wave 8 by story `infer-channel-ends` (`docs/slice.md` 11.7): a `match` arm's bindings take their types from a scrutinee of known type, and a call of a fn the module declares without type parameters has its declared return type unless that is a fn type.
 
 ## G20 (correction)
 

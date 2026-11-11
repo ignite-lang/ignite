@@ -1,9 +1,9 @@
 # std.cli
 
-The declaration of a command-line application: a set of commands, each with its arguments and
-a handler module. `ignite check` checks these declarations. The kind has no `main`, so it
-builds no executable of its own; the buildable client today is
-[`TelnetClient`](telnet.md).
+The declaration of a command-line application. Today it is a declaration only: `ignite check`
+checks it, and nothing builds or runs it. The kind has no `main`, so it builds no executable.
+The buildable client is [`TelnetClient`](telnet.md); a program reads its own arguments through
+a [`CommandLine`](process.md#command-line).
 
 - Layer: general.
 - Source: [`std/cli.ignite`](https://github.com/ignite-lang/ignite/blob/main/std/cli.ignite).
@@ -37,36 +37,26 @@ enum ArgKind {
 type SessionHandler {
   connect: fn(stream: TcpStream) -> Result<Unit, IoError> requires [stream.*, stdin.*, stdout.*, process.*]
 }
+
+fn endpoint(speaking: Protocol) -> ArgKind
+fn text() -> ArgKind
 ```
 
-- `Application` is the application: its executable and its commands by name.
+- `Application` is the executable and its commands by name.
 - `Command` is one command. `handler` names the module whose `connect` runs the session over a
-  connected stream, with the terminal and the process at hand. `terminal` and `escape` are
-  plain text today (defaults `"interactive"` and `"Ctrl+]"`); the source calls them closed
-  sets, but lists no other members and nothing checks the value.
-- `Argument` is one argument and its kind.
+  connected stream. `terminal` and `escape` are plain text; nothing checks their value.
+- `Argument` is one argument. `endpoint(P)` makes an argument that is a `host:port` of a server
+  speaking `P`, `text()` one that is any text.
 - `SessionHandler` is what a handler module provides. `module("std.protocol.telnet")` fills it
   with Telnet's `connect`.
 
-## Functions
-
-```ignite,fragment
-fn endpoint(speaking: Protocol) -> ArgKind
-fn text() -> ArgKind
-fn describe(name: Text, kind: ArgKind) -> Text
-fn usage(name: Text, arguments: List<Argument>) -> Text
-```
-
-| function | what it does |
-|---|---|
-| `endpoint` | an argument that is an endpoint of a server speaking the protocol, written `host:port` |
-| `text` | an argument that is any text |
-| `describe` | the usage text of one argument: `<name: host:port>` or `<name>` |
-| `usage` | the usage line of a command with its arguments |
+The module also exports `describe` and `usage`, which write the usage text of an argument and
+of a command.
 
 ## In a declaration
 
-From [`terminal.design.ignite`](https://github.com/ignite-lang/ignite/blob/main/examples/terminal/terminal.design.ignite):
+The one use is the client of
+[`terminal.design.ignite`](https://github.com/ignite-lang/ignite/blob/main/examples/terminal/terminal.design.ignite):
 
 ```ignite,fragment
 component client: Application {
@@ -82,18 +72,5 @@ component client: Application {
       escape = "Ctrl+]"
     }
   }
-}
-```
-
-## Example
-
-```ignite
-import std.cli.*
-
-test "usage lines" {
-  assert describe("file", text()) == "<file>"
-  assert Argument { name = "x" }.kind == Plain
-  assert usage("connect", []) == "connect"
-  assert usage("copy", [Argument { name = "from" }, Argument { name = "to" }]) == "copy <from> <to>"
 }
 ```

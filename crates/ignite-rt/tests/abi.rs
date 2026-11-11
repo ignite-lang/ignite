@@ -264,7 +264,8 @@ fn tcp_round_trip_with_concurrent_read_and_write() {
 
 /// `tcp_peer`, `tcp_timed_out` and `tcp_connect_within` (`docs/slice.md`
 /// 26.4): the peer as an `Endpoint` in the task's arena, the flag of the
-/// last read, and a connect that gives up after its timeout.
+/// last read, and a connect that gives up after its timeout; `tcp_local`
+/// (story `http-app-connection`): this end, as `tcp_peer` gives the other.
 #[test]
 fn peer_timed_out_and_connect_within() {
     let listener = bind();
@@ -292,6 +293,17 @@ fn peer_timed_out_and_connect_within() {
     );
     ignite_rt_tcp_peer(&mut peer, listener);
     assert_eq!((read_text(&peer.address), peer.port), (String::new(), 0));
+    let mut local = IgniteEndpoint {
+        address: empty(),
+        port: -1,
+    };
+    ignite_rt_tcp_local(&mut local, server);
+    assert_eq!(
+        (read_text(&local.address), local.port),
+        ("127.0.0.1".to_string(), port)
+    );
+    ignite_rt_tcp_local(&mut local, listener);
+    assert_eq!((read_text(&local.address), local.port), (String::new(), 0));
 
     assert_eq!(ignite_rt_tcp_timed_out(client), 0);
     assert_eq!(ignite_rt_tcp_set_idle_timeout(client, 50, &mut err), 0);

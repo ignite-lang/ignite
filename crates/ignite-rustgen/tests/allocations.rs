@@ -81,10 +81,24 @@ fn reading_the_bytes_of_a_text_borrows_them() {
 #[test]
 fn text_is_appended_in_place_and_a_final_conversion_takes_the_buffer() {
     let (_, std) = todo();
+    // The status line and the header fields are rendered by render_fields
+    // since story http-app-connection (an upgrade's head has no Connection
+    // field of Http's own); render_head appends Connection to that text.
+    let fields = function(&std, "render_fields");
+    assert!(!fields.contains("format!(\"{}{}\", head"), "{fields}");
+    assert!(fields.contains("write!(head, \"{}: {}\\r\\n\""), "{fields}");
     let head = function(&std, "render_head");
     assert!(!head.contains("format!(\"{}{}\", head"), "{head}");
-    assert!(head.contains("write!(head, \"{}: {}\\r\\n\""), "{head}");
     assert!(!head.contains("head.clone().into_bytes()"), "{head}");
+    // An inline reply is rendered into one buffer with room for its head
+    // and body (story http-reply-cost-back): the buffer made with that room
+    // becomes the head's text, and the text becomes the bytes sent, each
+    // taken, not copied.
+    assert!(!fields.contains("from_utf8_lossy(&"), "{fields}");
+    for name in ["render_framed", "send_streamed"] {
+        let body = function(&std, name);
+        assert!(!body.contains(".clone().into_bytes()"), "{name}: {body}");
+    }
     let lower = function(&std, "to_lower");
     assert!(lower.contains("String::from_utf8(out)"), "{lower}");
 }

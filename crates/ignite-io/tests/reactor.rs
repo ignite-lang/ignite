@@ -1,15 +1,15 @@
 //! The reactor contract (`docs/readiness-io.md` 3.4, `ignite_io::reactor`)
 //! run against every implementation: `EpollReactor`, `PollReactor` and the
 //! test double `ScriptedReactor`, which delivers the readiness a test
-//! scripts without a kernel descriptor. That the double implements the
-//! trait from outside the crate, with nothing but the public waiter, is the
-//! proof that the seam carries no epoll type.
+//! scripts without asking the kernel about any descriptor. That the double
+//! implements the trait from outside the crate, with nothing but the public
+//! waiter, is the proof that the seam carries no epoll type.
 //!
 //! Every case parks a thread waiter, the thread-per-task implementation of
 //! the waiter seam, so the suite also runs over it.
 
 use std::io::Write;
-use std::os::fd::{AsRawFd, RawFd};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, RawFd};
 use std::os::unix::net::UnixStream;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex, PoisonError};
@@ -25,7 +25,7 @@ const SHORT: Duration = Duration::from_millis(50);
 trait Harness: Send + Sync + 'static {
     type R: Reactor + 'static;
     fn reactor(&self) -> &Self::R;
-    fn descriptor(&self) -> RawFd;
+    fn descriptor(&self) -> BorrowedFd<'_>;
     fn make_readable(&self);
 }
 
@@ -53,20 +53,35 @@ impl<R: Reactor + 'static> Harness for Kernel<R> {
     fn reactor(&self) -> &R {
         &self.reactor
     }
-    fn descriptor(&self) -> RawFd {
-        self.watched.as_raw_fd()
+    fn descriptor(&self) -> BorrowedFd<'_> {
+        self.watched.as_fd()
     }
     fn make_readable(&self) {
         self.peer.lock().unwrap().write_all(b"x").unwrap();
     }
 }
 
-/// A descriptor number that is no open descriptor of the process: the
-/// double never hands it to the kernel.
-const SCRIPTED_DESCRIPTOR: RawFd = 1_000_000;
-
+/// The double and the descriptor the harness lends it: one end of a
+/// socket pair with a byte waiting, which the kernel reports readable from
+/// the start. A double that asked the kernel would report it in
+/// `a_deadline_expires` and after `deregistration_stops_events`; only the
+/// script makes it readable for the double.
 struct Scripted {
     reactor: ScriptedReactor,
+    lent: UnixStream,
+    _peer: UnixStream,
+}
+
+impl Scripted {
+    fn new() -> Scripted {
+        let (lent, mut peer) = UnixStream::pair().unwrap();
+        peer.write_all(b"x").unwrap();
+        Scripted {
+            reactor: ScriptedReactor::default(),
+            lent,
+            _peer: peer,
+        }
+    }
 }
 
 impl Harness for Scripted {
@@ -74,11 +89,11 @@ impl Harness for Scripted {
     fn reactor(&self) -> &ScriptedReactor {
         &self.reactor
     }
-    fn descriptor(&self) -> RawFd {
-        SCRIPTED_DESCRIPTOR
+    fn descriptor(&self) -> BorrowedFd<'_> {
+        self.lent.as_fd()
     }
     fn make_readable(&self) {
-        self.reactor.ready(SCRIPTED_DESCRIPTOR, Interest::READ);
+        self.reactor.ready(self.lent.as_raw_fd(), Interest::READ);
     }
 }
 
@@ -111,7 +126,7 @@ impl ScriptedReactor {
 impl Reactor for ScriptedReactor {
     fn register(
         &self,
-        descriptor: RawFd,
+        descriptor: BorrowedFd<'_>,
         interest: Interest,
         waiter: Waiter,
     ) -> std::io::Result<Token> {
@@ -120,13 +135,26 @@ impl Reactor for ScriptedReactor {
         let token = Token(script.next);
         script
             .registered
-            .push((token, descriptor, interest, waiter));
+            .push((token, descriptor.as_raw_fd(), interest, waiter));
         Ok(token)
     }
 
-    fn deregister(&self, token: Token) -> std::io::Result<()> {
+    fn deregister(&self, token: Token, descriptor: BorrowedFd<'_>) -> std::io::Result<()> {
         let mut script = self.state.lock().unwrap();
-        script.registered.retain(|(known, ..)| *known != token);
+        let Some(at) = script
+            .registered
+            .iter()
+            .position(|(known, ..)| *known == token)
+        else {
+            return Ok(());
+        };
+        let (_, registered, _, _) = script.registered.remove(at);
+        if registered != descriptor.as_raw_fd() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "deregistered with another descriptor than the registered one",
+            ));
+        }
         Ok(())
     }
 
@@ -196,7 +224,10 @@ fn readiness_wakes_a_parked_waiter<H: Harness>(harness: H) {
     assert!(event.waiter.same(&waiter), "the event names the waiter");
     wake(&event.waiter);
     assert_eq!(parked.recv_timeout(LIMIT).unwrap(), Woken::Notified);
-    harness.reactor().deregister(token).unwrap();
+    harness
+        .reactor()
+        .deregister(token, harness.descriptor())
+        .unwrap();
 }
 
 fn a_deadline_expires<H: Harness>(harness: H) {
@@ -214,7 +245,10 @@ fn a_deadline_expires<H: Harness>(harness: H) {
     assert!(events.is_empty(), "nothing was ready: {events:?}");
     assert!(waited >= SHORT, "returned after {waited:?}");
     assert!(waited < LIMIT, "returned after {waited:?}");
-    harness.reactor().deregister(token).unwrap();
+    harness
+        .reactor()
+        .deregister(token, harness.descriptor())
+        .unwrap();
 }
 
 fn a_cross_thread_wake_ends_a_wait<H: Harness>(harness: H) {
@@ -253,7 +287,10 @@ fn deregistration_stops_events<H: Harness>(harness: H) {
         .reactor()
         .register(harness.descriptor(), Interest::READ, Waiter::current())
         .unwrap();
-    harness.reactor().deregister(token).unwrap();
+    harness
+        .reactor()
+        .deregister(token, harness.descriptor())
+        .unwrap();
     harness.make_readable();
     let mut events = Vec::new();
     harness
@@ -264,6 +301,55 @@ fn deregistration_stops_events<H: Harness>(harness: H) {
         events.iter().all(|event| event.token != token),
         "an event after deregistration: {events:?}"
     );
+}
+
+/// A deregistration names the descriptor it is for: another one than the
+/// registered one is refused, and the token gives no more events.
+fn another_descriptor_is_refused<H: Harness>(harness: H) {
+    let token = harness
+        .reactor()
+        .register(harness.descriptor(), Interest::READ, Waiter::current())
+        .unwrap();
+    let (other, _peer) = UnixStream::pair().unwrap();
+    let refused = harness
+        .reactor()
+        .deregister(token, other.as_fd())
+        .expect_err("another descriptor deregistered");
+    assert_eq!(refused.kind(), std::io::ErrorKind::InvalidInput);
+    harness.make_readable();
+    let mut events = Vec::new();
+    harness
+        .reactor()
+        .wait(Some(Instant::now() + SHORT), &mut events)
+        .unwrap();
+    assert!(
+        events.iter().all(|event| event.token != token),
+        "an event after the refused deregistration: {events:?}"
+    );
+}
+
+/// A registration after a deregistration has a token of its own: the
+/// earlier token, deregistered again, leaves the new registration in place
+/// (an `EpollReactor` reuses the slot of an ended registration, story
+/// `binary-size-back`).
+fn a_reused_registration_has_a_token_of_its_own<H: Harness>(harness: H) {
+    let reactor = harness.reactor();
+    let first = reactor
+        .register(harness.descriptor(), Interest::READ, Waiter::current())
+        .unwrap();
+    reactor.deregister(first, harness.descriptor()).unwrap();
+    let second = reactor
+        .register(harness.descriptor(), Interest::READ, Waiter::current())
+        .unwrap();
+    assert_ne!(first, second, "a reused registration got the earlier token");
+    reactor.deregister(first, harness.descriptor()).unwrap();
+    harness.make_readable();
+    let events = events_within(reactor);
+    assert!(
+        events.iter().any(|event| event.token == second),
+        "the earlier token ended the new registration: {events:?}"
+    );
+    reactor.deregister(second, harness.descriptor()).unwrap();
 }
 
 macro_rules! contract {
@@ -290,15 +376,20 @@ macro_rules! contract {
             fn deregistration_stops_events() {
                 super::deregistration_stops_events($harness);
             }
+
+            #[test]
+            fn another_descriptor_is_refused() {
+                super::another_descriptor_is_refused($harness);
+            }
+
+            #[test]
+            fn a_reused_registration_has_a_token_of_its_own() {
+                super::a_reused_registration_has_a_token_of_its_own($harness);
+            }
         }
     };
 }
 
 contract!(epoll, Kernel::new(EpollReactor::new().unwrap()));
 contract!(poll, Kernel::new(PollReactor::new().unwrap()));
-contract!(
-    scripted,
-    Scripted {
-        reactor: ScriptedReactor::default()
-    }
-);
+contract!(scripted, Scripted::new());

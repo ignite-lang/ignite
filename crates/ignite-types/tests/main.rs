@@ -4,6 +4,7 @@
 //! `<file>::<test>`.
 
 mod adversary_bounds;
+mod adversary_http_app;
 mod audit;
 mod builtin_tables;
 mod clone;
@@ -11,6 +12,9 @@ mod common;
 mod effectful_map_adversary;
 mod fixtures;
 mod generics;
+mod infer_adversary;
+mod infer_adversary2;
+mod infer_imports;
 mod inline_tests;
 mod lent;
 mod limits;

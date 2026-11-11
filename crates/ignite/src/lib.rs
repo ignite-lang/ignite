@@ -17,10 +17,13 @@ pub mod conformance;
 mod embedded_runtime;
 mod llvm_build;
 mod musl;
+mod prebuild;
+pub use prebuild::compile_on_thread;
 pub mod rfc;
 pub mod run;
 mod test_build;
 pub mod typed_json;
+pub mod version;
 
 pub use llvm_build::{COMPILE_FLAGS, LINK_FLAGS, RELEASE_LINK_FLAGS};
 pub use run::Standing;
@@ -398,6 +401,13 @@ fn builtin_dependencies(source: &SourceFile, own: Option<&str>) -> BTreeSet<Stri
         .collect()
 }
 
+#[cfg(test)]
+thread_local! {
+    /// The [`module_dependencies`] calls of this thread, by module path.
+    static DEPENDENCY_SCANS: std::cell::RefCell<BTreeMap<String, usize>> =
+        const { std::cell::RefCell::new(BTreeMap::new()) };
+}
+
 /// Imports and literal `module("p")` calls are dependencies before typing:
 /// module records resolve their functions without an accompanying import.
 /// Walk expression chains iteratively, including defaults and test bodies.
@@ -408,6 +418,14 @@ fn builtin_dependencies(source: &SourceFile, own: Option<&str>) -> BTreeSet<Stri
 /// `std.net`, `docs/slice.md` 26.1).
 fn module_dependencies(program: &Program, source: &SourceFile) -> BTreeSet<String> {
     use ignite_syntax::ast::{Block, Decl, Expr, ExprKind, StmtKind};
+
+    #[cfg(test)]
+    DEPENDENCY_SCANS.with(|scans| {
+        *scans
+            .borrow_mut()
+            .entry(program_module(program))
+            .or_default() += 1;
+    });
 
     enum Node<'a> {
         Expr(&'a Expr),
@@ -633,6 +651,27 @@ struct Parsed {
     path: String,
     source: SourceFile,
     program: Program,
+    /// [`module_dependencies`] of the module, computed once: the loader
+    /// asks for them when it follows the module's imports and again when
+    /// it orders the modules ([`import_order`]), and computing them lexes
+    /// the module's text.
+    dependencies: std::sync::OnceLock<BTreeSet<String>>,
+}
+
+impl Parsed {
+    fn new(path: String, source: SourceFile, program: Program) -> Self {
+        Self {
+            path,
+            source,
+            program,
+            dependencies: std::sync::OnceLock::new(),
+        }
+    }
+
+    fn dependencies(&self) -> &BTreeSet<String> {
+        self.dependencies
+            .get_or_init(|| module_dependencies(&self.program, &self.source))
+    }
 }
 
 /// `std.a.b` is `<root>/a/b.ignite`; `None` for a path outside `std`.
@@ -709,19 +748,15 @@ fn load_modules(
         let source = read_source(&file)?;
         let program = parse(&source)?;
         check_package(&path, &source, &program)?;
+        let module = Parsed::new(path.clone(), source, program);
         pending.extend(
-            module_dependencies(&program, &source)
-                .into_iter()
-                .filter(|module| !seen.contains(module)),
+            module
+                .dependencies()
+                .iter()
+                .filter(|module| !seen.contains(*module))
+                .cloned(),
         );
-        parsed.insert(
-            path.clone(),
-            Parsed {
-                path,
-                source,
-                program,
-            },
-        );
+        parsed.insert(path, module);
     }
 
     let order = import_order(&parsed)?;
@@ -732,6 +767,7 @@ fn load_modules(
             path,
             source,
             program,
+            ..
         } = parsed.remove(&path).expect("ordered modules are parsed");
         let symbols =
             ignite_check::check_module(&program, &checked).map_err(|d| diagnostics(&source, d))?;
@@ -773,9 +809,10 @@ fn import_order(parsed: &BTreeMap<String, Parsed>) -> Result<Vec<String>, Error>
     let edges: BTreeMap<&str, BTreeSet<&str>> = parsed
         .iter()
         .map(|(path, module)| {
-            let targets = module_dependencies(&module.program, &module.source)
-                .into_iter()
-                .filter_map(|m| parsed.get_key_value(&m).map(|(k, _)| k.as_str()))
+            let targets = module
+                .dependencies()
+                .iter()
+                .filter_map(|m| parsed.get_key_value(m).map(|(k, _)| k.as_str()))
                 .collect();
             (path.as_str(), targets)
         })
@@ -1007,13 +1044,13 @@ impl ParsedFile {
     /// Every module the program and its siblings import, standard-library
     /// or not; the loader skips the ones that are no standard-library file.
     fn std_modules(&self) -> impl Iterator<Item = String> + '_ {
-        std::iter::once((&self.program, &self.source))
+        module_dependencies(&self.program, &self.source)
+            .into_iter()
             .chain(
                 self.siblings
                     .values()
-                    .map(|sibling| (&sibling.program, &sibling.source)),
+                    .flat_map(|sibling| sibling.dependencies().iter().cloned()),
             )
-            .flat_map(|(program, source)| module_dependencies(program, source))
     }
 }
 
@@ -1083,14 +1120,7 @@ fn parse_siblings(file: &Path, program: &Program) -> Result<BTreeMap<String, Par
             continue;
         }
         let program = parse(&source)?;
-        parsed.insert(
-            path.clone(),
-            Parsed {
-                path,
-                source,
-                program,
-            },
-        );
+        parsed.insert(path.clone(), Parsed::new(path, source, program));
     }
     let parent = file
         .file_stem()
@@ -1141,14 +1171,7 @@ fn parse_siblings(file: &Path, program: &Program) -> Result<BTreeMap<String, Par
             continue;
         };
         wanted.extend(imports(&program));
-        parsed.insert(
-            path.clone(),
-            Parsed {
-                path,
-                source,
-                program,
-            },
-        );
+        parsed.insert(path.clone(), Parsed::new(path, source, program));
     }
     Ok(parsed)
 }
@@ -1169,6 +1192,7 @@ fn check_siblings(
             path,
             source,
             program,
+            ..
         } = parsed.remove(&path).expect("ordered modules are parsed");
         let symbols =
             ignite_check::check_module(&program, &modules).map_err(|d| diagnostics(&source, d))?;
@@ -2001,38 +2025,89 @@ pub fn build(file: &Path, options: &BuildOptions) -> Result<BuildOutput, Error> 
     if let Some(triple) = &triple {
         musl::require_rust_target(triple)?;
     }
-    let (parsed, library) = load_program_std(file, options.std.as_deref(), &[])?;
     let substrate = options
         .substrate
         .clone()
         .unwrap_or_else(default_substrate_path);
-    let emitted = generate(parsed, &library, substrate)?;
-    let project = emitted.program;
+    let target_dir_of = |out: &Path| {
+        options
+            .target_dir
+            .clone()
+            .unwrap_or_else(|| out.join("target"))
+    };
+    let prebuild_for = |out: &Path| {
+        prebuild::Prebuild::start(
+            &substrate,
+            out,
+            &target_dir_of(out),
+            options.release,
+            triple.as_deref(),
+        )
+    };
+    // Dropped on any error below, which stops it.
+    let mut prebuild = match &options.out {
+        Some(out) => prebuild_for(out),
+        None => prebuild::Prebuild::none(),
+    };
+    let (parsed, library) = load_program_std(file, options.std.as_deref(), &[])?;
     let out = options.out.clone().unwrap_or_else(|| {
-        Path::new("target")
+        let out = Path::new("target")
             .join("ignite")
-            .join(&project.package_name)
+            .join(ignite_rustgen::package_name(&parsed.program));
+        prebuild = prebuild_for(&out);
+        out
     });
-    ignite_rustgen::write_project(&project, &out).map_err(io_error(&out))?;
+    let emitted = generate(parsed, &library, substrate.clone())?;
+    let project = emitted.program;
+    let target_dir = target_dir_of(&out);
+    let laid_out = options.release
+        && release_layout(&target_dir)
+        && ignite_rustgen::write_release_project(&project, &out).map_err(io_error(&out))?;
+    let layout = if laid_out {
+        let triple = triple.clone().unwrap_or_else(host_triple);
+        Some(ignite_rustgen::release_layout_config(&triple, &out).map_err(io_error(&out))?)
+    } else {
+        ignite_rustgen::write_project(&project, &out).map_err(io_error(&out))?;
+        None
+    };
     let std_out = out.join("std");
     ignite_rustgen::write_project(&emitted.std, &std_out).map_err(io_error(&std_out))?;
-    let target_dir = options
-        .target_dir
-        .clone()
-        .unwrap_or_else(|| out.join("target"));
+    seed_lock(&substrate, &out)?;
+    prebuild.finish();
     eprintln!(
         "note: building the generated Rust project in {}; compiler messages refer to generated code",
         out.display()
     );
     test_build::claim_target_dir(&out, &target_dir)?;
-    cargo_build(
-        &out,
-        &target_dir,
-        options.release,
-        triple.as_deref(),
-        false,
-        options.offline,
-    )?;
+    let cargo = |layout: Option<&str>| {
+        cargo_build(
+            &out,
+            &target_dir,
+            options.release,
+            triple.as_deref(),
+            false,
+            options.offline,
+            layout,
+        )
+    };
+    match cargo(layout.as_deref()) {
+        // A failed build with the layout: only when the linker itself
+        // refuses the script is it built again without. Any other failure
+        // is the build's, reported once, and leaves the layout on.
+        Err(Error::Cargo { .. })
+            if layout.is_some()
+                && linker_refuses_layout(&target_dir, triple.as_deref(), options.offline) =>
+        {
+            eprintln!(
+                "note: the linker does not read the linker script of the release layout; building without it"
+            );
+            let marker = target_dir.join(NO_RELEASE_LAYOUT);
+            std::fs::write(&marker, "").map_err(io_error(&marker))?;
+            ignite_rustgen::write_project(&project, &out).map_err(io_error(&out))?;
+            cargo(None)?;
+        }
+        built => built?,
+    }
     let built = cargo_output_dir(&target_dir, options.release, triple.as_deref());
     let executables = project
         .executables
@@ -2049,6 +2124,96 @@ pub fn build(file: &Path, options: &BuildOptions) -> Result<BuildOutput, Error> 
         project_dir: out,
         executables,
     })
+}
+
+/// The file in a cargo target directory that says a release build into it
+/// links without the release layout: the linker of an earlier build
+/// refused its script ([`linker_refuses_layout`]).
+const NO_RELEASE_LAYOUT: &str = "ignite-no-release-layout";
+
+/// Whether a release build into `target_dir` links its executables with
+/// the release layout (`ignite_rustgen::RELEASE_LAYOUT`, row 3.8 of
+/// `docs/quality.md`): on Linux, whose linkers read the script, unless the
+/// linker of a build into the directory refused it. The LLVM linker, which
+/// rustc links with on x86-64, and GNU ld read it; a linker that does not
+/// (gold, which has no `INSERT`) fails the link, and `build` then asks it
+/// ([`linker_refuses_layout`]), builds again without the script and leaves
+/// [`NO_RELEASE_LAYOUT`], so the next build does not try.
+fn release_layout(target_dir: &Path) -> bool {
+    cfg!(target_os = "linux") && !target_dir.join(NO_RELEASE_LAYOUT).exists()
+}
+
+/// The directory in a cargo target directory where the linker is asked
+/// about the release layout: `project` and its own `target`.
+const LAYOUT_PROBE: &str = "ignite-layout-probe";
+
+/// Whether the linker of a release build into `target_dir` refuses the
+/// release layout's script, asked after such a build failed: a program of
+/// one empty `main` (`ignite_rustgen::write_layout_probe`) does not build
+/// with the script and builds without it, by the same cargo, in the same
+/// environment and directory (so with the same configured linker and
+/// `rustflags`) and for the same target as the build. Its output is not
+/// shown. `false` for every other outcome, so a build that failed for
+/// another reason (a compiler that was killed, a dependency that cannot be
+/// read, a full disk, a link error of the program's own) is not built
+/// again and does not turn the layout off.
+fn linker_refuses_layout(target_dir: &Path, triple: Option<&str>, offline: bool) -> bool {
+    let probe = target_dir.join(LAYOUT_PROBE);
+    let project = probe.join("project");
+    let builds = |layout: bool| -> Option<bool> {
+        ignite_rustgen::write_layout_probe(&project, layout).ok()?;
+        let config = if layout {
+            let triple = triple.map_or_else(host_triple, str::to_string);
+            Some(ignite_rustgen::release_layout_config(&triple, &project).ok()?)
+        } else {
+            None
+        };
+        let (_, mut command) = cargo_command(
+            &project,
+            &probe.join("target"),
+            true,
+            triple,
+            true,
+            offline,
+            config.as_deref(),
+        );
+        Some(command.output().ok()?.status.success())
+    };
+    builds(true) == Some(false) && builds(false) == Some(true)
+}
+
+/// The target triple of a build without `--target`, by which cargo reads
+/// the link arguments of the release layout: the driver's own
+/// architecture and C library, as [`musl::triple`] names the musl one.
+/// Where cargo's host is another, it runs the project's build script
+/// instead, which gives the same arguments.
+fn host_triple() -> String {
+    let libc = if cfg!(target_env = "musl") {
+        "musl"
+    } else {
+        "gnu"
+    };
+    format!("{}-unknown-linux-{libc}", std::env::consts::ARCH)
+}
+
+/// Give a generated project at `out` that has no `Cargo.lock` the lock of
+/// the workspace its `ignite-io` (`substrate`) lives in,
+/// `<substrate>/../../Cargo.lock`, when there is one (`docs/slice.md` 6.2).
+/// Cargo then takes the locked versions from its local cache instead of
+/// asking the registry's index about every dependency of `ignite-io`,
+/// drops the entries the project does not use and writes the lock back.
+/// Without it every build into a fresh `--out` resolves over the network
+/// (row 6.2 of `docs/quality.md`, story `build-time-back`). A project
+/// that has a lock keeps it.
+pub(crate) fn seed_lock(substrate: &Path, out: &Path) -> Result<(), Error> {
+    let lock = out.join("Cargo.lock");
+    let workspace = substrate.join("../../Cargo.lock");
+    if lock.exists() || !workspace.is_file() {
+        return Ok(());
+    }
+    std::fs::copy(&workspace, &lock)
+        .map(drop)
+        .map_err(io_error(&lock))
 }
 
 /// Where cargo writes the executables of a build into `target_dir`:
@@ -2070,9 +2235,85 @@ fn cargo_output_dir(target_dir: &Path, release: bool, triple: Option<&str>) -> P
 /// every configured `rustflags`.
 const STATIC_RUSTFLAGS: &str = r#"["-C", "relocation-model=static"]"#;
 
+/// Give a cargo run of the driver `-g0` for the C compiler, as the
+/// repository's `.cargo/config.toml` does with `CFLAGS` for the cargo runs
+/// inside it, wherever the driver stands (story `build-time-back`): the C
+/// and assembly that build scripts compile through the `cc` crate (the TLS
+/// engine's, which asks for `-g3` itself) then carry no debug information
+/// into a dev executable, like the Rust crates from outside the project.
+pub(crate) fn without_c_debug_information(command: &mut Command) {
+    command.envs(c_debug_flags().iter().copied());
+}
+
+/// The variables of [`without_c_debug_information`]: `HOST_CFLAGS` and
+/// `TARGET_CFLAGS`, which `cc` passes after `CFLAGS` (the one of its kind,
+/// whether the build compiles for the host or another target), so a
+/// user's `CFLAGS`, also one of `[env]` in a cargo configuration (which
+/// cargo would not apply over a `CFLAGS` of its environment), still
+/// reaches the compiler. A user's own flags win: none is set when
+/// `CFLAGS`, `TARGET_CFLAGS`, `HOST_CFLAGS` or a `CFLAGS_<target>` is in
+/// the environment, the variables `cc` reads.
+pub(crate) fn c_debug_flags() -> &'static [(&'static str, &'static str)] {
+    c_debug_flags_for(std::env::vars_os().map(|(name, _)| name))
+}
+
+/// [`c_debug_flags`] for an environment with the variables `names`.
+fn c_debug_flags_for(
+    mut names: impl Iterator<Item = std::ffi::OsString>,
+) -> &'static [(&'static str, &'static str)] {
+    let set = names.any(|name| {
+        let name = name.to_string_lossy();
+        matches!(name.as_ref(), "CFLAGS" | "TARGET_CFLAGS" | "HOST_CFLAGS")
+            || name.starts_with("CFLAGS_")
+    });
+    if set {
+        &[]
+    } else {
+        &[("HOST_CFLAGS", "-g0"), ("TARGET_CFLAGS", "-g0")]
+    }
+}
+
+#[cfg(test)]
+mod c_flags_tests {
+    use super::c_debug_flags_for;
+
+    fn given(names: &[&str]) -> Option<&'static [(&'static str, &'static str)]> {
+        let flags = c_debug_flags_for(names.iter().map(|name| (*name).into()));
+        (!flags.is_empty()).then_some(flags)
+    }
+
+    const G0: Option<&[(&str, &str)]> = Some(&[("HOST_CFLAGS", "-g0"), ("TARGET_CFLAGS", "-g0")]);
+
+    /// The driver's cargo runs get `-g0` unless the user set flags of
+    /// their own in any variable `cc` reads, and never in `CFLAGS`, which
+    /// a cargo configuration's `[env]` may set.
+    #[test]
+    fn the_driver_sets_cflags_only_where_the_user_set_none() {
+        assert_eq!(given(&[]), G0);
+        assert_eq!(given(&["PATH", "CXXFLAGS", "RUSTFLAGS"]), G0);
+        for user in [
+            "CFLAGS",
+            "TARGET_CFLAGS",
+            "HOST_CFLAGS",
+            "CFLAGS_x86_64-unknown-linux-gnu",
+            "CFLAGS_x86_64_unknown_linux_gnu",
+        ] {
+            assert_eq!(given(&["PATH", user]), None, "{user}");
+        }
+    }
+}
+
 /// `cargo build` of the generated project in `out`, `--quiet` when `quiet`,
 /// `--target <triple>` with [`STATIC_RUSTFLAGS`] for a static build
-/// (`docs/slice.md` 23.5).
+/// (`docs/slice.md` 23.5). A dynamic build passes no `rustflags`, so the
+/// `build.rustflags` of the user's cargo configuration apply: packed
+/// relative relocations, which the LLVM target links with, raised the
+/// start of a Rust executable (story `binary-size-back`), and a dev build
+/// compresses no debug section, its line tables split out of the objects
+/// by the generated dev profile (rows 3.2 and 6.2). `layout` is the
+/// `--config` value of a release project's link arguments
+/// (`ignite_rustgen::release_layout_config`): arguments of the
+/// executables' links only, no `rustflags`.
 /// Cargo is `$CARGO` when set, else `cargo` from `PATH`.
 fn cargo_build(
     out: &Path,
@@ -2081,9 +2322,35 @@ fn cargo_build(
     triple: Option<&str>,
     quiet: bool,
     offline: bool,
+    layout: Option<&str>,
 ) -> Result<(), Error> {
+    let (cargo, mut command) =
+        cargo_command(out, target_dir, release, triple, quiet, offline, layout);
+    let status = command.status().map_err(|error| Error::Io {
+        path: PathBuf::from(&cargo),
+        error,
+    })?;
+    if !status.success() {
+        return Err(Error::Cargo {
+            status: status.code().unwrap_or(-1),
+        });
+    }
+    Ok(())
+}
+
+/// The cargo of [`cargo_build`] and its command, not yet run.
+fn cargo_command(
+    out: &Path,
+    target_dir: &Path,
+    release: bool,
+    triple: Option<&str>,
+    quiet: bool,
+    offline: bool,
+    layout: Option<&str>,
+) -> (std::ffi::OsString, Command) {
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let mut command = Command::new(&cargo);
+    without_c_debug_information(&mut command);
     command
         .arg("build")
         .arg("--manifest-path")
@@ -2100,22 +2367,16 @@ fn cargo_build(
             .arg("--config")
             .arg(format!("target.{triple}.rustflags={STATIC_RUSTFLAGS}"));
     }
+    if let Some(layout) = layout {
+        command.arg("--config").arg(layout);
+    }
     if quiet {
         command.arg("--quiet");
     }
     if offline {
         command.arg("--offline");
     }
-    let status = command.status().map_err(|error| Error::Io {
-        path: PathBuf::from(&cargo),
-        error,
-    })?;
-    if !status.success() {
-        return Err(Error::Cargo {
-            status: status.code().unwrap_or(-1),
-        });
-    }
-    Ok(())
+    (cargo, command)
 }
 
 /// Where the runtime archive is looked for, in order, for an executable at
@@ -2238,4 +2499,39 @@ pub(crate) fn emit_llvm_with(
     };
     let generated = ignite_llvm::generate_with(&std_inputs, &program, &options);
     Ok((package, generated))
+}
+
+#[cfg(test)]
+mod dependency_scan_tests {
+    use super::*;
+
+    /// Row 6.1 (story `build-time-back`): `ignite check` and `ignite plan`
+    /// of the terminal design scan the dependencies of each module, the
+    /// program, its siblings and every standard-library module they reach,
+    /// once: the loader asks for them when it follows the imports and again
+    /// when it orders the modules, and a scan lexes the module's text.
+    #[test]
+    fn check_and_plan_scan_each_module_once() {
+        let design = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../examples/terminal/terminal.design.ignite");
+        for command in ["check", "plan"] {
+            DEPENDENCY_SCANS.with(|scans| scans.borrow_mut().clear());
+            match command {
+                "check" => check(&design).unwrap_or_else(|error| panic!("{error}")),
+                _ => drop(
+                    plan(&design, &PlanOptions::default())
+                        .unwrap_or_else(|error| panic!("{error}")),
+                ),
+            }
+            let scans = DEPENDENCY_SCANS.with(|scans| scans.borrow().clone());
+            assert!(scans.len() > 10, "{command}: {scans:?}");
+            let repeated: Vec<(&String, &usize)> =
+                scans.iter().filter(|(_, count)| **count != 1).collect();
+            assert!(
+                repeated.is_empty(),
+                "{command}: modules scanned more than once of {}: {repeated:?}",
+                scans.len()
+            );
+        }
+    }
 }

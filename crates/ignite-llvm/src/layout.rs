@@ -341,6 +341,7 @@ impl TypeEnv {
             | Ty::TcpListener
             | Ty::TcpStream
             | Ty::PipeStream
+            | Ty::TlsStream
             | Ty::Sender(_)
             | Ty::Receiver(_)
             | Ty::Store(_)
@@ -472,6 +473,51 @@ impl TypeEnv {
         result
     }
 
+    /// Whether a value of `ty` can hold a handle-table entry
+    /// (`docs/llvm.md` section 4): a listener, a stream, a pipe end, a
+    /// channel end or a capability, or a list, map, tuple, record or enum
+    /// with one inside. A fn value's environment is not looked into: a
+    /// closure that captures a handle never owns it ([`crate::own`]).
+    pub fn holds_handles(&self, ty: &Ty) -> bool {
+        self.holds_handles_in(ty, &mut Vec::new())
+    }
+
+    fn holds_handles_in(&self, ty: &Ty, seen: &mut Vec<Ty>) -> bool {
+        match ty {
+            Ty::TcpListener
+            | Ty::TcpStream
+            | Ty::PipeStream
+            | Ty::TlsStream
+            | Ty::Sender(_)
+            | Ty::Receiver(_)
+            | Ty::Capability(_) => true,
+            Ty::List(t) | Ty::Option(t) => self.holds_handles_in(t, seen),
+            Ty::Result(a, b) | Ty::Map(a, b) => {
+                self.holds_handles_in(a, seen) || self.holds_handles_in(b, seen)
+            }
+            Ty::Tuple(items) => items.iter().any(|t| self.holds_handles_in(t, seen)),
+            Ty::Record(_) | Ty::GenericRecord(..) => {
+                if seen.contains(ty) {
+                    return false;
+                }
+                seen.push(ty.clone());
+                self.fields_of(ty)
+                    .iter()
+                    .any(|(_, t)| self.holds_handles_in(t, seen))
+            }
+            Ty::Enum(_) | Ty::GenericEnum(..) => {
+                if seen.contains(ty) {
+                    return false;
+                }
+                seen.push(ty.clone());
+                self.variants(ty)
+                    .iter()
+                    .any(|(_, payload)| payload.iter().any(|t| self.holds_handles_in(t, seen)))
+            }
+            _ => false,
+        }
+    }
+
     /// Whether copying a value of `ty` must copy heap buffers (a list or
     /// text anywhere inside it, a boxed position or a fn value, whose
     /// environment is copied), so a plain `memcpy` is not a copy.
@@ -580,6 +626,7 @@ pub fn scalar_type(ty: &Ty) -> Option<&'static str> {
         | Ty::TcpListener
         | Ty::TcpStream
         | Ty::PipeStream
+        | Ty::TlsStream
         | Ty::Sender(_)
         | Ty::Receiver(_)
         | Ty::Capability(_) => Some("i64"),
@@ -616,6 +663,7 @@ pub fn mangle(ty: &Ty) -> String {
         Ty::TcpListener => "TcpListener".into(),
         Ty::TcpStream => "TcpStream".into(),
         Ty::PipeStream => "PipeStream".into(),
+        Ty::TlsStream => "TlsStream".into(),
         Ty::Capability(kind) => kind.name().into(),
         Ty::IoError => "IoError".into(),
         Ty::Input => "Input".into(),

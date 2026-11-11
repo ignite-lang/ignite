@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-11T08:42:30Z",
+  "actor": "human:timo",
+  "artifact": "story:llvm-release-handle-temporaries",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "coordinator run on 39aeb902 (wave/11-handles after fix round 2, merged with the integration branch at 1f68ceb4): cargo test -p ignite-llvm 43 passed, 1 ignored; leak:: golden scheduler:: todo:: drain:: terminal:: 206 passed, 0 failed; task test-ignite 452 passed per target; cargo test --no-fail-fast -p ignite-check 10 + 24 passed, 1 failed (layering::compiler_crates_name_no_application_protocol, unit reply's open fix), 1 ignored; quality::static_metrics_hold_the_bar and differential:: red on improved lines only (1.1 eval 2, no 1.1 llvm line: 0); thirteen mutants of own.rs and lower.rs: twelve killed by the soak programs or the goldens, M11 (the owned-binding filter of sole_mentions) survives as an equivalent mutant; fmt and clippy exit 0"
+  }
+}

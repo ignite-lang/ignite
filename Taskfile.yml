@@ -59,7 +59,7 @@ tasks:
       - task: ux
 
   quality:
-    desc: Measure every instrumented metric of docs/quality.md once and append the run to quality/history.jsonl (RUN=vX.Y.Z for a release, which is refused when worse than the last)
+    desc: Measure every instrumented metric of docs/quality.md once and append the run to quality/history.jsonl (RUN=vX.Y.Z for a release, whose rows worse than the last are printed as tracked)
     vars:
       WORK:
         sh: echo "${IGNITE_QUALITY_WORK:-${XDG_CACHE_HOME:-$HOME/.cache}/ignite/quality}"
@@ -76,7 +76,7 @@ tasks:
       - cargo test -q -p ignite --test main -- --ignored --exact quality::record
 
   quality-remote:
-    desc: Measure the timing rows of docs/quality.md (5.3, 6.1, 6.2) and the native benchmark against plain Rust and Go (3.3, 3.7, 3.8, 3.9, bench/native, absolute values in quality/bench.jsonl) for BASE and HEAD interleaved on a single-tenant EC2 host (INSTANCE_TYPE, default c7i.metal-24xl, spot, on-demand only without spot capacity) made for the run and terminated after it, and append HEAD's records to quality/history.jsonl (RUN=vX.Y.Z for a release, refused when worse than BASE); AWS profile IGNITE_PERF_AWS_PROFILE (required), region IGNITE_PERF_AWS_REGION; MAX_HOURS (default 3) after which the instance terminates itself; DRY_RUN=1 prints the aws calls and makes the creating ones with --dry-run
+    desc: Measure the timing rows of docs/quality.md (5.3, 6.1, 6.2) and the native benchmark against plain Rust and Go (3.3, 3.7, 3.8, 3.9, bench/native, absolute values in quality/bench.jsonl) for BASE and HEAD interleaved on a single-tenant EC2 host (INSTANCE_TYPE, default c7i.metal-24xl, spot, on-demand only without spot capacity) made for the run and terminated after it, and append HEAD's records to quality/history.jsonl (RUN=vX.Y.Z for a release, whose rows worse than BASE are printed as tracked); AWS profile IGNITE_PERF_AWS_PROFILE (required), region IGNITE_PERF_AWS_REGION; MAX_HOURS (default 3) after which the instance terminates itself; DRY_RUN=1 prints the aws calls and makes the creating ones with --dry-run
     requires:
       vars: [BASE, HEAD]
     vars:
@@ -122,17 +122,21 @@ tasks:
         sh: cargo pkgid -p ignite | sed 's/.*[#@]//'
       NAME: ignite-{{.VERSION}}-x86_64-linux
       DIR: '{{.T}}/dist/{{.NAME}}'
+      RELEASE_COMMIT:
+        sh: git rev-parse --verify 'v{{.VERSION}}^{commit}'
     env:
       CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C target-feature=+crt-static
+      IGNITE_RELEASE_COMMIT: '{{.RELEASE_COMMIT}}'
     cmds:
       - cargo build --release --locked -p ignite --target x86_64-unknown-linux-gnu
       - rm -rf '{{.DIR}}' '{{.DIR}}.tar.gz'
       - mkdir -p '{{.DIR}}/bin' '{{.DIR}}/share/ignite'
       - cp '{{.T}}/x86_64-unknown-linux-gnu/release/ignite' '{{.DIR}}/bin/ignite'
+      - 'v="$(''{{.DIR}}/bin/ignite'' --version)" && echo "$v" && test "$v" = ''ignite {{.VERSION}}'''
+      - git diff --quiet 'v{{.VERSION}}' -- std README.md && test -z "$(git ls-files --others -- std)"
       - cp -R std '{{.DIR}}/share/ignite/std'
       - cp README.md '{{.DIR}}/'
       - tar -czf '{{.DIR}}.tar.gz' -C '{{.T}}/dist' '{{.NAME}}'
-      - '''{{.DIR}}/bin/ignite'' --version'
       - echo 'built {{.DIR}}.tar.gz'
 
   image:
@@ -170,10 +174,10 @@ tasks:
   bench-throughput:
     desc: Build both targets' release terminald and print the throughput matrix (CELLS=rr:16,pipe:256 and RUNS=n narrow it)
     cmds:
-      - cargo build -q --release -p ignite-rt -p ignite-load
+      - cargo build -q --release -p ignite-load
       - cargo build -q -p ignite
       - target/debug/ignite build {{.EXAMPLE}} --target rust --release --out target/bench/rust --target-dir target/bench/rust-target
-      - target/debug/ignite build {{.EXAMPLE}} --target llvm --release --runtime target/release/libignite_rt.a --out target/bench/llvm
+      - target/debug/ignite build {{.EXAMPLE}} --target llvm --release --runtime "$(cargo run -q -p ignite-perf -- runtime --target-dir target/bench-rt)" --out target/bench/llvm
       - target/release/ignite-load matrix --server rust=target/bench/rust-target/release/terminald --server llvm=target/bench/llvm/bin/terminald --runs {{.RUNS | default "3"}} {{if .CELLS}}--cells {{.CELLS}}{{end}} --out target/bench/throughput.jsonl
 
   server:

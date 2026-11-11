@@ -91,7 +91,14 @@ fn read_and_write_agree_across_the_evaluator_and_both_targets() {
     let names = printed_fns(loaded.program());
     assert_eq!(
         names,
-        ["documents", "values", "compact", "pretty", "round_trips"]
+        [
+            "documents",
+            "values",
+            "compact",
+            "pretty",
+            "round_trips",
+            "duplicates"
+        ]
     );
     let ours = evaluated(&loaded);
     assert_eq!(ours[1].matches("Ok(").count(), 8, "{}", ours[1]);
@@ -114,6 +121,11 @@ fn read_and_write_agree_across_the_evaluator_and_both_targets() {
     assert_eq!(
         ours[4],
         "[true, true, true, true, true, true, true, true, true, true]"
+    );
+    // 19.20, case study gap G29: the last `channel`, as JavaScript reads it.
+    assert_eq!(
+        ours[5],
+        r#"(Some(Json.Str("/meta/handshake")), [Json.Str("/a"), Json.Str("/meta/handshake")], "{\"channel\":\"/a\",\"channel\":\"/meta/handshake\"}")"#
     );
     std::thread::scope(|scope| {
         let handles: Vec<_> = [Target::Rust, Target::Llvm]

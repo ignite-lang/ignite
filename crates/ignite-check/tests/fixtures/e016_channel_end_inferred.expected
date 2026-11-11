@@ -1,0 +1,2 @@
+e016_channel_end_inferred.ignite:11:17: error[E016]: missing effect `senders.send` for `tx.try_send`; add it to the `requires` of `ring`
+e016_channel_end_inferred.ignite:20:3: error[E016]: missing effect `e.send` for `try_send`; add it to the `requires` of `send_through`

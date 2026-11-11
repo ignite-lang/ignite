@@ -6,5 +6,6 @@
 mod copies;
 mod golden;
 mod layout;
+mod owned_patterns;
 mod streams;
 mod tests_build;

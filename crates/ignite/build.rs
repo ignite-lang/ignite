@@ -25,6 +25,23 @@
 //! version of the rustc that built it, which the driver compares with
 //! clang's; when that build fails the file says `None` and release builds
 //! link the native archive.
+//!
+//! In the release profile every archive is built on the standard library
+//! from source without its backtrace symbolizer (`../ignite-rt/release_std.rs`,
+//! story `binary-size-back`) when the toolchain has the `rust-src`
+//! component; without it the archives are built on the prebuilt standard
+//! library and the build warns.
+//!
+//! It also sets `IGNITE_VERSION`, the version `ignite --version` prints
+//! (`src/version.rs`): the package version, with the
+//! commit the driver was built from unless it is a clean build of the
+//! release tag.
+
+#[path = "src/version/describe.rs"]
+mod version;
+
+#[path = "../ignite-rt/release_std.rs"]
+mod release_std;
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -49,6 +66,7 @@ fn main() {
     for path in [
         crates.join("ignite-rt/src"),
         crates.join("ignite-rt/Cargo.toml"),
+        crates.join("ignite-rt/release_std.rs"),
         crates.join("ignite-io/src"),
         crates.join("ignite-io/Cargo.toml"),
         workspace.join("Cargo.toml"),
@@ -56,11 +74,22 @@ fn main() {
     ] {
         println!("cargo::rerun-if-changed={}", path.display());
     }
+    version(workspace);
 
     let out = PathBuf::from(env("OUT_DIR"));
     let target_dir = runtime_target_dir(&out);
     let target = env("TARGET");
     let release = env("PROFILE") == "release";
+    let std_source = release && {
+        let rustc = std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
+        let found = release_std::sysroot(&rustc)
+            .and_then(|sysroot| release_std::library(&sysroot))
+            .is_some();
+        if !found {
+            println!("cargo::warning={}", release_std::MISSING);
+        }
+        found
+    };
     let musl = musl_self_contained(&target);
     let runtime_build = |target_dir: &Path| {
         let mut command = Command::new(env("CARGO"));
@@ -84,6 +113,9 @@ fn main() {
             .env_remove("CARGO_BUILD_TARGET");
         if release {
             command.arg("--release");
+            if std_source {
+                release_std::apply(&mut command);
+            }
         }
         command
     };
@@ -255,4 +287,107 @@ fn fnv1a(mut hash: u64, bytes: &[u8]) -> u64 {
         hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
     }
     hash
+}
+
+/// Sets `IGNITE_VERSION`, what `ignite --version` prints after `ignite `
+/// (`src/version/describe.rs`): the commit of the git checkout that is the
+/// workspace, else the one its `COMMIT` file records (written beside the
+/// source of an archive, `dist/toolchain/Dockerfile`), else `+unknown`.
+///
+/// Reruns when a file of [`version::SOURCES`] changes (they decide
+/// `.dirty`), when `HEAD` moves (see [`git_source`]) and when
+/// `IGNITE_RELEASE_COMMIT` changes, which `task dist` sets to the commit of
+/// the release tag so that a tag made after the last build is seen.
+/// Two setups are not watched (story `version-names-commit`, wave 8): a
+/// checkout without a reflog whose branch is packed keeps the version of
+/// its last build after a commit, and a tag made after the last build is
+/// seen by a plain rebuild only when `HEAD` or a source next changes.
+fn version(workspace: &Path) {
+    let (source, inputs) = match git_source(workspace) {
+        Some(found) => found,
+        None => {
+            let file = workspace.join("COMMIT");
+            match std::fs::read_to_string(&file) {
+                Ok(text) => (version::Source::recorded(&text), vec![file]),
+                Err(_) => (version::Source::Unknown, Vec::new()),
+            }
+        }
+    };
+    for path in version::SOURCES
+        .iter()
+        .map(|path| workspace.join(path))
+        .chain(inputs)
+        .filter(|path| path.exists())
+    {
+        println!("cargo::rerun-if-changed={}", path.display());
+    }
+    println!("cargo::rerun-if-env-changed=IGNITE_RELEASE_COMMIT");
+    println!(
+        "cargo::rustc-env=IGNITE_VERSION={}",
+        version::describe(&env("CARGO_PKG_VERSION"), &source)
+    );
+}
+
+/// The checkout's source, when `workspace` is a checkout's top level
+/// (`None` without git or inside another repository), and the git files
+/// that move when its `HEAD` does, all of them per worktree or per ref so
+/// that another worktree's fetch, branch or gc reruns nothing here:
+/// `HEAD` (a checkout of another branch), `logs/HEAD` (every commit, reset
+/// and amend appends to it, whether the branch's ref is loose or packed),
+/// the branch's loose ref (for a repository without a reflog), the
+/// worktree's `reftable/tables.list` (the reftable backend, which keeps no
+/// `logs/`) and the release tag's loose ref. A path that does not exist is
+/// not watched, since cargo reruns a script whose watched path is missing at
+/// every build.
+fn git_source(workspace: &Path) -> Option<(version::Source, Vec<PathBuf>)> {
+    let git = |args: &[&str]| {
+        let output = Command::new("git")
+            .arg("--no-optional-locks")
+            .arg("-C")
+            .arg(workspace)
+            .args(args)
+            .output()
+            .ok()?;
+        output
+            .status
+            .success()
+            .then(|| String::from_utf8(output.stdout).ok())
+            .flatten()
+            .map(|text| text.trim().to_string())
+    };
+    let top = PathBuf::from(git(&["rev-parse", "--show-toplevel"])?);
+    if top.canonicalize().ok()? != workspace.canonicalize().ok()? {
+        return None;
+    }
+    let commit = git(&["rev-parse", "HEAD"])?;
+    let mut status = vec!["status", "--porcelain", "--untracked-files=no", "--"];
+    status.extend(version::SOURCES);
+    let dirty = !git(&status)?.is_empty();
+    let tags = git(&["tag", "--points-at", "HEAD"])?
+        .lines()
+        .map(str::to_string)
+        .collect();
+    let dir = PathBuf::from(git(&["rev-parse", "--absolute-git-dir"])?);
+    let common = PathBuf::from(git(&[
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-common-dir",
+    ])?);
+    let mut inputs = vec![
+        dir.join("HEAD"),
+        dir.join("logs/HEAD"),
+        dir.join("reftable/tables.list"),
+        common.join(format!("refs/tags/v{}", env("CARGO_PKG_VERSION"))),
+    ];
+    if let Some(branch) = git(&["symbolic-ref", "-q", "HEAD"]) {
+        inputs.push(common.join(branch));
+    }
+    Some((
+        version::Source::Git {
+            commit,
+            dirty,
+            tags,
+        },
+        inputs,
+    ))
 }

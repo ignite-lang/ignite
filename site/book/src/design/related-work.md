@@ -16,7 +16,7 @@ are the links on the previous page, and three more:
 
 "Yes" means the project does it as part of what it is. "Partial" is explained in a footnote.
 "No" means it is not part of the project, often by choice of scope. Ignite's column describes
-v0.15.0.
+v0.16.0.
 
 | capability | Ignite | Lean 4 | Winglang | Pulumi | CUE | Kubernetes controllers | Temporal |
 |---|---|---|---|---|---|---|---|
@@ -58,7 +58,7 @@ v0.15.0.
     There is no objective over a window of observations.
 
 [^ignite-machines]: Four built-in machines (supervise, schedule, evaluate, roll out) keep the
-    declared processes running on one local host. User-defined machines are a later slice.
+    declared processes running on one local host. User-defined machines are not built.
 
 [^pulumi-drift]: `pulumi up` moves resources to the declared state when it is run. Pulumi
     Cloud can detect drift on a schedule and remediate it with `pulumi up --refresh`.
@@ -96,14 +96,14 @@ in one typed program, checked by one compiler:
 5. **Pure reducers for operations, with journal replay.** Supervision, scheduling, evaluation
    and rollout are pure Ignite functions in `std.control`. The journal of a run is enough to
    reproduce every decision with `ignite replay`
-   ([The compile-time evaluator](evaluator.md)).
+   ([The run-time model](runtime.md)).
 6. **Protocols written in the language.** Telnet and HTTP/1.1 are Ignite code over any byte
    stream, tested in process over a pipe, with their RFC requirements as data.
    `ignite conformance` reports what is claimed and verified
    ([Protocols and roles](protocols.md)).
-7. **Fast builds for many agents.** The reason the project exists: a program builds in a
-   fraction of a second on the LLVM target, where the same program takes seconds through
-   cargo ([Building for Rust and LLVM](../guide/targets.md)).
+7. **Fast builds for many agents.** The reason the project exists: on the LLVM target the todo
+   service builds in under a third of the time it takes through cargo
+   ([Inspirations](inspirations.md#why-ignite-exists)).
 
 Because they share one compiler, a change in one part is checked against the others. An
 effect in a property expression, a binding an assembly does not admit, a component without

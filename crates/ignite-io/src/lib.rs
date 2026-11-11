@@ -197,20 +197,26 @@ pub fn exit(code: i32) -> ! {
 /// the first `set_raw(true)` are kept for the life of the process;
 /// `set_raw(false)` and [`run`] (when `main` returns or panics) restore
 /// them.
+///
+/// The attributes are read and set through the `termios` crate (the C
+/// library's `tcgetattr` and `tcsetattr`, one `ioctl` each), not `nix`'s
+/// `term` feature, whose types cost every generated project a fifth of
+/// `nix`'s compile before its metadata (story `build-time-back`).
 pub mod terminal {
     use std::io::IsTerminal;
+    use std::os::fd::AsRawFd;
     use std::sync::{Mutex, PoisonError};
 
-    use nix::sys::termios::{
-        InputFlags, LocalFlags, SetArg, SpecialCharacterIndices, Termios, tcgetattr, tcsetattr,
-    };
+    use termios::{ECHO, ICANON, ICRNL, ISIG, IXON, TCSANOW, Termios, VMIN, VTIME, tcsetattr};
 
     use super::IoError;
 
     /// The attributes before the first `set_raw(true)`.
     static SAVED: Mutex<Option<Termios>> = Mutex::new(None);
 
-    fn error(operation: &str, errno: nix::Error) -> IoError {
+    /// The failure in the words of [`nix::errno::Errno`], as before.
+    fn error(operation: &str, error: &std::io::Error) -> IoError {
+        let errno = nix::errno::Errno::from_raw(error.raw_os_error().unwrap_or(0));
         IoError::new(format!("terminal {operation}: {errno}"))
     }
 
@@ -223,35 +229,36 @@ pub mod terminal {
         if !stdin.is_terminal() {
             return Ok(());
         }
+        let descriptor = stdin.as_raw_fd();
         let mut saved = SAVED.lock().unwrap_or_else(PoisonError::into_inner);
         if !on {
             if let Some(original) = saved.as_ref() {
-                tcsetattr(&stdin, SetArg::TCSANOW, original).map_err(|e| error("restore", e))?;
+                tcsetattr(descriptor, TCSANOW, original).map_err(|e| error("restore", &e))?;
             }
             return Ok(());
         }
         let original = match saved.as_ref() {
-            Some(original) => original.clone(),
+            Some(original) => *original,
             None => {
-                let current = tcgetattr(&stdin).map_err(|e| error("read attributes", e))?;
-                *saved = Some(current.clone());
+                let current =
+                    Termios::from_fd(descriptor).map_err(|e| error("read attributes", &e))?;
+                *saved = Some(current);
                 current
             }
         };
         let mut raw = original;
-        raw.local_flags
-            .remove(LocalFlags::ICANON | LocalFlags::ECHO | LocalFlags::ISIG);
-        raw.input_flags.remove(InputFlags::IXON | InputFlags::ICRNL);
-        raw.control_chars[SpecialCharacterIndices::VMIN as usize] = 1;
-        raw.control_chars[SpecialCharacterIndices::VTIME as usize] = 0;
-        tcsetattr(&stdin, SetArg::TCSANOW, &raw).map_err(|e| error("set raw mode", e))
+        raw.c_lflag &= !(ICANON | ECHO | ISIG);
+        raw.c_iflag &= !(IXON | ICRNL);
+        raw.c_cc[VMIN] = 1;
+        raw.c_cc[VTIME] = 0;
+        tcsetattr(descriptor, TCSANOW, &raw).map_err(|e| error("set raw mode", &e))
     }
 
     /// Restore the saved attributes, if any; errors are ignored.
     pub fn restore() {
         let saved = SAVED.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(original) = saved.as_ref() {
-            let _ = tcsetattr(std::io::stdin(), SetArg::TCSANOW, original);
+            let _ = tcsetattr(std::io::stdin().as_raw_fd(), TCSANOW, original);
         }
     }
 
@@ -1083,19 +1090,35 @@ pub fn drain() {
 // Slice 14 (`docs/slice.md` 18.8): the in-memory stream pair and the
 // stream interface both targets dispatch on, after the tests for the same
 // reason. Owner: U2.
+#[cfg(feature = "process")]
 mod pipe;
 mod stream;
+#[cfg(feature = "process")]
 pub use pipe::{PIPE_CAPACITY, Pipe, PipeStream};
 pub use stream::ByteStream;
+
+// TLS client sessions (`docs/slice.md` 38):
+// rustls over a `TcpStream`, the fourth `ByteStream`. Behind the feature
+// `tls`, so a generated program that names no TLS item builds without
+// rustls and ring; the runtime archive and such a program turn it on.
+#[cfg(feature = "tls")]
+mod tls;
+#[cfg(feature = "tls")]
+pub use tls::{HANDSHAKE_TIMEOUT, TlsOptions, TlsStream};
 
 // Slice 17 (`docs/slice.md` 21.8): the capabilities `Directory`,
 // `Launcher` with `ChildProcess`, `Entropy` and `Setting`, and the exit
 // hooks, after the tests for the same reason. Owner of the surface: U1;
-// `fs` U2, `child` U3, `entropy` U5, `args::flag_from_args` U4.
+// `fs` U2, `child` U3, `entropy` U5, `args::flag_from_args` U4. `child` and
+// `pipe` are behind the feature `process`, which the generated manifest
+// turns on for a program that names a launcher, a child process or a pipe
+// (story `build-time-back`).
+#[cfg(feature = "process")]
 pub mod child;
 pub mod entropy;
 pub mod fs;
 pub use args::{CommandLine, Setting};
+#[cfg(feature = "process")]
 pub use child::{ChildExit, ChildProcess, Invocation, Launcher};
 pub use entropy::Entropy;
 pub use fs::Directory;
@@ -1117,7 +1140,12 @@ pub mod wait;
 // `docs/readiness-io.md` 4.1, 4.3 to 4.6 (phase R1): stackful tasks on
 // epoll workers, the IO mode `readiness`.
 mod sched;
-pub use sched::{IoMode, TASK_STACK, TaskLocals, io_mode, set_task_locals, worker_limit};
+// The one place a signal's disposition is changed.
+pub mod signal;
+pub use sched::{
+    IoMode, SchedulerCounts, TASK_STACK, TaskLocals, io_mode, scheduler_counts, set_task_locals,
+    worker_limit,
+};
 // Story `text-fast-search`: the byte search of `Bytes.index_of` and
 // `Text.pieces`.
 pub mod text;

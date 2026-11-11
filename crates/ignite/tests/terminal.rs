@@ -63,14 +63,57 @@ fn shown(bytes: &[u8]) -> String {
     bytes.escape_ascii().to_string()
 }
 
-/// A child process, killed on drop.
+/// A child process, killed on drop and waited for, and before it the
+/// processes it started that still run: a wrapper that does not become its
+/// program is their parent (`strace`, [`first_session_calls`]), and a
+/// process traced by a `strace` that was killed runs on with no parent to
+/// end it.
 struct Running(Child);
 
 impl Drop for Running {
     fn drop(&mut self) {
+        let started = started_by(self.0.id());
+        for pid in &started {
+            let _ = nix::sys::signal::kill(
+                nix::unistd::Pid::from_raw(*pid),
+                nix::sys::signal::Signal::SIGKILL,
+            );
+        }
         let _ = self.0.kill();
         let _ = self.0.wait();
+        // Each is reaped by its parent, or by the process that inherits it.
+        let deadline = Instant::now() + TIMEOUT;
+        while started.iter().any(|pid| runs(*pid)) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(5));
+        }
     }
+}
+
+/// The processes the threads of process `parent` started and did not wait
+/// for yet.
+fn started_by(parent: u32) -> Vec<i32> {
+    let Ok(tasks) = std::fs::read_dir(format!("/proc/{parent}/task")) else {
+        return Vec::new();
+    };
+    tasks
+        .flatten()
+        .filter_map(|task| std::fs::read_to_string(task.path().join("children")).ok())
+        .flat_map(|children| {
+            children
+                .split_whitespace()
+                .filter_map(|pid| pid.parse().ok())
+                .collect::<Vec<i32>>()
+        })
+        .collect()
+}
+
+/// Whether process `pid` still runs: it exists and is not a killed process
+/// that waits to be reaped.
+fn runs(pid: i32) -> bool {
+    std::fs::read_to_string(format!("/proc/{pid}/stat")).is_ok_and(|stat| {
+        stat.rsplit_once(") ")
+            .is_some_and(|(_, after_name)| !after_name.starts_with('Z'))
+    })
 }
 
 /// A running compiled `terminald --port 0`.
@@ -825,6 +868,184 @@ fn tn_on_a_terminal_closes_its_side_on_ctrl_d(target: Target) {
     terminal.expect(b"bye\r\n");
     assert_eq!(exit_code(&mut tn), Some(0));
     terminal.assert_canonical_with_echo();
+}
+
+/// The calls of a `strace -f` trace so far, once it has come to rest (no
+/// line for 300 ms; a worker without a task ends after a second, later
+/// than that): a call counts once, at the line that begins it, and
+/// `fcntl(F_GETFD)` not at all, the check a debug build of std makes
+/// before each `close`, which no release build makes.
+fn calls_at_rest(trace: &Path) -> Vec<String> {
+    let deadline = Instant::now() + TIMEOUT;
+    let mut text = String::new();
+    let mut changed = Instant::now();
+    while changed.elapsed() < Duration::from_millis(300) {
+        assert!(Instant::now() < deadline, "the trace never came to rest");
+        std::thread::sleep(Duration::from_millis(20));
+        let now = std::fs::read_to_string(trace).unwrap_or_default();
+        if now != text {
+            text = now;
+            changed = Instant::now();
+        }
+    }
+    text.lines()
+        .filter_map(|line| line.split_once(' ').map(|(_, call)| call.trim_start()))
+        .filter(|call| !call.starts_with(['<', '+', '-']))
+        .filter(|call| !(call.starts_with("fcntl(") && call.contains("F_GETFD")))
+        .filter_map(|call| call.split_once('(').map(|(name, _)| name.to_string()))
+        .collect()
+}
+
+/// The system calls `terminald` makes for the first session of its
+/// process: from the client's `connect` until the session is closed and
+/// the process is at rest, the session's request sent once the server
+/// waits for it. By name with their counts, most first, and the total.
+fn first_session_calls(target: Target) -> (usize, String) {
+    let status = Command::new("strace")
+        .args(["-o", "/dev/null", "true"])
+        .stderr(Stdio::null())
+        .status()
+        .unwrap_or_else(|e| panic!("strace is needed to count system calls and did not run: {e}"));
+    assert!(
+        status.success(),
+        "strace cannot trace a child here: {status:?}"
+    );
+    // A file per count: two tests count the same target at the same time,
+    // and two `strace` writing one file count each other's calls.
+    static COUNTS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let trace = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "terminal-first-session-{}-{}-{}.txt",
+        std::process::id(),
+        target.index(),
+        COUNTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    let _ = std::fs::remove_file(&trace);
+    let server = Server::start_under(target, &["strace", "-f", "-o", trace.to_str().unwrap()]);
+    let before = calls_at_rest(&trace).len();
+    let mut stream = server.raw();
+    calls_at_rest(&trace);
+    send_line(&mut stream, "quit");
+    assert_eq!(shown(&read_until_closed(&mut stream)), shown(b"bye\r\n"));
+    let calls = calls_at_rest(&trace);
+    drop(server);
+    let _ = std::fs::remove_file(&trace);
+    let mut by_name: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+    for call in &calls[before..] {
+        *by_name.entry(call).or_default() += 1;
+    }
+    let mut counts: Vec<(&str, usize)> = by_name.into_iter().collect();
+    counts.sort_by_key(|(name, count)| (std::cmp::Reverse(*count), *name));
+    let table: Vec<String> = counts
+        .iter()
+        .map(|(name, count)| format!("{name} {count}"))
+        .collect();
+    (calls.len() - before, table.join(", "))
+}
+
+/// `story:readiness-session-cost`: the first session of a process, the
+/// worker it starts included, makes the system calls of the first session
+/// of v0.15.0's `terminald` with the thread it started, and at most one
+/// more: v0.15.0 made 30 on the Rust target and 25 on the LLVM target
+/// (release builds on 4 CPUs; this counts the builds of the test matrix),
+/// this build 29 and 26. The one more on the LLVM target is the `prctl`
+/// that names the worker, by which the workers are told from a program's
+/// other threads. Before, 60 and 58: what a process does once was done
+/// while its first session waited (the worker limit read from the cgroup
+/// files, the overflow handler, the eventfd of the lone waits), a `poll`
+/// came before each `accept4`, and a worker of the LLVM target asked for
+/// its alternate stack before it was given one.
+#[test]
+fn the_first_session_costs_at_most_one_system_call_more_than_at_v0_15_0() {
+    let mut failures = Vec::new();
+    for (target, v0_15_0, bound) in [(Target::Rust, 30, 30), (Target::Llvm, 25, 26)] {
+        let (total, table) = first_session_calls(target);
+        println!("{target:?}: {total} calls, v0.15.0 made {v0_15_0}: {table}");
+        if total > bound {
+            failures.push(format!(
+                "{target:?}: {total} calls, at most {bound} expected (v0.15.0 made \
+                 {v0_15_0}): {table}"
+            ));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// The processes running `executable` that no test holds any more: not a
+/// child of this test process, and not the child of a `strace` (the count
+/// of the first session, while it runs). A process that was killed and
+/// waits to be reaped is not counted.
+fn left_behind(executable: &Path) -> Vec<i32> {
+    let executable = std::fs::canonicalize(executable).expect("the built terminald");
+    let me = std::process::id().to_string();
+    let mut found = Vec::new();
+    for entry in std::fs::read_dir("/proc").expect("/proc").flatten() {
+        let name = entry.file_name();
+        let Some(pid) = name.to_str().and_then(|name| name.parse::<i32>().ok()) else {
+            continue;
+        };
+        if std::fs::read_link(entry.path().join("exe")).ok().as_deref() != Some(&*executable) {
+            continue;
+        }
+        let Ok(stat) = std::fs::read_to_string(entry.path().join("stat")) else {
+            continue;
+        };
+        let Some((_, after_name)) = stat.rsplit_once(") ") else {
+            continue;
+        };
+        let mut fields = after_name.split(' ');
+        let (state, parent) = (fields.next(), fields.next().unwrap_or(""));
+        let held_by = std::fs::read_to_string(format!("/proc/{parent}/comm")).unwrap_or_default();
+        if state != Some("Z") && parent != me && held_by.trim() != "strace" {
+            found.push(pid);
+        }
+    }
+    found
+}
+
+/// Adversary pass 1 on unit `session` of wave 11
+/// (`story:readiness-session-cost`): the count of the first session leaves
+/// no server behind. [`first_session_calls`] runs `terminald` under
+/// `strace -f` and ends the run by dropping its [`Server`], whose child is
+/// `strace`. A process traced by a `strace` that was killed runs on: while
+/// the drop killed only its own child, the `terminald` stayed, listening on
+/// its port, with no parent that would end it, one more per target at every
+/// run of
+/// [`the_first_session_costs_at_most_one_system_call_more_than_at_v0_15_0`].
+/// [`Running`] now ends what its child started first. What this test finds
+/// left behind it ends itself.
+#[test]
+fn the_count_of_the_first_session_leaves_no_server_running() {
+    let mut failures = Vec::new();
+    for target in [Target::Rust, Target::Llvm] {
+        let terminald = &executables(target).terminald;
+        let before = left_behind(terminald);
+        first_session_calls(target);
+        // A killed process is gone at once; the ceiling is for the reaping.
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let left = loop {
+            let left: Vec<i32> = left_behind(terminald)
+                .into_iter()
+                .filter(|pid| !before.contains(pid))
+                .collect();
+            if left.is_empty() || Instant::now() >= deadline {
+                break left;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        for pid in &left {
+            let _ = nix::sys::signal::kill(
+                nix::unistd::Pid::from_raw(*pid),
+                nix::sys::signal::Signal::SIGKILL,
+            );
+        }
+        if !left.is_empty() {
+            failures.push(format!(
+                "{target:?}: {} still runs after its session was counted, as process {left:?}",
+                terminald.display()
+            ));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
 /// The symbol names in `binary`, from `nm`.

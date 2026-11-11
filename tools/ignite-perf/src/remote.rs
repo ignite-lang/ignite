@@ -14,8 +14,8 @@
 //! On the host: the trees of BASE and HEAD (`git archive`), each with its compiler and runtime
 //! built, and a third tree, the commit of the checkout running the mode, whose `ignite-perf`
 //! runs `quality --timing-only` over each tree (so BASE and HEAD may predate this mode): one
-//! discarded warm-up of HEAD, then `--passes` passes in ABBA order (base, head; head, base;
-//! …). The values are fetched, the instance terminated, and the mode checks by the run tag
+//! discarded warm-up of HEAD, then `--passes` passes (default 5) in ABBA order (base, head;
+//! head, base; …). The values are fetched, the instance terminated, and the mode checks by the run tag
 //! that no instance, security group or key pair is left; any one left is an error. The
 //! instance, group and key pair are cleaned up on every exit path: success, failure and an
 //! interrupt (SIGINT, SIGTERM, SIGHUP; the commands it starts run in their own process
@@ -27,13 +27,18 @@
 //! BASE's median as `base_value`. The record names no instance, account or zone. With
 //! `--run vX.Y.Z` the run is a release: a row whose HEAD median is worse than BASE's (the last
 //! release, measured on the same host in the same run) beyond the metric's tolerance in
-//! `quality/baseline.json` refuses it, and the records are labelled `run`.
+//! `quality/baseline.json`, or worse in every pass than every pass of BASE, is printed as
+//! worse than the base and tracked: it does not refuse the release (the operator, 2026-11-11:
+//! "track the numbers, but let's not block the release"), the records keep the release's
+//! label and the mode exits 0. A cell of the size row (3.9) that is worse is held by a new
+//! `decision` on its bar, one `quality/baseline.json` at BASE does not hold, and printed as
+//! held ([`judge`]); without one it is among the tracked rows.
 //!
 //! `--dry-run` makes the read-only calls, makes every call that creates with EC2's
 //! `--dry-run` (the answer `DryRunOperation` is success) and prints the rest without making
 //! them.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
@@ -85,7 +90,7 @@ pub struct RemoteArgs {
     #[arg(long, default_value_t = 3.0)]
     pub max_hours: f64,
     /// Measured passes of each tree after the warm-up, interleaved ABBA.
-    #[arg(long, default_value_t = 3)]
+    #[arg(long, default_value_t = 5)]
     pub passes: usize,
     #[arg(long, default_value_t = 15)]
     pub check_runs: usize,
@@ -101,7 +106,7 @@ pub struct RemoteArgs {
     /// `$XDG_CACHE_HOME/ignite/quality-remote/<run id>`.
     #[arg(long)]
     pub state: Option<PathBuf>,
-    /// `bar`, `vX.Y.Z` (a release, refused when worse than BASE) or `run`.
+    /// `bar`, `vX.Y.Z` (a release: its rows worse than BASE are printed as tracked) or `run`.
     #[arg(long, default_value = "run")]
     pub run: String,
 }
@@ -295,7 +300,7 @@ pub struct HostArgs {
     /// The directory holding the trees `base` and `head`; `out` and `work` are made in it.
     #[arg(long)]
     pub root: PathBuf,
-    #[arg(long, default_value_t = 3)]
+    #[arg(long, default_value_t = 5)]
     pub passes: usize,
     #[arg(long, default_value_t = 15)]
     pub check_runs: usize,
@@ -1571,14 +1576,36 @@ pub fn history_lines(
     run: &str,
     date: &str,
 ) -> Vec<String> {
+    history_lines_held(rows, machine, base, head, run, date, &[])
+}
+
+/// [`history_lines`] of a release: the record of a cell in `held` also carries its `decision`,
+/// which the release's row of `quality/trend.md` is generated from.
+pub fn history_lines_held(
+    rows: &[Row],
+    machine: &Json,
+    base: &str,
+    head: &str,
+    run: &str,
+    date: &str,
+    held: &[Held],
+) -> Vec<String> {
     let instance_type = machine.field("instance_type").as_str().unwrap_or("?");
     rows.iter()
         .map(|row| {
-            compact(&obj(vec![
+            let mut fields = vec![
                 ("base", Json::from(base)),
                 ("base_value", Json::Int(median(&row.base))),
                 ("commit", Json::from(head)),
                 ("date", Json::from(date)),
+            ];
+            if let Some(cell) = held
+                .iter()
+                .find(|cell| cell.metric == row.metric && cell.target == row.target)
+            {
+                fields.push(("decision", Json::from(cell.decision.as_str())));
+            }
+            fields.extend([
                 ("host", Json::from(format!("ec2:{instance_type}"))),
                 (
                     "load",
@@ -1589,7 +1616,8 @@ pub fn history_lines(
                 ("run", Json::from(run)),
                 ("target", Json::from(row.target.as_str())),
                 ("value", Json::Int(median(&row.head))),
-            ]))
+            ]);
+            compact(&obj(fields))
         })
         .collect()
 }
@@ -1603,11 +1631,184 @@ pub fn shown(value: i64, unit: &str) -> String {
 }
 
 /// The refusals of a release: a row whose HEAD median is worse than BASE's beyond the
-/// tolerance of its metric in `baseline` (`quality/baseline.json`).
+/// tolerance of its metric in `baseline` (`quality/baseline.json`), or worse by any amount when
+/// every HEAD sample is worse than every BASE sample (a row of one sample each: any worse value).
+/// The tolerance is a bound on noise only: where the samples overlap the difference is not
+/// shown and the tolerance decides; where they do not, the row is worse. No `decision` holds a
+/// row for a release, the size row excepted ([`judge`]); without BASE's baseline, which this
+/// takes none of, a worse cell of the size row is refused too.
 pub fn refusals(baseline: &Json, rows: &[Row]) -> R<Vec<String>> {
-    let mut out = Vec::new();
+    Ok(judge(baseline, None, rows)?.refused)
+}
+
+/// What a release run found: every row worse than the base (`refused`, the name of the rule
+/// before 2026-11-11: the run prints them as tracked and refuses nothing), and every grown cell of the
+/// size row a decision holds, one line each (the cell, BASE's value, HEAD's, the decision).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Judged {
+    pub refused: Vec<String>,
+    pub grown: Vec<String>,
+    /// The cells of `grown` with the decision that holds each, for the records of the run
+    /// ([`history_lines_held`]).
+    pub held: Vec<Held>,
+}
+
+/// A grown cell of the size row and the decision on its bar that holds it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Held {
+    pub metric: String,
+    pub target: String,
+    pub decision: String,
+}
+
+/// The fewest letters and digits of a decision that names added code.
+pub const DECISION_LETTERS: usize = 40;
+
+/// How the decision on the bar of a size cell above BASE reads against the decisions BASE's
+/// baseline held.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum DecisionRead {
+    /// It names nothing: fewer letters and digits than a decision has.
+    NamesNothing,
+    /// It is one the last release held.
+    LastReleases,
+    New,
+}
+
+/// The letters and digits of `text`, case folded: what a decision of the size row is compared
+/// by, so that case, punctuation, spacing and characters that show nothing make no decision a
+/// new one.
+fn letters_and_digits(text: &str) -> String {
+    text.chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+/// [`DecisionRead`] of `decision` against `held`, each read by its [`letters_and_digits`]: with
+/// fewer than [`DECISION_LETTERS`] of them it names nothing; when it is one of `held`, or
+/// contains one (the last release's decision with a sentence added), it is the last release's;
+/// otherwise it is new. One character changed makes it new: the check reads that the text
+/// differs, a person reads what it says. A text of `held` with fewer than [`DECISION_LETTERS`]
+/// letters and digits is no decision and carries nothing over. The gate holds the same
+/// function for row 3.2 (`quality::read_decision` in `crates/ignite/tests/quality.rs`; the
+/// tool and the gate share no crate), and both are held to the same cases.
+pub fn read_decision(decision: &str, held: &BTreeSet<String>) -> DecisionRead {
+    let read = letters_and_digits(decision);
+    if read.chars().count() < DECISION_LETTERS {
+        return DecisionRead::NamesNothing;
+    }
+    let carried = held
+        .iter()
+        .map(|held| letters_and_digits(held))
+        .any(|held| held.chars().count() >= DECISION_LETTERS && read.contains(&held));
+    if carried {
+        DecisionRead::LastReleases
+    } else {
+        DecisionRead::New
+    }
+}
+
+/// What the release path of a run judged and what it prints for it.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct ReleaseJudgement {
+    pub judged: Judged,
+    /// For stderr, as soon as it is judged: why BASE's baseline could not be read.
+    pub note: String,
+    /// For stdout: the grown cells of the size row, each with the decision that holds it.
+    pub listed: String,
+    /// For stdout: the rows worse than the base ([`Judged::refused`]). They are tracked and
+    /// refuse no release: the release notes list each with the story that takes it.
+    pub tracked: String,
+}
+
+/// The release path of a run: for `run` `vX.Y.Z` the `rows` judged ([`judge`]) against
+/// `quality/baseline.json` of `repo`'s working tree, with the baseline at the commit `base`
+/// read from `repo` ([`baseline_at`]) for which decisions are the last release's, and the text
+/// the run prints; for any other run nothing.
+pub fn judge_release(repo: &Path, base: &str, run: &str, rows: &[Row]) -> R<ReleaseJudgement> {
+    if !run.starts_with('v') {
+        return Ok(ReleaseJudgement::default());
+    }
+    let baseline = crate::perf::read_json(&repo.join("quality/baseline.json"))?;
+    let (base_baseline, note) = match baseline_at(repo, base) {
+        Ok(read) => (Some(read), String::new()),
+        Err(why) => (
+            None,
+            format!(
+                "release {run}: quality/baseline.json at the base could not be read ({why}); a grown cell of the size row is refused\n"
+            ),
+        ),
+    };
+    let judged = judge(&baseline, base_baseline.as_ref(), rows)?;
+    let listed = if judged.grown.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "release {run}: the size row above the base, each cell held by the decision on its bar:\n  {}\n",
+            judged.grown.join("\n  ")
+        )
+    };
+    let tracked = if judged.refused.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "release {run}: worse than the base, tracked and not refused:\n  {}\n",
+            judged.refused.join("\n  ")
+        )
+    };
+    Ok(ReleaseJudgement {
+        judged,
+        note,
+        listed,
+        tracked,
+    })
+}
+
+/// The size row among the rows this run measures: the stripped release binary against plain
+/// Rust. It is the only one of them the baseline may mark `"release_growth": "decision"`; the
+/// others are time and memory, which no decision holds for a release.
+pub const SIZE_ROW: &str = "3.9";
+
+/// The rows of a release run judged against `baseline` ([`refusals`]). A cell of the size row
+/// (`"release_growth": "decision"` on its metric; `AGENTS.md` § Releases: a binary may grow when
+/// a release adds code) that would be refused is listed in `grown` instead when its bar in the
+/// baseline carries a new `decision`, which names the code that added the bytes; without one it
+/// is refused and the refusal says the decision is missing. A decision is new when
+/// `base_baseline`, `quality/baseline.json` at BASE ([`baseline_at`]), does not hold it, on that
+/// bar or anywhere else, read by its letters and digits ([`read_decision`]): one it holds named
+/// the last release's code and does not let a cell grow again, reworded or with a sentence
+/// added, and the refusal asks for a new one; a text with fewer than [`DECISION_LETTERS`]
+/// letters and digits is no decision. With no `base_baseline` (it could not be read), or one
+/// that has no `metrics` object and so is no baseline, a grown cell with a decision is refused,
+/// since the decision is not known to be new. A decision on the bar of a cell of the size row
+/// that is not above BASE holds nothing and is refused until it is removed, so one written for
+/// a candidate that was not cut does not hold a later growth. The cells listed are in `held`
+/// with their decisions, for the records of the run.
+/// Another value of the mark, or the mark on a row other than [`SIZE_ROW`], is an error.
+pub fn judge(baseline: &Json, base_baseline: Option<&Json>, rows: &[Row]) -> R<Judged> {
+    let mut out = Judged::default();
     for row in rows {
         let metric = baseline.field("metrics").field(&row.metric);
+        let size_row = match metric.get("release_growth") {
+            None => false,
+            Some(Json::Str(rule)) if rule == "decision" => {
+                if row.metric != SIZE_ROW {
+                    return Err(format!(
+                        "{}: `release_growth` is for the size row {SIZE_ROW} only; no decision holds a timing or benchmark row for a release",
+                        row.metric
+                    ));
+                }
+                true
+            }
+            Some(other) => {
+                return Err(format!(
+                    "{}: `release_growth` is {}, and \"decision\" is its only value",
+                    row.metric,
+                    compact(other)
+                ));
+            }
+        };
         let direction = metric
             .field("direction")
             .as_str()
@@ -1625,24 +1826,114 @@ pub fn refusals(baseline: &Json, rows: &[Row]) -> R<Vec<String>> {
             }
             _ => 0,
         };
-        let worse = match direction {
-            "lower" => head > base + slack,
-            "higher" => head < base - slack,
+        let (heads, bases) = (row.head.iter(), row.base.iter());
+        let (beyond, apart) = match direction {
+            "lower" => (
+                head > base + slack,
+                head > base && matches!((heads.min(), bases.max()), (Some(h), Some(b)) if h > b),
+            ),
+            "higher" => (
+                head < base - slack,
+                head < base && matches!((heads.max(), bases.min()), (Some(h), Some(b)) if h < b),
+            ),
             other => return Err(format!("{}: direction {other:?}", row.metric)),
         };
-        if worse {
-            let unit = metric.field("unit").as_str().unwrap_or("ms");
-            out.push(format!(
-                "{} {}: {} at the base, {} now ({direction}, {})",
-                row.metric,
-                row.target,
-                shown(base, unit),
-                shown(head, unit),
-                compact(tolerance)
+        let worse = beyond || apart;
+        if !worse && !size_row {
+            continue;
+        }
+        let unit = metric.field("unit").as_str().unwrap_or("ms");
+        let values = format!(
+            "{} {}: {} at the base, {} now",
+            row.metric,
+            row.target,
+            shown(base, unit),
+            shown(head, unit)
+        );
+        let decision = metric
+            .field("bars")
+            .field(&row.target)
+            .field("decision")
+            .as_str()
+            .map(str::trim)
+            .filter(|decision| !decision.is_empty());
+        if !worse {
+            if let Some(decision) = decision {
+                out.refused.push(format!(
+                    "{values}; the decision `{decision}` on its bar holds nothing, the cell is not above the base: remove it"
+                ));
+            }
+            continue;
+        }
+        let shown_apart = if beyond {
+            ""
+        } else {
+            "; every sample worse than every sample of the base"
+        };
+        let judged = format!("({direction}, {}{shown_apart})", compact(tolerance));
+        if !size_row {
+            out.refused.push(format!("{values} {judged}"));
+            continue;
+        }
+        let Some(decision) = decision else {
+            out.refused.push(format!(
+                "{values} {judged}; a size row grows at a release only by a `decision` on the bar of the grown cell, and a `decision` naming the added code is missing"
             ));
+            continue;
+        };
+        // A text that names nothing is no decision whatever BASE held, so it is read before
+        // BASE's baseline is.
+        let read = match read_decision(decision, &BTreeSet::new()) {
+            DecisionRead::NamesNothing => DecisionRead::NamesNothing,
+            _ => {
+                let held = base_baseline
+                    .filter(|base| base.field("metrics").is_obj())
+                    .map(decisions_of);
+                let Some(held) = held else {
+                    out.refused.push(format!(
+                        "{values} {judged}; quality/baseline.json at the base could not be read, so the decision `{decision}` is not known to be new"
+                    ));
+                    continue;
+                };
+                read_decision(decision, &held)
+            }
+        };
+        match read {
+            DecisionRead::NamesNothing => out.refused.push(format!(
+                "{values} {judged}; the `decision` on its bar (`{decision}`) has fewer than {DECISION_LETTERS} letters and digits and names nothing: a size row grows at a release only by a `decision` on the bar of the grown cell, and a `decision` naming the added code is missing"
+            )),
+            DecisionRead::LastReleases => out.refused.push(format!(
+                "{values} {judged}; the decision `{decision}` is the last release's (quality/baseline.json at the base holds it, read by its letters and digits), and a new `decision` naming the added code is needed"
+            )),
+            DecisionRead::New => {
+                out.grown.push(format!("{values}; decision: {decision}"));
+                out.held.push(Held {
+                    metric: row.metric.clone(),
+                    target: row.target.clone(),
+                    decision: decision.to_string(),
+                });
+            }
         }
     }
     Ok(out)
+}
+
+/// Every decision `baseline` holds, trimmed: on a bar, on a tolerance, for a slow unit, for an
+/// intermittent difference (as `quality::decisions_of` of the gate reads them).
+fn decisions_of(baseline: &Json) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    for (_, metric) in baseline.field("metrics").as_obj() {
+        for (_, bar) in metric.field("bars").as_obj() {
+            out.extend(bar.field("decision").as_str());
+        }
+        out.extend(metric.field("tolerance_decision").as_str());
+    }
+    for key in ["eval_slow", "intermittent_decisions"] {
+        for (_, decision) in baseline.field(key).as_obj() {
+            out.extend(decision.as_str());
+        }
+    }
+    out.into_iter().map(|d| d.trim().to_string()).collect()
 }
 
 /// `machine` of the records: the instance type, what the host reported, and the cost.
@@ -1697,8 +1988,54 @@ fn git_commit(repo: &Path, rev: &str) -> R<String> {
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
+/// `quality/baseline.json` at the revision `rev` of `repo`, read on the caller's side (`git
+/// show <rev>:quality/baseline.json`): the committed file of that revision, whatever the working
+/// tree holds. [`judge`] reads from BASE's which decisions are the last release's. A file that
+/// is no JSON, or JSON without a `metrics` object, is an error: it holds no decision to compare.
+pub fn baseline_at(repo: &Path, rev: &str) -> R<Json> {
+    let file = format!("{rev}:quality/baseline.json");
+    let out = Command::new("git")
+        .args(["-C", &path_str(repo), "show", &file])
+        .output()
+        .map_err(io_err("git"))?;
+    if !out.status.success() {
+        return Err(format!(
+            "git show {file}: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    let read =
+        Json::parse(&String::from_utf8_lossy(&out.stdout)).map_err(|e| format!("{file}: {e}"))?;
+    if !read.field("metrics").is_obj() {
+        return Err(format!("{file}: no `metrics` object, so no baseline"));
+    }
+    Ok(read)
+}
+
+/// The fewest passes of each tree a release run takes, for the timing rows and the benchmark
+/// alike: with five, two equal builds have disjoint samples on a row by chance in 1 of 252 runs.
+pub const RELEASE_PASSES: usize = 5;
+
+/// A release run (`--run vX.Y.Z`) on fewer than [`RELEASE_PASSES`] passes is an error before
+/// anything starts: `--passes 0` yields no timing row and `--bench-passes 0` no benchmark row,
+/// so the release would pass them unjudged. Other runs take any count.
+pub fn release_samples(run: &str, passes: usize, bench_passes: usize) -> R<()> {
+    if !run.starts_with('v') {
+        return Ok(());
+    }
+    for (flag, count) in [("--passes", passes), ("--bench-passes", bench_passes)] {
+        if count < RELEASE_PASSES {
+            return Err(format!(
+                "release {run}: {flag} {count} is fewer than the {RELEASE_PASSES} passes a release is judged on"
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// `ignite-perf quality-remote`.
 pub fn main(args: &RemoteArgs) -> R<i32> {
+    release_samples(&args.run, args.passes, args.bench_passes)?;
     let profile = profile(args, std::env::var("IGNITE_PERF_AWS_PROFILE").ok())?;
     let region = args
         .region
@@ -1803,23 +2140,17 @@ pub fn main(args: &RemoteArgs) -> R<i32> {
         bench_records = crate::bench::records(&samples, &sizes, args.bench_passes);
     }
     let baseline = crate::perf::read_json(&args.repo.join("quality/baseline.json"))?;
-    let refused = if args.run.starts_with('v') {
-        refusals(&baseline, &rows)?
-    } else {
-        Vec::new()
-    };
-    let label = if refused.is_empty() {
-        args.run.as_str()
-    } else {
-        "run"
-    };
-    let lines = history_lines(
+    let release = judge_release(&args.repo, &base, &args.run, &rows)?;
+    eprint!("{}", release.note);
+    let label = args.run.as_str();
+    let lines = history_lines_held(
         &rows,
         &machine(&info),
         &base,
         &head,
         label,
         &civil_date(secs),
+        &release.judged.held,
     );
     let history = args.repo.join("quality/history.jsonl");
     let mut file = fs::OpenOptions::new()
@@ -1868,9 +2199,7 @@ pub fn main(args: &RemoteArgs) -> R<i32> {
         );
     }
     println!("appended {} records to {}", lines.len(), history.display());
-    if !refused.is_empty() {
-        eprintln!("release {} refused:\n  {}", args.run, refused.join("\n  "));
-        return Ok(1);
-    }
+    print!("{}", release.listed);
+    print!("{}", release.tracked);
     Ok(0)
 }

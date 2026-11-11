@@ -47,10 +47,10 @@ pub use fail::{
     ignite_rt_guard_push, ignite_rt_try_failed,
 };
 pub use net::{
-    ignite_rt_own_mark, ignite_rt_own_release, ignite_rt_tcp_accept, ignite_rt_tcp_bind,
-    ignite_rt_tcp_bind_kept, ignite_rt_tcp_close, ignite_rt_tcp_connect,
-    ignite_rt_tcp_connect_within, ignite_rt_tcp_local_port, ignite_rt_tcp_own, ignite_rt_tcp_peer,
-    ignite_rt_tcp_read, ignite_rt_tcp_release, ignite_rt_tcp_retain,
+    ignite_rt_handle_release, ignite_rt_own_mark, ignite_rt_own_release, ignite_rt_tcp_accept,
+    ignite_rt_tcp_bind, ignite_rt_tcp_bind_kept, ignite_rt_tcp_close, ignite_rt_tcp_connect,
+    ignite_rt_tcp_connect_within, ignite_rt_tcp_local, ignite_rt_tcp_local_port, ignite_rt_tcp_own,
+    ignite_rt_tcp_peer, ignite_rt_tcp_read, ignite_rt_tcp_release, ignite_rt_tcp_retain,
     ignite_rt_tcp_set_idle_timeout, ignite_rt_tcp_timed_out, ignite_rt_tcp_urgent_pending,
     ignite_rt_tcp_write_all, ignite_rt_tcp_write_urgent,
 };
@@ -280,6 +280,15 @@ pub use channel::{
     ignite_rt_channel_bounded, ignite_rt_channel_close, ignite_rt_channel_closed,
     ignite_rt_channel_receive, ignite_rt_channel_receive_within, ignite_rt_channel_send,
     ignite_rt_channel_try_send,
+};
+
+// TLS client sessions (`docs/slice.md` 38):
+// the entries of `crate::tls`, after the tests for the same reason.
+mod tls;
+pub use tls::{
+    IgniteTlsOptions, ignite_rt_tls_alpn, ignite_rt_tls_client, ignite_rt_tls_close,
+    ignite_rt_tls_read, ignite_rt_tls_set_idle_timeout, ignite_rt_tls_urgent_pending,
+    ignite_rt_tls_write_all, ignite_rt_tls_write_urgent,
 };
 
 // Panic containment at the C ABI (`crate::contain`), after the tests for

@@ -1,1 +1,1 @@
-e096_adv_higher_order.ignite:7:29: error[E096]: `Int` does not implement `ByteStream`, which `S` of `same` requires; pass a `TcpStream`, a `PipeStream` or a type parameter bounded by `ByteStream`
+e096_adv_higher_order.ignite:7:29: error[E096]: `Int` does not implement `ByteStream`, which `S` of `same` requires; pass a `TcpStream`, a `PipeStream`, a `TlsStream` or a type parameter bounded by `ByteStream`

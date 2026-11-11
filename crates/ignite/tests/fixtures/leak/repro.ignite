@@ -1,0 +1,133 @@
+package repro
+
+// The case study's reproducer of gap G30 (`docs/research/case-study-gaps.md`,
+// `docs/leak-guard.md` 1.1), as reported: `MODE` picks how a task's channel
+// ends are held, `N` how many tasks run one after another.
+// `leak::g30_reproducer_stays_flat_in_every_mode` runs every mode on both
+// targets and compares each one's peak resident size with `none`'s.
+
+type Waiter {
+  id: Int
+  wake: Receiver<Int>
+}
+
+fn local(done: Sender<Int>) -> Result<Unit, IoError> {
+  let (tx, rx) = Channel.bounded(1)
+  let rung = tx.try_send(1)
+  tx.close()
+  let got = rx.receive_within(0 ms)
+  let sent = done.send(1)
+  Ok(())
+}
+
+fn alias(done: Sender<Int>) -> Result<Unit, IoError> {
+  let (tx, rx) = Channel.bounded(1)
+  let r: Receiver<Int> = rx
+  let rung = tx.try_send(1)
+  tx.close()
+  let got = r.receive_within(0 ms)
+  let sent = done.send(1)
+  Ok(())
+}
+
+fn typed(done: Sender<Int>) -> Result<Unit, IoError> {
+  let ends: (Sender<Int>, Receiver<Int>) = Channel.bounded(1)
+  let rung = ends.0.try_send(1)
+  ends.0.close()
+  let got = ends.1.receive_within(0 ms)
+  let sent = done.send(1)
+  Ok(())
+}
+
+fn field(done: Sender<Int>) -> Result<Unit, IoError> {
+  let (tx, rx) = Channel.bounded(1)
+  let w = Waiter { id = 1, wake = rx }
+  let rung = tx.try_send(1)
+  tx.close()
+  let got = w.wake.receive_within(0 ms)
+  let sent = done.send(1)
+  Ok(())
+}
+
+fn open(senders: Store<Sender<Int>>) -> Waiter {
+  let (tx, rx) = Channel.bounded(1)
+  let id = senders.next_id()
+  senders.put(id, tx)
+  Waiter { id, wake = rx }
+}
+
+fn close(senders: Store<Sender<Int>>, w: Waiter) -> Unit {
+  match senders.remove(w.id) {
+    Some(found) => {
+      let tx: Sender<Int> = found
+      tx.close()
+    }
+    None => {}
+  }
+}
+
+fn server(senders: Store<Sender<Int>>, done: Sender<Int>) -> Result<Unit, IoError> {
+  let w: Waiter = open(senders)
+  let got = w.wake.receive_within(0 ms)
+  close(senders, w)
+  let sent = done.send(1)
+  Ok(())
+}
+
+fn none(done: Sender<Int>) -> Result<Unit, IoError> {
+  var l: List<Int> = [1, 2, 3]
+  l.push(4)
+  let sent = done.send(1)
+  Ok(())
+}
+
+type Repro {
+  senders: Store<Sender<Int>>
+  environment: Environment
+  executable: Text
+}
+
+fn Repro.main(self: Repro) -> Result<Unit, IoError> {
+  let n = match self.environment.get("N") {
+    Some(t) => match Int.parse(t) {
+      Some(v) => v
+      None => 1000
+    }
+    None => 1000
+  }
+  let mode = match self.environment.get("MODE") {
+    Some(m) => m
+    None => "local"
+  }
+  let (done, finished) = Channel.bounded(1)
+  var i = 0
+  while i < n {
+    if mode == "alias" {
+      spawn alias(done)
+    } else if mode == "typed" {
+      spawn typed(done)
+    } else if mode == "field" {
+      spawn field(done)
+    } else if mode == "server" {
+      spawn server(self.senders, done)
+    } else if mode == "none" {
+      spawn none(done)
+    } else {
+      spawn local(done)
+    }
+    let got = finished.receive()
+    i = i + 1
+  }
+  log("{mode}: {n} done")
+  Ok(())
+}
+
+system ReproSystem {
+  resource senders: Store<Sender<Int>>
+  resource environment: Environment
+  component repro: Repro {
+    senders = senders
+    environment = environment
+    executable = "repro"
+  }
+}

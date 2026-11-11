@@ -172,10 +172,12 @@ pub fn change(builtin: Builtin) -> Option<Change> {
         | StreamWriteUrgent
         | TcpListenerAccept
         | TcpListenerBind
+        | TcpListenerBindKept
         | TcpListenerLocalPort
         | TcpStreamClose
         | TcpStreamConnect
         | TcpStreamConnectWithin
+        | TcpStreamLocal
         | TcpStreamPeer
         | TcpStreamRead
         | TcpStreamSetIdleTimeout
@@ -207,7 +209,9 @@ pub fn change(builtin: Builtin) -> Option<Change> {
         | ReceiverReceive
         | ReceiverReceiveWithin
         | ReceiverClosed
-        | ReceiverClose => None,
+        | ReceiverClose
+        | TlsClient
+        | TlsStreamAlpn => None,
     }
 }
 

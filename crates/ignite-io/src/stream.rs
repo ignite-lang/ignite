@@ -4,10 +4,14 @@
 //! so each instance dispatches statically to the inherent method of its
 //! stream type.
 
-use crate::{Input, IoError, PipeStream, TcpStream};
+#[cfg(feature = "process")]
+use crate::PipeStream;
+#[cfg(feature = "tls")]
+use crate::TlsStream;
+use crate::{Input, IoError, TcpStream};
 
-/// A byte stream: [`TcpStream`] and [`PipeStream`]. Each method is the
-/// inherent method of the same name.
+/// A byte stream: [`TcpStream`], [`PipeStream`] and, with the feature
+/// `tls`, `TlsStream`. Each method is the inherent method of the same name.
 pub trait ByteStream: Clone + Send + Sync + 'static {
     /// One read of up to `maximum` bytes; zero bytes is `Input::Eof`.
     fn read(&self, maximum: i64) -> Result<Input, IoError>;
@@ -50,6 +54,7 @@ impl ByteStream for TcpStream {
     }
 }
 
+#[cfg(feature = "process")]
 impl ByteStream for PipeStream {
     fn read(&self, maximum: i64) -> Result<Input, IoError> {
         PipeStream::read(self, maximum)
@@ -73,5 +78,32 @@ impl ByteStream for PipeStream {
 
     fn urgent_pending(&self) -> Result<bool, IoError> {
         PipeStream::urgent_pending(self)
+    }
+}
+
+#[cfg(feature = "tls")]
+impl ByteStream for TlsStream {
+    fn read(&self, maximum: i64) -> Result<Input, IoError> {
+        TlsStream::read(self, maximum)
+    }
+
+    fn write_all(&self, data: Vec<u8>) -> Result<(), IoError> {
+        TlsStream::write_all(self, data)
+    }
+
+    fn close(&self) -> Result<(), IoError> {
+        TlsStream::close(self)
+    }
+
+    fn set_idle_timeout(&self, ms: i64) -> Result<(), IoError> {
+        TlsStream::set_idle_timeout(self, ms)
+    }
+
+    fn write_urgent(&self, data: Vec<u8>) -> Result<(), IoError> {
+        TlsStream::write_urgent(self, data)
+    }
+
+    fn urgent_pending(&self) -> Result<bool, IoError> {
+        TlsStream::urgent_pending(self)
     }
 }

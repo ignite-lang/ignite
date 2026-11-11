@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-11T05:38:10Z",
+  "actor": "human:timo",
+  "artifact": "story:http-reply-cost-back",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "coordinator run on ee9aaf87 (wave/11-reply): cargo test -p ignite-io exit 0 in both modes (113 + 203 passed each); cargo test -p ignite --test main -- reply_cost:: todo:: drain:: conformance:: leak:: http: 102 passed, 0 failed, 2 ignored; task build, cargo fmt --check, clippy on ignite-io and ignite exit 0"
+  }
+}

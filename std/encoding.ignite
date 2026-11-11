@@ -1,0 +1,203 @@
+package std.encoding
+
+// Binary-to-text encodings of RFC 4648: base64 (section 4) and base64url
+// (section 5), and lowercase hex (section 8). Encoding is total; decoding
+// returns the first character it refuses. A leaf of the base layer: it
+// imports nothing (`docs/layering.md`).
+
+// Why a text is no encoding of any bytes: the byte `offset` of the first
+// character refused (the text's length when the length is wrong).
+type EncodingError {
+  offset: Int
+  message: Text
+}
+
+const STANDARD: Text = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+const URL_SAFE: Text = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+
+// `data` in the 64 characters of `alphabet`, with `=` padding to a
+// multiple of four characters when `padded`.
+fn encode64(data: Bytes, alphabet: Bytes, padded: Bool) -> Text {
+  let n = data.len()
+  var out = Bytes.with_capacity((n + 2) / 3 * 4)
+  var i = 0
+  while i + 3 <= n {
+    let v = data[i].to_int() << 16 | data[i + 1].to_int() << 8 | data[i + 2].to_int()
+    out.push(alphabet[v >> 18])
+    out.push(alphabet[v >> 12 & 63])
+    out.push(alphabet[v >> 6 & 63])
+    out.push(alphabet[v & 63])
+    i = i + 3
+  }
+  if n - i == 1 {
+    let v = data[i].to_int() << 16
+    out.push(alphabet[v >> 18])
+    out.push(alphabet[v >> 12 & 63])
+    if padded {
+      out.push(b'=')
+      out.push(b'=')
+    }
+  } else if n - i == 2 {
+    let v = data[i].to_int() << 16 | data[i + 1].to_int() << 8
+    out.push(alphabet[v >> 18])
+    out.push(alphabet[v >> 12 & 63])
+    out.push(alphabet[v >> 6 & 63])
+    if padded {
+      out.push(b'=')
+    }
+  }
+  out.to_text()
+}
+
+/// `data` in base64 with `=` padding (RFC 4648 section 4).
+fn base64(data: Bytes) -> Text = encode64(data, STANDARD.to_bytes(), true)
+
+/// `data` in base64url, `-` and `_` for `+` and `/`, with `=` padding
+/// (RFC 4648 section 5).
+fn base64url(data: Bytes) -> Text = encode64(data, URL_SAFE.to_bytes(), true)
+
+/// `data` in base64url without padding, as a specification that refers to
+/// RFC 4648 may require (section 3.2; JWS, RFC 7515, does).
+fn base64url_unpadded(data: Bytes) -> Text = encode64(data, URL_SAFE.to_bytes(), false)
+
+// The value of base64 character `c`, in base64url when `url_safe`; -1 for
+// any other character.
+fn sextet(c: Byte, url_safe: Bool) -> Int {
+  if c >= b'A' && c <= b'Z' {
+    return c.to_int() - 65
+  }
+  if c >= b'a' && c <= b'z' {
+    return c.to_int() - 71
+  }
+  if c >= b'0' && c <= b'9' {
+    return c.to_int() + 4
+  }
+  if c == (if url_safe { b'-' } else { b'+' }) {
+    return 62
+  }
+  if c == (if url_safe { b'_' } else { b'/' }) {
+    return 63
+  }
+  -1
+}
+
+// The bytes `text` encodes in the alphabet `url_safe` picks. A padded text
+// is a multiple of four characters with at most two `=`, all at the end;
+// an unpadded one has no `=` and a length that is not 1 more than a
+// multiple of four. The bits after the last byte are zero (the canonical
+// encoding, section 3.5). Characters outside the alphabet are refused
+// (section 3.3).
+fn decode64(text: Text, url_safe: Bool, padded: Bool) -> Result<Bytes, EncodingError> {
+  let chars = text.to_bytes()
+  var n = chars.len()
+  if padded {
+    if n % 4 != 0 {
+      return Err(EncodingError { offset = n, message = "the length of padded base64 is a multiple of 4" })
+    }
+    if n > 0 && chars[n - 1] == b'=' {
+      n = n - 1
+      if chars[n - 1] == b'=' {
+        n = n - 1
+      }
+    }
+  } else if n % 4 == 1 {
+    return Err(EncodingError { offset = n, message = "no base64 text has this length" })
+  }
+  var out = Bytes.with_capacity(n / 4 * 3 + 2)
+  var acc = 0
+  var bits = 0
+  var i = 0
+  while i < n {
+    let c = chars[i]
+    let v = sextet(c, url_safe)
+    if v < 0 {
+      if c == b'=' && padded {
+        return Err(EncodingError { offset = i, message = "`=` only as the last one or two characters" })
+      }
+      return Err(EncodingError { offset = i, message = "not a base64 character" })
+    }
+    acc = (acc << 6 | v) & 0xFFFFFF
+    bits = bits + 6
+    if bits >= 8 {
+      bits = bits - 8
+      out.push((acc >> bits).wrap_byte())
+    }
+    i = i + 1
+  }
+  if bits > 0 && acc & ((1 << bits) - 1) != 0 {
+    return Err(EncodingError { offset = n - 1, message = "the bits after the last byte are not zero" })
+  }
+  Ok(out)
+}
+
+/// The bytes of base64 `text` with padding (RFC 4648 section 4).
+fn base64_decode(text: Text) -> Result<Bytes, EncodingError> = decode64(text, false, true)
+
+/// The bytes of base64url `text` with padding (RFC 4648 section 5).
+fn base64url_decode(text: Text) -> Result<Bytes, EncodingError> = decode64(text, true, true)
+
+/// The bytes of base64url `text` without padding.
+fn base64url_unpadded_decode(text: Text) -> Result<Bytes, EncodingError> = decode64(text, true, false)
+
+/// `data` as two lowercase hex digits per byte (RFC 4648 section 8, in
+/// lowercase as a digest is usually printed).
+fn hex(data: Bytes) -> Text {
+  let digits = b"0123456789abcdef"
+  var out = Bytes.with_capacity(data.len() * 2)
+  for b in data {
+    let v = b.to_int()
+    out.push(digits[v >> 4])
+    out.push(digits[v & 15])
+  }
+  out.to_text()
+}
+
+test "base64 of RFC 4648 section 10" {
+  assert base64(b"") == ""
+  assert base64(b"f") == "Zg=="
+  assert base64(b"fo") == "Zm8="
+  assert base64(b"foo") == "Zm9v"
+  assert base64(b"foob") == "Zm9vYg=="
+  assert base64(b"fooba") == "Zm9vYmE="
+  assert base64(b"foobar") == "Zm9vYmFy"
+  assert base64(b"\x00\xff\xfe\x3e\x3f") == "AP/+Pj8="
+}
+
+test "base64url writes - and _ for + and / (RFC 4648 section 5), padded or not" {
+  assert base64(b"\xfb\xff") == "+/8="
+  assert base64url(b"\xfb\xff") == "-_8="
+  assert base64url(b"\xfb\xff\xbf") == "-_-_"
+  assert base64url_unpadded(b"\xfb\xff") == "-_8"
+  assert base64url_unpadded(b"f") == "Zg"
+  assert base64url_unpadded(b"foo") == "Zm9v"
+  assert base64url_unpadded(b"") == ""
+}
+
+test "base64_decode reverses base64 on the RFC 4648 vectors" {
+  for text in ["", "f", "fo", "foo", "foob", "fooba", "foobar"] {
+    assert base64_decode(base64(text.to_bytes())) == Ok(text.to_bytes())
+    assert base64url_decode(base64url(text.to_bytes())) == Ok(text.to_bytes())
+    assert base64url_unpadded_decode(base64url_unpadded(text.to_bytes())) == Ok(text.to_bytes())
+  }
+  assert base64_decode("+/8=") == Ok(b"\xfb\xff")
+  assert base64url_decode("-_8=") == Ok(b"\xfb\xff")
+  assert base64url_unpadded_decode("-_8") == Ok(b"\xfb\xff")
+}
+
+test "base64_decode refuses what RFC 4648 section 3 refuses, at the first bad character" {
+  assert base64_decode("Zg=") == Err(EncodingError { offset = 3, message = "the length of padded base64 is a multiple of 4" })
+  assert base64_decode("Zm9v!A==") == Err(EncodingError { offset = 4, message = "not a base64 character" })
+  assert base64_decode("-_8=") == Err(EncodingError { offset = 0, message = "not a base64 character" })
+  assert base64url_decode("+/8=") == Err(EncodingError { offset = 0, message = "not a base64 character" })
+  assert base64_decode("Zg==Zg==") == Err(EncodingError { offset = 2, message = "`=` only as the last one or two characters" })
+  assert base64_decode("Z===") == Err(EncodingError { offset = 1, message = "`=` only as the last one or two characters" })
+  assert base64_decode("Zh==") == Err(EncodingError { offset = 1, message = "the bits after the last byte are not zero" })
+  assert base64_decode("Zm9=") == Err(EncodingError { offset = 2, message = "the bits after the last byte are not zero" })
+  assert base64url_unpadded_decode("Zg==") == Err(EncodingError { offset = 2, message = "not a base64 character" })
+  assert base64url_unpadded_decode("Zm9vY") == Err(EncodingError { offset = 5, message = "no base64 text has this length" })
+}
+
+test "hex writes two lowercase digits per byte" {
+  assert hex(b"") == ""
+  assert hex(b"\x00\x0f\xa9\xff") == "000fa9ff"
+}

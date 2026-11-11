@@ -1084,3 +1084,43 @@ fn kept() -> Result<Unit, IoError> {
     assert_eq!(t.marked_in("handed"), vec!["rx", "s"]);
     assert_eq!(t.marked_in("kept"), none());
 }
+
+/// A pattern that binds two names binds both afresh in each iteration
+/// (`Walk::unbind`, which reads `Pattern::bindings`): the second name of a
+/// `for` tuple pattern, or of a `match` arm in a loop, moves at its last
+/// use in the iteration as the first one does. Adversary pass 1 on
+/// `story:duplicated-rules-back`: unbinding only the first name kept the
+/// whole suite green.
+#[test]
+fn every_name_a_loop_pattern_binds_moves() {
+    let t = with_prelude(
+        r#"
+fn pairs() -> List<(State, State)> = [(fresh(), fresh())]
+
+fn maybe_pair() -> Option<(State, State)> = Some((fresh(), fresh()))
+
+fn second_of_each() -> List<State> {
+  var out = []
+  for (a, b) in pairs() {
+    out.push(b)
+  }
+  out
+}
+
+fn second_in_loop(n: Int) -> List<State> {
+  var out = []
+  var i = 0
+  while i < n {
+    match maybe_pair() {
+      Some((a, b)) => out.push(b)
+      None => {}
+    }
+    i = i + 1
+  }
+  out
+}
+"#,
+    );
+    assert_eq!(t.marked_in("second_of_each"), vec!["b", "out"]);
+    assert_eq!(t.marked_in("second_in_loop"), vec!["b", "out"]);
+}

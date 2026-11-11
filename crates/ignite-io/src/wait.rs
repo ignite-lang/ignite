@@ -29,9 +29,9 @@
 //!
 //! A wait for a descriptor goes through the reactor interface
 //! ([`crate::reactor::Reactor`]): off a worker, [`wait_descriptor`]
-//! registers the descriptor with the thread's own
-//! [`crate::reactor::PollReactor`] (`poll` on the descriptor and the
-//! thread's `eventfd`), so a [`wake`] from any thread ends the wait as it
+//! waits in the thread's own [`crate::reactor::PollReactor`] (one `poll`
+//! of the descriptor and the thread's `eventfd`, no registration), so a
+//! [`wake`] from any thread ends the wait as it
 //! ends a [`park`]; on a worker it registers with the worker's reactor and
 //! parks the task. That is how the drain wakes `main` in `accept`.
 //!
@@ -43,13 +43,15 @@ use std::collections::VecDeque;
 use std::fmt;
 use std::io;
 use std::ops::{Deref, DerefMut};
-use std::os::fd::RawFd;
+use std::os::fd::BorrowedFd;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError, TryLockError};
 use std::thread::Thread;
 use std::time::{Duration, Instant};
 
-use crate::reactor::{Event, Interest, PollReactor, Reactor};
+use nix::poll::PollTimeout;
+
+use crate::reactor::{Interest, PollReactor, Reactor};
 use crate::sched;
 
 /// Why a [`park`] returned.
@@ -216,7 +218,7 @@ pub fn park(waiter: &Waiter, deadline: Option<Instant>) -> Woken {
                 match deadline {
                     None => std::thread::park(),
                     Some(deadline) => {
-                        let now = Instant::now();
+                        let now = sched::read_clock();
                         if now >= deadline {
                             return Woken::Deadline;
                         }
@@ -280,7 +282,7 @@ pub fn sleep_until(deadline: Instant) {
 /// [`sleep_until`] `duration` from now; a duration past the end of
 /// `Instant` sleeps without end.
 pub fn sleep(duration: Duration) {
-    match Instant::now().checked_add(duration) {
+    match sched::read_clock().checked_add(duration) {
         Some(deadline) => sleep_until(deadline),
         None => {
             let me = Waiter::current();
@@ -406,16 +408,141 @@ pub enum DescriptorWait {
 /// the thread's own [`PollReactor`]: `poll` on the descriptor and the
 /// thread's `eventfd`, which a wake writes. On a worker the descriptor is
 /// registered with the worker's reactor for the wait and the task parks.
-/// The descriptor stays open for the call.
+/// The borrow keeps the descriptor open for the call.
 pub fn wait_descriptor(
-    descriptor: RawFd,
+    descriptor: BorrowedFd<'_>,
     interest: Interest,
     deadline: Option<Instant>,
+) -> io::Result<DescriptorWait> {
+    wait_within(descriptor, interest, &mut Limit::until(deadline))
+}
+
+/// How long the waits of one operation for a descriptor may last together:
+/// the caller keeps one across them (a read keeps one for its idle
+/// timeout, `crate::net`).
+///
+/// A limit given as a duration ([`Limit::within_ms`]) costs no read of the
+/// clock while the operation waits alone: its first `poll` takes the
+/// duration as its timeout ([`Limit::poll_timeout`]), and when the kernel
+/// ends that `poll` for the timeout, the limit has passed
+/// ([`Limit::passed`]). Only a wait that needs an instant reads the clock:
+/// one that parks its task ([`Limit::deadline`], for the worker's timers),
+/// or one that follows a `poll` which ended early and found nothing (a
+/// wake, a signal, readiness another reader used up).
+///
+/// The bound on such a restart: the wait after that first `poll` reads the
+/// clock, the limit becomes that instant plus the whole duration, and it
+/// stays an instant from then on. The duration so begins again at most
+/// once, and only before it has passed: the waits of one operation end
+/// less than twice the duration after the first began, however many wakes
+/// or signals interrupt them. Uninterrupted, they end after the duration.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Limit {
+    /// No limit.
+    Unbounded,
+    /// These milliseconds from the first wait, which has not begun.
+    Within(u64),
+    /// These milliseconds, which one `poll` took as its timeout: it timed
+    /// out ([`Limit::passed`]), or the next wait counts them from when it
+    /// begins.
+    Again(u64),
+    /// This instant.
+    Until(Instant),
+}
+
+impl Limit {
+    /// `deadline`, or no limit.
+    pub(crate) fn until(deadline: Option<Instant>) -> Limit {
+        deadline.map_or(Limit::Unbounded, Limit::Until)
+    }
+
+    /// `ms` milliseconds from the first wait; no limit for 0 or less.
+    pub(crate) fn within_ms(ms: i64) -> Limit {
+        match u64::try_from(ms) {
+            Ok(ms) if ms > 0 => Limit::Within(ms),
+            _ => Limit::Unbounded,
+        }
+    }
+
+    /// The limit of an operation whose first wait was not a `poll` under
+    /// [`Limit::poll_timeout`] and ended early (a `recv` under
+    /// `SO_RCVTIMEO` that a signal interrupted): its next wait counts a
+    /// duration from when it begins, as after such a `poll`.
+    pub(crate) fn begun(self) -> Limit {
+        match self {
+            Limit::Within(ms) => Limit::Again(ms),
+            limit => limit,
+        }
+    }
+
+    /// The limit as an instant, for a wait that parks, and the instant it
+    /// was computed from if the clock was read for it: a duration counts
+    /// from now, and the limit is an instant from here on.
+    pub(crate) fn deadline(&mut self) -> (Option<Instant>, Option<Instant>) {
+        match *self {
+            Limit::Unbounded => (None, None),
+            Limit::Until(end) => (Some(end), None),
+            Limit::Within(ms) | Limit::Again(ms) => {
+                let now = sched::read_clock();
+                match now.checked_add(Duration::from_millis(ms)) {
+                    Some(end) => {
+                        *self = Limit::Until(end);
+                        (Some(end), Some(now))
+                    }
+                    None => {
+                        *self = Limit::Unbounded;
+                        (None, None)
+                    }
+                }
+            }
+        }
+    }
+
+    /// The timeout of the next `poll` of a wait; `None` when the limit has
+    /// passed already. The first `poll` under a duration takes it as it
+    /// is, without a read of the clock; every other one under a limit
+    /// reads the clock once.
+    pub(crate) fn poll_timeout(&mut self) -> Option<PollTimeout> {
+        if let Limit::Within(ms) = *self
+            && let Ok(timeout) = PollTimeout::try_from(ms)
+        {
+            *self = Limit::Again(ms);
+            return Some(timeout);
+        }
+        match self.deadline() {
+            (None, _) => Some(PollTimeout::NONE),
+            (Some(end), now) => {
+                let left = end.saturating_duration_since(now.unwrap_or_else(sched::read_clock));
+                (!left.is_zero()).then(|| crate::reactor::timeout_left(left))
+            }
+        }
+    }
+
+    /// Whether the limit has passed, asked after the `poll` that took
+    /// [`Limit::poll_timeout`] ended for its timeout: a duration taken
+    /// whole has, with no read of the clock; an instant is compared with
+    /// the clock, as a timeout longer than a `poll` can take ends early.
+    pub(crate) fn passed(&self) -> bool {
+        match *self {
+            Limit::Again(_) => true,
+            Limit::Until(end) => sched::read_clock() >= end,
+            Limit::Unbounded | Limit::Within(_) => false,
+        }
+    }
+}
+
+/// [`wait_descriptor`] under `limit`, which the caller keeps across the
+/// waits of one operation.
+pub(crate) fn wait_within(
+    descriptor: BorrowedFd<'_>,
+    interest: Interest,
+    limit: &mut Limit,
 ) -> io::Result<DescriptorWait> {
     let me = Waiter::current();
     let reactor = match &me.inner.kind {
         Kind::Thread { reactor, .. } => reactor,
         Kind::Task(task) => {
+            let (deadline, _) = limit.deadline();
             return sched::wait_descriptor(&me, task, descriptor, interest, deadline);
         }
         Kind::Descriptor(_) => return Ok(DescriptorWait::Woken),
@@ -427,26 +554,22 @@ pub fn wait_descriptor(
             reactor.get_or_init(|| made)
         }
     };
-    let token = reactor.register(descriptor, interest, me.clone())?;
-    let mut events: Vec<Event> = Vec::new();
     let outcome = loop {
         me.inner.state.fetch_or(POLLING, Ordering::SeqCst);
         if me.take_wake() {
             break Ok(DescriptorWait::Woken);
         }
-        if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+        let Some(timeout) = limit.poll_timeout() else {
             break Ok(DescriptorWait::Deadline);
-        }
-        events.clear();
-        if let Err(error) = reactor.wait(deadline, &mut events) {
-            break Err(error);
-        }
-        if let Some(event) = events.iter().find(|event| event.token == token) {
-            break Ok(DescriptorWait::Ready(event.ready));
+        };
+        match reactor.poll_one(descriptor, interest, timeout) {
+            Err(error) => break Err(error),
+            Ok((ready, _)) if !ready.is_empty() => break Ok(DescriptorWait::Ready(ready)),
+            Ok((_, true)) if limit.passed() => break Ok(DescriptorWait::Deadline),
+            Ok(_) => {}
         }
     };
     me.inner.state.fetch_and(!POLLING, Ordering::SeqCst);
-    let _ = reactor.deregister(token);
     outcome
 }
 
@@ -569,5 +692,111 @@ impl<T> Drop for LockGuard<'_, T> {
                 .unwrap_or_else(PoisonError::into_inner)
                 .wake_one();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const MS: u64 = 60_000;
+
+    fn millis(timeout: Option<PollTimeout>) -> Option<u32> {
+        timeout.expect("the limit has not passed").as_millis()
+    }
+
+    /// The first `poll` under a duration takes it whole, and a `poll` the
+    /// kernel ended for that timeout has shown that the limit passed: the
+    /// limit holds no instant, so no clock was read for either.
+    #[test]
+    fn a_duration_is_the_timeout_of_its_first_poll() {
+        let mut limit = Limit::within_ms(MS as i64);
+        assert_eq!(limit, Limit::Within(MS));
+        assert_eq!(millis(limit.poll_timeout()), Some(MS as u32));
+        assert_eq!(limit, Limit::Again(MS));
+        assert!(limit.passed());
+    }
+
+    /// The wait after a `poll` that ended early counts the duration from
+    /// when it begins, and every wait after that goes on against the same
+    /// instant: the duration begins again once.
+    #[test]
+    fn a_duration_begins_again_once() {
+        let mut limit = Limit::within_ms(MS as i64);
+        limit.poll_timeout();
+        let before = Instant::now();
+        assert_eq!(millis(limit.poll_timeout()), Some(MS as u32));
+        let after = Instant::now();
+        let Limit::Until(end) = limit else {
+            panic!("an instant after the second wait began: {limit:?}");
+        };
+        let whole = Duration::from_millis(MS);
+        assert!(before + whole <= end && end <= after + whole);
+        assert!(!limit.passed());
+        for _ in 0..3 {
+            let left = millis(limit.poll_timeout()).expect("a timeout");
+            assert!(left <= MS as u32);
+            assert_eq!(limit, Limit::Until(end));
+            assert_eq!(limit.deadline(), (Some(end), None));
+        }
+    }
+
+    /// A read whose blocking `recv` was interrupted waits on as after an
+    /// interrupted `poll`.
+    #[test]
+    fn a_limit_that_has_begun_counts_from_its_next_wait() {
+        assert_eq!(Limit::within_ms(MS as i64).begun(), Limit::Again(MS));
+        assert_eq!(Limit::Unbounded.begun(), Limit::Unbounded);
+        let end = Instant::now();
+        assert_eq!(Limit::Until(end).begun(), Limit::Until(end));
+        let mut limit = Limit::within_ms(MS as i64).begun();
+        assert_eq!(millis(limit.poll_timeout()), Some(MS as u32));
+        assert!(matches!(limit, Limit::Until(_)));
+    }
+
+    /// A wait that parks needs an instant: the duration counts from the
+    /// instant read for it, which the caller gets too.
+    #[test]
+    fn a_wait_that_parks_turns_a_duration_into_an_instant() {
+        let mut limit = Limit::within_ms(MS as i64);
+        let (Some(end), Some(now)) = limit.deadline() else {
+            panic!("a deadline and the instant it counts from");
+        };
+        assert_eq!(end, now + Duration::from_millis(MS));
+        assert_eq!(limit, Limit::Until(end));
+    }
+
+    /// No idle timeout (0, or less) is no limit: a `poll` without a
+    /// timeout, no deadline, never passed.
+    #[test]
+    fn no_timeout_is_no_limit() {
+        for ms in [0, -1, i64::MIN] {
+            let mut limit = Limit::within_ms(ms);
+            assert_eq!(limit, Limit::Unbounded);
+            assert_eq!(limit.poll_timeout(), Some(PollTimeout::NONE));
+            assert_eq!(limit.deadline(), (None, None));
+            assert!(!limit.passed());
+        }
+        assert_eq!(Limit::until(None), Limit::Unbounded);
+    }
+
+    /// An instant that has come gives no `poll`, and counts as passed.
+    #[test]
+    fn an_instant_that_has_come_has_passed() {
+        let mut limit = Limit::until(Some(Instant::now()));
+        assert_eq!(limit.poll_timeout(), None);
+        assert!(limit.passed());
+    }
+
+    /// A duration longer than a `poll` can take is not cut to what it can:
+    /// the limit becomes an instant, and the `poll` that ends for its
+    /// longest timeout finds the limit not passed.
+    #[test]
+    fn a_duration_longer_than_a_poll_can_take_is_kept() {
+        let ms = i32::MAX as i64 + 1;
+        let mut limit = Limit::within_ms(ms);
+        assert_eq!(millis(limit.poll_timeout()), Some(i32::MAX as u32));
+        assert!(matches!(limit, Limit::Until(_)));
+        assert!(!limit.passed());
     }
 }

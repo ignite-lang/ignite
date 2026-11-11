@@ -2,11 +2,14 @@
 
 A component is a unit of computation in a system: a server, a client, a console, a probe. Its
 kind is an ordinary record type, so a component declaration is a record literal the compiler
-checks field by field. A kind becomes an executable by declaring one function, `K.main`, and
-takes part in `ignite run` through two more, `machine` and `validate`. The running example is
-[`examples/terminal/terminal.ignite`](https://github.com/ignite-lang/ignite/blob/main/examples/terminal/terminal.ignite).
+checks field by field. A kind becomes an executable by declaring one function, `K.main`. It
+takes part in `ignite check` and `ignite run` through two more, `validate` and `machine`.
+This page explains why kinds are records and what each of the three functions is for.
 
 ## A kind is a record type
+
+The terminal's server, from
+[`examples/terminal/terminal.ignite`](https://github.com/ignite-lang/ignite/blob/main/examples/terminal/terminal.ignite):
 
 ```ignite,fragment
 component server: TelnetServer {
@@ -30,14 +33,11 @@ type TelnetServer {
 }
 ```
 
-The rules are those of record literals:
-
-- a field with a default may be left out; the terminal leaves out `sessions`, `recovery` and
-  `rollout`, and gets the defaults;
-- a field without a default that is left out is E104;
-- a field whose type is `Signal<T>` is an output: the component produces it, and setting it
-  in a declaration is E104 too;
-- property values are typed against the field: `maximum_line = 4096 bytes` is a `ByteSize`.
+The rules are those of record literals. The terminal leaves out `sessions`, `recovery` and
+`rollout`, and gets their defaults. A field without a default that is left out is E104. A
+field whose type is `Signal<T>` is an output: the component produces it, and setting it in a
+declaration is E104 too. Property values are typed against the field, so
+`maximum_line = 4096 bytes` is a `ByteSize`.
 
 Because a kind is a type, a program can declare its own. Nothing in the compiler lists the
 kinds of the standard library.
@@ -45,13 +45,18 @@ kinds of the standard library.
 ## `K.main` makes an executable
 
 A kind produces an executable when its module declares `fn K.main(self: K) ->
-Result<Unit, IoError>`. Its effects are inferred. A wrong signature is E109.
+Result<Unit, IoError>`. Its effects are inferred. Here is a kind of your own, with all three
+functions:
 
 ```ignite
+import std.control.{Machine, Supervisor}
+import std.policy.Restart
+
 type Greeter {
   listener: TcpListener
   greeting: Text = "hello"
   executable: Text
+  recovery: Restart = Restart {}
 }
 
 fn Greeter.main(self: Greeter) -> Result<Unit, IoError> {
@@ -66,6 +71,12 @@ fn Greeter.validate(self: Greeter) -> List<Text> = if self.greeting.is_empty() {
 } else {
   []
 }
+
+fn Greeter.machine(self: Greeter, id: Text) -> Machine = Machine.Supervise(Supervisor {
+  id = "{id}.supervisor"
+  member = id
+  restart = self.recovery
+})
 
 fn greet(stream: TcpStream, greeting: Text) -> Result<Unit, IoError> requires [stream.write] {
   stream.write_all("{greeting}\r\n".to_bytes())?
@@ -85,20 +96,15 @@ system Hello {
 }
 ```
 
-`ignite build` generates a `main` for each executable component, the same on both targets:
-
-1. run under the substrate's process entry;
-2. bind each `TcpListener` the component uses, honouring `--port` and printing the
-   `listening on` line;
-3. build the component's record value, with the resource handles and embedded components
-   filled in;
-4. call `K.main(value)` and map an `Err` to its exit code.
+`ignite build` generates a `main` for each executable component, the same on both targets.
+It binds each listener the component uses, builds the component's record value with the
+resource handles filled in, and calls `K.main`. The
+[command-line reference](../reference/cli.md#compiled-executables) lists what it does and
+its exit statuses. `executable` names the program, by default the component's name.
 
 The accept loop is Ignite code in the kind's module, not generated code. A failure inside a
-spawned session (a failed `assert`, an overflow, an index out of range) ends that task and is
-reported with file, line and column; the server goes on accepting.
-
-`executable` names the program, by default the component's name; the terminal sets `terminald`.
+spawned session ends that task and is reported with file, line and column. The server goes
+on accepting ([Failures](../reference/tests.md#failures)).
 
 ## Components without `main` are values
 
@@ -115,85 +121,37 @@ component console: CommandConsole {
 }
 ```
 
-## `module("…")` binds a sibling module
+`module("examples.terminal.commands")` fills a record of function types from the public
+functions of the sibling file `commands.ignite`. The commands stay plain functions with
+their own tests, and the declaration says which module implements the console.
+[Module bindings](../reference/modules.md#module-bindings) has the rules.
 
-`implementation` has the type `Module<ConsoleCommands>`, where `ConsoleCommands` is a record
-of function types:
+## `validate` states the rules a type cannot express
 
-```ignite,fragment
-type ConsoleCommands {
-  respond: fn(Text) -> Reply
-}
-```
-
-`module("examples.terminal.commands")` names the sibling file `commands.ignite`. The compiler
-fills the record's fields by name from that module's public functions, so `respond` becomes
-`examples.terminal.commands.respond`. A module that is not found, or a function that is
-missing or has another type, is E102. The commands stay plain functions with their own
-tests, and the declaration says which module implements the console. A module path may also
-name a std module: the design file's client uses `handler = module("std.protocol.telnet")`.
-
-## The hooks `machine` and `validate`
-
-Two more associated functions connect a kind to the tools. Both are pure, with a fixed
-signature; any other shape, or an effect, is E109.
-
-| hook | signature | used by |
-|---|---|---|
-| `validate` | `fn K.validate(self: K) -> List<Text>` | `ignite check`: each text is one E120 reason |
-| `machine` | `fn K.machine(self: K, id: Text) -> std.control.Machine` | `ignite run`: the control machine of the member |
-
-`validate` states the declaration rules a type cannot express. If the `Greeter` above were
-declared with `greeting = ""`, `ignite check` would refuse it:
-
-```ignite,fails=E120
-type Greeter {
-  greeting: Text = "hello"
-}
-
-fn Greeter.validate(self: Greeter) -> List<Text> = if self.greeting.is_empty() {
-  ["greeting is empty"]
-} else {
-  []
-}
-
-system Hello {
-  component server: Greeter { greeting = "" }
-}
-```
+A type can say that `greeting` is text. It cannot say that the text must not be empty. The
+pure hook `validate` returns the reasons a value is refused, and `ignite check` reports each
+reason as E120. Declare the `Greeter` above with `greeting = ""`, and the check refuses it:
 
 ```text
 error[E120]: declaration `Hello.server` of kind `main.Greeter` is refused: greeting is empty
 ```
 
 The compiler validates every member whose kind has the hook, and every record value inside a
-property whose type has one, so `recovery = Restart { maximum_attempts = 0 }` is refused by
-`Restart.validate`.
+property whose type has one. So `recovery = Restart { maximum_attempts = 0 }` is refused by
+`Restart.validate`. The library states its own rules, in Ignite, and the compiler applies
+them.
 
-`machine` returns the member's control machine. `TelnetServer` returns a supervisor that
-restarts it under its `recovery` policy:
+## `machine` gives the member its control
 
-```ignite,fragment
-fn TelnetServer.machine(self: TelnetServer, id: Text) -> Machine = Machine.Supervise(Supervisor {
-  id = "{id}.supervisor"
-  member = id
-  restart = self.recovery
-  rollout = Some(self.rollout)
-})
-```
+The pure hook `machine` returns the member's control machine for `ignite run`. The
+`Greeter` returns a supervisor that restarts it under its `recovery` policy, as
+`TelnetServer` does. `Machine` is a closed enum of four machines: supervisor, probe
+scheduler, contract evaluator and rollout. A kind chooses and configures one. It cannot
+define a new one, so every control decision stays in reducers the driver can journal and
+replay. The evaluator calls the hook at plan time, so the initial machines are part of the
+system model. [The run-time model](runtime.md) explains what the machines do.
 
-`Machine` is a closed enum of four machines (`Supervise`, `Schedule`, `Evaluate`, `Roll`), so
-a kind chooses and configures one; it cannot define a new one. The evaluator calls the hook
-at plan time, so the initial machines are part of the system model.
-[Contracts, policies and control](contracts.md) explains what each machine does.
-
-## The terminal's components
-
-| component | kind | `main` | `machine` | result |
-|---|---|---|---|---|
-| `console` | `CommandConsole` | no | no | a value inside `terminald` |
-| `server` | `TelnetServer` | accept loop | supervisor | the executable `terminald` |
-| `client` | `TelnetClient` | client session, exit 3 or 4 on failure | no | the executable `tn` |
-| `promptProbe` (design file) | `TelnetPrompt` | one probe attempt | probe scheduler | the executable `promptProbe` |
+The signatures of the hooks, and E109 for any other shape or an effect, are in
+[System declarations](../reference/systems.md#hooks).
 
 Next: [Systems and assemblies](systems.md).

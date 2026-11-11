@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-11T10:39:31Z",
+  "actor": "human:timo",
+  "artifact": "story:http-reply-cost-back",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "coordinator run on 0aadf15e (wave/11-reply after fix round 6, merged with the integration branch at 98ccb25c): cargo test -p ignite-io 116 + 227 passed, 1 ignored, the same with IGNITE_IO=threads; cargo test -p ignite-rt 44 + 29 passed; cargo test -p ignite-rustgen 152 passed, 1 ignored; reply_cost:: todo:: drain:: leak:: scheduler:: stack_overflow:: stack_overflow_adversary:: reply_adversary:: terminal:: 206 passed, 0 failed; cargo test --no-fail-fast -p ignite-check 10 + 34 passed, 0 failed; task test-ignite 452 passed per target; quality::static_metrics_hold_the_bar red on improved lines only (2.6 6, 3.6 llvm 79 / rust 12, 7.2 23, 7.3 4); fmt and clippy exit 0; std/protocol/http.ignite 2,905 lines; implementor's bytes: LLVM release todod 1,214,272 and terminald 964,472 with the release runtime (1f68ceb4: 1,214,408 and 964,504), todod 2,233,832 by row 3.2's method (1f68ceb4: 2,229,312)"
+  }
+}

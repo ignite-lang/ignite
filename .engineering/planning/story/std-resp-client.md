@@ -2,11 +2,13 @@
 format: aep.planning-md/3
 id: story:std-resp-client
 kind: story
-status: proposed
+status: implemented
 title: 'std.protocol.resp: RESP3 client with pub/sub and Sentinel'
-revision: 2
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T01:25:59Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-11-10T01:15:24Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-10T19:39:18Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 # Story: std-resp-client
 

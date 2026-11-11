@@ -250,14 +250,38 @@ pub fn heap_counted(bytes: i64) {
     heap_add(bytes);
 }
 
+#[cfg(test)]
+thread_local! {
+    /// The calls of [`Counting`] on this thread that reached `alloc` and
+    /// `realloc`, kept by the unit tests' build only (which installs it),
+    /// so that a test tells a growth done in place from a new allocation.
+    static CALLS: Cell<(usize, usize)> = const { Cell::new((0, 0)) };
+}
+
+/// Count a call of [`Counting`] that reached `alloc` (`(1, 0)`) or
+/// `realloc` (`(0, 1)`); nothing outside the unit tests.
+fn called(alloc: usize, realloc: usize) {
+    #[cfg(test)]
+    let _ = CALLS.try_with(|calls| {
+        let (allocs, reallocs) = calls.get();
+        calls.set((allocs + alloc, reallocs + realloc));
+    });
+    #[cfg(not(test))]
+    let _ = (alloc, realloc);
+}
+
 /// The counting global allocator: the system allocator, with every
 /// allocation's size added to the heap bytes and every free's subtracted.
+/// A reallocation is the system allocator's, which grows a buffer in place
+/// where it can and remaps a large one instead of copying it: it is no new
+/// allocation, and the heap bytes follow its change of size.
 pub struct Counting;
 
 // SAFETY: every call goes to `System` unchanged; the counting touches no
 // allocation.
 unsafe impl GlobalAlloc for Counting {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        called(1, 0);
         // SAFETY: as the caller's contract.
         let pointer = unsafe { System.alloc(layout) };
         if !pointer.is_null() {
@@ -272,9 +296,36 @@ unsafe impl GlobalAlloc for Counting {
         heap_add(-(layout.size() as i64));
     }
 
+    /// The system allocator's reallocation: the C allocator's `realloc`
+    /// where the system allocator calls it, a new allocation, a copy and a
+    /// free where it does those (an alignment over `malloc`'s or the new
+    /// size's). Written out, not called through `System`, so that a program
+    /// does not carry std's copy of the second branch next to this one;
+    /// inlined into the allocator's entry point, so it has no symbol of its
+    /// own.
+    #[inline]
     unsafe fn realloc(&self, pointer: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-        // SAFETY: as the caller's contract.
-        let moved = unsafe { System.realloc(pointer, layout, new_size) };
+        called(0, 1);
+        // SAFETY: as the caller's contract, which the system allocator's
+        // `alloc` and `dealloc` take over for the new layout (`new_size`
+        // with the old alignment, valid by that contract) and the old one.
+        // `realloc` returns memory aligned for `max_align_t` and so for the
+        // alignment of the first branch; the second branch's two pointers
+        // are distinct allocations of at least the bytes copied.
+        let moved = unsafe {
+            if layout.align() <= align_of::<nix::libc::max_align_t>() && layout.align() <= new_size
+            {
+                nix::libc::realloc(pointer.cast(), new_size).cast::<u8>()
+            } else {
+                let new_layout = Layout::from_size_align_unchecked(new_size, layout.align());
+                let moved = System.alloc(new_layout);
+                if !moved.is_null() {
+                    std::ptr::copy_nonoverlapping(pointer, moved, layout.size().min(new_size));
+                    System.dealloc(pointer, layout);
+                }
+                moved
+            }
+        };
         if !moved.is_null() {
             heap_add(new_size as i64 - layout.size() as i64);
         }
@@ -305,5 +356,31 @@ mod tests {
     #[test]
     fn resident_bytes_are_read() {
         assert!(read().resident_bytes > 0);
+    }
+
+    #[global_allocator]
+    static ALLOCATOR: Counting = Counting;
+
+    /// A buffer that grows is reallocated by the system allocator, which
+    /// grows it in place or moves it, not allocated again and copied: the
+    /// one allocation of the buffer reaches `alloc`, its growth from 16
+    /// bytes to 1 MiB reaches `realloc`. Counted on this thread by the
+    /// allocator itself (the heap bytes across a growth:
+    /// `tests/unsafe_adversary.rs`).
+    #[test]
+    fn a_growing_buffer_is_reallocated_not_allocated_again() {
+        let (allocs, reallocs) = CALLS.with(Cell::get);
+        let mut bytes: Vec<u8> = Vec::with_capacity(16);
+        bytes.extend_from_slice(&[7; 16]);
+        bytes.reserve_exact(1 << 20);
+        let (allocs_after, reallocs_after) = CALLS.with(Cell::get);
+        let grown = bytes.capacity();
+        drop(std::hint::black_box(bytes));
+        assert_eq!(
+            (allocs_after - allocs, reallocs_after - reallocs),
+            (1, 1),
+            "calls of alloc and realloc for one buffer grown once"
+        );
+        assert_eq!(grown, 16 + (1 << 20));
     }
 }

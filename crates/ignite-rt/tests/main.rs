@@ -7,3 +7,4 @@ mod abi;
 mod c_abi;
 mod pipe;
 mod terminal;
+mod tls;

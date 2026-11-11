@@ -1481,7 +1481,6 @@ fn adversary_row5_a_program_importing_std_rfc_carries_no_catalogue() {
 /// `ignite emit` holds all of `std.rfc.rfc855`, because D2 also makes "a
 /// program's `use` lines" roots on Rust.
 #[test]
-#[ignore = "fixed on branch fix/rustgen-builtin-shadowing (9bbd4b2, a clause-only catalogue import emits none of its constants), not merged into s15/claims"]
 fn adversary_row5_a_program_conforming_to_a_std_catalogue_carries_none() {
     assert_carries_no_catalogue("adversary_conforms_rfc855", "rfc855-claim");
 }

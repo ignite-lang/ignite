@@ -34,6 +34,7 @@ fn builtin_effect(builtin: Builtin) -> Option<(Effect, &'static str)> {
     use Builtin::*;
     Some(match builtin {
         TcpListenerBind => (Effect::Ambient("net.listen"), "TcpListener.bind"),
+        TcpListenerBindKept => (Effect::Ambient("net.listen"), "TcpListener.bind_kept"),
         TcpStreamConnect => (Effect::Ambient("net.connect"), "TcpStream.connect"),
         StdinRead => (Effect::Ambient("stdin.read"), "Stdin.read"),
         StdinIsTerminal => (Effect::Ambient("stdin.mode"), "Stdin.is_terminal"),
@@ -96,6 +97,7 @@ fn builtin_effect(builtin: Builtin) -> Option<(Effect, &'static str)> {
         EnvironmentGet => (Effect::Receiver("variable"), "get"),
         TcpStreamTimedOut => (Effect::Receiver("read"), "timed_out"),
         TcpStreamConnectWithin => (Effect::Ambient("net.connect"), "TcpStream.connect_within"),
+        TlsClient => (Effect::Ambient("net.connect"), "Tls.client"),
         ChannelBounded => (Effect::Ambient("channel.new"), "Channel.bounded"),
         SenderSend => (Effect::Receiver("send"), "send"),
         SenderTrySend => (Effect::Receiver("send"), "try_send"),

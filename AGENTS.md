@@ -15,7 +15,7 @@ the IO substrate (Rust) that compiled programs link.
 | `crates/ignite-rustgen/` | Rust target: the `ignite-std` crate and the program crate |
 | `crates/ignite-llvm/` | LLVM target: IR text for std, program and one main per executable |
 | `crates/ignite-rt/` | runtime of the LLVM target, `libignite_rt.a`: C ABI adapter over `ignite-io` (value conversion, handle table), arenas and regions, the spawn handshake; no IO of its own |
-| `crates/ignite-io/` | IO substrate of both targets: TCP listener and stream (urgent data inline since story `telnet-rfc854-conformance`: `write_urgent`, `urgent_pending`, `SO_OOBINLINE` on every stream, a read stops before the urgent byte; `docs/slice.md` 19.21), the in-process pipe (`Pipe.pair()`, `PipeStream`, coalescing as TCP, bounded at `PIPE_CAPACITY`, `received_batches`; `docs/slice.md` 18.4, 18.8) and the `ByteStream` trait both streams implement, stdin, stdout, terminal mode, tasks (IO mode `readiness`, the default: stackful tasks on epoll workers, `sched.rs` over `reactor.rs` and `wait.rs`; `IGNITE_IO=threads`: one thread each; `docs/slice.md` section 7), `run`, process arguments and exit, the reports of `assert` and `?`, the test runner (feature `runner`); since slice 17 (`docs/slice.md` 21.4 to 21.8) `fs` (`Directory`: files under a root, one `openat2` beneath it with an `openat` walk where that fails, every symlink refused, atomic replace, bounds), `child` (`Launcher`, `ChildProcess`: one watcher thread per child, `Invocation.input` written to the child's stdin by a `child-input` thread, timeout and kill by process group, bounded output, `close_range` and `PR_SET_PDEATHSIG` in `pre_exec`; the test runner's `run_child` uses the same watcher), `entropy` (`/dev/urandom`), `args::flag_from_args` (settings and directory flags) and the `at_exit` hooks that kill live children; `limits`, the open-files soft limit raised to the hard limit at the entry of both targets (`docs/slice.md` 28) |
+| `crates/ignite-io/` | IO substrate of both targets: TCP listener and stream (urgent data inline since story `telnet-rfc854-conformance`: `write_urgent`, `urgent_pending`, `SO_OOBINLINE` on every stream, a read stops before the urgent byte; `docs/slice.md` 19.21), the in-process pipe (`Pipe.pair()`, `PipeStream`, coalescing as TCP, bounded at `PIPE_CAPACITY`, `received_batches`; `docs/slice.md` 18.4, 18.8) and the `ByteStream` trait both streams implement, stdin, stdout, terminal mode, tasks (IO mode `readiness`, the default: stackful tasks on epoll workers, `sched.rs` over `reactor.rs` and `wait.rs`; `IGNITE_IO=threads`: one thread each; `docs/slice.md` section 7), `run`, process arguments and exit, the reports of `assert` and `?`, the test runner (feature `runner`), TLS client sessions (`tls.rs`, `TlsStream` over a `TcpStream`, rustls behind feature `tls`, which `ignite-rt` and a generated program that names a TLS item turn on; `docs/slice.md` 38); since slice 17 (`docs/slice.md` 21.4 to 21.8) `fs` (`Directory`: files under a root, one `openat2` beneath it with an `openat` walk where that fails, every symlink refused, atomic replace, bounds), `child` (`Launcher`, `ChildProcess`: one watcher thread per child, `Invocation.input` written to the child's stdin by a `child-input` thread, timeout and kill by process group, bounded output, `close_range` and `PR_SET_PDEATHSIG` in `pre_exec`; the test runner's `run_child` uses the same watcher), `entropy` (`/dev/urandom`), `args::flag_from_args` (settings and directory flags) and the `at_exit` hooks that kill live children; `limits`, the open-files soft limit raised to the hard limit at the entry of both targets (`docs/slice.md` 28) |
 | `crates/ignite-eval/` | compile-time evaluator (`docs/slice.md` section 15): interprets property expressions over the typed modules with fuel (E115, E117, E118), builds the system model `ignite plan` prints, resolves assemblies through `std.deploy`'s `admits` and `includes` (E110 to E114), renders `ignite explain`; steps the reducers of `std.control` for `ignite run` and `ignite replay` (`docs/slice.md` 16.2, O27); used by `check`, `plan`, `explain`, `run` and `replay` only, linked by no backend and no compiled program |
 | `crates/ignite/` | `ignite` CLI: `check`, `emit`, `build`, `test`, `plan`, `explain`, `run`, `replay`, `host`, `apply`, `inspect`, `rfc import`, `rfc check`, `conformance` (`src/conformance.rs`: the matrix and verdicts of `docs/slice.md` 19.10); `emit --typed-json` (`src/typed_json.rs`: the typed program as one `ignite-typed/0.1` document, `docs/slice.md` 24); end-to-end tests of the example in `tests/terminal.rs`, model and explain goldens in `tests/golden/` |
 | `crates/ignite/src/run/` | the driver of `ignite run` and `ignite replay` (`docs/slice.md` 16.3): `engine` steps the `std.control` reducers in `ignite-eval`, `live` runs the adapters `process`, `probe`, `clock` and `control` that turn effects into processes, attempts, timers and stdin commands and feed events back, `journal` records every event, effect, signal, standing and consequence (16.5), `replay` re-steps a journal and compares (E127) |
@@ -23,14 +23,16 @@ the IO substrate (Rust) that compiled programs link.
 | `crates/ignite/src/apply/` | the local host and source-bound saved plans (`docs/slice.md` 17): `plan` owns input/artifact identities and action manifests, `host` owns the state lock, socket queue, durable receipts and host journal, `revision` owns retained source/type/model contexts and calls the existing `run` driver; implementation-only server replacements use `std.control`'s existing rollout through a pinned artifact builder; since slice 18 the host journal is checked at start (a torn last record repaired as `journalRepaired`, an altered record, a cut before the `status.json` anchor or a differing revision journal refused with exit 3; 22.7), the host records its working directory in `<state>/workdir`, and `host/recovery` carries the operator's `recover` (22.9) |
 | `crates/ignite-load/` | `ignite-load`: load generator for `terminald` and `todod` (workloads `rr`, `pipe`, `connect`, `get`, `patch`; server and load pinned to disjoint CPUs with `--server-cpus`, `--load-cpus`; `ignite-load matrix` for `task bench-throughput` and the native benchmark, servers in ABBA order per pass; `ignite-load check`, the functional check every benchmarked server passes first); not linked into compiled programs |
 | `bench/native/` | the native benchmark's references (`docs/quality.md` "Against plain Rust"): the todo service and the terminal server in plain Rust (`rust/`, its own Cargo workspace and lockfile, excluded from the main one: hyper and tokio for todo, std threads for terminal) and in Go (`go/`, standard library only); built and timed on the dedicated host by `ignite-perf quality-remote` (`tools/ignite-perf/src/bench.rs`) |
-| `tools/ignite-perf/` | `ignite-perf`: the performance budget harness (modes `self-check`, `recover-baseline`, `smoke`, `prepare`, `cold`, `warm`, `programs`, `cli`, `all`, `summarize`; records `ignite-performance/1`; `quality`, the timing and size rows of `docs/quality.md` on the working tree for `task quality`; `quality-remote` and its host part `quality-host`, the timing rows and the native benchmark (`src/bench.rs`) on a dedicated EC2 host for `task quality-remote`, `src/remote.rs`; `docs/performance/README.md`) and `verify-llvm-readiness`; replaced `scripts/*.py`; not linked into compiled programs |
+| `tools/ignite-perf/` | `ignite-perf`: the performance budget harness (modes `self-check`, `recover-baseline`, `smoke`, `prepare`, `cold`, `warm`, `programs`, `cli`, `all`, `summarize`; records `ignite-performance/1`; `quality`, the timing and size rows of `docs/quality.md` on the working tree for `task quality`; `quality-remote` and its host part `quality-host`, the timing rows and the native benchmark (`src/bench.rs`) on a dedicated EC2 host for `task quality-remote`, `src/remote.rs`; `runtime`, the release runtime archive the benchmark links, built as the dedicated host builds it; `docs/performance/README.md`) and `verify-llvm-readiness`; replaced `scripts/*.py`; not linked into compiled programs |
 | `std/` | standard library in Ignite; module `std.a.b` is `std/a/b.ignite` |
 | `std/console.ignite` | `Console`, `Reply`, `Action`: a line-oriented console application, independent of the protocol that carries it; `CommandConsole` (the declared form: `implementation: Module<ConsoleCommands>`, `command_schema`), `console_of`, `command_names` |
 | `std/text.ignite` | text operations called by UFCS (`split`, `contains`, `to_lower`, `is_digit`, …) |
 | `std/option.ignite`, `std/result.ignite` | UFCS helpers on `Option` and `Result` (`unwrap_or`, `map`, `and_then`, `ok_or`, `map_err`, `ok`, …); the shared names make a glob import of both E041 at use |
 | `std/json.ignite` | `Json` (RFC 8259): integers that fit `Int` as `Number(Int)` (`-0` excepted), every other number as `Decimal(Text)` of its exact text, `decimal(text)` the checked constructor (`docs/slice.md` 19.20); `encode`, `parse`; the bridge to `std.data` (`docs/slice.md` 27): `to_data`, `of_data`, `read`, `read_with` (within `DataLimits`, a repeated member name refused), `write`, `write_pretty` |
-| `std/data.ignite` | `std.data`, the value model every data format reads into and writes from (`docs/serde.md` 4 to 6, `docs/slice.md` 27): `Value`, `Shape` (`Case`, `Tagging`, `Unknown`, `Shape.default()`), `DecodeError` (`describe`), `DataLimits`, `FormatError` (`format_error`), `base64`; base layer, imports nothing |
-| `std/net.ignite` | `Endpoint { address, port }`: the client-side target a bare `TcpListener` resource name gives where `Endpoint` is expected (slice 10); the module is also the substrate builtins `TcpListener`, `TcpStream`, `Exposure` and, since slice 14, the interface `ByteStream`, the test-only `Pipe.pair()` and its ends `PipeStream` (`docs/slice.md` 18.3, 18.4); `Endpoint.of(ref)` is the substrate builtin that resolves a `Ref` through `ignite run`'s `--ref` arguments (16.9); since the network builtins story a `TcpStream` has `peer()` (an `Endpoint`), `timed_out()` (the last read ended by the idle timeout) and `TcpStream.connect_within(address, port, timeout)` (`docs/slice.md` 26) |
+| `std/data.ignite` | `std.data`, the value model every data format reads into and writes from (`docs/serde.md` 4 to 6, `docs/slice.md` 27): `Value`, `Shape` (`Case`, `Tagging`, `Unknown`, `Shape.default()`), `DecodeError` (`describe`), `DataLimits`, `FormatError` (`format_error`); base layer, imports nothing |
+| `std/encoding.ignite`, `std/digest.ignite` | `std.encoding`: RFC 4648 base64 and base64url, padded and unpadded, their decoders returning `EncodingError`, lowercase `hex`; `std.digest`: `sha1`, `sha256` and the incremental `Digest` (`Digest.sha1()`, `Digest.sha256()`, `update`, `finish` by UFCS); both base layer, written on `U32` (`docs/slice.md` 34) |
+| `std/net.ignite` | `Endpoint { address, port }`: the client-side target a bare `TcpListener` resource name gives where `Endpoint` is expected (slice 10); the module is also the substrate builtins `TcpListener`, `TcpStream`, `Exposure` and, since slice 14, the interface `ByteStream`, the test-only `Pipe.pair()` and its ends `PipeStream` (`docs/slice.md` 18.3, 18.4); `Endpoint.of(ref)` is the substrate builtin that resolves a `Ref` through `ignite run`'s `--ref` arguments (16.9); since the network builtins story a `TcpStream` has `peer()` (an `Endpoint`), `timed_out()` (the last read ended by the idle timeout) and `TcpStream.connect_within(address, port, timeout)` (`docs/slice.md` 26); since story `http-app-connection` also `local()` (this end, an `Endpoint`) and `Connection { peer, local, tls }` with `Connection.unknown()` and `Connection.of(stream)` (`docs/slice.md` 37.2) |
+| `std/tls.ignite` | `std.tls` (`docs/slice.md` 38): `TlsOptions` (`alpn`, `authorities` PEM instead of the system roots, `verify` on by default, `handshake_timeout` 10 s) and `certificate_refused`; the builtins `Tls.client(stream, server_name, options) -> Result<TlsStream, IoError>` and `TlsStream` (a `ByteStream`, `alpn()`) are rustls in `crates/ignite-io/src/tls.rs` and `crates/ignite-rt/src/tls.rs`; its inline tests need no TLS server, `tls::` in `crates/ignite-io/tests/tls.rs` and `crates/ignite/tests/tls.rs` (both targets) run servers with an authority they generate; base layer |
 | `std/fs.ignite` | `std.fs`, the capability `Directory` (`docs/slice.md` 21.4): its builtin methods (`read_file`, `write_file`, `read_directory`, `create_directory`, `remove`, `remove_tree`, `absolute_path`), the helpers `read_text_file`, `write_text_file`, `join_path`, the test-only `Directory.temporary()`; base layer |
 | `std/process.ignite` | `std.process`, the capabilities `Launcher` and `ChildProcess` (`execute`, `start`, `id`, `wait`, `kill`; `Invocation` with its stdin `input`, `ChildExit`, `Ending`, `outcome`), `Entropy` (`random_bytes`), `Setting` (`value`), `CommandLine` (`arguments`) and `Environment` (`get`) (`docs/slice.md` 21.5 to 21.7, 21.19, 21.20; the statics `Clock.sleep`, `Clock.now` and `Process.flush` are documented there too); test-only `Launcher.new()`, `Entropy.new()`, `Setting.of(flag, value)`, `CommandLine.of(arguments)`, `Environment.of(entries)`; base layer |
 | `std/rfc.ignite` | `std.rfc`, the vocabulary of requirements (`docs/slice.md` 19.3): `Level`, `Party`, `Source`, `Requirement`, `Spec`; a leaf, like every `std.rfc.*` module; declares no fn |
@@ -41,8 +43,13 @@ the IO substrate (Rust) that compiled programs link.
 | `std/sync.ignite` | `std.sync`, bounded channels between the tasks of one process (`docs/slice.md` 30): the substrate builtins `Channel.bounded`, `Sender<T>` (`send`, `try_send`, `close`) and `Receiver<T>` (`receive`, `receive_within`, `closed`, `close`), implemented in `crates/ignite-io/src/channel.rs` and `crates/ignite-rt/src/channel.rs`; declares nothing, holds their inline tests; base layer |
 | `std/control.ignite` | the pure reducers `ignite run` steps (`docs/slice.md` 16.5 to 16.12): `Machine` (`Supervise`, `Schedule`, `Evaluate`, `Roll`), `Event`, `Effect` (since slice 18 `AttemptDone` carries the printed line, `Emit` a `std.sli.Sample` and `Emitted` a `Verdict`; the driver classifies at routing, 22.3), `Standing`, `Fired`, `step(machine, event) -> Step`, `companions(machine)`; imports only the leaves `std.sli`, `std.policy`, `std.time` (O45), tested inline with synthetic event lists; `crates/ignite/tests/fixtures/control_trace.ignite` steps the same reducers in the evaluator and on both targets (`control_trace::reducers_agree_across_the_evaluator_and_both_targets`) and times A7 (`control_trace::a7_evaluator_steps_10000_emissions_into_a_30_day_window`) |
 | `std/protocol/telnet.ignite` | `protocol Telnet`: declares `conforms [RFC854, RFC855]` (`docs/slice.md` 19.5; `ignite conformance` prints the matrix and whether each claim holds; both hold since 19.21: IAC GA after every prompt and AYT answer, the Synch sent on Ctrl+C and honoured by the server through the stream's urgent data, Ctrl+D sends a partial line); server role `serve(stream, limits: SessionLimits, application)`, client role `connect`, both generic over `S: ByteStream` (`docs/slice.md` 18.6); its session tests run over a pipe, one stays on TCP; the executable kinds `TelnetServer` (accept loop, `SessionLimits`, `TelnetProfile`), `TelnetClient` (exit 3 and 4) and the probe `TelnetPrompt` (`main` runs one attempt, the probe process of `docs/slice.md` 16.8; `machine` its scheduler) |
-| `std/protocol/http.ignite` | `protocol Http`: declares `conforms [RFC9112, RFC9110]`, scoped to the parties a server is; server role `serve(stream: T, limits: HttpLimits, application: HttpApp<S>)`, generic over `T: ByteStream`; `Request`, `Response` (a `Content` that is `Inline` text, `Binary` bytes or `Streamed`: pieces from `HttpApp.piece`, chunked for HTTP/1.1, `docs/slice.md` 19.23), `HttpLimits`; the executable kind `HttpServer<S>` with the hooks `machine` (supervisor, `recovery`, `rollout`) and `validate` of `docs/slice.md` 16.16, so the standard `Deployment` runs it as a `nativeProcess`; its session tests run over a pipe, one also on TCP |
+| `std/protocol/http.ignite` | `protocol Http`: declares `conforms [RFC9112, RFC9110]`, scoped to the parties a server is; server role `serve(stream: T, limits: HttpLimits, application: HttpApp<S, T>)`, generic over `T: ByteStream` (`T` is also the stream an `Upgrade` takeover gets); `HttpApp` has `handle`, `piece`, `reply` (`Reply`: `Respond`, `Hold` on a `std.sync` receiver, `Upgrade` with a takeover) and `on_oversized`; `Request.connection` is the `std.net.Connection` it came on (`docs/slice.md` 37; `serve` gives `Connection.unknown()`); `serve_connection`, `serve_listener` (which `HttpServer.main` is; its `Holds` register lets the drain answer held requests); `Request`, `Response` (a `Content` that is `Inline` text, `Binary` bytes or `Streamed`: pieces from `HttpApp.piece`, chunked for HTTP/1.1, `docs/slice.md` 19.23), `HttpLimits`; the executable kind `HttpServer<S>` with the hooks `machine` (supervisor, `recovery`, `rollout`) and `validate` of `docs/slice.md` 16.16, so the standard `Deployment` runs it as a `nativeProcess`; its session tests run over a pipe, one also on TCP |
+| `std/protocol/http/connection_tests.ignite` | `std.protocol.http.connection_tests`, the inline tests of `std.protocol.http`'s connection, held requests, upgrades and `on_oversized` (`docs/slice.md` 37.7), beside the module so that `std/protocol/http.ignite` stays under 3,000 lines; declares nothing, verifies no clause, and holds its own copies of the test-only helpers it shares with `http.ignite` (a test-only item is not exported, 12.2) |
 | `std/protocol/jsonrpc.ignite` | `protocol JsonRpc`: declares `conforms [JSONRPC_2]` for the parties a server is, batches unsupported (`docs/slice.md` 19.19); an id that is a `Decimal` comes back as sent (`DecimalId`); Content-Length framing generic over `T: ByteStream` (`frame`, `write_message`, `read_message` returning `Frame`, `split_frame` the same framing over bytes already read for a reader that is no `ByteStream`, typed `FrameError`, bounded by `JsonRpcLimits`; a body that is not UTF-8 is the parse error, `is_utf8`, `decode_body`), JSON-RPC 2.0 messages through `std.json` (`Message`: `Call(Request)`, `Notify(Notification)`, `Reply(Response)`; `Id`, `ErrorObject`, the standard codes; `encode_message`, `decode`); server role `serve(stream, limits, application: JsonRpcApp<S>)`, whose `call` handler returns the outcome a request is always answered with and whose `notify` handler returns none; tests over a pipe |
+| `std/protocol/resp.ignite` | `std.protocol.resp`, a RESP2/RESP3 client generic over `T: ByteStream` (`docs/slice.md` 35): `RespValue` (every RESP3 type), `encode`, `decode` and `read_value` within `RespLimits` (typed `RespError`); `Client<T>` with `command`, `pipeline` (replies in order) and typed helpers for strings, hashes, sets, keys, expiry and `publish`; `subscribe` (a reader task sends each `Message` on `Subscription.messages` until `unsubscribe` or the connection ends; `retry_delay`, `resubscribe` for the caller's reconnect); Sentinel `ask_master`, `master_from`, `master_at`, `watch_master`, `next_master` (`+switch-master`); tests over a scripted pipe server, the real `redis-server` and `redis-sentinel` in `crates/ignite/tests/resp.rs` (`#[ignore]`) |
+| `std/protocol/nats.ignite` | `std.protocol.nats`, a NATS core client generic over `T: ByteStream` (`docs/slice.md` 36): `encode_connect`, `encode_publish` (PUB, HPUB), `encode_subscribe`, `encode_unsubscribe`, `decode` (INFO, MSG, HMSG, PING, PONG, +OK, -ERR) within `NatsLimits` (typed `NatsError`); `valid_subject`, `valid_filter`, `subject_matches` (the server's wildcard rule); `connect` (INFO, CONNECT with `NatsAuth`, PING, PONG; then per connection a reader task and a writer task, and a client task that owns the state and never writes, so the keepalive finds a server that stopped reading; `NatsLimits.backlog` bounds the unwritten bytes, `NatsLimits.lingering` the lost connections whose tasks still run; `shutdown` hands the writer everything acknowledged and answers queued commands as shut down; `NatsStats` counts every acknowledged message once), `publish`, `publish_message`, `subscribe`, `queue_subscribe`, `unsubscribe`, `unsubscribe_after`, `request` (an inbox, a deadline on a channel, no responders), `respond`, `flush`, `stats` (`NatsStats`), `shutdown`; keepalive PING with `max_pings_out`; a lost connection holds publishes in a bounded buffer and drops and counts those older than `pending_age` (1 s), `reconnect` resubscribes and sends the fresh ones the new server's INFO takes (publishing is checked against the newest INFO), `connect_to` reconnects over TCP itself (`retry_delay`); tests over a scripted pipe server, the real `nats-server` in `crates/ignite/tests/nats.rs` (`#[ignore]`) |
+| `std/protocol/mysql.ignite` | `std.protocol.mysql`, a MySQL client generic over `T: ByteStream` (`docs/slice.md` 42): packets with sequence numbers and the 16 MiB - 1 continuation within `MysqlLimits` (typed `MysqlError`; `describe` never holds the server's message, a statement or a credential); the version 10 handshake with `mysql_native_password` and `caching_sha2_password`, either after an authentication switch, full authentication on a TLS stream only (`FullAuthenticationNeedsTls` on a plain one, no RSA exchange), any other plugin refused by name; `connect`, `connect_tls` (SSLRequest, then `Tls.client`), `start`, with `MysqlOptions` (account, database, `read_only`, connect and read timeout); `query` (text protocol), `prepare`, `execute`, `close`, `execute_once` (binary protocol, parameters as values), each a `ResultSet` of `Column`s and rows of `Option<MysqlValue>` (`Int`, `Decimal`, `Bool`, `Text`, `Bytes`); `ping`, `quit`; `Pool` with `pool_of`, `checkout`, `checkin`, `pool_query`, `pool_execute`, `quit_idle` (a failed connection is not put back); tests over a scripted pipe server, two real servers in containers in `crates/ignite/tests/mysql.rs` (runs where docker and the image are present, says why it did nothing elsewhere), adversary cases in `crates/ignite/tests/mysql_adversary.rs` (commands of two frames and DOUBLE values against a real server; the descriptors of ended connections: none on the Rust target, one each until the process exits on the LLVM target, pinned exactly until the owner rule of `docs/llvm.md` section 4 covers a client record) |
+| `std/protocol/mysql/binary.ignite` | `std.protocol.mysql.binary`, what the fixed-width values of the MySQL binary protocol print as, beside the module so that `std/protocol/mysql.ignite` stays under 3,000 lines: `float_text` and `double_text` (the shortest decimal digits that read back as the same number, ties to the even digit, in the notation of the server's text protocol, since the language has no floating-point type; Burger and Dybvig's free-format algorithm over natural numbers in base 10^9), `unsigned_text`, `date_text`, `time_text` |
 | `std/contract.ignite`, `std/policy.ignite`, `std/deploy.ignite`, `std/cli.ignite` | the declaration vocabulary of design section 11.3 (`SLA`, `Availability`, `Restart`, `DrainRollout`, `Deployment`, `Application`, …; the Telnet probe `TelnetPrompt` is in `std/protocol/telnet.ignite`), checked and tested; `std.deploy`'s `Member`, `admits` and `includes` are what the compiler calls to resolve an assembly (`docs/slice.md` 15.6); since slice 12 each runnable kind has the hooks `machine` and `validate` of 16.16 (`ignite run` steps the machines, `ignite check` reports `validate`'s reasons as E120) and `std.deploy.entries` names the entries a binding needs (E129); since slice 18 a contract kind is generic over its probe's outcome type, `good` is a predicate `fn(T) -> Bool` and the hook `classify(self, sample: T) -> Bool` applies it (22.3; E150, E151) |
 | `examples/terminal/terminal.ignite` | the terminal system in component form (`CommandConsole`, `TelnetServer`, `TelnetClient`); `ignite build` emits `terminald` and `tn` |
 | `examples/terminal/commands.ignite`, `command_schema.ignite` | sibling modules of the terminal: the console's commands (`respond`) and their names (`commands`), filled into the declaration by `module(..)`; `commands.ignite` ends with the test "the terminal transcript over a pipe", slice 9 item 4's transcript through `Telnet.serve` over `Pipe.pair()` (`docs/slice.md` 18.0 row 3); tests elsewhere rewrite its `lines = ["ready"]`, so that test writes `ready` as bytes |
@@ -82,7 +89,7 @@ Rules of the layout:
 - Nothing named telnet lives under `crates/`.
 - A general layer knows no application protocol: the layers of std and the rule for
   `crates/*/src` are in `docs/layering.md`, enforced by `layering::` in
-  `crates/ignite-check/tests/layering.rs`; change the table in both together. The substrate knows sockets and TLS sessions, not application protocols: a TLS engine (rustls) may live in `crates/ignite-io`, the `Tls<T>` layer is Ignite (Timo, 2026-11-01).
+  `crates/ignite-check/tests/layering.rs`; change the table in both together. The substrate knows sockets and TLS sessions, not application protocols: a TLS engine (rustls) may live in `crates/ignite-io`, the `Tls<T>` layer is Ignite (Timo, 2026-11-01). As landed (`docs/slice.md` 38): the session is the substrate builtin `TlsStream` over a `TcpStream`, a `ByteStream`, so a protocol role generic over its stream runs over it; `std.tls` holds its options in Ignite.
 
 ## Commands
 
@@ -92,7 +99,7 @@ Rules of the layout:
 | all tests | `task test` |
 | format and lint | `task check` |
 | merge gate | `task gate` |
-| pack the release binary | `task dist` (release `ignite` for Linux x86_64, glibc linked statically, with `std/` as `target/dist/ignite-VERSION-x86_64-linux.tar.gz`: `bin/ignite`, `share/ignite/std`; a driver at `<prefix>/bin/ignite` reads `<prefix>/share/ignite/std` first when it exists) |
+| pack the release binary | `task dist` (release `ignite` for Linux x86_64, glibc linked statically, with `std/` as `target/dist/ignite-VERSION-x86_64-linux.tar.gz`: `bin/ignite`, `share/ignite/std`; a driver at `<prefix>/bin/ignite` reads `<prefix>/share/ignite/std` first when it exists; fails unless the driver prints the bare `ignite VERSION`, a clean build of the tag `vVERSION`, which must exist) |
 | build and check the toolchain image | `task image VERSION=X.Y.Z` (`dist/toolchain/Dockerfile`, tags `ghcr.io/ignite-lang/ignite-toolchain:X.Y.Z` from release vX.Y.Z's archive and the tag's source), `task image-check VERSION=X.Y.Z [IMAGE=REF]` (`image::` in `crates/ignite/tests/image.rs`, ignored elsewhere: needs docker) |
 | compile the example | `task compile` (`ignite build --target rust`; writes `target/ignite/terminal/`, prints `built …/terminald` and `built …/tn`) |
 | run the compiled server | `task server` |
@@ -122,7 +129,11 @@ Rules of the layout:
 | check a catalogue against its source | `target/debug/ignite rfc check CATALOGUE [SOURCE]` (exit 0 silent when the digests match, 1 when they differ; without SOURCE prints `<CATALOGUE>: unchecked`) |
 | print a conformance matrix | `target/debug/ignite conformance FILE [--target llvm\|rust] [the build flags of ignite test]` (`docs/slice.md` 19.10: runs FILE's tests once, one block per protocol and spec, a claim line each; exit 0 every claim holds, 1 one does not, 2 a diagnostic or no conforming protocol, 3 a test build or run failure) |
 
-`task` is go-task. Rust toolchain: stable, edition 2024, `rustfmt` defaults. Every cargo
+`task` is go-task. `strace`, with ptrace allowed on a child, is a prerequisite of `task gate`:
+`scheduler::a_connection_costs_no_more_system_calls_than_at_v0_15_0` in `crates/ignite-io`
+counts the connection path with it and fails, naming it, without it. So is `valgrind`:
+`reply_cost::a_get_reply_allocates_no_more_than_at_v0_15_0` in `crates/ignite` counts the
+allocations of an HTTP reply with it. Rust toolchain: stable, edition 2024, `rustfmt` defaults. Every cargo
 invocation in automation sets `CARGO_INCREMENTAL=0`. `task test-ignite` honours
 `CARGO_TARGET_DIR` (binary, runtime and outputs under it); `task compile-llvm` and
 `task compile-todo-llvm` build and pass the runtime under it too, and write their programs to
@@ -430,6 +441,8 @@ cold comparison against each baseline meets the start-load rule and has no faile
   `restart-samples.json` links the copied journals. A test-only mutex fixes the ARGS race;
   syscall-traced HTTP failures are diagnostic interference, not readiness evidence.
 
+- Agents run no disk probes (`df`, `du`, `find` over a tree) and follow no free-space rule; disk
+  space on the workstation is its owner's round, not an agent's (Timo, 2026-11-10).
 - No comments in `Cargo.toml`, `Taskfile.yml` or any other config file.
 - Tooling, checks and scripts are Rust (Timo, 2026-11-02): a `#[test]` in the crate that owns the rule, or a Rust binary. No new Python; Bash only for one-line invocations in `Taskfile.yml`. The former `scripts/*.py` are `tools/ignite-perf` and the serial `cargo fmt --all -- --check` of `task check` (`story:rust-tooling`); scripts under `docs/performance/` are recorded evidence and stay as they are.
 - The repository, its releases and its packages are public (Timo, 2026-11-08): no company, customer, service or internal project names, hosts, paths, account ids or credentials in any file, commit message, PR, release note or image label. A case study is named by what it is ("a WebSocket push service").
@@ -479,12 +492,31 @@ Standing rule (Timo, 2026-11-04): finished work goes to `main` without waiting f
 Standing rule (Timo, 2026-11-07): a release is cut after every third wave a coordinator closes,
 without waiting for a person.
 
+Pace (Timo, 2026-11-11: "its not accreptable to work in that pace", "fix your process"). v0.16.0
+was open for three days; a coordinator does this instead of what cost them:
+
+- The dedicated-host run (`task quality-remote BASE=<last release tag> HEAD=<integration head>`,
+  with a `RUN` label that is not `v*`) is started as soon as the units of a wave that move a time
+  row are merged into the integration branch. It is not left for after the last merge: waves 9
+  and 10 merged without one, and 14 cells were refused together at the cut.
+- Work that does not touch the same files runs at once, an accepted story of the next wave
+  included. A release in recovery does not hold back unrelated accepted work.
+- One adversary pass per unit. Its introduced findings go back to the implementor once, and the
+  coordinator reruns the red cases itself. A second pass is for new code nobody attacked, and the
+  coordinator says which code.
+- A count that moves by less than its run-to-run spread, or that the reviewer ties to code layout
+  and not to code on the path, does not send a unit back. The time rows of the dedicated host
+  judge it.
+- The value of `IGNITE_PERF_AWS_PROFILE` is copied into the coordinating session's own scratch at
+  a handoff. Another session's scratch is deleted when that session ends, and the name is in no
+  file of the repository and in no transcript.
+
 - Count: waves closed on `main` since the last release tag; the wave pages under
   `.engineering/waves/` name them. At the third, the next minor version is released.
 - Steps, as `v0.12.0` (`29f656f2`): one `chore(release): version X.Y.Z` commit bumping the
   workspace crates in `Cargo.toml` and `Cargo.lock` and the version the site names
   (`site/book/src/README.md`, `faq.md`, `guide/install.md`, `design/related-work.md`,
-  `design/inspirations.md`, a `roadmap.md` row, a milestone in `site/index.html`); a PR with a
+  `design/inspirations.md`, a `roadmap.md` row, a milestone and the version label (`eyebrow`) in `site/index.html`); a PR with a
   green `task gate`, merged; tag `vX.Y.Z` on the merge commit; `gh release create vX.Y.Z` with
   notes in the shape of `v0.12.0`'s: one bullet per merged PR, behaviour changes (a
   `CODEGEN_REVISION` bump means the first `ignite apply` rebuilds), what is not yet covered.
@@ -493,7 +525,14 @@ without waiting for a person.
   would carry a musl runtime archive that the default, dynamic LLVM link cannot use), `bin/ignite`
   with `share/ignite/std`, the standard library a driver at `<prefix>/bin/ignite` reads first;
   the Rust target still needs a clone (`--substrate`). The VS Code extension of `ignite-lsp`
-  downloads it.
+  downloads it. `task dist` needs the toolchain's `rust-src` component (`rustup component add
+  rust-src`): the release runtime archive the driver carries is built on the standard library from
+  source without its backtrace symbolizer (`crates/ignite-rt/release_std.rs`, an unstable cargo
+  flag under `RUSTC_BOOTSTRAP=1`; story `binary-size-back`, row 3.9). Without it the build warns
+  and carries an archive about 130 KB larger per LLVM executable: refuse such a build. The same
+  recipe builds the archive of `cargo install`, `task bench-throughput` and the dedicated host's
+  benchmark (`ignite-perf runtime`, its setup installs `rust-src`); the toolchain image takes the
+  released driver and builds no archive.
 - Image (story `toolchain-image`), after the archive is uploaded: `task image VERSION=X.Y.Z`
   (`dist/toolchain/Dockerfile`: `rust:1.98-trixie`, clang, lld, the release archive checked
   against its `.sha256`, the tag's source in `/usr/local/src/ignite` with its crates fetched,
@@ -505,17 +544,77 @@ without waiting for a person.
   with `gh release edit`.
 - Quality gate (`docs/quality.md`): in the release commit, run `task quality RUN=vX.Y.Z`, which
   appends the run to `quality/history.jsonl` and regenerates `quality/trend.md` and the book's
-  quality page. The release is refused, and not cut, when it fails: a count row worse than at
-  the last release (or the bar) beyond its tolerance, or worse than a bar a `decision` moved since
-  the last release. Timing rows there are `host: local` and
-  refuse nothing. Then run `task quality-remote BASE=<last release tag> HEAD=<release commit>
-  RUN=vX.Y.Z` with `IGNITE_PERF_AWS_PROFILE` set (spending on it is approved, about two thirds of an
-  instance-hour of a spot `c7i.metal-24xl`): it measures the timing rows and the native benchmark of both trees
-  interleaved on a dedicated EC2 host and refuses the release, exit 1, when a timing row of HEAD
-  is worse than BASE's beyond its tolerance; it fails when anything tagged by the run is left in
+  quality page. No measured number refuses a release (Timo, 2026-11-11: "Let's just track the
+  numbers, but let's not block the release"): the run prints what the rest of this bullet calls
+  refused as `worse than the last release, tracked and not refused`, records the run under the
+  release's label and exits 0, and the release notes list each such row with both values and the
+  id of its story (a row without a story gets a draft before the release is cut). What the run
+  lists: a count, size or
+  hill-climb row worse by any amount than at the last release (a cell of the binary-size rows
+  3.2 and 3.9 held by a new `decision` excepted, below; the nearest `v*` tag reachable
+  from HEAD, as `git describe` finds it; its records in the history, never a refused
+  candidate's; the bar before the first tag), or a bar a `decision` moved worse than the last
+  release, whatever the value (a timing or benchmark bar against its bar in the tag's
+  `quality/baseline.json`); the refusal names the decision to withdraw. The bars of 3.2 and 3.9
+  are not judged by that second check: there a new `decision` is what lets a cell grow, so a
+  cell above the last release is listed when its bar carries one and refused when it does not,
+  and a decision on a cell that is not above the last release is refused until it is removed
+  (the binary-size bullet below). Timing values there are
+  `host: local` and refuse nothing. Pre-release tags (`v*-rc*`) are not created: the check would
+  take one as the last release. Then run `task quality-remote BASE=<last release tag> HEAD=<release commit>
+  RUN=vX.Y.Z` with `IGNITE_PERF_AWS_PROFILE` set (spending on it is approved; one spot
+  `c7i.metal-24xl`, 5 passes of each tree by default, and the cost of a run with 5 timing passes
+  is not measured yet): it measures the timing rows and
+  the native benchmark of both trees interleaved on a dedicated EC2 host and prints, as `worse
+  than the base, tracked and not refused`, every row of HEAD that is worse than BASE's beyond
+  its tolerance, or worse in every pass than every pass of BASE (a release run with fewer than
+  5 passes is an error). It exits 0 and its records carry the release's label; a release has
+  one such run. The mode fails when anything tagged by the run is left in
   the account. Commit the regenerated files with the release; the release notes carry the
   release's row of `quality/trend.md`, its dedicated-host row and the run's cost (`machine` of
   its records).
+- Every release aims to be better than the release before it on every row (Timo, 2026-11-10:
+  "every release should be an improvement in quality"), and the numbers are tracked, not a
+  block (Timo, 2026-11-11: "the general idea is to get better every time, but the metrics, of
+  course, need to make sense"; "Let's just track the numbers, but let's not block the
+  release"). This replaces the rule of 2026-11-10 that a release waits for every row: v0.16.0
+  waited on one cell, the p99 of `terminal/connect-8` at 1.15 of v0.15.0 inside its 20 %
+  tolerance, while the p99 row over its six cells was at 0.65. A row that
+  `task quality RUN=vX.Y.Z` or `task quality-remote` prints as worse than the last release goes
+  into the release notes with both values, and a story in the plan takes it (the next wave's
+  first candidates). The binary-size rows keep their decisions (next bullet).
+- Binary size is the one exception, and time comes before bytes (Timo, 2026-11-11: "increase in
+  binary size isn't a big deal ... if we're adding more code and more logic, then obviously the
+  size will increase ... what would be bad is execution time, compile time"). A size row (3.2,
+  3.9) may end above the last release when the release added code. Bytes are never bought with
+  time: a change that lowers a binary's bytes and raises instructions per request, per
+  connection, at start, or in the build (compile or link) is not taken. The size rows are the
+  metrics `quality/baseline.json` marks `"release_growth": "decision"` (3.2 and 3.9, no other
+  row; `docs/quality.md` "`task quality` and releases"). `task quality RUN=vX.Y.Z` (3.2, against
+  the last release's record) and `task quality-remote` (3.9, HEAD against BASE in the run) do
+  not refuse a cell of them above the last release when the bar of that cell carries a new
+  `decision` naming the code that added the bytes, and each run prints every such cell with its
+  value at the last release, its value now and the decision. A decision is new when
+  `quality/baseline.json` at the last release (its tag for 3.2, BASE for 3.9) does not hold it:
+  one carried over from the last release named that release's code and does not let a cell grow
+  again. Decisions are compared by their letters and digits, case folded: the last release's
+  decision in other case or punctuation, or with a sentence added, is the last release's; one
+  character of it changed reads as new, so a person reads what a decision says; a text with
+  fewer than 40 letters and digits is no decision. A grown cell whose bar has no `decision`, or
+  the last release's, is refused, and the refusal says a decision is missing or a new one is
+  needed, so a release does not grow by accident; so is a grown cell when the last release's
+  baseline cannot be read. A decision on a cell of 3.2 or 3.9 that is not above the last
+  release holds nothing and refuses the release until it is removed, so the decisions on these
+  bars at a release are those of the cells that grew in it. The release's records of the grown
+  cells in `quality/history.jsonl` carry the decision, and the release's row of
+  `quality/trend.md` lists the cells, both values and the decision. A merge is judged as
+  before: a size is held against its bar, and a bar
+  moves worse against `main` only with a `decision` of its own. The cells a run prints are
+  reported to Timo with the code that added the bytes before the release is cut.
+- Timing and benchmark rows (5.3, 6.1, 6.2, 3.3, 3.7, 3.8, 3.9) are judged only on the records
+  of the dedicated host (`host: ec2:*` in `quality/history.jsonl`, HEAD against BASE measured in
+  the same run), never on `host: local` values (Timo, 2026-11-10: "you must check the results
+  which were run on the remote EC2 - not local").
 - EC2 runs (`task quality-remote`: timing and native benchmarks) happen only when a release is
   about to be cut (Timo, 2026-11-08); merges run the local gate only.
 - Benchmarks and load tests run only on that dedicated EC2 host, never on the shared

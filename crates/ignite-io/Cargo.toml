@@ -8,10 +8,22 @@ autotests = false
 
 [dependencies]
 corosensei = "0.3.4"
-nix = { workspace = true, features = ["signal", "dir", "poll", "resource", "event", "feature", "socket"] }
+nix = { workspace = true, features = ["signal", "dir", "poll", "resource", "event", "socket"] }
+rustls = { workspace = true, optional = true }
+termios = "0.3.3"
+
+[target.'cfg(not(target_arch = "x86_64"))'.dependencies]
+nix = { workspace = true, features = ["feature"] }
+
+[dev-dependencies]
+ignite-io = { path = ".", features = ["process", "tls"] }
+rcgen.workspace = true
+nix = { workspace = true, features = ["term"] }
 
 [features]
-runner = []
+process = []
+runner = ["process"]
+tls = ["dep:rustls"]
 
 [[test]]
 name = "main"

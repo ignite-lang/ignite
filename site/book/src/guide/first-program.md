@@ -42,9 +42,7 @@ test hello/greet puts the name in the sentence ... ok
 test result: ok. 1 passed; 0 failed; 0 filtered out; finished in 0.01s
 ```
 
-A test's full name is `<module>/<name>`. `ignite test` builds one test executable and runs
-every test in it; [Testing with ignite test](testing.md) has the details, and
-`--target all` runs the same tests on both targets.
+A test's full name is `<module>/<name>`. [Test it](testing.md) has more.
 
 ## An executable
 
@@ -98,16 +96,10 @@ built target/ignite/hello/bin/hello
 Hello, Ignite!
 ```
 
-`ignite build` compiles the program on the default target, LLVM: it writes LLVM IR into
-`--out` (default `target/ignite/<package>`, the IR under `llvm/`), has clang compile and link
-it against the runtime archive the `ignite` binary carries, and prints one `built <path>`
-line per executable. It needs clang and no network. With `--target rust` the same program is
-generated as a Rust project and built by cargo instead; see
-[Building for Rust and LLVM](targets.md).
+`ignite build` compiles the program on the default target, LLVM. It writes LLVM IR under
+`target/ignite/hello/llvm/`, and clang compiles and links it. It prints one `built <path>` line
+per executable. The [command-line reference](../reference/cli.md#ignite-build) has its
+options.
 
-## What to read next
-
-- [The terminal walkthrough](terminal.md): a real system with a protocol, a console and two
-  executables.
-- [Language design](../design/index.md): why Ignite looks the way it does.
-- [Grammar](../reference/grammar.md) and [Types](../reference/types.md) for the details.
+Next: [the terminal system](terminal.md), a real system with a protocol, a console and two
+executables.

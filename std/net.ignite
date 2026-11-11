@@ -26,10 +26,34 @@ package std.net
 // - `TcpStream.connect_within(address, port, timeout: Duration) ->
 //   Result<TcpStream, IoError>`, effect `net.connect`: `connect` that
 //   gives up after `timeout` (a timeout that is not positive is refused).
+//
+// Since story `http-app-connection` it also has `stream.local() ->
+// Endpoint`: this end of the connection, the address the connection
+// arrived at (an accepted stream) or left from (a connected one), written
+// as `peer` writes its address. Pure; kept after `close`.
 type Endpoint {
   address: Text
   port: Int
 }
+
+// What a server knows of one connection, the view a protocol hands its
+// application (story `http-app-connection`): the other end, this end, and
+// whether TLS carries the bytes. A connection with no address, such as
+// one end of `Pipe.pair()`, is `Connection.unknown()`.
+type Connection {
+  peer: Endpoint
+  local: Endpoint
+  tls: Bool = false
+}
+
+// The view of a connection with no address: both ends empty, port 0.
+fn Connection.unknown() -> Connection = Connection {
+  peer = Endpoint { address = "", port = 0 }
+  local = Endpoint { address = "", port = 0 }
+}
+
+// The view of an accepted or connected plain TCP stream.
+fn Connection.of(stream: TcpStream) -> Connection = Connection { peer = stream.peer(), local = stream.local() }
 
 test "the peer of a stream is the other end, in both families" {
   let listener = TcpListener.bind("127.0.0.1", 0)?
@@ -46,6 +70,34 @@ test "the peer of a stream is the other end, in both families" {
   assert far.peer().address == "::1"
   far.close()?
   assert far.peer().address == "::1"
+}
+
+test "the local end of a stream is this end, in both families" {
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let client = TcpStream.connect("127.0.0.1", listener.local_port())?
+  let server = listener.accept()?
+  assert server.local() == Endpoint { address = "127.0.0.1", port = listener.local_port() }
+  assert client.local() == server.peer()
+  assert Connection.of(server) == Connection { peer = client.local(), local = client.peer() }
+  assert !Connection.of(server).tls
+  let six = TcpListener.bind("::1", 0)?
+  let near = TcpStream.connect("::1", six.local_port())?
+  let far = six.accept()?
+  assert far.local() == Endpoint { address = "::1", port = six.local_port() }
+  far.close()?
+  assert far.local() == near.peer()
+  assert Connection.unknown().peer == Endpoint { address = "", port = 0 }
+}
+
+// `TcpListener.bind_kept(address, port)`, effect `net.listen`, binds as
+// `bind` a listener the SIGTERM drain keeps open (16.13, story
+// `drain-keeps-bound-listeners`); the drain itself is tested end to end.
+test "a listener bound kept accepts as one bound plainly" {
+  let listener = TcpListener.bind_kept("127.0.0.1", 0)?
+  let client = TcpStream.connect("127.0.0.1", listener.local_port())?
+  let server = listener.accept()?
+  server.write_all(b"kept")?
+  assert client.read(4)? == Data(b"kept")
 }
 
 test "a read the idle timeout ended is told from a close" {

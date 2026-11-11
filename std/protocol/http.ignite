@@ -1,6 +1,6 @@
 package std.protocol.http
 
-import std.net.{ByteStream, Pipe, PipeStream, TcpStream}
+import std.net.{ByteStream, Pipe, PipeStream, TcpStream, Endpoint, Connection}
 import std.io.IoError
 import std.text.*
 import std.option.unwrap_or
@@ -40,12 +40,20 @@ import std.control.{Machine, Supervisor}
 // An absolute-form request-target is accepted, its authority replacing
 // the received `Host`; HEAD is asked of the application as GET and
 // answered without content.
+//
+// Since story `http-app-connection` the application sees its connection
+// (`Request.connection`), may hold a request until a message or a
+// deadline (`Reply.Hold`), take the connection over (`Reply.Upgrade`) and
+// answer a body over the limit itself (`HttpApp.on_oversized`); see the
+// block "the connection, holds, upgrades and oversized bodies" below.
 
 type IoResult<T> = Result<T, IoError>
 
 // One request. `path` is the target without its query, `query` the text
 // after `?`; header names are in lower case, values without the SP and
-// HTAB around them (OWS, RFC 9110 section 5.6.3).
+// HTAB around them (OWS, RFC 9110 section 5.6.3). `connection` is the
+// connection it came on, as the server knows it (`Connection.unknown()`
+// until the session sets it).
 type Request {
   method: Text
   path: Text
@@ -53,6 +61,7 @@ type Request {
   version: Text
   headers: List<(Text, Text)>
   body: Text
+  connection: Connection = Connection { peer = Endpoint { address = "", port = 0 }, local = Endpoint { address = "", port = 0 } }
 }
 
 // One response. `content` says where its body is: `body` by default.
@@ -69,17 +78,53 @@ type Response {
 // they come (`send_streamed`).
 enum Content { Inline, Binary(Bytes), Streamed }
 
-// What a server runs: shared state, the handler called once per request
-// with that state, and `piece`, called with the state and the request
-// for the next piece of a `Streamed` body until it returns `Ok(None)`.
-type HttpApp<S> {
+// What a server runs over streams of type `T`: shared state, the handler
+// called once per request with that state, and `piece`, called with the
+// state and the request for the next piece of a `Streamed` body until it
+// returns `Ok(None)`. Since story `http-app-connection`: `reply`, when
+// given, answers each request in place of `handle` and may hold it or take
+// the connection over (`Reply`); `on_oversized`, when given, answers a
+// body over `HttpLimits.body` in place of std's 413 (`session`). `T` is
+// the stream an `Upgrade`'s takeover gets: `TcpStream` under
+// `HttpServer`, `PipeStream` in tests.
+type HttpApp<S, T> {
   state: S
-  handle: fn(state: S, request: Request) -> Response requires [state.*]
+  handle: fn(state: S, request: Request) -> Response requires [state.*] = not_found
   piece: fn(state: S, request: Request) -> IoResult<Option<Bytes>> requires [state.*] = no_piece
+  reply: Option<fn(state: S, request: Request) -> Reply<S, T> requires [state.*]> = None
+  on_oversized: Option<fn(state: S, head: Request, limit: ByteSize) -> Response requires [state.*]> = None
 }
 
 // The default `piece`: every streamed body is empty.
 fn no_piece<S>(state: S, request: Request) -> IoResult<Option<Bytes>> = Ok(None)
+
+// The default `handle`: 404 for every request, for an application that
+// answers through `reply` alone.
+fn not_found<S>(state: S, request: Request) -> Response = status_response(404)
+
+// What `HttpApp.reply` answers a request with (story
+// `http-app-connection`):
+//
+// - `Respond(response)`: the response, as `handle` gives it.
+// - `Hold(receiver, deadline, on_timeout)`: the connection's task waits on
+//   `receiver` (a `std.sync` channel) for at most `deadline` and sends the
+//   response that arrives, or `on_timeout` at the deadline, at once when
+//   the channel is closed, and at once when the server drains. Other
+//   connections are not held up; requests pipelined behind this one wait.
+//   The receiver is closed after the wait, so a later `send` to it is
+//   false: the request was answered.
+// - `Upgrade(response, takeover)`: the server writes the head of
+//   `response` (and its body, framed as an inline body is) without a
+//   `Connection` field of its own, then calls `takeover` on the
+//   connection's task with the state, the request, the stream and the
+//   bytes read after the request; the connection is closed when it
+//   returns. A response `checked` refuses is answered 500 instead and
+//   nothing takes over.
+enum Reply<S, T> {
+  Respond(Response)
+  Hold(Receiver<Response>, Duration, Response)
+  Upgrade(Response, fn(state: S, request: Request, stream: T, early: Bytes) -> IoResult<Unit> requires [state.*, stream.read, stream.write])
+}
 
 // The limits of a server's connections (`docs/slice.md` 18.5): the
 // longest head (request line and fields, else 431) and body (else 413),
@@ -122,33 +167,64 @@ protocol Http conforms [RFC9112, RFC9110] scope { parties = [Server, Sender, Rec
   not_applicable RFC9110.R6_6_1_3 "applies to an origin server without a clock; the host has one, see RFC9110.R6_6_1_2"
   not_applicable RFC9110.R9_2_1_2 "addresses the resource owner: the application's handler decides what a method does"
 
-  fn serve<T: ByteStream, S>(stream: T, limits: HttpLimits, application: HttpApp<S>) -> IoResult<Unit> requires [
+  // A stream with no address of its own: the application sees
+  // `Connection.unknown()`, and no drain answers its held requests.
+  fn serve<T: ByteStream, S>(stream: T, limits: HttpLimits, application: HttpApp<S, T>) -> IoResult<Unit> requires [
     stream.read, stream.write, application.*
   ] {
-    stream.set_idle_timeout(limits.idle_timeout.to_ms())?
-    let result = session(stream, limits, application)
-    _ = stream.close()
-    result
+    serve_connection(stream, Connection.unknown(), limits, application, Holds.none())
   }
 }
 
+// `Http.serve` of a connection the application sees as `connection`, its
+// held requests registered in `holds`, which the drain answers
+// (`drain_holds`). `serve_listener` calls it for each accepted stream.
+fn serve_connection<T: ByteStream, S>(stream: T, connection: Connection, limits: HttpLimits, application: HttpApp<S, T>, holds: Holds) -> IoResult<Unit> {
+  stream.set_idle_timeout(limits.idle_timeout.to_ms())?
+  let result = session(stream, connection, limits, application, holds)
+  _ = stream.close()
+  result
+}
+
 // An HTTP server over a listener (`docs/slice.md` section 14.5): the
-// executable binds the listener, accepts connections and runs `Http.serve`
-// under `limits` in one task per connection; a connection whose handler
-// fails ends its task and the server goes on accepting.
+// executable binds the listener, accepts connections and serves each
+// under `limits` in one task per connection (`serve_listener`); a
+// connection whose handler fails ends its task and the server goes on
+// accepting.
 type HttpServer<S> {
   listener: TcpListener
-  application: HttpApp<S>
+  application: HttpApp<S, TcpStream>
   executable: Text
   limits: HttpLimits = HttpLimits {}
   recovery: Restart = Restart {}
   rollout: DrainRollout = DrainRollout {}
 }
 
-fn HttpServer.main<S>(self: HttpServer<S>) -> IoResult<Unit> {
+fn HttpServer.main<S>(self: HttpServer<S>) -> IoResult<Unit> = serve_listener(self.listener, self.limits, self.application)
+
+// Accepts connections on `listener` and serves each in a task of its own,
+// the application seeing the stream's `Connection.of`. When `accept`
+// fails, as it does once the drain began (`docs/slice.md` 16.13), every
+// held request is answered at once (`drain_holds`) and the error
+// returned, so `main` ends while the open connections finish. Only a
+// `reply` holds a request: without one the server starts no register of
+// held requests, and no task for it.
+fn serve_listener<S>(listener: TcpListener, limits: HttpLimits, application: HttpApp<S, TcpStream>) -> IoResult<Unit> {
+  let holds = match application.reply {
+    Some(_) => Holds.start()
+    None => Holds.none()
+  }
   loop {
-    let stream = self.listener.accept()?
-    spawn Http.serve(stream, self.limits, self.application)
+    match listener.accept() {
+      Ok(stream) => {
+        let connection = Connection.of(stream)
+        spawn serve_connection(stream, connection, limits, application, holds)
+      }
+      Err(error) => {
+        drain_holds(holds)
+        return Err(error)
+      }
+    }
   }
 }
 
@@ -470,10 +546,31 @@ fn checked(response: Response) -> Response satisfies [
 // not at all since the response has none.
 enum Framing { Length(Int), Chunks, UntilClose, NoBody }
 
-// The status line, the application's header fields, the field `framing`
-// needs and `Connection`, then the blank line.
-fn render_head(response: Response, framing: Framing, keep_alive: Bool) -> Bytes {
-  var head = "HTTP/1.1 {response.status} {reason(response.status)}\r\n"
+// The bytes a head takes besides its header fields: the status line
+// (a reason has 31 bytes at most), `Content-Length` or
+// `Transfer-Encoding`, and `Connection` with the blank line.
+const HEAD_ROOM: Int = 128
+
+// An empty text with room for `length` bytes: what is appended to it
+// within that length stays in its one buffer, which is never moved to a
+// larger one (a move is an allocation of its own). The bytes' buffer
+// becomes the text's, not copied.
+fn text_with_room(length: Int) -> Text {
+  let room = Bytes.with_capacity(length)
+  room.to_text()
+}
+
+// The status line, the application's header fields and the field
+// `framing` needs, each ending in CRLF, in a text with room for the whole
+// head and `after` bytes more: `HEAD_ROOM` and each header field with its
+// separator and CRLF.
+fn render_fields(response: Response, framing: Framing, after: Int) -> Text {
+  var room = HEAD_ROOM + after
+  for header in response.headers {
+    room = room + header.0.len() + header.1.len() + 4
+  }
+  var head = text_with_room(room)
+  head = head + "HTTP/1.1 {response.status} {reason(response.status)}\r\n"
   for header in response.headers {
     head = head + "{header.0}: {header.1}\r\n"
   }
@@ -486,11 +583,25 @@ fn render_head(response: Response, framing: Framing, keep_alive: Bool) -> Bytes 
     }
     _ => {}
   }
+  head
+}
+
+// The status line, the application's header fields, the field `framing`
+// needs and `Connection`, then the blank line, with room for `after`
+// bytes more: the body a message appends to it.
+fn render_head(response: Response, framing: Framing, keep_alive: Bool, after: Int) -> Text {
+  var head = render_fields(response, framing, after)
   if keep_alive {
     head = head + "Connection: keep-alive\r\n\r\n"
   } else {
     head = head + "Connection: close\r\n\r\n"
   }
+  head
+}
+
+// The bytes of `render_head`, its buffer taken, not copied.
+fn head_bytes(response: Response, framing: Framing, keep_alive: Bool, after: Int) -> Bytes {
+  let head = render_head(response, framing, keep_alive, after)
   head.to_bytes()
 }
 
@@ -516,17 +627,24 @@ fn inline_length(response: Response) -> Int = match response.content {
 }
 
 // The head of `response` framed by `framing`, then its body unless
-// `with_body` is false or `framing` is `NoBody`; the body is appended
-// from the response, not copied first.
+// `with_body` is false or `framing` is `NoBody`, in one buffer made with
+// room for both; the body is appended from the response, not copied
+// first.
 fn render_framed(response: Response, framing: Framing, keep_alive: Bool, with_body: Bool) -> Bytes {
-  var out = render_head(response, framing, keep_alive)
-  if with_body && framing != NoBody {
-    match response.content {
-      Binary(bytes) => out.append(bytes)
-      _ => out.append(response.body.to_bytes())
-    }
+  if !with_body || framing == NoBody {
+    return head_bytes(response, framing, keep_alive, 0)
   }
-  out
+  match response.content {
+    Binary(bytes) => {
+      var out = head_bytes(response, framing, keep_alive, bytes.len())
+      out.append(bytes)
+      return out
+    }
+    _ => {}
+  }
+  var message = render_head(response, framing, keep_alive, response.body.len())
+  message = message + response.body
+  message.to_bytes()
 }
 
 // How an `Inline` or `Binary` response to `request` is framed: none for a
@@ -606,10 +724,10 @@ fn chunk(piece: Bytes) -> Bytes {
 // returned at once and the session closes the connection: a chunked body
 // then lacks its last chunk, which a client sees as incomplete; a body
 // that ends by closing looks complete to the client.
-fn send_streamed<T: ByteStream, S>(stream: T, application: HttpApp<S>, request: Request, response: Response, keep_alive: Bool) -> IoResult<Bool> satisfies [RFC9112.R6_1_2] {
+fn send_streamed<T: ByteStream, S>(stream: T, application: HttpApp<S, T>, request: Request, response: Response, keep_alive: Bool) -> IoResult<Bool> satisfies [RFC9112.R6_1_2] {
   let framing = streamed_framing(request, response.status)
   let keep = keep_alive && framing != UntilClose
-  stream.write_all(render_head(response, framing, keep))?
+  stream.write_all(head_bytes(response, framing, keep, 0))?
   if framing == NoBody || request.method == "HEAD" {
     return Ok(keep)
   }
@@ -1321,12 +1439,22 @@ fn read_head<T: ByteStream>(stream: T, limits: HttpLimits, buffer: Bytes) -> IoR
       return Ok((TooLarge, data))
     }
     from = if data.len() > 3 { data.len() - 3 } else { 0 }
-    match stream.read(READ_SIZE)? {
+    match read_once(stream)? {
       Eof => return Ok((Closed, data))
-      Data(more) => data.append(more)
+      Data(more) => if data.is_empty() {
+        data = more
+      } else {
+        data.append(more)
+      }
     }
   }
 }
+
+// One read of `stream`. Returned by a fn, the bytes of `Data` are the
+// caller's to move (`stream.read` matched in place is a borrow of the
+// stream to the last-use analysis), so the first read of a request
+// becomes its bytes as it is, not copied again.
+fn read_once<T: ByteStream>(stream: T) -> IoResult<Input> = stream.read(READ_SIZE)
 
 // Reads until `data` holds at least `end` bytes; `None` when the peer
 // closed first. The length was checked against `limits.body` already.
@@ -1343,8 +1471,12 @@ fn read_body<T: ByteStream>(stream: T, limits: HttpLimits, data: Bytes, end: Int
 
 // What comes next on a connection: a request and the bytes after it, the
 // end of the connection, or a status to answer before closing;
-// `RejectHead` answers a HEAD request, without content.
-enum Next { Got(Request, Bytes), Close, Reject(Int), RejectHead(Int) }
+// `RejectHead` answers a HEAD request, without content. `Oversized` is a
+// request whose body is over `limits.body`: its head, the bytes read after
+// the head, and the length its `Content-Length` declares, -1 for a chunked
+// body whose end is not known. The session answers it with
+// `HttpApp.on_oversized`, or as `rejected(head, 413)` without one.
+enum Next { Got(Request, Bytes), Close, Reject(Int), RejectHead(Int), Oversized(Request, Bytes, Int) }
 
 // The rejection of a parsed `request` with `status`.
 fn rejected(request: Request, status: Int) -> Next = if request.method == "HEAD" { RejectHead(status) } else { Reject(status) }
@@ -1373,6 +1505,7 @@ fn next_request<T: ByteStream>(stream: T, limits: HttpLimits, buffer: Bytes) -> 
     }
     return match read_chunked(stream, limits, data, head_end)? {
       Unfinished => Ok(Close)
+      Refused(413) => Ok(Oversized(request, Bytes.empty(), -1))
       Refused(status) => Ok(rejected(request, status))
       Decoded(body, rest) => {
         var full = request
@@ -1396,7 +1529,7 @@ fn next_request<T: ByteStream>(stream: T, limits: HttpLimits, buffer: Bytes) -> 
     return Ok(rejected(request, 400))
   }
   if length > limits.body.to_int() {
-    return Ok(rejected(request, 413))
+    return Ok(Oversized(request, data.slice(head_end, data.len()), length))
   }
   match read_body(stream, limits, data, head_end + length)? {
     None => Ok(Close)
@@ -1673,6 +1806,13 @@ test "a Content-Length is 1 to 18 decimal digits" verifies [RFC9112.R6_3_4] {
 // A HEAD request gets the head of the reply only.
 fn reject<T: ByteStream>(stream: T, limits: HttpLimits, status: Int, head: Bool) -> IoResult<Unit> satisfies [RFC9112.R6_1_13, RFC9112.R6_1_14, RFC9112.R6_3_5, RFC9112.R9_6_6, RFC9112.R9_6_7, RFC9110.R9_3_2_1] {
   stream.write_all(render_message(status_response(status), false, !head))?
+  linger(stream, limits)
+}
+
+// The lingering close after a reply that ends the connection while input
+// may be unread: the write half shut down, then input drained as `reject`
+// says.
+fn linger<T: ByteStream>(stream: T, limits: HttpLimits) -> IoResult<Unit> {
   _ = stream.close()
   stream.set_idle_timeout(limits.drain_timeout.to_ms())?
   let maximum = limits.drain.to_int()
@@ -1698,27 +1838,269 @@ fn asked(request: Request) -> Request {
   out
 }
 
-fn session<T: ByteStream, S>(stream: T, limits: HttpLimits, application: HttpApp<S>) -> IoResult<Unit> satisfies [RFC9112.R9_6_3, RFC9112.R9_6_5, RFC9112.R9_6_6, RFC9112.R9_6_7, RFC9110.R9_1_1, RFC9110.R9_3_2_1] {
+// The requests of a connection until it ends: each is asked of the
+// application with `connection` as its `Request.connection`, through
+// `reply` when the application gives one and `handle` otherwise; a held
+// request is registered in `holds` while it waits. A body over the limit
+// is answered by `on_oversized` when given (`oversized`), else 413 and a
+// lingering close.
+fn session<T: ByteStream, S>(stream: T, connection: Connection, limits: HttpLimits, application: HttpApp<S, T>, holds: Holds) -> IoResult<Unit> satisfies [RFC9112.R9_6_3, RFC9112.R9_6_5, RFC9112.R9_6_6, RFC9112.R9_6_7, RFC9110.R9_1_1, RFC9110.R9_3_2_1] {
   var buffer = Bytes.empty()
   loop {
     match next_request(stream, limits, buffer)? {
       Close => return Ok(())
       Reject(status) => return reject(stream, limits, status, false)
       RejectHead(status) => return reject(stream, limits, status, true)
-      Got(request, rest) => {
-        let response = checked(application.handle(application.state, asked(request)))
-        var keep = keep_alive(request) && !response_closes(response)
-        if response.content == Streamed {
-          keep = send_streamed(stream, application, request, response, keep)?
-        } else {
-          let framing = inline_framing(request, response)
-          keep = keep && framing != UntilClose
-          stream.write_all(render_framed(response, framing, keep, request.method != "HEAD"))?
+      Oversized(head, rest, length) => {
+        var seen = head
+        seen.connection = connection
+        match oversized(stream, limits, application, seen, rest, length)? {
+          Some(after) => {
+            buffer = after
+          }
+          None => return Ok(())
         }
-        if !keep {
+      }
+      Got(request, rest) => {
+        // The copy the application is asked carries the connection; the
+        // request kept for the answer gets it only for `piece`, so the
+        // connection is copied once per request, and the answer is not.
+        var seen = request
+        let keep_open = keep_alive(seen)
+        var question = asked(seen)
+        question.connection = connection
+        let response = match application.reply {
+          None => application.handle(application.state, question)
+          Some(reply) => match reply(application.state, question) {
+            Respond(response) => response
+            Hold(receiver, deadline, on_timeout) => wait_held(holds, receiver, deadline, on_timeout)
+            Upgrade(response, takeover) => {
+              var taken = asked(seen)
+              taken.connection = connection
+              return upgrade(stream, limits, application, taken, response, takeover, rest)
+            }
+          }
+        }
+        if response.content == Streamed {
+          seen.connection = connection
+        }
+        if !respond(stream, application, seen, response, keep_open)? {
           return Ok(())
         }
         buffer = rest
+      }
+    }
+  }
+}
+
+// Sends `answer` to `request`, `checked` first: streamed or inline, the
+// connection kept when `keep_alive` holds, the answer does not ask to
+// close and its framing does not end by closing. Whether it stays open.
+fn respond<T: ByteStream, S>(stream: T, application: HttpApp<S, T>, request: Request, answer: Response, keep_alive: Bool) -> IoResult<Bool> {
+  let response = checked(answer)
+  let keep = keep_alive && !response_closes(response)
+  if response.content == Streamed {
+    return send_streamed(stream, application, request, response, keep)
+  }
+  let framing = inline_framing(request, response)
+  let kept = keep && framing != UntilClose
+  stream.write_all(render_framed(response, framing, kept, request.method != "HEAD"))?
+  Ok(kept)
+}
+
+// ---- the connection, holds, upgrades and oversized bodies ---------------
+//
+// Story `http-app-connection` (`docs/slice.md` "HttpApp sees its
+// connection"); the server side of `Reply` and `HttpApp.on_oversized`.
+
+// The requests a server holds (`Reply.Hold`), so that the drain answers
+// them: `events` goes to the task `keep_holds` started by `Holds.start()`,
+// which keeps every held receiver until it is answered. `serve_listener`
+// starts one for all its connections when the application has a `reply`
+// (without one it holds nothing and has none); `Http.serve` has none
+// (`Holds.none()`), since no drain reaches a stream it is given. A program
+// creates no `Store` (E051), so the register is a task, not a store.
+type Holds {
+  events: Option<Sender<HoldEvent>>
+}
+
+// What the register of held requests is told: a request is held on this
+// receiver, or the drain began.
+enum HoldEvent { Held(Receiver<Response>), Drain }
+
+// Holds with no register: a held request waits for its message or its
+// deadline only.
+fn Holds.none() -> Holds = Holds { events = None }
+
+// Holds with a register of their own, `keep_holds` in a task of its own,
+// which ends at the drain or when every copy of these holds is gone.
+fn Holds.start() -> Holds {
+  let (events, register) = Channel.bounded(1024)
+  spawn keep_holds(register)
+  Holds { events = Some(events) }
+}
+
+// The register: the receivers of the requests held and not yet answered
+// (an answered one is closed and dropped as the list grows). At `Drain`
+// every one is closed, so each held request is answered at once with what
+// was sent to it or its `on_timeout`; then the register closes its channel,
+// closes the receivers still queued in it and ends, so the drain does not
+// wait for it, and a request held later finds the channel closed and is
+// answered at once (`wait_held`).
+fn keep_holds(events: Receiver<HoldEvent>) -> IoResult<Unit> {
+  var held: List<Receiver<Response>> = []
+  var drained = false
+  var prune_at = 64
+  loop {
+    match events.receive() {
+      None => return Ok(())
+      Some(Held(sent)) => {
+        let receiver: Receiver<Response> = sent
+        if drained {
+          receiver.close()
+        } else {
+          held.push(receiver)
+          if held.len() >= prune_at {
+            held = waiting_only(held)
+            prune_at = 2 * held.len() + 64
+          }
+        }
+      }
+      Some(Drain) => {
+        drained = true
+        events.close()
+        for open in held {
+          let receiver: Receiver<Response> = open
+          receiver.close()
+        }
+        held = []
+      }
+    }
+  }
+}
+
+// The receivers of `held` whose request still waits: not yet closed.
+fn waiting_only(held: List<Receiver<Response>>) -> List<Receiver<Response>> {
+  var out: List<Receiver<Response>> = []
+  for open in held {
+    let receiver: Receiver<Response> = open
+    if !receiver.closed() {
+      out.push(receiver)
+    }
+  }
+  out
+}
+
+// Waits for the response to a held request: what arrives on `receiver`
+// within `deadline`, else `on_timeout`. The receiver is registered with
+// `holds` first, so the drain can close it and end the wait with what was
+// sent before; a register that is gone (the drain began) closes it at
+// once. It is closed after the wait, so a later `send` is false. The wait
+// does not watch the stream: a held request whose client has gone keeps
+// its task, its receiver and its place in the register until a message,
+// the deadline or the drain ends the wait, so `deadline` bounds what a
+// vanished client costs.
+fn wait_held(holds: Holds, receiver: Receiver<Response>, deadline: Duration, on_timeout: Response) -> Response {
+  match holds.events {
+    Some(events) => if !events.send(Held(receiver)) {
+      receiver.close()
+    }
+    None => {}
+  }
+  let response = match receiver.receive_within(deadline) {
+    Some(sent) => sent
+    None => on_timeout
+  }
+  receiver.close()
+  response
+}
+
+// The drain's part (`serve_listener`): every request held with `holds` is
+// answered at once, by what was sent to it or its `on_timeout`, and so is
+// every request held later (`keep_holds`).
+fn drain_holds(holds: Holds) -> Unit {
+  match holds.events {
+    Some(events) => {
+      _ = events.send(Drain)
+    }
+    None => {}
+  }
+}
+
+// An upgrade (`Reply.Upgrade`): `offered`, `checked`, is written without a
+// `Connection` field of Http's own, framed as an inline response to
+// `request`, then `takeover` gets the stream and `early`, the bytes read
+// after the request. A refused response is answered 500 with a lingering
+// close and nothing takes over.
+fn upgrade<T: ByteStream, S>(stream: T, limits: HttpLimits, application: HttpApp<S, T>, request: Request, offered: Response, takeover: fn(state: S, request: Request, stream: T, early: Bytes) -> IoResult<Unit> requires [state.*, stream.read, stream.write], early: Bytes) -> IoResult<Unit> {
+  let response = checked(offered)
+  if response != offered {
+    return reject(stream, limits, 500, false)
+  }
+  let framing = inline_framing(request, response)
+  var fields = render_fields(response, framing, 0)
+  fields = fields + "\r\n"
+  var head = fields.to_bytes()
+  if framing != NoBody {
+    match response.content {
+      Binary(bytes) => head.append(bytes)
+      _ => head.append(response.body.to_bytes())
+    }
+  }
+  stream.write_all(head)?
+  takeover(application.state, request, stream, early)
+}
+
+// A body over the limit (`Next.Oversized`): without `on_oversized` 413 and
+// a lingering close, as for every rejection. With it, its answer to `head`
+// (asked as `asked` asks) and `limits.body` is sent, and the connection
+// goes on when the request keeps it, the answer does not ask to close and
+// the body has a known `length` and was not announced with
+// `Expect: 100-continue`: the body is read and dropped and the bytes after
+// it returned. Otherwise the answer is followed by a lingering close; a
+// chunked body over the limit always ends the connection, since its
+// remaining chunks are not decoded, and so does a body the client waits to
+// send until it reads 100 (RFC 9110 section 10.1.1), which it may never
+// send, so that reading it would take the next request for it. `None`
+// when the connection ends.
+fn oversized<T: ByteStream, S>(stream: T, limits: HttpLimits, application: HttpApp<S, T>, head: Request, rest: Bytes, length: Int) -> IoResult<Option<Bytes>> {
+  let hook: fn(state: S, head: Request, limit: ByteSize) -> Response requires [state.*] = match application.on_oversized {
+    Some(hook) => hook
+    None => {
+      reject(stream, limits, 413, head.method == "HEAD")?
+      return Ok(None)
+    }
+  }
+  let answer = hook(application.state, asked(head), limits.body)
+  if !respond(stream, application, head, answer, keep_alive(head) && length >= 0 && !expects_continue(head))? {
+    linger(stream, limits)?
+    return Ok(None)
+  }
+  discard(stream, rest, length)
+}
+
+// Whether `request` asks for 100 before it sends its body (RFC 9110
+// section 10.1.1): its `Expect` field is `100-continue`, in any case.
+fn expects_continue(request: Request) -> Bool = match header(request, "expect") {
+  Some(value) => trim_ows(value).to_lower() == "100-continue"
+  None => false
+}
+
+// Reads and drops the `length` bytes of a body of which `data` holds the
+// first: the bytes after the body, `None` when the peer closed first.
+fn discard<T: ByteStream>(stream: T, data: Bytes, length: Int) -> IoResult<Option<Bytes>> {
+  if data.len() >= length {
+    return Ok(Some(data.slice(length, data.len())))
+  }
+  var left = length - data.len()
+  loop {
+    match stream.read(READ_SIZE)? {
+      Eof => return Ok(None)
+      Data(more) => {
+        if more.len() >= left {
+          return Ok(Some(more.slice(left, more.len())))
+        }
+        left = left - more.len()
       }
     }
   }
@@ -1735,12 +2117,16 @@ test fn connected() -> IoResult<(PipeStream, PipeStream)> {
 }
 
 // What `next_request` makes of `input` under `limits`, sent with the
-// write half closed after it.
+// write half closed after it; a body over the limit as the session
+// without `on_oversized` answers it, `rejected(head, 413)`.
 test fn next_with(input: Bytes, limits: HttpLimits) -> IoResult<Next> {
   let (client, server) = connected()?
   client.write_all(input)?
   _ = client.close()
-  next_request(server, limits, Bytes.empty())
+  match next_request(server, limits, Bytes.empty())? {
+    Oversized(head, _, _) => Ok(rejected(head, 413))
+    next => Ok(next)
+  }
 }
 
 // What `next_request` makes of `input` under the default limits.
@@ -2516,3 +2902,4 @@ test "adversary: the body limit in one-byte chunks is decoded in under 8 s" {
   assert got == Got(chunked_request(repeat("a", size)), Bytes.empty())
   assert took < 8000 ms, "{size} one-byte chunks took {took.to_ms()} ms"
 }
+

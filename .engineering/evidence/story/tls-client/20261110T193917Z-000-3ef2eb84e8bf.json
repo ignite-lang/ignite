@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-10T19:39:17Z",
+  "actor": "human:timo",
+  "artifact": "story:tls-client",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate on wave/10 in parts: check and 11 test binaries (run 3, 0 failed), the remaining crates (502 passed), task test-ignite (452 passed on each target), task ux (389 passed)",
+    "reference": "d9b4daf9"
+  }
+}

@@ -1,2 +1,1 @@
-effects_b04_store_unknown_receivers.ignite:2:15: error[E042]: cannot check the effects of `get`: the type of its receiver is not declared; annotate the binding
-effects_b04_store_unknown_receivers.ignite:8:10: error[E042]: cannot check the effects of `get`: the type of its receiver is not declared; annotate the binding
+effects_b04_store_unknown_receivers.ignite:2:15: error[E016]: missing effect `o.read` for `st.get`; add it to the `requires` of `via_option`

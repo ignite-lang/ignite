@@ -132,7 +132,16 @@ its implementations, not as a stage to remove.
   cgroup-aware), and stay.
 - A **task** is a stack and a control block (its arena state, section 4.5; its owned handles;
   its parked reason). `spawn` creates a task; `task_end` frees it and returns the stack to the
-  worker's pool.
+  worker's pool. As landed (`story:readiness-connect-latency`): each worker keeps two free
+  stacks, the rest go to one shared pool of 64; a spawn takes the stack from the cache of the
+  worker it places the task on, from `main` too, else from another worker's cache (a worker
+  it starts has none), else from the pool, and maps one, without the placement lock held,
+  only when none is free. So a connection accepted in `main` takes no pool lock and maps no
+  stack while the worker it is placed on holds a free one, or, for a worker it starts, while
+  any worker does. A running worker with an empty cache still maps one when only another
+  worker caches a free stack (case `scheduler_adversary::a_connection_accepted_in_main_maps_no_stack_while_another_worker_holds_one`,
+  a known gap: taking from other workers' caches for running workers raised the pool takes
+  of the connect-8 shape from 0 to 2 to 2 to 19 per run).
 - `main` stays on the process main thread outside the workers in phase R1: its waits block the
   OS thread, as today. An accept loop in `main` (`TelnetServer`, `HttpServer`) therefore costs
   one wakeup per connection, not per reply. R2 may move `main` onto a worker.
@@ -213,10 +222,15 @@ in R1.
   storage into the task's control block. The thread-local keeps one pointer, the running task's
   block, set at each switch. Generated code that caches the state's address is then right after
   a migration, because the address is the task's, not the thread's.
-- The other substrate thread-locals are per worker and never live across a park: pending writes
-  (`net.rs`; a task already flushes before it waits, slice §30.1, so they are empty at every
-  switch), the read scratch buffer, report and callback guards. A park inside a `with` closure
-  of a thread-local is a bug; `debug_assertions` builds check that none is borrowed at `park`.
+- The pending writes (`PENDING` in `net.rs`, the streams a task wrote to and has not flushed)
+  are per task: the worker swaps the task's list into the thread-local when it resumes the task
+  and out when the task parks or ends. They are not empty at every switch (a task parks for
+  room inside its own send, with its stream listed), and a list per worker let one task's read
+  flush another task's stream and wait for that task's write lock, a deadlock when the writer
+  waits for a peer that waits for the reader.
+- The other substrate thread-locals are per worker and never live across a park: the read
+  scratch buffer, report and callback guards. A park inside a `with` closure of a thread-local
+  is a bug; `debug_assertions` builds check that none is borrowed at `park`.
 - glibc's per-thread malloc arenas stay correct under migration (they are a cache).
 
 ### 4.6 Stacks
@@ -340,5 +354,12 @@ not beside it.
 - K3. Stack RSS per idle task (8 to 32 KiB, inferred) is about 50 times a stackless frame. At
   10,000 idle sessions that is 80 to 320 MiB. Vision's 10,000 idle actors would be measured
   against this before actors P5.
-- K4. Edge-triggered epoll loses a wakeup if a call stops reading before `EAGAIN`. Mitigation:
-  a stream keeps a `maybe_readable` flag, cleared only by `EAGAIN`.
+- K4. Edge-triggered epoll loses a wakeup if a call stops reading before `EAGAIN`. As landed:
+  a call waits for readiness only after `EAGAIN`, against an event count taken before the
+  attempt, with one exception: a read that returned fewer bytes than it asked for counts as
+  having emptied the socket, so the next read waits before its first `recv`
+  (`Stream::emptied`). It does not count so on a socket that ever reported hang-up, error or
+  urgent data (`Readiness::short_read_may_leave_input`): an end of stream or a reset behind
+  the bytes, or the bytes behind the urgent mark the read stopped at, arrive in the same edge
+  as the bytes and raise none of their own (`5e6f5847`; before it, in-process clients that
+  shared a worker with their server waited for their idle timeout).

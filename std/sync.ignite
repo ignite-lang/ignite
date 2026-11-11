@@ -23,7 +23,12 @@ package std.sync
 // by `receive`; no two tasks share it. `close` on either end, or the last
 // handle of all senders or of all receivers going away, closes the channel:
 // every waiting `send` returns false, and every waiting `receive` returns
-// what was sent before, then `None`.
+// what was sent before, then `None`. An end is released with its last
+// owner wherever it was moved: a second binding, an annotated tuple, a
+// record field, a `Store` and back (case study gap G30, `docs/slice.md`
+// 30.3); the soaks at the end hold each form flat.
+
+import std.runtime.{soak}
 
 test fn ring_after(bell: Sender<Text>, delay: Duration) -> Result<Unit, IoError> {
   Clock.sleep(delay)
@@ -167,4 +172,110 @@ test "a value sent is the receiver's own" {
   items.push(3)
   assert rx.receive() == Some([1, 2])
   assert items == [1, 2, 3]
+}
+
+test type Ends {
+  tx: Sender<Int>
+  rx: Receiver<Int>
+}
+
+test fn ends() -> Ends {
+  let pair: (Sender<Int>, Receiver<Int>) = Channel.bounded(2)
+  Ends { tx = pair.0, rx = pair.1 }
+}
+
+test fn ring(senders: Store<Sender<Int>>, id: Int, value: Int) -> Bool requires [senders.read, senders.send] {
+  match senders.get(id) {
+    Some(tx) => tx.try_send(value)
+    None => false
+  }
+}
+
+test "an end found in a Store needs no annotation" {
+  let (tx, rx) = Channel.bounded(2)
+  let senders: Store<Sender<Int>> = Store.new()
+  let id = senders.next_id()
+  senders.put(id, tx)
+  assert ring(senders, id, 5)
+  assert !ring(senders, id + 1, 6)
+  assert rx.receive_within(1 seconds) == Some(5)
+}
+
+test "the ends of a returned record need no annotation" {
+  let d = ends()
+  assert d.tx.try_send(9)
+  assert d.rx.receive_within(1 seconds) == Some(9)
+}
+
+// Case study gap G30 (`docs/leak-guard.md` 1.1, 6.1): the reproducer's
+// four forms of a channel end moved out of its `let (tx, rx)` binding, each
+// run 2,000 times. Until the LLVM lowering released a moved end, each kept
+// a filled handle slot and a channel per run.
+
+test type Waiter {
+  id: Int
+  wake: Receiver<Int>
+}
+
+test fn alias_end(run: Int) -> Unit {
+  let (tx, rx) = Channel.bounded(1)
+  let r: Receiver<Int> = rx
+  let rung = tx.try_send(run)
+  tx.close()
+  let got = r.receive_within(0 ms)
+}
+
+test fn typed_ends(run: Int) -> Unit {
+  let ends: (Sender<Int>, Receiver<Int>) = Channel.bounded(1)
+  let rung = ends.0.try_send(run)
+  ends.0.close()
+  let got = ends.1.receive_within(0 ms)
+}
+
+test fn field_end(run: Int) -> Unit {
+  let (tx, rx) = Channel.bounded(1)
+  let w = Waiter { id = run, wake = rx }
+  let rung = tx.try_send(run)
+  tx.close()
+  let got = w.wake.receive_within(0 ms)
+}
+
+test fn open_waiter(senders: Store<Sender<Int>>) -> Waiter {
+  let (tx, rx) = Channel.bounded(1)
+  let id = senders.next_id()
+  senders.put(id, tx)
+  Waiter { id, wake = rx }
+}
+
+test fn close_waiter(senders: Store<Sender<Int>>, w: Waiter) -> Unit {
+  match senders.remove(w.id) {
+    Some(found) => {
+      let tx: Sender<Int> = found
+      tx.close()
+    }
+    None => {}
+  }
+}
+
+test fn stored_end(senders: Store<Sender<Int>>) -> Unit {
+  let w: Waiter = open_waiter(senders)
+  let got = w.wake.receive_within(0 ms)
+  close_waiter(senders, w)
+}
+
+test "a channel end bound a second time is released (G30)" {
+  assert soak(2000, alias_end).growth == []
+}
+
+test "a channel end kept in a record field is released (G30)" {
+  assert soak(2000, field_end).growth == []
+}
+
+test "an annotated pair of channel ends is released (G30)" {
+  assert soak(2000, typed_ends).growth == []
+}
+
+test "a channel end put in a store and taken out is released (G30)" {
+  let senders: Store<Sender<Int>> = Store.new()
+  assert soak(2000, |run| stored_end(senders)).growth == []
 }

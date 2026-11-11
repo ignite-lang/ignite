@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-11T19:57:12Z",
+  "actor": "human:timo",
+  "artifact": "story:std-mysql-client",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "merge 22cb52bc, unit head bed031c5 (TINYINT(1), BOOL and BOOLEAN read as Int, BIT(1) as Bool): reported by the client's first user (a stored 2 read as true); std/protocol/mysql.ignite 56 passed on both targets, the new test red before with left MysqlValue.Bool(true) right MysqlValue.Int(2); cargo test mysql 3 passed with 10 real-server cases per target against MySQL 8.0 (9 before, the new case red before on LLVM); task test-ignite FILTER=mysql 65 passed per target; differential corpus 961 units, 0 LLVM differences"
+  }
+}

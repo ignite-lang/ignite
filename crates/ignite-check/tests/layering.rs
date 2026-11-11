@@ -63,6 +63,9 @@ const LAYERS: &[(&str, Layer)] = &[
     ("std.text", Layer::Base),
     ("std.json", Layer::Base),
     ("std.data", Layer::Base),
+    ("std.encoding", Layer::Base),
+    ("std.digest", Layer::Base),
+    ("std.tls", Layer::Base),
     ("std.sli", Layer::Leaf),
     ("std.time", Layer::Leaf),
     ("std.policy", Layer::Leaf),
@@ -80,6 +83,57 @@ const CRATES_EXEMPT: &[(&str, &str)] = &[(
 )];
 
 const PROTOCOL_PREFIX: &str = "std.protocol.";
+
+/// English words that contain a protocol's name and do not name it, per
+/// protocol: `resp` is the start of `response`. A word here is a maximal
+/// run of ASCII letters, compared lowercase, so `respond` in
+/// `console.respond` is no mention of `resp` while `RespValue` and
+/// `HttpResponse` still are. A word not listed is a mention, so a new one
+/// fails the test until it is added here.
+const ORDINARY_WORDS: &[(&str, &[&str])] = &[("resp", &["respond", "response", "respects"])];
+
+/// Whether `text` names `protocol` (lowercase): an occurrence of the name
+/// that is not inside one of its [`ORDINARY_WORDS`].
+fn mentions(text: &str, protocol: &str) -> bool {
+    let lower = text.to_lowercase();
+    let ordinary = ORDINARY_WORDS
+        .iter()
+        .find(|(name, _)| *name == protocol)
+        .map_or(&[][..], |(_, words)| *words);
+    lower.match_indices(protocol).any(|(at, _)| {
+        let bytes = lower.as_bytes();
+        let mut start = at;
+        while start > 0 && bytes[start - 1].is_ascii_alphabetic() {
+            start -= 1;
+        }
+        let mut end = at + protocol.len();
+        while end < bytes.len() && bytes[end].is_ascii_alphabetic() {
+            end += 1;
+        }
+        !ordinary.contains(&&lower[start..end])
+    })
+}
+
+#[test]
+fn ordinary_words_are_no_mention_and_every_other_occurrence_is() {
+    assert!(!mentions("let response = read_frame()", "resp"));
+    assert!(!mentions("fn respond(line: Text)", "resp"));
+    assert!(!mentions("Response.json(..)", "resp"));
+    assert!(!mentions(
+        "adversary_start_order_respects_depends_on",
+        "resp"
+    ));
+    assert!(mentions("RespValue", "resp"));
+    assert!(mentions("std.protocol.resp", "resp"));
+    assert!(mentions("respond and resp", "resp"));
+    assert!(mentions("HttpResponse", "resp"));
+    assert!(mentions("HttpResponse", "http"));
+    assert!(mentions("https://example.org", "http"));
+    assert!(mentions("TelnetServer", "telnet"));
+    assert!(mentions("responsive", "resp"));
+    assert!(mentions("NatsMessage", "nats"));
+    assert!(mentions("std.protocol.nats", "nats"));
+}
 
 /// `std.rfc` and every catalogue under it are leaf (`docs/slice.md` 19.11).
 const RFC_PREFIX: &str = "std.rfc";
@@ -299,7 +353,9 @@ fn std_modules_import_only_their_own_layer_or_below() {
     let protocols = protocol_names(&std);
     let catalogued = catalogued(&std);
     assert!(
-        protocols.contains("telnet") && protocols.contains("http") && protocols.contains("jsonrpc"),
+        ["telnet", "http", "jsonrpc", "resp", "nats", "mysql"]
+            .iter()
+            .all(|p| protocols.contains(*p)),
         "protocol names read from std/protocol/: {protocols:?}"
     );
     let mut violations = Vec::new();
@@ -338,10 +394,9 @@ fn std_modules_import_only_their_own_layer_or_below() {
             continue;
         }
         for name in declared_names(&module.program) {
-            let lower = name.name.to_lowercase();
             if let Some(protocol) = protocols
                 .iter()
-                .find(|p| lower.contains(p.as_str()) && !exempt(&module.module, p, &catalogued))
+                .find(|p| mentions(&name.name, p) && !exempt(&module.module, p, &catalogued))
             {
                 violations.push(format!(
                     "{}: {layer} module `{}` declares `{}`, which names the protocol `{protocol}`: protocol-specific items live in std.protocol.{protocol}",
@@ -403,8 +458,7 @@ fn compiler_crates_name_no_application_protocol() {
         }
         let text = std::fs::read_to_string(&path).unwrap();
         for (number, line) in text.lines().enumerate() {
-            let lower = line.to_lowercase();
-            if let Some(protocol) = protocols.iter().find(|p| lower.contains(p.as_str())) {
+            if let Some(protocol) = protocols.iter().find(|p| mentions(line, p)) {
                 violations.push(format!(
                     "{}:{}: names the protocol `{protocol}`: the compiler, the generators and the substrate know no application protocol ({})",
                     relative(&path),

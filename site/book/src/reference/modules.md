@@ -70,12 +70,12 @@ the module you mean, and the rest by glob.
 
 ## The standard library root
 
-`std.a.b` is the file `std/a/b.ignite` under the standard library root. By default the CLI reads
-`PREFIX/share/ignite/std` for a driver at `PREFIX/bin/ignite` when that directory exists (the
-layout of a release archive), else the `std/` directory of the source tree it was built from
-(an `ignite` installed with `cargo install` keeps reading its clone); `--std DIR` names another
-root. The modules are listed
-in the [standard library reference](std/index.md).
+`std.a.b` is the file `std/a/b.ignite` under the standard library root. By default the CLI
+reads `PREFIX/share/ignite/std` for a driver at `PREFIX/bin/ignite` when that directory
+exists. That is the layout of a release archive. Otherwise it reads the `std/` directory of
+the source tree it was built from, so an `ignite` installed with `cargo install` keeps reading
+its clone. `--std DIR` names another root. The modules are listed in the
+[standard library reference](std/index.md).
 
 ## Sibling modules
 

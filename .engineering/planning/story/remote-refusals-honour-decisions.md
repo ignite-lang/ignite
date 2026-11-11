@@ -2,9 +2,11 @@
 format: aep.planning-md/3
 id: story:remote-refusals-honour-decisions
 kind: story
-status: draft
+status: archived
 title: quality-remote refusals honour recorded decisions
-revision: 1
+revision: 2
+transitions:
+- {from: "draft", to: "archived", at: "2026-11-11T00:24:56Z", actor: "human:timo", revision: 2, executor: "agent:claude-coordinator", correlation: "wave-11"}
 ---
 # Story: remote-refusals-honour-decisions
 

@@ -110,6 +110,7 @@ pub const BUILTIN_TYPES: &[&str] = &[
     "TcpListener",
     "TcpStream",
     "PipeStream",
+    "TlsStream",
     "Stdin",
     "Stdout",
     "Stderr",
@@ -146,6 +147,7 @@ pub const BUILTIN_STATICS: &[(&str, &str)] = &[
     ("List", "with_capacity"),
     ("Int", "to_text"),
     ("TcpListener", "bind"),
+    ("TcpListener", "bind_kept"),
     ("TcpStream", "connect"),
     ("Stdin", "read"),
     ("Stdin", "is_terminal"),
@@ -174,6 +176,7 @@ pub const BUILTIN_STATICS: &[(&str, &str)] = &[
     ("Channel", "bounded"),
     ("Runtime", "census"),
     ("Runtime", "settle"),
+    ("Tls", "client"),
 ];
 
 /// Owners of [`BUILTIN_STATICS`] that are records of the standard library,
@@ -256,7 +259,9 @@ pub const BUILTIN_METHODS: &[&str] = &[
     "write_urgent",
     "urgent_pending",
     "peer",
+    "local",
     "timed_out",
+    "alpn",
 ];
 
 /// Free builtin functions.
@@ -306,6 +311,7 @@ const BUILTIN_STATIC_ARITIES: &[(&str, &str, usize)] = &[
     ("List", "with_capacity", 1),
     ("Int", "to_text", 1),
     ("TcpListener", "bind", 2),
+    ("TcpListener", "bind_kept", 2),
     ("TcpStream", "connect", 2),
     ("Stdin", "read", 1),
     ("Stdin", "is_terminal", 0),
@@ -334,11 +340,13 @@ const BUILTIN_STATIC_ARITIES: &[(&str, &str, usize)] = &[
     ("Channel", "bounded", 1),
     ("Runtime", "census", 0),
     ("Runtime", "settle", 2),
+    ("Tls", "client", 3),
 ];
 
 /// Builtin statics that are effectful substrate operations.
 const EFFECTFUL_STATICS: &[(&str, &str)] = &[
     ("TcpListener", "bind"),
+    ("TcpListener", "bind_kept"),
     ("TcpStream", "connect"),
     ("Stdin", "read"),
     ("Stdin", "is_terminal"),
@@ -353,6 +361,7 @@ const EFFECTFUL_STATICS: &[(&str, &str)] = &[
     ("Process", "open_files_limit"),
     ("TcpStream", "connect_within"),
     ("Channel", "bounded"),
+    ("Tls", "client"),
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -533,6 +542,13 @@ pub const IN_PLACE: [InPlace; 15] = [
     in_place_row("Store", "upsert", Change::Handle),
 ];
 
+/// Whether a call of `row` stores an argument into its receiver, so that
+/// the receiver takes the argument's roots: a `Value` row that keeps what
+/// it is given (`push`, `set`, `append`, `Map.put`).
+pub fn stores_argument(row: &InPlace) -> bool {
+    row.change == Change::Value && matches!(row.method, "push" | "set" | "append" | "put")
+}
+
 /// What the builtin `method` changes on a receiver of the builtin type
 /// `receiver` ([`IN_PLACE`]). For a receiver whose type is not known, the
 /// change every row of that method name agrees on: `push` is a `Value`
@@ -557,7 +573,7 @@ pub fn static_effect(owner: &str, name: &str) -> Option<&'static str> {
         ("Stdout", "write_all") => Some("stdout.write"),
         ("Stderr", "write_all") => Some("stderr.write"),
         ("Process", "exit") => Some("process.exit"),
-        ("TcpListener", "bind") => Some("net.listen"),
+        ("TcpListener", "bind" | "bind_kept") => Some("net.listen"),
         ("TcpStream", "connect") => Some("net.connect"),
         ("Clock", "monotonic") => Some("clock.read"),
         ("Clock", "sleep") => Some("clock.sleep"),
@@ -565,6 +581,7 @@ pub fn static_effect(owner: &str, name: &str) -> Option<&'static str> {
         ("Process", "open_files_limit") => Some("process.limit"),
         ("Endpoint", "of") => Some("process.args"),
         ("TcpStream", "connect_within") => Some("net.connect"),
+        ("Tls", "client") => Some("net.connect"),
         _ => None,
     }
 }
@@ -845,6 +862,7 @@ fn is_builtin_name(name: &str) -> bool {
         || BUILTIN_FUNCTIONS.contains(&name)
         || BUILTIN_INTERFACES.contains(&name)
         || name == "Pipe"
+        || name == "Tls"
 }
 
 fn plural(count: usize, word: &str) -> String {
@@ -2174,6 +2192,52 @@ impl Checker {
         }
     }
 
+    /// Give the names an arm pattern binds the types that follow from `ty`,
+    /// the declared type of the scrutinee: the whole value for a binding,
+    /// the elements of a tuple, and the payload of `Some(x)` of an
+    /// `Option<T>` and of `Ok(x)` and `Err(e)` of a `Result<T, E>`, so
+    /// `match senders.get(id) { Some(tx) => tx.send(1), .. }` checks the
+    /// effect of `send` by type (`docs/slice.md` 11.7).
+    fn type_pattern_bindings(&mut self, pattern: &Pattern, ty: &Type) {
+        match &pattern.kind {
+            PatternKind::Binding(name) => {
+                if let Some(local) = self
+                    .scopes
+                    .last_mut()
+                    .and_then(|scope| scope.get_mut(&name.name))
+                {
+                    local.ty = Some(ty.clone());
+                }
+            }
+            PatternKind::Tuple(items) if ty.is_tuple() && ty.args.len() == items.len() => {
+                for (item, element) in items.iter().zip(&ty.args) {
+                    self.type_pattern_bindings(item, element);
+                }
+            }
+            PatternKind::Variant { path, args } if args.len() == 1 => {
+                let (owner, variant) = match path.as_slice() {
+                    [variant] => (ty.name.name.as_str(), variant.name.as_str()),
+                    [owner, variant] => (owner.name.as_str(), variant.name.as_str()),
+                    _ => return,
+                };
+                if owner != ty.name.name || self.type_params.contains(owner) {
+                    return;
+                }
+                let index = match (owner, variant) {
+                    ("Option", "Some") | ("Result", "Ok") => 0,
+                    ("Result", "Err") => 1,
+                    _ => return,
+                };
+                if ty.args.len() != if owner == "Option" { 1 } else { 2 } {
+                    return;
+                }
+                let payload = self.expand(&ty.args[index]);
+                self.type_pattern_bindings(&args[0], &payload);
+            }
+            _ => {}
+        }
+    }
+
     fn lookup(&self, name: &str) -> Option<Binding> {
         self.local(name).map(|local| local.binding)
     }
@@ -2342,9 +2406,9 @@ impl Checker {
             "Int" | "Text" | "Bool" | "Byte" | "U32" | "Bytes" | "Unit" | "IoError" | "Input" => {
                 return false;
             }
-            "TcpStream" | "PipeStream" | "TcpListener" | "Store" | "Stdin" | "Stdout"
-            | "Stderr" | "Directory" | "Launcher" | "ChildProcess" | "Entropy" | "Setting"
-            | "CommandLine" | "Environment" | "Sender" | "Receiver" => {
+            "TcpStream" | "PipeStream" | "TlsStream" | "TcpListener" | "Store" | "Stdin"
+            | "Stdout" | "Stderr" | "Directory" | "Launcher" | "ChildProcess" | "Entropy"
+            | "Setting" | "CommandLine" | "Environment" | "Sender" | "Receiver" => {
                 return true;
             }
             "List" | "Option" | "Result" | "Tuple" => {
@@ -2397,6 +2461,17 @@ impl Checker {
             }
             Some(ty) => builtin_applies(&ty, &name.name),
         }
+    }
+
+    /// [`Checker::builtin_method`] where it is certain: a receiver whose
+    /// type is unknown here, with a module-level fn of that name in scope,
+    /// may take either, so it is not. A call that stores an argument into
+    /// its receiver gives the receiver that argument's roots only when it
+    /// is the builtin; a user fn named `put` or `push` stores nothing.
+    fn surely_builtin_method(&self, receiver: &Expr, name: &Ident) -> bool {
+        self.builtin_method(receiver, name)
+            && (self.static_type(receiver).is_some()
+                || !self.symbols.functions.contains_key(&name.name))
     }
 
     /// Whether binding `name` is captured by the closure being walked.
@@ -2727,9 +2802,13 @@ impl Checker {
             ExprKind::Match { scrutinee, arms } => {
                 self.expr(scrutinee);
                 let roots = self.roots(scrutinee);
+                let scrutinee_ty = self.static_type(scrutinee);
                 for arm in arms {
                     self.scopes.push(BTreeMap::new());
                     self.pattern(&arm.pattern, &roots, Binding::Pattern);
+                    if let Some(ty) = &scrutinee_ty {
+                        self.type_pattern_bindings(&arm.pattern, ty);
+                    }
                     self.expr(&arm.body);
                     let tail = self.roots(&arm.body);
                     self.tail_roots.insert(expr_key(&arm.body), tail);
@@ -2869,9 +2948,12 @@ impl Checker {
         if mutating {
             self.mutable_receiver(expr, receiver, name);
         }
-        if matches!(name.name.as_str(), "push" | "set" | "append")
-            && let Some(list) = place_root(receiver)
-        {
+        let stores = IN_PLACE.iter().any(|row| {
+            row.method == name.name
+                && stores_argument(row)
+                && receiver_type.is_none_or(|ty| ty == row.receiver)
+        }) && self.surely_builtin_method(receiver, name);
+        if stores && let Some(list) = place_root(receiver) {
             let roots = self.arg_roots(args.iter());
             if let Some(local) = self
                 .scopes
@@ -3207,6 +3289,11 @@ impl Checker {
                 .get(&ty.name.name)
                 .cloned()
                 .unwrap_or_default();
+            if let Some(home) = self.symbols.imported.get(&ty.name.name)
+                && !self.means_the_same_here(target, home, &params)
+            {
+                break;
+            }
             ty = Cow::Owned(substitute_type(target, &params, &ty.args));
         }
         ty
@@ -3224,14 +3311,48 @@ impl Checker {
             .get(&record.name.name)
             .cloned()
             .unwrap_or_default();
+        if let Some(home) = self.symbols.imported.get(&record.name.name)
+            && !self.means_the_same_here(ty, home, &params)
+        {
+            return None;
+        }
         Some(self.expand(&substitute_type(ty, &params, &record.args)))
+    }
+
+    /// Whether `ty`, the type of a field of a record or the target of an
+    /// alias as the module `home` declared it, means the same in this
+    /// module: every name in it is builtin, one of the declaration's type
+    /// parameters `params`, or imported here from `home`. A name this
+    /// module declares, imports from elsewhere or does not know could
+    /// stand for another type here, so the field has no static type and
+    /// the alias is not expanded (E042 at an effect of it) rather than
+    /// a wrong one (`docs/slice.md` 11.7).
+    fn means_the_same_here(&self, ty: &Type, home: &str, params: &[String]) -> bool {
+        let name = ty.name.name.as_str();
+        let known = ty.is_fn()
+            || ty.is_tuple()
+            || params.iter().any(|p| p == name)
+            || (BUILTIN_TYPES.contains(&name)
+                && !self.symbols.alias_targets.contains_key(name)
+                && !self.symbols.records.contains(name))
+            || self.symbols.imported.get(name).is_some_and(|m| m == home);
+        known
+            && ty
+                .args
+                .iter()
+                .all(|arg| self.means_the_same_here(arg, home, params))
     }
 
     /// The declared type of the value of `expr`, where it follows from
     /// declarations alone (`docs/slice.md` section 11.7): a local with a
     /// known type, a field of a value of known record type, `copy()`, `e?`,
-    /// `l[i]`, the results of `Store` methods and a literal of a record
-    /// without type parameters. `None` otherwise.
+    /// `l[i]`, the results of `Store` methods, a literal of a record
+    /// without type parameters and a call by name of a fn this module
+    /// declares without type parameters whose declared return type is no
+    /// fn type (that type; a fn value a call returns stays E042, 20.4.3).
+    /// An imported fn is left out: its return type names the exporting
+    /// module's types, which a local type of the same name would replace
+    /// here. `None` otherwise.
     fn static_type(&self, expr: &Expr) -> Option<Type> {
         let named = |name: &str, args: Vec<Type>| {
             let ident = Ident {
@@ -3276,13 +3397,23 @@ impl Checker {
                 let owner = self.path_head(receiver)?;
                 return self.constructor_type(&owner.name, &name.name, expr.span);
             }
-            ExprKind::Call { callee, .. } => {
-                let ExprKind::Field { receiver, name } = &callee.kind else {
-                    return None;
-                };
-                let owner = self.path_head(receiver)?;
-                return self.constructor_type(&owner.name, &name.name, expr.span);
-            }
+            ExprKind::Call { callee, .. } => match &callee.kind {
+                ExprKind::Field { receiver, name } => {
+                    let owner = self.path_head(receiver)?;
+                    return self.constructor_type(&owner.name, &name.name, expr.span);
+                }
+                ExprKind::Name(f)
+                    if self.local(&f.name).is_none()
+                        && !self.symbols.imported.contains_key(&f.name) =>
+                {
+                    let ret = self.expand(self.symbols.fn_returns.get(&f.name)?);
+                    if ret.is_fn() {
+                        return None;
+                    }
+                    ret
+                }
+                _ => return None,
+            },
             ExprKind::Try(inner) => {
                 let inner = self.static_type(inner)?;
                 if inner.name.name != "Result" {
@@ -3956,7 +4087,7 @@ impl Checker {
             }
             PatternKind::Or(alternatives) => {
                 for alternative in alternatives {
-                    if let Some(name) = first_binding(alternative) {
+                    if let Some(name) = alternative.bindings().first() {
                         self.error(
                             "E049",
                             name.span,
@@ -4378,8 +4509,9 @@ pub fn builtin_applies(ty: &Type, method: &str) -> bool {
             "next_id" | "get" | "put" | "remove" | "values" | "update" | "upsert"
         ),
         "TcpListener" => matches!(method, "accept" | "local_port"),
-        "TcpStream" => is_stream_method(method) || matches!(method, "peer" | "timed_out"),
+        "TcpStream" => is_stream_method(method) || matches!(method, "peer" | "local" | "timed_out"),
         "PipeStream" => is_stream_method(method) || method == "received_batches",
+        "TlsStream" => is_stream_method(method) || method == "alpn",
         "Map" => matches!(
             method,
             "get" | "put" | "remove" | "keys" | "len" | "contains"
@@ -4389,23 +4521,6 @@ pub fn builtin_applies(ty: &Type, method: &str) -> bool {
         "Ratio" => method == "ppm",
         "IoError" => method == "with_exit_code",
         _ => false,
-    }
-}
-
-/// The first name `pattern` binds, if any.
-fn first_binding(pattern: &Pattern) -> Option<&Ident> {
-    match &pattern.kind {
-        PatternKind::Binding(name) => Some(name),
-        PatternKind::Rest(name) => name.as_ref(),
-        PatternKind::Tuple(items) | PatternKind::List(items) | PatternKind::Or(items) => {
-            items.iter().find_map(first_binding)
-        }
-        PatternKind::Variant { args, .. } => args.iter().find_map(first_binding),
-        PatternKind::Wildcard
-        | PatternKind::Range { .. }
-        | PatternKind::Int(_)
-        | PatternKind::Str(_)
-        | PatternKind::Bool(_) => None,
     }
 }
 

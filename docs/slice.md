@@ -418,7 +418,7 @@ A function without `requires` gets it added to its inferred set.
 | `Stdin.is_terminal()`, `Stdin.set_raw(on)` | `stdin.mode` |
 | `Stdout.write_all(b)` | `stdout.write` |
 | `Process.exit(code)` | `process.exit` |
-| `TcpListener.bind(a, p)` | `net.listen` |
+| `TcpListener.bind(a, p)`, `TcpListener.bind_kept(a, p)` | `net.listen` |
 | `TcpStream.connect(a, p)` | `net.connect` |
 | `f(a, ..)`, `a.f(..)`, `P.role(a, ..)`, called or spawned | each entry `q.op` of the callee's declared or inferred set whose `q` is a parameter of the callee becomes `r.op` for each root `r` of the argument passed for `q` (the receiver of `a.f(..)` is the first argument); every other entry (`stdin.read`) is needed unchanged |
 | `TcpStream.connect_within(a, p, t)` (26.3) | `net.connect` |
@@ -433,8 +433,10 @@ may come from:
 - a parameter `p` has the root `p`;
 - a local (`let`, `var`, `for`, pattern binding) has the roots of the expression it was bound
   from; an assignment `x = e` (or `x.f = e`) adds the roots of `e` to those of `x`, whatever
-  the control flow, so a `var` assigned from two parameters needs effects on both; `l.push(e)`
-  and `l.append(e)` add the roots of `e` to those of the local `l`;
+  the control flow, so a `var` assigned from two parameters needs effects on both; `l.push(e)`,
+  `l.set(i, e)`, `l.append(e)` and `m.put(k, e)` add the roots of their arguments to those of
+  the local `l` or `m` (the rows of `ignite_check::IN_PLACE` that store an argument,
+  `ignite_check::stores_argument`);
 - `e.f`, `e[i]`, `e.copy()`, `e.at(i)`, `e.slice(a, b)` and `e?` have the roots of `e`; so
   do the container reads that return an element on a receiver `e` of declared type `Map`:
   `e.get(k)`, `e.remove(k)` and `e.keys()` (since slice 17: a `requires []` fn could otherwise
@@ -618,7 +620,7 @@ meaning. The generator emits exactly the Rust on the right.
 | `t.to_bytes()` | `t.clone().into_bytes()`; `t.into_bytes()` when `t` is a fresh text nothing else owns (a literal, a `+` chain or interpolation, `to_text` of Int, Byte or Bool, `concat`, `trim`) | `t.as_bytes()` to a lent bytes parameter and in the other borrowed forms of 20.3.7 |
 | `b.to_text()` | `String::from_utf8_lossy(&b).into_owned()` | |
 | `b.slice(i, j).to_text()` | `String::from_utf8_lossy(::ignite_io::checked::slice_ref(&b, i, j, <site>)).into_owned()`: the slice is borrowed, not copied, with the failure of `checked::slice` | Bytes |
-| `b.index_of(n, i) -> Option<Int>` | `::ignite_io::text::index_of(&b, &n, i)`: the offset of the first `n` at or after `i` (a negative `i` reads as 0; `None` when `i` is past the end, also for an empty `n`), by `memchr` or `memmem`; `t.to_bytes()` and a checked `slice` are borrowed, not copied. The LLVM runtime's `bytes_index_of` calls the same function (-1 for `None`). Story `text-fast-search` | Bytes |
+| `b.index_of(n, i) -> Option<Int>` | `::ignite_io::text::index_of(&b, &n, i)`: the offset of the first `n` at or after `i` (a negative `i` reads as 0; `None` when `i` is past the end, also for an empty `n`), by a scan for the first byte of `n` eight bytes at a time (a word XOR eight copies of the byte, then the zero-byte test) and a compare of the rest (story `unsafe-sites-back`; before, `memchr` or `memmem`: the word scan costs no more instructions per request of `todod`); `t.to_bytes()` and a checked `slice` are borrowed, not copied. The LLVM runtime's `bytes_index_of` calls the same function (-1 for `None`). Story `text-fast-search` | Bytes |
 | `t.pieces(s) -> List<Text>` | `::ignite_io::text::pieces(&t, &s)`: the texts between the separators, empty pieces kept, `[t]` for an empty `s`; no piece is checked for UTF-8 again, since valid text cut at a valid separator stays valid. `std.text.split` is this builtin. The LLVM runtime's `text_pieces` uses the same search. Story `text-fast-search` | Text |
 | `b.at(i)` | `b[(i) as usize]`, then `.clone()` when the element is not `Int`, `Byte` or `Bool` (also `l[i]`) | Bytes, List |
 | `l.map(f)` | `l.iter().cloned().map(f).collect::<Vec<_>>()` | List; `l.iter().map(..)` without the copy in the cases of 20.3.7 |
@@ -772,6 +774,9 @@ For `ignite build terminal.ignite --target rust --out DIR` (the default target u
 
 ```
 DIR/Cargo.toml          [package] name = <package last segment>, edition 2024, [workspace] empty,
+                        [profile.release] overflow-checks = true, codegen-units = 1, lto = true, [profile.release.package.nix] and [profile.release.package.corosensei] opt-level = "s" (a shorter start, story `binary-size-back`)
+                        [profile.dev.package."*"] debug = false, [profile.dev.package.ignite-io], [profile.dev.package."<package>"] and, with std, [profile.dev.package."ignite-std"] debug = "line-tables-only", split-debuginfo = "unpacked" (the crates from outside the project without debug information, `ignite-io`, the program and the standard library with line tables for backtraces, in `.dwo` files beside the objects; build time and dev size, rows 6.2 and 3.2)
+                        [profile.dev.build-override] debug-assertions = false, overflow-checks = false (build scripts and their dependencies; build time, row 6.2)
                         [dependencies] ignite-io = { path = <substrate> }, ignite-std = { path = "std" } when the program imports a std module
                         one [[bin]] per component: name = executable, path = src/bin/<executable>.rs
 DIR/src/lib.rs          the program's imports as `use`, every type, enum, protocol and fn
@@ -781,11 +786,48 @@ DIR/std/src/lib.rs      one nested `pub mod` per std module (`pub mod protocol {
 ```
 
 Every `.ignite` file under the standard-library root is part of `ignite-std`, checked in
-import order. `ignite build` then runs `cargo build --manifest-path DIR/Cargo.toml
+import order. When `DIR/Cargo.lock` does not exist, the build copies the lock of the
+workspace the substrate lives in (`<substrate>/../../Cargo.lock`, when there is one) to it,
+so cargo resolves from its versions and the local cache instead of asking the registry
+(row 6.2). `ignite build` then runs `cargo build --manifest-path DIR/Cargo.toml
 --target-dir TARGET` with `TARGET` from `--target-dir` (default `DIR/target`) and prints one
 line per built executable: `built TARGET/debug/<executable>`. Exit status: 0 built, 1
 diagnostics (in any file, rendered with that file's path), 2 cargo failed (its output passed
 through), 3 a file could not be read or written.
+
+A release build on Linux (`--release`) of a program with an executable writes two more files
+and links the executables with the first (`story:rust-peak-memory-at-one-connection`, row 3.8
+of `docs/quality.md`); a program without an executable gets none of the three additions:
+
+```
+DIR/layout.ld           a linker script added to the linker's own layout (`INSERT`): in `.text`, the functions of the
+                        standard library's backtrace symbolizer (`std::backtrace_rs`, `gimli`, `addr2line`,
+                        `rustc_demangle`, `miniz_oxide`; about 170 kB that run only to print a backtrace) in one run
+                        before every other function, `.init` after `.text`
+DIR/layout.rs           a build script that gives `-T DIR/layout.ld` as link arguments of the executables
+DIR/Cargo.toml          [package] also has links = "ignite-layout" and build = "layout.rs"
+```
+
+Fat LTO leaves the symbolizer between functions a server runs at its start, and the kernel
+maps the pages of a file around each page a process touches (64 KiB by default), so without
+the script the symbolizer is resident memory of every process. `ignite build` gives cargo the
+same link arguments itself (`--config target.<triple>.ignite-layout.rustc-link-arg-bins=[...]`),
+which overrides the build script: cargo neither compiles nor runs it, and the arguments are
+no `rustflags`, so they reach the executables' links only and replace nothing the user
+configured. The build script is for a `cargo build --release` by hand in `DIR`. The script
+changes no instruction; the size of an executable changes by the padding between its
+functions (tens of bytes, either way). The LLVM linker (rustc's on x86-64) and GNU ld read
+it. A linker that does not (gold, which has no `INSERT`) fails the link. When a release build
+with the script fails, the driver asks the linker: in `TARGET/ignite-layout-probe` it builds a
+program of one empty `main` with the script and, if that fails, without it, by the same cargo
+in the same environment and for the same target, showing no output of the two. Only when the
+first fails and the second builds does the driver print a note, leave
+`TARGET/ignite-no-release-layout` (later release builds into `TARGET` do not try the script),
+write the manifest without the two keys and build again. A build that failed for any other
+reason fails once, with cargo's output as it is, and leaves the layout on. A manifest without
+the two keys (after that fallback, and a dev build's) names neither file: `layout.ld` and
+`layout.rs` of an earlier release build stay in `DIR` unused, and `cargo build` of it compiles
+nothing more.
 
 ## 7 Substrate `ignite-io`
 
@@ -911,27 +953,39 @@ pub fn set_task_locals(make: fn() -> Box<dyn TaskLocals>);   // each new task ge
   counts as busy: placement passes it, and only when every worker is busy and none can start
   does a task go to it, to run when the read returns. A task stays on its worker (no
   stealing, no migration). A worker without a task waits up to
-  `LINGER` for one, then ends, so an idle server runs no worker. A wait of a task (a read, a
+  `LINGER` from the end of its last task for one, then ends, so an idle server runs no worker. A wait of a task (a read, a
   write that finds the socket buffer full, `accept`, a channel, a pipe, a timer, a child,
   standard input) parks the task and lets its worker run another. Sockets block, as in
   `threads` mode (an accepted one from a single `accept4` with `SOCK_CLOEXEC`); a task's
-  `recv` and `send` pass `MSG_DONTWAIT`, and a socket is registered edge-triggered with the
-  worker's epoll on its first wait. A read that left the socket empty (it read
-  less than it asked for, or nothing) makes the next read of the stream wait for readiness
-  before its first `recv`. A read that filled its buffer lets the next one try at once. A worker creates
-  its epoll and eventfd when a task first waits for a descriptor, so tasks that wait only for
-  each other cost no descriptor; a worker that cannot create them (the process is out of
+  `recv` and `send` pass `MSG_DONTWAIT`. A listener has `TCP_NODELAY` and `SO_OOBINLINE`,
+  which the sockets it accepts inherit. A socket is registered edge-triggered with the
+  worker's epoll by its first wait there that parks its task, for input, urgent data and
+  hang-up, and for room to write only from the first wait for room on; the drop of its last
+  handle forgets the registration, and the close removes it from epoll. A read that left the
+  socket empty (it read less than it asked for, or nothing) makes the next read of the stream
+  wait for readiness before its first `recv`; so does the first read of a stream that sent
+  first. A read that filled its buffer lets the next one try at once. A worker creates
+  its epoll and eventfd when a task first waits for a descriptor through them, so tasks that
+  wait only for each other, or only alone on a worker they may block, cost no descriptor; a
+  worker that cannot create them (the process is out of
   descriptors) looks at the descriptor every 10 ms instead, until it can. A worker runs at
   most 128 tasks in a row before it polls for descriptors without waiting. The only task of a
   worker with nothing else to run waits for its descriptor with one `poll` on the worker's
-  thread, as a blocked thread would, and a hand-over to the worker ends that wait. A read
-  without a deadline of its own by such a task, on a worker with no hand-over pending, is one
+  thread, as a blocked thread would, registered or not, and a hand-over to the worker ends
+  that wait and parks the task. A read after a read that emptied the socket, without a
+  deadline of its own, by such a task, on a worker with no hand-over pending, is one
   blocking `recv` instead, while fewer tasks live than `worker_limit()` (never with one
   worker), so a spawn meanwhile finds an idle worker or starts one; the worker counts as busy
-  for that read. Each wait reads the clock once.
+  for that read. On a worker without epoll, the `poll` of its only task blocks the worker
+  in the same way and under the same bounds, until as many tasks live as `worker_limit()`:
+  from then on every such `poll` ends and waits through the worker's epoll. The first read of
+  a stream never blocks its worker in `recv`, so connections opened before their first
+  request spread over the workers. `accept` off a worker (the main
+  thread's accept loop) waits for a connection before its `accept4`. Each wait reads the
+  clock once.
   `connect`, name resolution, `Directory`, `Launcher` and stdout run inline on the worker. The
-  idle timeout (26.2) is `SO_RCVTIMEO` for a blocking `recv` and the deadline of the read's
-  wait otherwise. A panic in a task ends the task, not
+  idle timeout (26.2) is `SO_RCVTIMEO` for a blocking `recv`, set before the first such
+  `recv`, and the deadline of the read's wait otherwise. A panic in a task ends the task, not
   its worker, as `task ended with error: <report>`; a stack overflow writes `thread 'worker'
   has overflowed its stack` and aborts the process, as Rust does on a thread. Thread-locals
   are the worker's: a runtime that keeps per-task state in thread-locals registers
@@ -1518,9 +1572,21 @@ and `to_text`.
 - `ignite-check` finds Store receivers and the fn types of called values from declared types:
   parameter types, `let` annotations, record field types (generic arguments substituted,
   aliases expanded), `x.f`, `x.copy()`, `e?`, `l[i]`, Store results, `for` over a list, a
-  literal of a record without type parameters (`let w = World { .. }`, case-study gap G15). Where
-  it cannot, the type checker reports E042 at the call (``cannot check the effects of `get`:
-  the type of its receiver is not declared; annotate the binding``).
+  literal of a record without type parameters (`let w = World { .. }`, case-study gap G15), a
+  call by name of a fn without type parameters that the module itself declares and whose
+  declared return type is no fn type (that type: `let d = ends()`, then `d.tx.send(1)`; an
+  imported fn's return type names the exporting module's types and stays E042, as does a fn
+  value a call returns, 20.4.3), and the names a `match` arm binds from a scrutinee of such a
+  type (the value itself, tuple elements, the payload of `Some(x)` of an `Option<T>` and of
+  `Ok(x)` and `Err(e)` of a `Result<T, E>`: `match senders.get(id) { Some(tx) => tx.send(1),
+  .. }` with `senders: Store<Sender<Int>>`; case-study gap G32). An imported record's field
+  types and an imported alias's target are written in the exporting module's namespace: a field
+  of such a record has no static type, and such an alias is not expanded, unless every name in
+  the declared type is builtin, a type parameter of the declaration, or imported from that same
+  module (a name the importer declares, imports from elsewhere or does not know could mean
+  another type). Where it cannot, the type
+  checker reports E042 at the call (``cannot check the effects of `get`: the type of its
+  receiver is not declared; annotate the binding``).
 
 **Systems.** In component property expressions every resource name is a value: a
 `TcpListener` resource of type `TcpListener`, a `Store<T>` resource of type `Store<T>`
@@ -3739,6 +3805,13 @@ The drain on SIGTERM:
   as a literal (E020 otherwise, as for `address` and `port`); the generated main binds it with `ignite_io::TcpListener::bind_kept`, on the LLVM target through the runtime
   entry `ignite_rt_tcp_bind_kept(address, port, kept, out, err)`, declared only in a main that
   binds a listener with the property, so other programs' IR is unchanged.
+- A listener bound at run time is kept the same way with the static `TcpListener.bind_kept(address:
+  Text, port: Int) -> Result<TcpListener, IoError>` (story `drain-keeps-bound-listeners`, the
+  case study's G31), effect `net.listen` as `bind`: its address and port are any values, read from
+  the environment or configuration, not literals. Rust lowers it to
+  `ignite_io::TcpListener::bind_kept`, LLVM to `ignite_rt_tcp_bind_kept(address, port, 1, out,
+  err)`, declared only in a module that calls it. `TcpListener.bind` is released as before. Test:
+  `drain::a_listener_bound_kept_at_run_time_accepts_through_the_drain`, both targets.
 - The wait for live tasks after `K.main` returns does not wait for a task that is blocked in
   `accept` on a kept listener or in a read of a stream a kept listener accepted: the process
   exits 0 once every other task has ended, so a kept admin or internal listener never holds
@@ -5016,7 +5089,7 @@ takes 2 parameters (stream, application) or 3 (stream, limits, application), fou
 
 | code | rule | phase | fixture |
 |---|---|---|---|
-| E096 | A use instantiates a `ByteStream`-bounded type parameter with a type that does not implement `ByteStream` (18.3). The message is "`T` does not implement `ByteStream`, which `S` of `f` requires; pass a `TcpStream`, a `PipeStream` or a type parameter bounded by `ByteStream`" | types (`ignite-types`) | `crates/ignite-types/tests/fixtures/e096_bound_not_met`, with one case each: `Int`, a record, an unbounded type parameter passed on, a fn value of the generic fn, and a `spawn` |
+| E096 | A use instantiates a `ByteStream`-bounded type parameter with a type that does not implement `ByteStream` (18.3). The message is "`T` does not implement `ByteStream`, which `S` of `f` requires; pass a `TcpStream`, a `PipeStream`, a `TlsStream` or a type parameter bounded by `ByteStream`" | types (`ignite-types`) | `crates/ignite-types/tests/fixtures/e096_bound_not_met`, with one case each: `Int`, a record, an unbounded type parameter passed on, a fn value of the generic fn, and a `spawn` |
 | E099 | A bound naming an interface other than `ByteStream` ("unknown interface `X`; the only interface is `ByteStream`"). A bound naming two interfaces ("`S` has more than one bound; only `ByteStream` exists"). `ByteStream` in a type position ("`ByteStream` is an interface, not a type; declare a type parameter `<S: ByteStream>`") | check (`ignite-check`) | `crates/ignite-check/tests/fixtures/e099_malformed_bound`, one case per message |
 
 Further fixture obligations:
@@ -6504,6 +6577,29 @@ number" and "minus zero round trips byte-identical"; in `std/protocol/jsonrpc.ig
 tests removed in 0b28ae4e and 831b72d4, restored, and "an id of 19 digits that fits Int is a
 NumberId and -0 comes back as sent"; `conformance::json_rpc_matrix_is_labelled_by_its_id_and_holds`.
 
+Repeated member names (story `json-duplicate-keys`, 2026-11-08). RFC 8259 section 4 says the
+names of an object should be unique and leaves open what a reader does when they are not.
+ECMAScript's `JSON.parse` keeps the last member, so a server that read the first one disagreed
+with its JavaScript clients: `{"channel":"/a","channel":"/meta/handshake"}` was `/a` in std and
+`/meta/handshake` in JavaScript (case study gap G29). The rule now:
+
+- `parse` keeps every member in document order and `encode` writes every one back, in that
+  order: for compact `t` (no whitespace between tokens, as `encode` writes) `encode(parse(t)?)
+  == t` holds for an object with a repeated name too; for any other `t` the members come back
+  in order, compacted (`{"a": 1, "a": 2}` encodes as `{"a":1,"a":2}`).
+- `get(value, name)` returns the last member `name`; `text`, `int` and `bool` read through it.
+  It returned the first before this story.
+- `get_all(value, name) -> List<Json>` returns every member `name` in document order, empty
+  when there is none or `value` is not an object.
+- `read` and `read_with` (27) still refuse a repeated name with "duplicate member"; the split
+  stays: `parse` is the lenient reader that agrees with JavaScript, `read` the strict one that
+  gives a `Map`.
+
+Tests: in `std/json.ignite`, "get returns the last duplicated member and get_all every one"
+and "the accessors read members of the right kind" (its repeated `id` now gives 8);
+`data_json::read_and_write_agree_across_the_evaluator_and_both_targets` evaluates the G29
+document's `get`, `get_all` and `encode` in the evaluator and prints them on both targets.
+
 ### 19.21 Telnet conforms to RFC 854 (story `telnet-rfc854-conformance`, 2026-11-06)
 
 `ignite conformance std/protocol/telnet.ignite` prints `claim conformance of Telnet to rfc854:
@@ -7798,8 +7894,15 @@ once and act on the last component relative to it (the root's own descriptor whe
 the root). When that call fails for any reason the operation walks as above, which either
 succeeds (the path changed in between) or gives the error this section words, naming the
 component; the walk is also the whole resolution once `openat2` answered `ENOSYS` or `EPERM` (a
-kernel before 5.6, a seccomp filter). A listing reads the directory with `getdents64` itself.
-Every behaviour above, its errors included, is the same in both resolutions; the substrate's
+kernel before 5.6, a seccomp filter). A listing reads the directory with `readdir` through
+`nix::dir::Dir` (story `unsafe-sites-back`). The calls of a listing, as `strace` shows them:
+an `fstat`, an `fcntl(F_GETFL)` and an `fcntl(F_SETFD, FD_CLOEXEC)` (`fdopendir`), the
+`getdents64` calls, an `lseek` back to the start (the end of the iteration) and the `close` of
+the descriptor. `remove_tree` lists each level through that level's own descriptor. A level it
+descends from then duplicates the descriptor (`fcntl(F_DUPFD_CLOEXEC)`) and closes the listing
+before it goes deeper. The deepest level keeps its listing until it is emptied. So the walk
+holds one descriptor per level and one listing at a time. Level `k` holds `k + 1` descriptors
+while it makes its duplicate, and a tree 256 levels deep needs 256 descriptors. Every behaviour above, its errors included, is the same in both resolutions; the substrate's
 tests run on both (`fs::tests`, `Scratch::both`). Measured with `strace -c` on the todo example's
 patch workload (16 connections on one todo, LLVM, release): 108.5 syscalls per reply before,
 45.8 after, the plain-Rust reference 16.0. Of the 45.8, 8.1 are failed `remove`s of versions a
@@ -9746,7 +9849,7 @@ tree every data format reads into and writes from; the codecs, YAML, TOML and th
 | `type DecodeError` | `path`, `expected`, `found`, all `Text`; `describe(error)` (UFCS `error.describe()`) is `<path>: expected <expected>, found <found>` |
 | `type FormatError` | `message: Text`, `line`, `column`, `offset: Int`: the first bad byte of a read, `line` and `column` 1-based, `column` in characters, `offset` in bytes (the positions of 1.1); a write gives 0 for all three |
 | `format_error(text, message, offset)` | the `FormatError` at byte `offset` of `text`, line and column counted |
-| `base64(bytes)` | RFC 4648 section 4 with `=` padding: the text of `Value.Bytes` in a format without bytes |
+| `base64(bytes)` | moved to `std.encoding` (section 34); `std.json` imports it from there for the text of `Value.Bytes` |
 
 `describe` is a fn, not a `DecodeError.describe` hook: a hook of 16.16 is not callable as a
 method. `Value`'s variants share names with `Json`'s (`Null`, `Bool`, `Decimal`), so a module
@@ -9771,7 +9874,7 @@ of a later step decodes the text into the field's type.
 
 ### 27.3 Layering
 
-`std.data` is in the base layer and imports nothing; `std.json` imports it
+`std.data` is in the base layer and imports nothing; `std.json` imports it and `std.encoding`
 (`docs/layering.md`, `layering::` in `crates/ignite-check/tests/layering.rs`).
 
 ### 27.4 Not covered
@@ -9783,7 +9886,7 @@ refused duplicate member follow `docs/serde.md` goal 5 and section 4.
 
 ### 27.5 Tests
 
-- `std/data.ignite`: the default `Shape`, `describe`, `base64` against RFC 4648's vectors,
+- `std/data.ignite`: the default `Shape`, `describe` (the `base64` vectors are in `std/encoding.ignite`, 34),
   `format_error`'s line and column (`task test-ignite`, both targets).
 - `std/json.ignite`: `of_data(to_data(j)) == j` for every `Json` variant, nested; `Bytes` as
   base64 and `Moment` as text; `read` of every kind; line, column and offset of a format error;
@@ -9956,7 +10059,8 @@ tests 1 to 4 (test 3 is a million `a`; plus the empty message) and the seven vec
 section 10; `bitwise::sha1_and_base64_vectors_on_both_targets` runs them with `ignite test` on
 both targets. Reading a byte by index and `push` lower to an inline load or store behind a
 bounds check on both targets (no call), so the story's "byte get/set cheaply" needs no new
-builtin.
+builtin. Since section 34 the code is `std.digest.sha1` and `std.encoding.base64`, which the
+fixture imports.
 
 The file's executable `codecs` builds 1 MiB (`byte i = (31 i + 7) mod 256`) and runs 16 rounds
 of SHA-1 and base64 over it, changing the first byte each round; it prints the last digest and
@@ -10063,9 +10167,80 @@ and `<Receiver>`.
 - The value argument of `send` and `try_send` is a move position, like the element of
   `Store.put`: a value dead after the call goes into the channel without a copy; a value read
   later is copied. The receiver gets its own value either way; nothing is shared between tasks.
-- LLVM target: a block owns an end its `let` created and releases it when the block is left,
-  as a stream (`own.rs`); an end sent as a value on another channel is left unowned (never
-  released, never closed early).
+- LLVM target: an end moved into a second binding, an annotated tuple, a record field or a
+  `Store` is released with its last owner, as on the Rust target (case study gap G30). The
+  rules (`own.rs`, `docs/llvm.md` section 4), which cover every handle kind (listeners,
+  streams, pipe ends, channel ends, capabilities):
+  - A block owns the handles of a binding whose `let` takes a value no one else owns: a
+    builtin that creates handles (`Channel.bounded`, `Pipe.pair`, `TcpListener.bind`,
+    `accept`, `connect`, `Launcher.new`, `Entropy.new`, `Directory.temporary`, …), with or
+    without `?`; a copy out of a store or a channel (`get`, `remove`, `values`, `update`,
+    `upsert`, `receive`, `receive_within`); or a call of a fn of the same module whose result
+    holds only handles it created (its final expression such a value, a binding of one that
+    escapes only there, or a tuple or record literal of those; no `return` of a value with a
+    handle). A `match` statement, or a `match` that is the value of a `let`
+    (`let present = match senders.get(id) {..}`), owns such a scrutinee when every arm keeps
+    what it binds; a `for` statement owns such an iterated value (`for s in senders.values()`)
+    when its body keeps every name the loop binds. The block registers every handle in the
+    value (`own_handles.<T>`) and releases them when it is left.
+  - The handles stay owned while every later mention keeps them in the block: a receiver of a
+    builtin method that does not hand it on, a value `put` in a store or sent on a channel, a
+    `spawn` argument, a plain argument of a call whose result holds no handle or only fresh
+    ones; a field or element of the binding counts as the binding (`ends.0.close()`,
+    `w.wake.receive()`), one of a type without handles keeps it anywhere (`w.id`). A `let` of
+    the binding, of a field of it, or of a tuple or record literal around it makes an alias,
+    which keeps it while the alias is kept in turn (`let r: Receiver<Int> = rx`,
+    `let w = Waiter { id, wake = rx }`). A binding with an alias is not handed over to a
+    `spawn` that is its last mention: the alias still reads the handle, so the block keeps
+    its owner until it is left. Any other mention leaves the binding unowned, as before:
+    never released, never closed early.
+  - `crates/ignite/tests/fixtures/leak/attack.ignite` (six inline tests,
+    `leak::reachable_handles_stay_usable_and_stored_reads_are_released`, both targets): an
+    alias or a record field of an end handed to a task stays usable, a stored end read back
+    or sent through a channel stays the store's or the receiver's, and a broadcast over
+    stored senders and a look at one through a `let` of a `match` keep the census flat.
+  - A heap copy in a store or a channel is an owner of its own: `copy_to_heap` adds an owner to
+    every handle in it and `free_heap` drops it (`ignite_rt_handle_release`); `copy_from_heap`
+    adds one for the copy it makes, so `remove` and `receive` hand the stored owner to their
+    caller. A store's `update` and `upsert` call their fn on a copy that shares the stored
+    handles.
+  - A value no one else owns that no binding holds is a temporary, owned by the expression
+    that consumes it, as the Rust target drops it at the end of its statement
+    (`story:llvm-release-handle-temporaries`): an argument of a call whose result holds no
+    handle or only fresh ones (`senders.get(id).is_some()`, the receiver of a fn called by
+    UFCS included), the value of a `put`, `send` or `try_send`, an argument of `spawn` the
+    task gets an owner of its own for, the scrutinee of a `match` that no statement claims
+    and whose arms keep what they bind (an arm's value without braces), and a bare
+    expression statement (`senders.remove(id)`). That expression takes an owner mark, the
+    temporary registers its handles when it is made, and the mark is released when the
+    expression is done, or by the `return`, `?`, `break` or `continue` that leaves it, or by
+    the failure that ends the task. A temporary that is a fn's result or a `let`'s value is
+    not one: its caller or its block owns it. A tuple or record literal around a binding
+    passed to `put`, `send` or `try_send` keeps the binding, as the binding itself does: the
+    heap copy is an owner of its own. `leak::stored_ends_read_in_every_form_are_released`
+    (`fixtures/leak/attack2.ignite`, 16 tests) and
+    `leak::stored_ends_read_into_temporaries_are_released_once`
+    (`crates/ignite/tests/soak/temporaries.ignite`, 5 tests: a fn's result, `spawn`, a loop
+    condition, `?`, a failing task; each fails on a copy never released and on one released
+    twice) pass on both targets.
+  - Known gap (pre-existing, `story:llvm-temporaries-without-owner-rule`): on LLVM a
+    copied-out value that no owning `let`, statement `match`, `for` or expression above
+    holds keeps that owner forever: the receiver of a builtin method
+    (`senders.values().len()`), the rest of a fresh value read for one field
+    (`open(s).id`), the thrown-away value of a `match` arm, a store read inside a record
+    argument of a call, and a `match` binding put in a store inside `Some`.
+    `leak::five_temporary_forms_are_not_released_on_llvm_yet`
+    (`crates/ignite/tests/soak/temporaries_unreleased.ignite`) holds these five as the
+    failing tests on LLVM; the Rust target passes all 5.
+  - Known gap (pre-existing, `story:llvm-task-move-aliases`): on LLVM a `spawn` of an
+    element a callee reads from a list with `xs.at(0)` moves the list's owner to the task,
+    whose release closes the end the list still holds.
+    `leak::an_element_read_from_a_list_and_moved_to_a_task_is_closed_early_on_llvm_yet`
+    (`crates/ignite/tests/soak/moves_aliases.ignite`) holds it as the failing test on LLVM;
+    the Rust target passes.
+  - `spawn` adds an owner in the parent for every handle inside a tuple, record or enum
+    argument (`retain_handles.<T>`); the task registers them and releases them when its fn
+    returns, as it does a stream argument.
 
 ### 30.4 Lowering
 
@@ -10081,11 +10256,12 @@ and `<Receiver>`.
 
 ### 30.5 Tests
 
-- `std/sync.ignite`: eight inline tests on both targets (`task test-ignite`): order and
+- `std/sync.ignite`: twelve inline tests on both targets (`task test-ignite`): order and
   `try_send` on a full channel, `receive_within` at its deadline, a send from another task
   waking a receiver, `send` waiting while full, close ending every waiter (a blocked sender
   refused, blocked receivers ended), queued values after a close, the last sender's task ending
-  closing the channel, a sent value independent of the sender's later changes.
+  closing the channel, a sent value independent of the sender's later changes, and the four
+  G30 soaks of 30.3 (33.4).
 - `channels::{rust,llvm}::g3_long_poll_heartbeat_without_bells`
   (`crates/ignite/tests/channels.rs`, `fixtures/channels/g3.ignite`): a long-poll held to its
   200 ms deadline, one woken by a message after 50 ms, a heartbeat that ticks until its stop
@@ -10388,15 +10564,1180 @@ counted object holds (both targets). Release builds ignore the variable.
   its drop returns it within 64 KiB.
 - `leak::every_soak_passes_without_a_seeded_leak` and
   `leak::each_seeded_leak_fails_its_soak_naming_the_kind` over
-  `crates/ignite/tests/fixtures/leak/seeded.ignite`, both targets. On the LLVM target five
-  soaks are known failures without a seed, each asserted red with the kind it names: the
-  lowering releases only the channel ends, pipe ends and streams a block owns (`own.rs`), so a
-  listener (`soak: listener`, `soak: stream`), a directory and a capability (`soak: child` by
-  its launcher, `soak: capability`) stay in the handle table until the process exits
-  (`docs/leak-guard.md` 1.2, Q8); their seeds are checked on the Rust target only. For the
-  same reason the census test of a capability checks its release on neither target.
-- G30 (`docs/leak-guard.md` 6.1): `fixtures/leak/g30.ignite` holds "a channel end bound a
-  second time is released (G30)" and "a channel end kept in a record field is released (G30)";
-  `leak::g30_soaks_pass_on_rust_and_are_known_failures_on_llvm` asserts both pass on Rust and
-  both fail on LLVM naming `handles` and `channels`. `story:channel-release-on-close` turns the
-  LLVM half green and moves the two tests into `std/sync.ignite`.
+  `crates/ignite/tests/fixtures/leak/seeded.ignite`, both targets: every soak passes without a
+  seed and each seed fails its soak on both targets. Until `story:llvm-release-all-handles` five
+  soaks were known failures on the LLVM target (`soak: listener`, `soak: stream`, `soak:
+  child` by its launcher, `soak: directory`, `soak: capability`): the lowering released only
+  the channel ends, pipe ends and streams a block owned; since 30.3 it releases every handle
+  kind. The census test of a capability checks its release on both targets.
+- G30 (`docs/leak-guard.md` 6.1): the soaks "a channel end bound a second time is released
+  (G30)", "a channel end kept in a record field is released (G30)", "an annotated pair of
+  channel ends is released (G30)" and "a channel end put in a store and taken out is released
+  (G30)" are inline tests of `std/sync.ignite` (2,000 runs each), green on both targets; on the
+  LLVM target before 30.3's rules each grew `handles` and `channels` by one or two per run.
+  `leak::g30_reproducer_stays_flat_in_every_mode` builds the case study's reproducer
+  (`fixtures/leak/repro.ignite`) on both targets and runs every mode at `N=20000`: each mode's
+  peak resident size (`VmHWM`, the lowest of up to three runs) is within 2 MB of `none`'s.
+
+### 33.5 The evaluator's model of the substrate under a test
+
+Story `eval-substrate-model`. `Evaluator::run_test` runs a test's body as task 0 of an
+in-memory, deterministic model of the substrate (`crates/ignite-eval/src/substrate.rs`). The
+model exists only while a test runs: `ignite check`, `ignite plan` and every other evaluation
+at compile time still report `evaluation failed: builtin `X` has no value at compile time` for
+the same builtins.
+
+| has a value under a test | as on the targets |
+|---|---|
+| `Store.new()` and every `Store<T>` method | ids from 1, values in id order; a copy shares the store |
+| `Setting.of`, `CommandLine.of`, `Environment.of` and their methods | what the capability was made of; the last entry of a variable wins |
+| `Pipe.pair()`, every `PipeStream` method and the `ByteStream` methods on a pipe end | 18.4: a task's writes wait in the send buffer until a flush point (a read, `Process.flush()`, an operation that waits, the task's end, 64 KiB, `close`, the end's drop) and arrive as one batch; the 16 MiB queue, `pipe peer is gone`, `write to a closed stream`, the urgent byte and the idle timeout |
+| `spawn` of a fn, a role, a fn value, a constant or a field fn, and calls of a role | the callee and arguments are evaluated by the spawning task; a fn value's call only when every argument is a name, as the Rust target evaluates that form inside the task |
+| `Channel.bounded` (capacity of at least 1), every `Sender` and `Receiver` method | 30: a waiting `send` or `receive` first delivers the task's writes |
+| `Clock.monotonic()`, `Clock.sleep(d)` | virtual time: nanoseconds since the test began, advanced only by the scheduler |
+| `Process.flush()` | delivers the task's writes |
+
+Tasks are cooperative. The first task in spawn order that can run holds the turn until it waits
+(a read, a `send` into a full channel, a `receive` from an empty one, a sleep) or ends; then
+the turn passes to the first task, in spawn order, that is ready or whose deadline has come.
+When none is, the virtual time moves to the earliest deadline; with no deadline the test ends
+as `evaluation failed: every task of the model waits and none has a deadline (a deadlock)`.
+Every task has an OS thread of its own and only the turn holder runs, so the order is the same
+on every run. The tasks share the test's fuel: a task that never waits ends the test on fuel. A
+failure (14.8) ends only its task, as on the targets; the test is over when its body ends. A
+last use moves its value (20.3.1), so a handle given to a task is dropped with the task. No
+wall clock is read: a timeout or a sleep costs no time.
+
+The values the model holds (stored values, queued values, pipe bytes by 64) count against the
+node limit (15.3). A handle is not encodable (E118) and its debug text is the type's name
+(`<PipeStream>`). Still without a value under a test: TCP and TLS, `Launcher`, `Directory`,
+`Entropy`, `Stdout` and `Stderr`, `Process.exit`, `Process.open_files_limit`, `Clock.now()`,
+`Runtime.census()` and `Runtime.settle` (33.2), and `main`. A unit that reaches one of them
+stays one the evaluator cannot run (`quality/baseline.json` `eval_cannot_run`).
+
+Tests: `crates/ignite/tests/eval_model.rs` (the order of tasks, the deadlock report, a task
+that ends on fuel, a failing task that ends only itself, pipe flush points and batches, virtual
+time, and the refusal outside a test) and the differential corpus run, where every unit the
+model runs agrees with the Rust target.
+
+## 34 SHA-1, SHA-256 and base64 in std (`std.digest`, `std.encoding`)
+
+**Status: implemented in `story:std-digest`.**
+
+Case-study gap G22 (`docs/research/case-study-gaps.md`): a WebSocket handshake, a token check
+or a content hash wrote its digest and its base64 by hand with bit arithmetic. Both are std
+modules, written in Ignite on 29's operators and 32's `U32`; no builtin and no substrate code is
+added, so the compiler and both backends are unchanged.
+
+### 34.1 `std.encoding`
+
+RFC 4648. Encoding is total; decoding returns `Result<Bytes, EncodingError>`.
+
+| item | meaning |
+|---|---|
+| `type EncodingError` | `offset: Int`, `message: Text`: the byte offset of the first character refused, the text's length when only the length is wrong |
+| `base64(data) -> Text` | section 4, `=` padding to a multiple of four characters |
+| `base64url(data) -> Text` | section 5 (`-` and `_` for `+` and `/`), padded |
+| `base64url_unpadded(data) -> Text` | section 5 without padding, which section 3.2 allows when the referring specification says so (JWS, RFC 7515) |
+| `base64_decode(text)`, `base64url_decode(text)` | the bytes of a padded text in that alphabet |
+| `base64url_unpadded_decode(text)` | the bytes of an unpadded base64url text |
+| `hex(data) -> Text` | section 8 in lowercase, two digits per byte, as a digest is printed |
+
+Decoding refuses, in this order: a padded text whose length is no multiple of 4 (`the length
+of padded base64 is a multiple of 4`, at the length); an unpadded one whose length is 1 more
+than a multiple of 4 (`no base64 text has this length`); a `=` that is not one of the last two
+characters of a padded text (`` `=` only as the last one or two characters ``); any character
+outside the alphabet, the other alphabet's two and a `=` in an unpadded text included (section
+3.3, `not a base64 character`); non-zero bits after the last byte (section 3.5's canonical
+encoding, `the bits after the last byte are not zero`, at the last character). Line breaks and
+white space are characters outside the alphabet.
+
+`std.data.base64` (27.1) is gone: the function moved here unchanged in output, and `std.json`
+imports it from `std.encoding` for the text of `Value.Bytes`.
+
+### 34.2 `std.digest`
+
+| item | meaning |
+|---|---|
+| `sha1(data) -> Bytes` | the 20-byte SHA-1 digest (RFC 3174) |
+| `sha256(data) -> Bytes` | the 32-byte SHA-256 digest (FIPS 180-4 section 6.2) |
+| `enum Algorithm` | `Sha1`, `Sha256` |
+| `type Digest` | `algorithm`, `state: List<U32>` (the words after the last whole block), `pending: Bytes` (fewer than 64), `length: Int` (bytes taken) |
+| `Digest.sha1()`, `Digest.sha256()` | the state before any input |
+| `update(self: Digest, data) -> Digest` | the state after `data`; by UFCS, `d.update(data)` |
+| `finish(self: Digest) -> Bytes` | the digest of everything taken |
+
+`sha1(data)` is `Digest.sha1().update(data).finish()`. `update` fills the pending block first,
+then compresses every whole block of `data` where it lies (no copy of the input), and keeps
+the rest; the one-shot form therefore copies at most 63 bytes of its input. `update` and
+`finish` are free fns because an associated fn `Digest.update` is not callable as a method
+(E041 on `d.update(..)`; `describe` in 27.1 is a fn for the same reason): a caller imports `std.digest.{Digest, update, finish}`. Input
+lengths are counted in `Int`; `length * 8` fails past 2^60 bytes as every `Int` overflow does.
+
+### 34.3 Layering
+
+Both are in the base layer (`docs/layering.md`, `LAYERS` in
+`crates/ignite-check/tests/layering.rs`). `std.encoding` imports nothing; `std.digest` imports
+`std.encoding.hex` for its tests only.
+
+### 34.4 The codecs fixture
+
+`crates/ignite/tests/fixtures/bitwise/codecs.ignite` (29.5, 32.5) no longer writes SHA-1 and
+base64 itself: it imports `std.digest.sha1` and `std.encoding.{base64, hex}`, keeps its four
+inline tests and its executable `codecs`, which prints the same two lines as
+`fixtures/bitwise/codecs.rs`. `bitwise::sha1_and_base64_vectors_on_both_targets` runs it on
+both targets; `bitwise::codecs_within_3x_of_hand_written_rust` (`#[ignore]`) is the
+acceptance's 1 MiB timing and now times std's code. Not recorded in this story: timing runs
+happen on the dedicated measurement host, not on the shared workstation; the numbers of 32.5
+are the last record and were taken over the same SHA-1 rounds.
+
+### 34.5 Tests
+
+- `std/encoding.ignite` (both targets): RFC 4648 section 10's vectors in base64; base64url
+  padded and unpadded; every decoder reverses its encoder on those vectors; each refusal of
+  34.1 with its offset; `hex`.
+- `std/digest.ignite` (both targets): RFC 3174's tests 1 to 4 (test 3 is a million `a`) and the
+  empty message; FIPS 180-4's SHA-256 examples (`abc`, the 448-bit and 896-bit messages), the
+  empty message and a million `a`; `Digest` fed in pieces of 1, 3, 55, 56, 63, 64, 65, 128 and
+  300 bytes gives the one-shot digest of a 300-byte message for both algorithms.
+- `layering::` with the two new rows; `bitwise::` over the rewritten fixture.
+
+## 35 std.protocol.resp: RESP3 client with pub/sub and Sentinel
+
+**Status: implemented in `story:std-resp-client`.**
+
+Case-study gap G9: no Redis or Sentinel client in std. `std.protocol.resp` is a client of the
+Redis serialization protocol, RESP2 and RESP3, generic over `T: ByteStream`, written in Ignite on
+the existing stream, channel and spawn builtins; no builtin and no substrate code is added, so the
+compiler and both backends are unchanged and no generated code changes.
+
+### 35.1 Values and limits
+
+| item | meaning |
+|---|---|
+| `enum RespValue` | `Simple(Text)`, `Error(Text)`, `Integer(Int)`, `Blob(Bytes)`, `Null`, `Double(Text)`, `Boolean(Bool)`, `BlobError(Bytes)`, `Verbatim(Text, Bytes)`, `BigNumber(Text)`, `Array`, `Map` (pairs), `Set`, `Push`, `Attributed(pairs, value)`: every RESP3 type; `Double` and `BigNumber` keep the exact text, as `std.json`'s `Decimal` |
+| `type RespLimits` | `line` 64 KiB (one line's text), `bulk` 16 MiB (one bulk string, blob error or verbatim string; a streamed string in total), `elements` 1,048,576 (items of one aggregate, a map's pairs), `depth` 32 (aggregates inside aggregates; the value an attribute annotates is one level deeper), `reply` 64 MiB (the encoded bytes of one value) |
+| `enum RespError` | `UnknownType(Byte)`, `Malformed(Text)`, `LineTooLong`, `BulkTooLarge`, `TooManyElements`, `TooDeep`, `ReplyTooLarge`, `Truncated`; `describe` |
+| `encode(value) -> Bytes` | the RESP3 form; a line type's text must hold no CR or LF |
+| `encode_command(args)`, `words(parts)` | a command as an array of bulk strings |
+| `decode(data, limits) -> Split` | `Complete(value, rest)`, `Partial`, `Invalid(error)`, without reading |
+| `read_value(stream, limits, buffer) -> IoResult<Read>` | `Got(value, rest)`, `Closed`, `Failed(error)` |
+
+The decoder reads RESP2's `$-1` and `*-1` as `Null`, a leading `+` on an integer, and RESP3's
+streamed strings (`$?`, `;` parts, `;0`) and streamed aggregates (`*?`, `~?`, `%?`, ended by `.`)
+as the value they spell. It refuses a line holding a CR or LF of its own, a length or integer that
+is no number, a negative length other than RESP2's nulls, and every limit one past it. A value
+that is still incomplete is decoded again from its start when more bytes arrive; a bulk string's
+length is checked before its bytes are, so only aggregates of many small items pay for the
+repeated parse.
+
+### 35.2 Commands
+
+`type Client<T> { stream: T, limits: RespLimits = RespLimits {} }`; `connect(endpoint, timeout)`
+is one over TCP whose reads also give up after `timeout`. `command(client, args)` returns the
+reply as a value, the server's error included; `pipeline(client, commands)` writes every command
+in one write and returns one reply per command in order. A push frame on a command connection is
+skipped, before the replies and after them; anything else after the last reply is the `IoError`
+`resp: a reply no command asked for`. So under RESP3 a `SUBSCRIBE` sent with `command` or
+`pipeline` waits until the stream's idle timeout, its confirmation being a push; `subscribe`
+(35.3) is the way to subscribe. A client serves one task at a time.
+
+The typed helpers, called as plain fns (`get(client, key)`; the method form is E042 on a
+generic record receiver): `ping`, `hello`, `auth`; strings `get`, `set`, `set_for` (`PX`),
+`set_if_absent` (`NX`), `mget`, `incr`, `incr_by`; hashes `hget`, `hset`, `hgetall`, `hdel`,
+`hexists`; sets `sadd`, `srem`, `smembers`, `sismember`, `scard`; keys `del`, `exists`,
+`rename`, `key_type`; expiry `expire` (`PEXPIRE`), `persist`, `ttl` (`PTTL` as `Expiry`:
+`Missing`, `Persistent`, `Remaining(Duration)`); `publish`. Keys, fields and channels are
+`Text`, values `Bytes`. Each reads RESP2 and RESP3 replies alike (a map or a flat array for
+`HGETALL`, a set or an array for `SMEMBERS`, attributes seen through); the server's error is an
+`IoError` whose message is the error line, a reply of another type the `IoError`
+`resp: unexpected reply to <NAME>: <debug text>`.
+
+### 35.3 Pub/sub
+
+`subscribe(stream, topics: Topics, limits) -> IoResult<Subscription<T>>` sends `SUBSCRIBE` and
+`PSUBSCRIBE` for `Topics { channels, patterns }` and reads the first confirmation, so a refusal
+(`-NOAUTH`) is its error. Then a spawned task reads the connection and sends every `Message
+{ channel, pattern, payload }` (`message`, `pmessage`, `smessage`, RESP2 arrays or RESP3 pushes)
+on `Subscription.messages`, a bounded channel of 1,024, until an unsubscribe confirmation leaves
+no subscription, the connection ends or sends bytes that are no value, or the receiver is
+closed; then the channel closes and `receive()` gives `None`. `unsubscribe(subscription)` ends
+every subscription. The connection is closed, not reused, after a subscription.
+
+Reconnecting is the caller's: `retry_delay(attempt)` (100 ms doubled per attempt, at most 10 s)
+and `resubscribe(stream, ended, limits)` (a new subscription to the ended one's topics); the
+module's comment shows the loop. Messages published while no connection was subscribed are lost,
+as pub/sub keeps none.
+
+### 35.4 Sentinel
+
+`ask_master(stream, name, limits)` is `SENTINEL get-master-addr-by-name`: `Some(Endpoint)`, or
+`None` for a name the sentinel does not monitor. `master_from(sentinels: List<T>, ..)` and
+`master_at(sentinels: List<Endpoint>, name, timeout, limits)` (connect, ask, close) ask a list in
+order and return the first master named; a sentinel that fails, cannot be reached or knows no
+such master is skipped, and the error names each. `watch_master(stream, limits)` subscribes to
+`+switch-master`, `switched_master(message, name)` reads `<name> <old address> <old port> <new
+address> <new port>`, and `next_master(subscription, name)` waits for the next switch of `name`.
+
+### 35.5 Layering
+
+A file under `std/protocol/` is a protocol name for `layering::` (`docs/layering.md` rules 3 and
+5), and `resp` begins `response`, `respond` and `respects`, which the compiler crates and
+`std.console` use. The rules now read a name as contained unless it lies inside an English word
+listed for that protocol (`ORDINARY_WORDS` in `crates/ignite-check/tests/layering.rs`); a word is
+a run of letters, so `RespValue` and `HttpResponse` still name it. Matching for the other
+protocols is unchanged.
+
+### 35.6 Tests
+
+- `std/protocol/resp.ignite`, both targets, 23 tests over `Pipe.pair()` with a scripted server
+  (`script`: reads each expected request byte-exact, writes its reply): every RESP3 type encodes
+  as the specification writes it and decodes back with the following bytes kept; every proper
+  prefix of each is `Partial`; RESP2 nulls and streamed values; each refusal and each limit;
+  a value split over five deliveries; truncation; the typed helpers with RESP2 and RESP3
+  replies; a pipeline in one delivery; server errors, pushes, extra and cut replies; a
+  subscription over channels and a pattern ended by `unsubscribe`, a refused one, one whose
+  connection ends and its `resubscribe`; `retry_delay`; `master_from` over four sentinels,
+  `master_at` over TCP; `+switch-master` followed.
+- `resp::a_real_server_and_sentinel_on_both_targets` in `crates/ignite/tests/resp.rs`,
+  `#[ignore]` like `image::`, since neither server is installed where the gate runs: per target,
+  a master, a replica and a sentinel on free loopback ports, then commands,
+  a pipeline, `HELLO 3`, a subscription, `master_at` past a dead port, a forced `SENTINEL
+  failover` and `next_master` to the replica. Run with
+  `cargo test -p ignite --test main resp:: -- --ignored` where `redis-server` and
+  `redis-sentinel` are on `PATH`.
+- `layering::` with `ordinary_words_are_no_mention_and_every_other_occurrence_is`.
+
+## 36 std.protocol.nats: NATS core client
+
+**Status: implemented in `story:std-nats-client`.**
+
+Case-study gap G9: no NATS client in std. `std.protocol.nats` is a client of NATS core (no
+JetStream), generic over `T: ByteStream`, written in Ignite on the existing stream, channel,
+clock and spawn builtins; no builtin and no substrate code is added, so the compiler and both
+backends are unchanged and no generated code changes.
+
+### 36.1 Wire and limits
+
+| item | meaning |
+|---|---|
+| `type NatsLimits` | `line` 64 KiB (one control line from the server, INFO included), `payload` 1 MiB (one message, its header block included; publishing is also bounded by the server's `max_payload`), `headers` 64 KiB (one header block), `pending` 4,096 and `pending_bytes` 8 MiB (the messages held while no connection is up, each counted with its header block), `pending_age` 1 s (a message older than this is dropped, not sent), `subscription` 1,024 (one subscription's channel), `backlog` 8 MiB (the bytes a connection may leave unwritten; past it the connection is lost), `lingering` 4 (the lost connections whose tasks still run before `connect_to` waits to dial) |
+| `enum NatsAuth`, `type NatsOptions` | `Anonymous`, `UserPassword(user, password)`, `Token(token)`; `name`, `verbose`, `pedantic`, `echo`, `ping_interval` 120 s, `max_pings_out` 2, `inbox_prefix` (`_INBOX.<token>` when empty) |
+| `type ServerInfo` | the INFO fields a client reads: `server_id`, `server_name`, `version`, `proto`, `max_payload`, `headers`, `auth_required`, `client_id`; a missing member keeps its default |
+| `type NatsMessage` | `subject`, `reply`, `headers` (`(name, value)` pairs in order), `status` (the code of `NATS/1.0 503`), `payload` |
+| `encode_connect(options, info)` | `CONNECT {json}`: `verbose`, `pedantic`, `tls_required`, `lang`, `version`, `protocol` 1, `echo`, `name`, `headers` and `no_responders` when the server has headers, `user` and `pass` or `auth_token` |
+| `encode_publish(message)`, `encode_subscribe(subject, queue, sid)`, `encode_unsubscribe(sid, max)` | PUB, or HPUB with the header block `NATS/1.0`, the headers and an empty line; SUB with an optional queue group; UNSUB at once or after `max` messages |
+| `enum ServerOp`, `decode(data, limits) -> Split` | `Info`, `Delivery(sid, message)` (MSG or HMSG), `Ping`, `Pong`, `Accepted` (+OK), `Refused(reason)` (-ERR, quotes removed); `Complete(op, rest)`, `Partial`, `Invalid(NatsError)` |
+| `enum NatsError` | `UnknownOperation(name)`, `Malformed(what)`, `LineTooLong`, `PayloadTooLarge`, `HeadersTooLarge`, `Truncated`; `describe` |
+| `valid_subject`, `valid_filter`, `subject_matches(filter, subject)` | the server's rules: tokens separated by `.`, none empty or holding whitespace; a subject to publish to has no wildcard token; in a filter `*` stands for one token and `>`, the last token only, for one or more; a `*` inside a longer token is literal; case-sensitive |
+
+Operation names are read in any case and fields are split on runs of spaces and tabs, as the
+server writes them. A line holding a CR or LF of its own, a sid or size that is no decimal
+number, a header size larger than the total, a payload not ended by CR LF, a header block that
+does not start with `NATS/1.0` or does not end with an empty line, a header line without a
+colon, a status that is not three digits, an INFO that is no JSON object and a PING, PONG or
++OK with arguments are refused, and each limit one past it.
+
+### 36.2 The client
+
+`connect(stream, options, limits)` reads INFO, writes CONNECT and PING, and returns when the
+PONG arrives, answering the server's PING and reading `+OK` and INFO updates meanwhile; a
+`-ERR` (`Authorization Violation`) is its error `nats: <reason>`. It is bounded by the stream's
+idle timeout, which the caller sets. Then per connection a reader decodes the server's
+operations and a writer writes the stream, and a client task owns all state, fed by one
+bounded channel of commands (1,024). The client task never writes the stream: it hands bytes
+to the writer through a channel of one chunk and holds the rest itself, up to
+`limits.backlog`, past which the connection is lost. A server that stops reading blocks only
+the writer, so the keepalive still finds it. The fns are plain fns over `Nats<T>`, as the
+method form on a generic record receiver is E042:
+
+| fn | what it does |
+|---|---|
+| `publish(client, subject, payload)`, `publish_message(client, message)` | checks the subject, the reply subject, header names and values; the client task then checks headers against the newest connection's INFO `headers`, and the size, header block included, against the smaller of `limits.payload` and its `max_payload`, and answers; then the message is queued with the time it was queued |
+| `subscribe(client, filter)`, `queue_subscribe(client, filter, queue)` | a `Subscription { sid, subject, queue, messages }` whose bounded channel gets each delivery in order; a full channel drops and counts it (`slow`) |
+| `unsubscribe`, `unsubscribe_after(client, subscription, max)` | UNSUB at once or after `max` messages in all; the channel closes after the last |
+| `request(client, subject, payload, timeout)`, `request_message` | SUB to `<inbox prefix>.<sid>`, UNSUB after one, PUB with it as the reply subject, then `receive_within(timeout)` on the reply channel (`docs/slice.md` 30); at the deadline UNSUB and the error `nats: no reply to <subject> within <ms> ms`; a reply with status 503 is `nats: no responders for <subject>`. The one reply closes the channel, so a channel found closed at the deadline is read once more before it counts as shut down; `flush` does the same |
+| `respond(client, message, payload)` | PUB to the message's reply subject |
+| `flush(client, timeout)` | PING after everything queued before it, and waits for its PONG |
+| `stats(client) -> NatsStats` | `connected`, `connections`, `losses`, `sent`, `received`, `pending`, `stale`, `overflow`, `slow`, `refused`, `dropped`, `lingering`, `errors`, `last_error` |
+| `shutdown(client)` | after the commands queued before it, hands the writer every byte queued, closes the connection and every subscription's channel; every later call, and every one queued behind it, is `nats: the client is shut down` |
+
+The client task sends PING every `ping_interval` and loses a connection that left
+`max_pings_out` of them unanswered; it answers the server's PING with PONG. A `-ERR` that does
+not end the connection (a permissions violation) is counted in `errors` and `last_error`.
+
+### 36.3 Reconnect and the outgoing buffer
+
+A lost connection (the connection ended, a write failed, bytes that are no operation, the
+backlog, or the keepalive) sends the number of losses so far on `Nats.losses`. Delivery is at
+most once: the client task takes back the chunk the writer has not taken and drops it with the
+unsent bytes, and their messages move from `sent` to `dropped`; what the writer took is not
+sent again. Every acknowledged message is in exactly one of `sent`, `pending`, `stale`,
+`overflow`, `refused` and `dropped` (the doc of `NatsStats`). While no
+connection is up the client task holds each published message, up to `pending` messages and
+`pending_bytes` bytes, header blocks included; one past either is dropped and counted
+(`overflow`). A message is stale when more than
+`pending_age` (1 s, the case study's rule) passed since it was queued: a stale one is dropped and
+counted (`stale`) instead of written, whether it waited in the buffer or in the command channel,
+so a reconnect never replays a stale message. `reconnect(client, stream)` runs the handshake on
+a new stream in the caller's task and hands it over; the client task closes the old connection
+if one is up, subscribes again to every live subscription (UNSUB with the messages left for one
+with a limit), writes the held messages that are still fresh and that the new server's INFO
+takes (the others are counted in `refused`; a held request among them is answered with the
+refusal at once, and its inbox is not subscribed again), and starts a reader and a writer for
+the new connection; the reader and writer of an old one are ignored. From then on publishing
+is checked against the new INFO, and against each INFO update the server sends.
+`connect_to(endpoint, timeout, options, limits)` is a client over TCP that reconnects itself:
+a task reads `losses` and dials again, waiting `retry_delay(attempt)` (100 ms doubled per
+attempt, at most 10 s) before each attempt; connect and handshake give up after `timeout`.
+
+`shutdown` hands the writer the chunk it has not taken and the unsent bytes as one last chunk,
+closes its channel and returns; it waits for no write. The writer writes everything the client
+acknowledged, then closes the stream. Commands queued behind `Shutdown` are answered as shut
+down (a publish, request, subscribe, flush or stats call, and a second `shutdown`), so no caller
+waits without a bound.
+
+The substrate's `close` ends a stream's write half only (a TCP `shutdown(Write)`), and a read
+or write blocked on a silent peer is not woken by it. So `dial` sets the stream's idle timeout,
+after the handshake, to `quiet_limit(options)`, `ping_interval` times `max_pings_out + 1`,
+saturating at about 100 years: a live server answers a PING within it, and the reader of a dead
+connection ends. A `ping_interval` of 0 or less is refused by the handshake. A writer blocked on
+a server that stopped reading stays blocked until the server or the kernel ends the connection:
+the substrate has no operation that ends a blocked write, a full `shutdown(Both)` of a TCP
+stream (or an abort that closes the socket) callable from another task without the stream's
+write lock. Per lost connection to such a server, the growth is two tasks (the writer until
+then, the reader until `quiet_limit`), one socket, and the one chunk of the blocked write, at
+most `backlog` bytes plus one message; the client task holds none of it. The client counts these
+connections (`NatsStats.lingering`, from the `Ended` each task sends) and `connect_to` does not
+dial while `NatsLimits.lingering` (4) of them run, so the growth is at most `lingering` times
+that. A caller that reconnects itself reads `lingering` from `stats`. After `shutdown` the
+connection that was up may linger the same way.
+
+### 36.4 Tests
+
+- `std/protocol/nats.ignite`, both targets, 37 tests, all but eight over `Pipe.pair()`, with a
+  scripted server (`script`: reads each expected request byte-exact, writes its reply, and with
+  `hold` keeps the connection open until the client closes it): every client operation encodes
+  as the protocol writes it; every server operation decodes with the following bytes kept, and
+  every proper prefix of each is `Partial`; each refusal and each limit; the defaults; subject
+  matching and validity; the handshake with user and password, with a token, and with
+  `verbose`, a server PING and an INFO update inside it; a refused, ended and garbled
+  handshake; subscriptions with a wildcard and a queue group, HMSG headers and reply,
+  publishing with headers and `respond`; the checks before sending; the server's PING and a
+  counted `-ERR`; request and reply, its deadline and no responders; `unsubscribe_after` and
+  `unsubscribe`; a lost connection that drops a message stale when published and one gone
+  stale while held, and sends the fresh one and the subscription on `reconnect`; the bounded
+  outgoing buffer; `connect_to` over TCP, which reconnects by itself and subscribes again; a
+  keepalive that loses a silent connection; a shut-down client; `retry_delay`. The adversary's
+  cases, moved in: a TCP server that stops reading during a burst of forty 1 MB publishes is
+  lost by the keepalive within 3 s, and without the burst too; one is lost by a 1 MiB backlog
+  with the keepalive at 120 s; the buffer's byte bound counts the header block; after a
+  reconnect publishing and requests are checked against the new server's `max_payload`, and a
+  held message it refuses is counted, not sent; `unsubscribe_after` sends the messages left on
+  the new connection; a reply after a request's deadline reaches nobody; MSG, HMSG and PING
+  written one byte per read are read whole. From the second pass: forty 1 MB publishes
+  acknowledged while the server does not read are all written after `shutdown`; after a loss
+  by the backlog `sent` times the message size is what the server reads, and the counters add
+  up to the 40 acknowledged; eight publishers racing `shutdown` all return; a `connect_to` loop
+  against a server that stops reading stops at `lingering` (2) lost connections, and after
+  `shutdown` only their two tasks each remain until the server ends; an INFO update on the live
+  connection bounds publishing; a held request the new server refuses gets the refusal and no
+  SUB of its inbox; a quiet TCP connection whose server answers each PING is kept;
+  `quiet_limit` saturates, and a `ping_interval` of 0 is refused; on the client task's state,
+  a loss leaves no chunk in the writer's channel and counts its messages as dropped.
+- `nats::a_real_server_on_both_targets` in `crates/ignite/tests/nats.rs`, `#[ignore]` like
+  `image::`, since `nats-server` is not installed where the gate runs: per target, a server with
+  a user and a password, then `connect_to` with them, wildcards, a queue group, headers, a
+  request answered by a task, no responders, a wrong password, and a reconnect through a proxy
+  in the test that cuts the connection: a message held 1.5 s is dropped, a fresh one arrives.
+  Run with `cargo test -p ignite --test main nats:: -- --ignored` where `nats-server` is on
+  `PATH`.
+- `layering::` reads `nats` as a protocol name from the file name; no word of the tree contains
+  it, so `ORDINARY_WORDS` gets no entry.
+
+## 37 HttpApp sees its connection, holds, takes over and answers oversized bodies
+
+**Status: implemented in `story:http-app-connection`.**
+
+Case study gap G28 (`docs/research/case-study-gaps.md`): a WebSocket or long-poll service kept
+a hand-written HTTP server, because the `HttpApp` handler never saw its connection (no peer
+address for an allow list, no takeover for an upgrade), could not wait (waiting on a channel
+not in the state is E017 in a handler), and std answered a body over the limit with its own 413
+before the application ran. Waiting uses section 30's channels.
+
+### 37.1 The surface
+
+```ignite,fragment
+// std.net
+type Connection {
+  peer: Endpoint
+  local: Endpoint
+  tls: Bool = false
+}
+fn Connection.unknown() -> Connection
+fn Connection.of(stream: TcpStream) -> Connection
+
+// std.protocol.http
+type Request { .., connection: Connection = Connection { peer = Endpoint { address = "", port = 0 }, local = Endpoint { address = "", port = 0 } } }
+
+type HttpApp<S, T> {
+  state: S
+  handle: fn(state: S, request: Request) -> Response requires [state.*] = not_found
+  piece: fn(state: S, request: Request) -> IoResult<Option<Bytes>> requires [state.*] = no_piece
+  reply: Option<fn(state: S, request: Request) -> Reply<S, T> requires [state.*]> = None
+  on_oversized: Option<fn(state: S, head: Request, limit: ByteSize) -> Response requires [state.*]> = None
+}
+
+enum Reply<S, T> {
+  Respond(Response)
+  Hold(Receiver<Response>, Duration, Response)
+  Upgrade(Response, fn(state: S, request: Request, stream: T, early: Bytes) -> IoResult<Unit> requires [state.*, stream.read, stream.write])
+}
+
+type Holds { events: Option<Sender<HoldEvent>> }
+enum HoldEvent { Held(Receiver<Response>), Drain }
+fn Holds.none() -> Holds
+fn Holds.start() -> Holds
+fn drain_holds(holds: Holds) -> Unit
+fn not_found<S>(state: S, request: Request) -> Response
+fn serve_connection<T: ByteStream, S>(stream: T, connection: Connection, limits: HttpLimits, application: HttpApp<S, T>, holds: Holds) -> IoResult<Unit>
+fn serve_listener<S>(listener: TcpListener, limits: HttpLimits, application: HttpApp<S, TcpStream>) -> IoResult<Unit>
+
+type HttpServer<S> { listener: TcpListener, application: HttpApp<S, TcpStream>, .. }
+```
+
+- `HttpApp` gains the type parameter `T`, the stream type an `Upgrade`'s takeover gets. A fn
+  type names effects only on its own parameters (13.3), and the takeover reads and writes the
+  stream, so the stream must be one of its parameters, and a fn value has one type: `T` is that
+  type. `HttpServer<S>` keeps one parameter and names `HttpApp<S, TcpStream>`; a pipe test's
+  `HttpApp { .. }` infers `PipeStream` from `Http.serve`'s stream: a record literal passed to a
+  generic fn is now typed against the parameter as far as the arguments before it bind it
+  (`crates/ignite-types` typer, `generics::a_record_literal_argument_takes_its_type_parameters_from_the_call`).
+  A closure is deferred to the last pass and sees every other argument. A record literal with a
+  type parameter of its own that neither the arguments before it nor its given fields bind
+  waits for the plain arguments after it and is typed before the closures, so a literal before
+  the argument that binds its parameter infers it too
+  (`adversary_http_app::a_record_literal_before_the_argument_that_binds_its_parameter`); one
+  whose parameter no argument binds is still E042 at the literal.
+  A literal bound by `let` with no annotation still has no `T` (E042), so such a binding writes
+  `let app: HttpApp<S, PipeStream> = ..`. A declaration that wrote
+  `HttpApp<X>` now writes `HttpApp<X, TcpStream>` (two fixtures of `crates/ignite/tests`
+  did). Every literal `HttpApp { state, handle }` stays as it was.
+- `reply` and `on_oversized` are `Option`s of fn types, not fns with defaults, so that their
+  absence keeps the behaviour before this section: without `reply` the request goes to `handle`,
+  without `on_oversized` a body over the limit is 413 and a lingering close. A default fn could
+  not call `handle`, nor tell std's 413 from an application's.
+- `handle` gains the default `not_found` (404), for an application that answers through
+  `reply` alone.
+- A generic `reply` or takeover fn is used as a value at the instance the field's type gives:
+  `fn poll<T>(state: Waiters, request: Request) -> Reply<Waiters, T>` and
+  `fn echo<T: ByteStream>(state: Unit, request: Request, stream: T, early: Bytes) -> ..`.
+
+### 37.2 The connection
+
+`Request.connection` is the connection the request came on, set by the session for every
+request it asks of the application (`handle`, `reply`, `piece`, `on_oversized`); a request
+`next_request` parses has `Connection.unknown()`. `serve_listener`, which `HttpServer.main` is,
+gives each accepted stream `Connection.of(stream)`: `peer()` (26.1) and the new builtin
+`local()`. `Http.serve` knows no address of a `T: ByteStream` and gives `Connection.unknown()`;
+`serve_connection` takes the view as an argument, which is how the tests serve a pipe as a
+connection from a given peer. `tls` is false: no TLS layer exists yet (`Tls<T>`, AGENTS.md).
+
+`s.local()` on a `TcpStream` is this end of the connection, an `Endpoint` written as `peer`
+writes it: the address and port an accepted connection arrived at, the ones a connected stream
+left from. Pure, never fails, never waits; the substrate asks the operating system at each call
+(`getsockname`), so a stream that never asks pays nothing, and it stays known after `close`. A
+handle that is no stream gives `Endpoint { address = "", port = 0 }` on the LLVM target.
+
+| layer | `local` |
+|---|---|
+| `ignite-check` | `BUILTIN_METHODS`, `builtin_applies` on `TcpStream` |
+| `ignite-types` | `Builtin::TcpStreamLocal`, `(TcpStream, "local") -> Endpoint`, no effect; `builtin_method_std_modules` names `std.net` for it as for `peer` |
+| `ignite-io` | `TcpStream::local(&self) -> (String, i64)` |
+| Rust target | `{ let (address, port) = s.local(); Endpoint { address, port } }` |
+| LLVM runtime | `void ignite_rt_tcp_local(Endpoint* out, i64 stream)`, the address in the task's arena |
+| LLVM target | `rt_out` into an `Endpoint` temporary; the receiver is kept (`own.rs`) |
+| evaluator | no value at compile time |
+
+The generated code of a program that does not call `local` is unchanged; one that calls it
+needs the new builtin: `CODEGEN_REVISION` is `ignite-codegen/0.1.0-49` (wave 10, one bump with 38).
+
+### 37.3 Holding a request
+
+`Hold(receiver, deadline, on_timeout)` makes the connection's task wait (`wait_held`):
+`receiver.receive_within(deadline)` gives the answer, `on_timeout` is the answer when the wait
+ends empty: at the deadline, or at once when the channel is closed (every sender gone, or the
+drain). The answer goes through `checked` and is sent as `Respond`'s would be, so the
+connection goes on after it. The receiver is closed after the wait, so the application's `send`
+to an answered request returns false. A held request holds up only its own connection: each
+connection is a task of its own, and a channel wait blocks a task, not a worker (30.1); requests
+pipelined behind it wait. The wait does not watch the stream: a held request whose client has
+gone keeps its task, its receiver and its place in the register until a message, the deadline
+or the drain ends the wait, so the hold's deadline bounds what a vanished client costs.
+Effects: the wait is the session's, on a receiver the reply returned,
+so the handler's type keeps `requires [state.*]` and needs no effect of its own; no change to
+the effects of `crates/ignite-types` was needed for it.
+
+A thousand held requests over TCP with the clients in the same process (the last test of 37.7)
+first lost answers under the default IO mode `readiness`, and so did fifty in-process clients
+of an in-process echo server with no HTTP at all: a short read hid an end of stream behind it in
+the substrate. With that fixed (`fix(io): a short read no longer hides an end of stream behind
+it`) every request is answered in both IO modes. The test starts its clients a hundred at a
+time, each hundred once the ones before are held: `TcpStream.connect` is a blocking `connect`
+on the task's worker and the listener's backlog is 128, so a thousand connects at once overflowed
+the listener's queue, each dropped SYN blocked its worker until the retransmit, and once every
+worker was blocked so, the accepting task's among them, nothing was accepted for minutes.
+
+The drain (16.13). `serve_listener` keeps one `Holds` for all its connections,
+`Holds.start()` when the application has a `reply` and `Holds.none()` otherwise (only a `reply`
+holds a request; story `http-reply-cost-back`, section 40). `Holds.start()` is
+a bounded channel of `HoldEvent`s to a register task, `keep_holds`. Each held
+receiver is sent to it (`Held`) before the wait; the register keeps the receivers not yet
+closed, dropping answered ones as the list grows. Once the drain begins, `accept` fails, and
+`serve_listener` calls `drain_holds` before it returns the error: `Drain` closes every kept
+receiver, so each held request is answered at once with what was sent to it or with its
+`on_timeout`. The register then closes its channel, closes the receivers already queued behind
+`Drain` and ends, so the drain does not wait for its task; a request held later finds the channel
+closed (`send` is false) and `wait_held` closes its receiver itself, so it is answered at once
+too. One channel orders both, so no hold is missed. A register, not a `Store`,
+because `Store.new()` is test-only (E051) and a non-test fn cannot make one. `main` then
+returns and the process ends when the open connections have. `Http.serve` waits with
+`Holds.none()`, which no drain reaches.
+
+### 37.4 Taking the connection over
+
+`Upgrade(response, takeover)`: the session writes the head of `response`, `checked`, framed as
+an inline response to the request (`inline_framing`; a 101 has no body) but without a
+`Connection` field of Http's own: the application names `Connection: upgrade` and `Upgrade`
+(RFC 9110 section 7.8). Then it calls `takeover(state, request, stream, early)` on the
+connection's task, `early` being the bytes already read after the request (a client may send its
+first frame with the upgrade request). The session ends when `takeover` returns, and
+`serve_connection` closes the stream. A response `checked` refuses (`checked(r) != r`) is
+answered with `reject(.., 500, ..)`, and nothing takes over.
+
+### 37.5 A body over the limit
+
+`next_request` returns `Oversized(head, rest, length)` for a body over `limits.body` where it
+returned `Reject(413)`: the head, the bytes read after it, and the declared `Content-Length`,
+-1 for a chunked body found over the limit while it was decoded. Without `on_oversized` the
+session answers it as before, `reject(.., 413, ..)` (RejectHead for HEAD). With it
+(`oversized`), the hook's answer to `head` (asked as `asked` asks) and `limits.body` is sent;
+the connection goes on when the request keeps it, the answer does not list `close` and
+`length` is known: `discard` reads and drops the rest of the body and the session reads the
+next request from the bytes after it. Otherwise the answer is followed by `linger`, the
+lingering close `reject` uses. A chunked body over the limit always ends the connection, since
+its remaining chunks are not decoded; so does a body announced with `Expect: 100-continue`
+(`expects_continue`, any case): such a client waits for 100 before it sends the body (RFC 9110
+section 10.1.1), the server never sends 100 for a body it refuses, and reading `length` bytes
+would take the client's next request for the body. The discard of a `Content-Length` body is
+bounded by the length and by the idle timeout of each read, not by `limits.drain`.
+
+The inline tests that compare `next_request` with `Reject(413)` read it through `next_with`,
+which maps `Oversized(head, ..)` to `rejected(head, 413)`, the session's answer without a hook;
+their assertions are unchanged.
+
+### 37.6 Claims
+
+No `satisfies` or `verifies` clause moved; `next_request`, `session` and `reject` keep theirs,
+and `ignite conformance std/protocol/http.ignite` prints the claims it printed before on both
+targets. What this section adds is outside the imported catalogue: `std/rfc/rfc9110.ignite`
+imports sections 5, 6, 7.2 and 9.x of RFC 9110, not Upgrade (section 7.8), Expect (section
+10.1.1) or 413 Content Too Large (section 15.5.14), so no requirement of those sections is
+claimed, verified or reported as a gap; their behaviour here rests on the inline tests of 37.7.
+
+### 37.7 Tests
+
+- `std/protocol/http/connection_tests.ignite` (`std/protocol/http.ignite` until wave 11, which
+  moved them to keep that file under 3,000 lines; both targets, over `Pipe.pair()` unless
+  named): "the handler sees
+  its connection and an allow list refuses a peer with 403" (a pipe from a listed and an
+  unlisted peer, a TCP stream through `Connection.of`, and `Http.serve`'s unknown connection);
+  "a held request is answered by its message and the connection goes on"; "a held request is
+  answered on_timeout at its deadline"; "a held request does not block another connection";
+  "the drain answers every held request at once with its on_timeout"; "an upgrade writes its
+  response and hands takeover the stream and the bytes after the request"; "an upgrade whose
+  response is refused is 500 and nothing takes over"; "on_oversized answers a body over the
+  limit, which is discarded, and the connection goes on" (in one delivery and in three); "on_oversized
+  closes the connection when its answer or the request asks to, or the body is chunked"; "a
+  thousand requests held over TCP are each answered by their message" (1,000 clients over
+  loopback, each held until one message, a further connection answered while they wait).
+- `std/net.ignite`: "the local end of a stream is this end, in both families".
+- `drain::the_drain_answers_a_held_http_request_at_once` (`crates/ignite/tests/drain.rs`,
+  `fixtures/http_hold_drain.ignite`, both targets): an `HttpServer` holds a request for 60 s;
+  after SIGTERM the client reads the hold's `on_timeout` within 30 s and the server exits.
+- `ignite-types` `generics::a_record_literal_argument_takes_its_type_parameters_from_the_call`.
+- `ignite-io` `net::tests::a_stream_knows_its_local_end_in_both_families`; `ignite-rt`
+  `abi::peer_timed_out_and_connect_within` (now also `tcp_local`); `ignite-types`
+  `builtins::tests::substrate_methods_name_net_for_peer` (now `local` and `peer`).
+- Moved, not changed: `render_head` renders the status line and header fields through the new
+  `render_fields` (an upgrade's head has no `Connection` field of Http's own), so
+  `ignite-rustgen` `allocations::text_is_appended_in_place_and_a_final_conversion_takes_the_buffer`
+  looks for the in-place header loop in `render_fields`. The plan goldens `todo.model.json` and
+  `studio.model.json` show the two new `HttpApp` fields, `None`, and moved std spans.
+
+## 38 TLS client sessions as a ByteStream
+
+**Status: implemented in `story:tls-client`.**
+
+Case-study gap G25: the service refuses https backend URLs at start. A program opens a TLS
+client session over a `TcpStream`, with the server's certificate verified against the system
+roots by default, and uses it wherever a `ByteStream` is taken, so a protocol role generic over
+its stream runs over TLS unchanged. The TLS engine is rustls in `crates/ignite-io` (`AGENTS.md`,
+layout rules: the substrate knows sockets and TLS sessions); the module `std.tls` holds the
+options record, the error test and the inline tests.
+
+### 38.1 Surface
+
+| item | meaning |
+|---|---|
+| `Tls.client(stream: TcpStream, server_name: Text, options: TlsOptions) -> Result<TlsStream, IoError>` | builtin static, effect `net.connect`: the client handshake on `stream`; `server_name` is sent as SNI and is the name (DNS name or IP address) the certificate must be valid for |
+| `TlsStream` | builtin handle type (`Ty::TlsStream`), visible in every module as `TcpStream` is; implements `ByteStream`, so E096 accepts it for a bounded parameter; a copy shares the session |
+| `read`, `write_all`, `close`, `set_idle_timeout`, `write_urgent`, `urgent_pending` | the six stream methods, resolved to the `Stream*` builtins with the receiver's effects of 18.3 (`read`: `<root>.read`, the rest `<root>.write`, `urgent_pending` `<root>.read`); each backend dispatches by the receiver's type as for a bounded parameter |
+| `session.alpn() -> Text` | builtin `TlsStreamAlpn`, pure: the protocol the server chose from `options.alpn`, empty for none |
+| `type TlsOptions` (`std.tls`) | `alpn: List<Text> = []` (offered, most preferred first), `authorities: Text = ""` (PEM certificates trusted instead of the system roots), `verify: Bool = true`, `handshake_timeout: Duration = 10 seconds` |
+| `certificate_refused(error: IoError) -> Bool` (`std.tls`) | whether the error is the refusal of the server's certificate |
+
+Behaviour:
+
+- The handshake reads with the time left before `handshake_timeout` as the stream's idle
+  timeout and restores the stream's own idle timeout when it returns. A timeout that is not
+  positive is refused before any IO.
+- System roots: `SSL_CERT_FILE`, else the first system bundle that exists
+  (`/etc/ssl/certs/ca-certificates.crt` and the other distributions' paths), else every file of
+  `SSL_CERT_DIR` or of `/etc/ssl/certs` and `/etc/pki/tls/certs`; read once per process.
+- `verify: false` takes any certificate for any name; the handshake signatures are still
+  checked.
+- `close` sends close_notify, then closes the write half of the TCP stream. A read returns
+  `Eof` after the server's close_notify and when the stream's idle timeout passes; a connection
+  closed without close_notify is an error, since the data may have been cut short. Dropping the
+  last handle closes the socket without close_notify.
+- `write_urgent` is refused and `urgent_pending` is false: TLS carries no urgent data.
+- A reader task and a writer task share one session: the rustls connection is behind a lock
+  never held across a wait; a read holds the session's read lock across its wait for
+  ciphertext, a write holds its write lock until its records are in the stream's send buffer.
+- Records nobody wrote (the handshake's, an alert, a key update) are sent before the call
+  returns: the session flushes right after queuing them, holding its write lock. Left in the
+  stream's send buffer, the client's Finished kept the stream on the worker's flush list, and a
+  reader task's flush then waited for the write lock of its writer task parked on a full socket,
+  a deadlock on the Rust target under `readiness` (adversary pass 1).
+
+Errors, each an `IoError` whose message starts with `tls <server_name>: `:
+
+| case | message |
+|---|---|
+| a certificate the client does not accept | `tls <name>: certificate refused: <reason>`, `<reason>` one of `expired`, `not yet valid`, `not valid for <name>`, `unknown issuer`, `revoked`, or rustls' name of the error |
+| the deadline passed | `tls <name>: handshake timed out after <ms> ms` |
+| the timeout is not positive | `tls <name>: handshake timeout <ms> ms is not positive` |
+| no certificate in `authorities` | `tls <name>: no certificate in the authorities` |
+| a server name that is no DNS name or IP address | ``tls: invalid server name `<name>` `` |
+| an ALPN entry that is empty or over 255 bytes | ``tls <name>: ALPN protocol `<p>` is not 1 to 255 bytes`` |
+| the server closed during the handshake | `tls <name>: the server closed the connection during the handshake` |
+| anything else rustls refuses (a peer that speaks no TLS, an alert) | `tls <name>: <rustls' message>` |
+
+### 38.2 Lowering
+
+- Rust target: `::ignite_io::TlsStream::client(stream, name, ::ignite_io::TlsOptions { .. })`,
+  the record converted field by field; the stream methods as `<::ignite_io::TlsStream as
+  ::ignite_io::ByteStream>::read(..)`; `alpn` as the inherent method.
+- LLVM target: a session is a handle of the runtime's table (`Handle::Tls`), owned and
+  released as a stream is; `ignite_rt_tls_client(i64 stream, Text* name, TlsOptions* options,
+  i64* out, IoError* err)` with `TlsOptions` as its record layout (`IgniteTlsOptions`:
+  `alpn`, `authorities`, `verify` as `i8`, `handshake_timeout` in nanoseconds),
+  `ignite_rt_tls_alpn(Text* out, i64)`, and `ignite_rt_tls_<op>` for the six stream methods
+  with the signatures of the `pipe_<op>` entries. A `tls_*` entry given another handle fails
+  with "`<h>` is not a TLS stream".
+- Generation changes (two builtins, one type), so `CODEGEN_REVISION` is `ignite-codegen/0.1.0-49` (wave 10, one bump with 37).
+
+### 38.3 Dependencies
+
+`rustls` 0.23 with the `ring` provider, `std` and `tls12` (no default features, so no
+`aws-lc-rs`), in `ignite-io`; its tree adds `ring`, `rustls-webpki`, `rustls-pki-types`,
+`untrusted`, `subtle`, `zeroize`, `once_cell` and `getrandom` 0.2. It sits behind the
+`ignite-io` feature `tls`: the runtime archive of the LLVM target turns it on, and the Rust
+target turns it on in a generated crate's `Cargo.toml` (program or `ignite-std`) whose source
+names `::ignite_io::Tls..`, so a program without TLS compiles neither rustls nor ring
+(`crates/ignite-rustgen/tests/streams.rs`,
+`only_a_program_with_tls_turns_on_the_substrate_feature`). On the LLVM target a program that
+opens no session links none of the engine (`llvm_build::a_program_without_tls_links_no_tls_engine`):
+the runtime's handle table holds a session behind `dyn Any`, so only `ignite_rt_tls_client`
+reaches the engine's drop and clone, and the workspace's dev profile builds these eight crates
+and `rustls` at `opt-level = 2`, so they export no shared generic instances that the runtime's
+own code would link in their place (in the dev runtime archive they made the LLVM release
+executables of terminald and todod 9 and 11 % larger than at wave 9, `quality::release_binaries_stay_within_10_percent_of_v0_15_0`).
+Nothing is replaced: the workspace
+had no TLS. `rcgen` 0.14 is a dev-dependency of `ignite-io`
+and `ignite` only, for the authorities the tests generate. No crate reads the system roots for
+us (`rustls-native-certs` was not taken): the substrate reads the PEM bundle itself.
+
+### 38.4 Tests
+
+- `crates/ignite-io/tests/tls.rs` (`tls::`): a TLS server in the test with an authority
+  generated by `rcgen`, on the loopback interface: a verified session carries bytes both ways
+  as a `ByteStream`; a wrong host name, an expired certificate and the test authority under the
+  system roots are refused with their messages; `verify: false`; an IP address as the name;
+  ALPN; the handshake deadline against a silent server; a timeout that is not positive; a peer
+  that speaks no TLS; an invalid server name; authorities without a certificate; a handshake
+  read waits only for the time left; `verify: false` still checks the handshake signature;
+  urgent data.
+- `crates/ignite-io/tests/tls_adversary.rs` (adversary pass 1): names, wildcards, chains,
+  TLS 1.2, a trickling or hanging-up server, truncation, and a reader and a writer on one
+  session over 10 MiB, as threads and as tasks under both IO modes.
+- `tls::rust::sessions_run` and `tls::llvm::sessions_run` (`crates/ignite/tests/tls.rs`): the
+  same servers started by the test, and `ignite test` of a program with the authority's PEM and
+  the ports filled in, on each target: a session as a `ByteStream` through a generic fn, ALPN,
+  a wrong host name (and `certificate_refused`), an expired certificate, verification against
+  the system roots by default, `verify: false`.
+- `tls_adversary::rust::adversary_cases_run` and `tls_adversary::llvm::adversary_cases_run`
+  (`crates/ignite/tests/tls_adversary.rs`), each under both IO modes: among them a writer task
+  and the reader task it spawns carrying 10 MiB on one session, more than the socket buffers
+  hold.
+- `std/tls.ignite`, both targets, without a TLS server: the defaults, the handshake deadline
+  against a server that never answers, a timeout that is not positive, a peer that speaks no
+  TLS, an invalid server name, authorities without a certificate.
+- No network: every certificate is generated in the test.
+
+## 39 A dev build, a check and a plan take no longer than at v0.15.0
+
+Story `build-time-back`: rows 6.2 (`llvm`, `rust`), 6.1 (`all/check`, `all/plan`) and the dev
+cells of 3.2 of `docs/quality.md` at v0.15.0 or better. The dedicated host has no cargo
+configuration, so its dev profile has full debug information; every rule below holds for it
+and for a configured `debug` alike.
+
+- Runtime archive. The workspace's dev profile builds every crate from outside the workspace
+  without debug information (`[profile.dev.package."*"] debug = false`) and `ignite-rt` and
+  `ignite-io` with line tables (`debug = "line-tables-only"`); it replaces the five `debug =
+  false` lines of the TLS engine's crates. `ring`'s build script compiles its C and assembly
+  with `-g3` in every profile, so `.cargo/config.toml` sets `CFLAGS = "-g0"`, which `cc`
+  passes last (a `CFLAGS` of the environment wins). A dev executable on the LLVM target holds no compile
+  unit of a third-party crate (`dev_build::dev_todod_links_no_third_party_debug_information`,
+  with the archive built as configured and with `CARGO_PROFILE_DEV_DEBUG=2`). The driver gives
+  its own cargo runs (the build ahead and the program's build) `HOST_CFLAGS=-g0` and
+  `TARGET_CFLAGS=-g0` wherever it stands, unless `CFLAGS`, `TARGET_CFLAGS`, `HOST_CFLAGS` or a
+  `CFLAGS_<target>` is set (`c_flags_tests::the_driver_sets_cflags_only_where_the_user_set_none`),
+  so a TLS program built outside the repository holds no third-party compile unit either
+  (`dev_build_adversary::a_tls_program_built_outside_the_repository_holds_no_third_party_debug_information`).
+  `cc` passes them after `CFLAGS`, and the driver leaves `CFLAGS` alone: a user's `[env]
+  CFLAGS` of a cargo configuration, which cargo does not apply over a `CFLAGS` of its
+  environment, reaches the C compiler
+  (`dev_build_adversary::c_flags_of_the_users_cargo_configuration_reach_the_c_compiler`). A
+  profile without debug information for the crates that compile C would not do: `ring` asks
+  for `-g3` whatever cargo's `DEBUG`.
+- Linker. A dev build on the LLVM target without `--triple` and `--static` links with
+  `-fuse-ld=lld` when `ld.lld` lies beside the clang it runs, its symbolic links resolved, and
+  with clang's default linker otherwise (`docs/llvm.md` section 1); both carry a build id
+  (`dev_build::dev_link_uses_lld_beside_clang_else_the_default_linker`). The dedicated host
+  installs `lld-<major>` of the LLVM it installs (`tools/ignite-perf/src/remote-user-data.sh`,
+  `remote::the_host_installs_lld_beside_its_clang`).
+- Rust target. The generated `Cargo.toml` builds the crates from outside the project without
+  debug information and `ignite-io`, the program and `ignite-std` with line tables, split out
+  into `.dwo` files (section 6.2), whatever the profile's own `debug`; a build or a test build
+  into a directory without `Cargo.lock` starts from the substrate workspace's lock, so cargo
+  makes no index request (`dev_build::fresh_rust_build_makes_no_index_request`).
+- Dependencies ahead (Rust target). Before it parses (after, when `--out` is not given), the
+  driver writes a crate that depends on `ignite-io` with the generated project's profiles into
+  `<target-dir>/ignite-prebuild/`, with the project's lock or else the substrate workspace's,
+  and starts `cargo build --quiet --offline -p corosensei -p nix -p termios` from it into the
+  build's target directory, its output discarded: the crates `ignite-io` builds on, which the
+  program's build then finds fresh whatever features of `ignite-io` it turns on (`process` and
+  `tls` change none of them; `units::only_tls_changes_a_dependency_of_ignite_io`,
+  `dev_build::dependencies_built_ahead_are_fresh_in_the_programs_build`). The program's build
+  starts after that cargo has ended. A target directory that has built `nix` for the profile
+  builds nothing ahead, and neither does a `--static` build. A load, type or generation error
+  stops that cargo and every process under it before the driver reports the error
+  (`dev_build::a_type_error_stops_the_build_ahead`), and so does a panic as it unwinds
+  (`prebuild::tests::a_panic_stops_the_build_ahead_and_what_it_started`). While it runs, SIGTERM,
+  SIGINT and SIGHUP sent to the driver alone are taken by a thread of the driver's, which stops
+  it the same way and ends the driver by that signal, also one it takes while it is being
+  stopped (`prebuild::tests::a_signal_the_watcher_takes_while_it_stops_ends_the_driver`); for
+  that time every other thread blocks them, the main thread too, which waits for the compiling
+  thread and blocks them when asked. A signal the driver ignores stays ignored, one it was
+  started with blocked stays blocked
+  (`dev_build_adversary::a_driver_ended_by_sigterm_leaves_no_build_ahead`, `_sigint_`,
+  `_sighup_`, `a_driver_started_with_an_ending_signal_blocked_keeps_it_blocked`). The cargo
+  starts (`posix_spawn`) with the signal mask the driver was started with, so it and what it
+  starts block none of the three
+  (`dev_build_adversary::the_build_ahead_blocks_no_signal_and_ends_on_sigterm`). A command that
+  builds nothing ahead makes no signal call for it and reads no `/proc/self/status`
+  (`dev_build_adversary::a_command_without_a_build_ahead_makes_no_system_call_for_its_signals`).
+  SIGKILL cannot be taken: the build ahead then runs to its end, and the next build
+  finds what it built fresh (or waits for it on cargo's lock of the target directory). Row 6.2 rust: the driver's own work then
+  runs beside the longest chain of the dependency build (`libc`, `nix`) instead of before it.
+- Substrate. `nix` is built without `term`: standard input's raw mode reads and sets the
+  terminal attributes through the `termios` crate (`tcgetattr`, `tcsetattr`: one `ioctl` each,
+  as through `nix`), and only the tests that open a pty turn `term` on
+  (`units::ignite_io_builds_nix_without_term`); `term` cost 938 M of `nix`'s 6,038 M
+  instructions before its metadata. `ignite-io`'s `child` and `pipe` modules are behind its
+  feature `process`, which the generated manifest turns on when the program or its
+  `ignite-std` names a launcher, a child process or a pipe, and `runner` and the runtime archive
+  turn on (`streams::only_a_program_with_processes_or_pipes_turns_on_the_substrate_feature`);
+  without it `ignite-io` takes 383 M fewer before its metadata. A program without it does not
+  reset SIGCHLD at start: it starts no child.
+- Loader. The dependencies of each module (`module_dependencies`) are computed once per load
+  and kept with the parsed module (`dependency_scan_tests::check_and_plan_scan_each_module_once`
+  in `crates/ignite/src/lib.rs`); `plan.json` of the terminal design is unchanged
+  (`plan::design_model_is_byte_identical_across_processes_and_directories`).
+- Backtraces. Under `gdb`, a dev executable that fails names file and line of the Ignite fn
+  and of `ignite-rt`'s and `ignite-io`'s frames on the LLVM target, and of `ignite-io`'s and
+  the generated program's frames on the Rust target, whose failure report names the Ignite
+  line (`dev_build::dev_backtrace_names_ignite_and_substrate_lines_on_both_targets`).
+- Not taken: `incremental = false` in the generated dev profile (`ignite-perf` builds with
+  `CARGO_INCREMENTAL=0` already, so row 6.2 would not see it, and a user's rebuild would lose
+  it); `nix` without its `socket` feature: `recv` with `MSG_DONTWAIT` into an initialised
+  buffer has no safe call in `std` or `socket2` (their flagged receives take
+  `[MaybeUninit<u8>]`), and a socket made non-blocking at creation cannot block: the read of a
+  worker's only task in a request-reply rhythm (`sched::block_alone`), one blocking `recv` per
+  request now, would wait in `poll` first (`todod` 2 to 3 calls per keep-alive request), and
+  `connect` would return `EINPROGRESS` and wait in `poll` (one call more per outgoing
+  connection); whether a read may block is decided per read, so no socket can be given the
+  right mode at creation. Building `ignite-io` ahead as well: the program's build would wait for
+  its code generation instead of `nix`'s (worse in the model); one cargo for the dependencies and
+  the program: cargo fixes its units when it starts, before the driver has generated the
+  program. `nix` without `dir` (48 M) or `resource` (71 M, and `std` has no `setrlimit`), and
+  `entropy` and `environment` behind features (70 M together).
+
+## 40 An HTTP reply allocates no more than at v0.15.0, and a server without held requests starts no task for them
+
+Story `http-reply-cost-back` (rows 3.3 `rust/todo/get-1` and 3.8 `todo/get-1` of
+`docs/quality.md`).
+
+- Allocations per `GET /todos/1` reply of `todod`, counted by `valgrind --tool=memcheck
+  --trace-malloc=yes` over 200 replies after 50 on one connection
+  (`reply_cost::a_get_reply_allocates_no_more_than_at_v0_15_0`, the bounds measured by
+  `reply_cost::count_a_given_todod` over the v0.15.0 binaries): Rust target 37 at v0.15.0, 53
+  at wave 10, 37 at the unit's merge, 40 after `unsafe-sites-back`, 36 now; LLVM target 1, 1, 0.
+- The 16 came with `Request.connection` (section 37): `session` copied the connection into the
+  request it kept for the answer (its two addresses, 2 allocations), `asked` copied it again (2),
+  the request asked was copied once more for `handle` or `reply` (8) and `Respond`'s response was
+  copied out of the reply (4). `session` now sets the connection on the copy the application is
+  asked only, moves that copy into `handle` or `reply` and the response into `respond`; the
+  request kept for the answer gets the connection only for a `Streamed` response, whose `piece`
+  sees it. An `Upgrade` copies the request again for its takeover. The connection is still copied
+  once per request (2 allocations).
+- Two allocations per reply that v0.15.0 made too pay for those 2: `read_head` takes the first
+  read of a request as the request's bytes instead of copying it (`read_once`: a binding of
+  `stream.read` matched in place is a borrow of the stream to the last-use analysis, so it was
+  copied), and `ignite_io::flush` gives the emptied list of streams to send back to the task
+  instead of dropping it, so the task's next write does not allocate it again (the one
+  allocation per reply of the LLVM target).
+- Story `unsafe-sites-back` removed the counting allocator's own `realloc`: every growth of a
+  buffer became a new allocation, a copy and a free, and the three growths of rendering a reply
+  made the Rust count 40. The allocator reallocates through the system allocator again
+  (`census::tests::a_growing_buffer_is_reallocated_not_allocated_again` counts the calls that
+  reach `alloc` and `realloc`), and an inline reply is rendered into one buffer made with room
+  for its head (`HEAD_ROOM`, 128 bytes, and each header field) and its body (`render_fields`'s
+  `after`, `text_with_room`): the head is written into it, the body is appended to it from the
+  response instead of being copied first, and the buffer becomes the bytes sent, each step
+  taking the buffer of the one before, not copying it (on the Rust target a conversion is a
+  move only as a function's last expression, which `head_bytes` and `render_framed` keep;
+  `allocations::text_is_appended_in_place_and_a_final_conversion_takes_the_buffer` of
+  `crates/ignite-rustgen` reads the generated code). Rust target 36 now, LLVM target
+  0.
+- A task's stack overflow is reported on the worker's alternate signal stack. On the Rust target
+  that stack is std's, which every thread std starts has; `ignite-io` makes none. The LLVM
+  runtime, whose `main` is not Rust's, gives each worker its own
+  (`ignite_io::signal::give_workers_an_alternate_stack`, set by `init`). On the Rust target
+  `ignite-io` puts the ignore back over its handler for a signal found ignored at the start,
+  and std gives its threads a stack only when it installed a handler, for a signal not
+  ignored. An overflow faults with `SIGSEGV`, so by the start on the Rust target: nothing
+  ignored, or only `SIGBUS`, the overflow is reported and the process aborts; `SIGSEGV`
+  ignored, alone or with `SIGBUS`, the overflow ends the process by `SIGSEGV` with no report, as
+  a v0.15.0 program started so did (also when only `SIGSEGV` is ignored and std gave the
+  thread a stack), and other faults of an ignored signal reach the ignore too. The LLVM target
+  reports the overflow in all four starts (`stack_overflow::` and
+  `stack_overflow_adversary::` of `crates/ignite`; `scheduler::started_with_faults_ignored_*`
+  and `reply_adversary::started_with_only_*` of `crates/ignite-io`).
+- `serve_listener` starts the register of held requests (`Holds.start()`, the task
+  `keep_holds`) only when the application has a `reply`, the only way to hold a request:
+  `reply_cost::a_server_without_reply_starts_no_task_for_held_requests` builds
+  `tests/fixtures/http_census.ignite` on both targets and reads `Runtime.census().tasks` while
+  each of its servers answers its only connection: 1 without `reply` (2 before), 2 with one (as
+  before).
+- `valgrind` is a prerequisite of `reply_cost::`, as `strace` is of `scheduler::`.
+
+## 41 Every binary is at or below its v0.15.0 size, and peak memory at one connection with it
+
+Story `binary-size-back`: rows 3.9 and 3.2 of `docs/quality.md` towards v0.15.0's bytes
+without a program running slower, and row 3.8 at one connection with them. Each rule names the test that holds it; the bytes
+of each step are in the commits.
+
+- Dev links. The line tables of `ignite-rt`, `ignite-io`, the generated program and the
+  generated `ignite-std` are split out of their objects into `.dwo` files beside them
+  (`split-debuginfo = "unpacked"` in the workspace's and the generated dev profile), so the
+  linker neither copies nor relocates them. With lld the LLVM target's dev link compresses
+  the two address tables only
+  (`-Wl,--compress-sections=.debug_aranges=zlib`, the same for `.debug_addr`), with another
+  linker every debug section; the Rust target compresses nothing. gdb, lldb,
+  binutils and the standard library's symbolizer read both, so a backtrace keeps its files
+  and lines while the target directory holds the `.dwo` files, on the Rust target in the
+  standard library's frames too
+  (`dev_build::dev_backtrace_names_ignite_and_substrate_lines_on_both_targets`,
+  `binary_size_adversary::a_rust_dev_backtrace_names_file_and_line_of_a_standard_library_frame`). A dev link
+  takes fewer instructions than without either (`docs/llvm.md` section 1).
+- Packed relative relocations. Every dynamic executable of the LLVM target links with
+  `-z pack-relative-relocs` and needs glibc 2.36 or newer (`GLIBC_ABI_DT_RELR`; before, 2.34);
+  a `--static` build takes none. The Rust target links without it and needs 2.34 as before:
+  there it made the start longer, and the `rustflags` table that carried it replaced the
+  user's `build.rustflags`
+  (`binary_size::llvm_executables_pack_their_relative_relocations_and_rust_ones_do_not`,
+  `binary_size_adversary::a_rust_build_keeps_the_build_rustflags_of_the_cargo_configuration`).
+- Run time first. A binary may stay above its v0.15.0 bytes; a step stays only if the
+  instructions a program runs (callgrind: start, each request kind, a connection, a terminal
+  session, both IO modes, both targets) and the syscalls it makes are equal or fewer with it.
+  The commits that undid a step give the counts.
+- Scheduler. A worker's timers are a binary heap with at most one entry per task, whose
+  position each task slot records: the entry of a task that ends is taken out at once, so the
+  worker never wakes for it, and one armed earlier moves up in place (`sched::tests` in
+  `crates/ignite-io/src/sched.rs`,
+  `timer_adversary::a_worker_does_not_wake_for_the_timer_of_a_session_that_ended`). The epoll
+  reactor holds its registrations in a slab whose tokens carry a generation and whose free
+  slots form a list in the slab (`reactor::*::a_reused_registration_has_a_token_of_its_own`).
+  `IGNITE_IO=threads` stays.
+- Opt-levels. The generated manifest builds `nix` and `corosensei` at `opt-level = "s"`: the
+  start about 200 instructions shorter, the stripped executable about 570 bytes larger
+  (`units::release_profile_builds_nix_and_corosensei_at_opt_level_s`); `ignite-rt`, `ignite-io`
+  and `ignite-std` keep the default level.
+- Release LLVM link. `-Wl,--discard-all` drops the symbols local to the linked objects;
+  global names stay
+  (`binary_size::an_llvm_release_executable_drops_the_local_symbols_of_its_objects`).
+  A release executable's failure report is the dev one's on both targets
+  (`binary_size::a_release_failure_report_is_the_dev_one_on_both_targets`).
+- Release runtime. The LLVM target's release runtime archive is built on the standard
+  library from source without its backtrace symbolizer, one recipe for the driver's build
+  script, `ignite-perf runtime`, `task bench-throughput` and the dedicated host
+  (`crates/ignite-rt/release_std.rs`, `docs/llvm.md` section 1); a toolchain without
+  `rust-src` builds on the prebuilt one and says so
+  (`runtime::the_release_runtime_leaves_out_the_symbolizer_unless_the_std_source_is_missing`).
+  `AGENTS.md` § Releases names the requirement.
+- TLS engine. A program that names no `Tls` holds no symbol and no compile unit of `rustls`,
+  `webpki`, `ring` or `untrusted` on the LLVM target, dev and release, with the runner
+  archive (`binary_size::an_llvm_program_without_tls_links_no_tls_engine_in_dev_and_release`).
+  With the release-profile archive (`--static`, `ignite-perf runtime`) no section of those
+  crates is kept either, but functions of `ignite-io` that LLVM merged with identical ones
+  over `rustls` types keep those names as aliases; one crate of their own for the engine
+  (story `tls-engine-own-crates`) takes them out.
+- Libraries as needed. The LLVM target links its runtime libraries after `-Wl,--as-needed`,
+  as rustc links the Rust target, so an executable loads no `libm` it calls nothing of
+  (`binary_size::an_llvm_executable_loads_no_library_it_does_not_call`).
+- Not taken: DWARF 5, split or not (larger archive and executable, a longer link); zstd
+  debug sections (the standard library's symbolizer does not read them); compressing the
+  debug strings or every debug section (the link's instructions above their uncompressed
+  count); `ignite-io` at `opt-level = 1` in the generated dev profile (a dev `todod` 0.5 MB
+  smaller, compiling `ignite-io` four times the instructions); one codegen unit per crate
+  in it (a few tens of KB, compiled on one core); dropping `IGNITE_IO=threads` (decided to
+  stay); `opt-level = "s"` for `ignite-rt`, `ignite-io` and `ignite-std` (5 to 7 % more
+  instructions per request); a worker limit of its own from the affinity mask and the cgroup
+  quota (about 16,000 more instructions at the first connection than
+  `std::thread::available_parallelism`).
+- Generation changes in wave 11 (the LLVM target closes a served connection's socket at the
+  end of its session; the Rust target's release project carries the linker layout above), so
+  `CODEGEN_REVISION` is `ignite-codegen/0.1.0-50` (one bump for both).
+
+## 42 std.protocol.mysql: MySQL wire client with caching_sha2_password
+
+**Status: implemented in `story:std-mysql-client`.**
+
+Case-study gap G11: no MySQL client in std and no FFI. `std.protocol.mysql` is a client of the
+MySQL wire protocol (protocol 41, handshake version 10), generic over `T: ByteStream`, written in
+Ignite on the existing stream, channel, TLS and digest builtins (`std.digest.sha1` and `sha256`
+are the two scrambles' hashes); no builtin, no substrate code and no dependency is added, so the
+compiler and both backends are unchanged and no generated code changes. Its first consumer reads
+another party's database: the client sends no statement of its own except the one `read_only`
+asks for, and nothing it returns as a description of an error holds a statement or a credential.
+
+### 42.1 Packets, limits and errors
+
+| item | meaning |
+|---|---|
+| `frames(payload, sequence) -> Bytes` | one packet: frames of a 3-byte length and a sequence number modulo 256; a payload of 16 MiB - 1 bytes or more is split, and one that fills its last frame is followed by an empty frame |
+| `read_packet(stream, maximum, buffer, at, sequence)` | the next packet with its frames joined, the bytes read so far, the offset after it and the next sequence number; a frame with another number is `OutOfOrder(expected, got)`, a payload above `maximum` is `PacketTooLarge` when its frame header is read, before its bytes are |
+| `type MysqlLimits` | `packet` 64 MiB (one packet, frames joined), `row` 16 MiB (one row's packet), `rows` 1,000,000 (rows of one result set), `columns` 4,096 (its columns) |
+| `enum MysqlError` | `Server(ServerError)`, `Io(Text)`, `Closed`, `OutOfOrder(Int, Int)`, `PacketTooLarge`, `RowTooLarge`, `TooManyRows`, `TooManyColumns`, `Malformed(Text)`, `Unsupported(Text)`, `UnsupportedPlugin(Text)`, `FullAuthenticationNeedsTls`, `TlsNotOffered`, `WrongParameterCount(Int, Int)`, `NoConnection` |
+| `type ServerError` | the server's error packet: `code`, `sql_state` (empty when the server sent none), `message` |
+| `describe(error) -> Text`, `io_error(error) -> IoError` | the error in words; of `Server` the code and the SQL state only (`server error 1064 (42000)`), since the server's message can quote the statement and name the account; of `UnsupportedPlugin` the printable ASCII among the first 64 bytes of the name, which the server chose |
+
+Every call returns `Result<_, MysqlError>`. `Server` leaves the connection usable, as does
+`WrongParameterCount`, which is found before anything is sent. Every other error of a call on a
+connection closes its stream, so a connection that is out of step is not used again. `Closed` is
+the end of the stream and also a read that passed the stream's idle timeout, which the substrate
+reports alike. The module logs nothing.
+
+### 42.2 Connecting and authentication
+
+`type MysqlOptions { user, password = "", database = "", read_only = false, charset = 45
+(utf8mb4), limits, connect_timeout = 10 seconds, read_timeout = 30 seconds, server_name = "",
+tls: TlsOptions }`. `connect(endpoint, options)` is a `Client<TcpStream>`; `connect_tls` is a
+`Client<TlsStream>`: it reads the server's handshake on the TCP stream, sends the SSLRequest
+packet and opens the `std.tls` session with `options.tls` for `options.server_name` (the
+endpoint's address when empty) before the account is sent, and fails with `TlsNotOffered` when
+the server's handshake offers no TLS. Both dial with `TcpStream.connect_within(connect_timeout)`
+and set the stream's idle timeout to `read_timeout`. `start(stream, options)` authenticates on
+any stream already connected (the tests' `PipeStream`); `request_tls` and `authenticate` are the
+two steps of `connect_tls` for a caller with a stream of its own. Whether a connection uses TLS
+is the caller's choice of function, because the two give different stream types; there is no
+"TLS when offered" mode. On the LLVM target a connection's descriptor is released when the
+process exits: `quit` and every failure close the stream, but a client record that a function
+returns is owned by no block (`docs/llvm.md`, section 4), so a program that opens connections
+without end runs out of descriptors there. The Rust target releases the descriptor when the
+client is dropped or quit.
+
+| the server | the client |
+|---|---|
+| handshake names `mysql_native_password` | answers SHA1(password) xor SHA1(scramble, SHA1(SHA1(password))) |
+| handshake names `caching_sha2_password` | answers SHA256(password) xor SHA256(SHA256(SHA256(password)), scramble) |
+| authentication switch (0xFE) to either plugin | answers with that plugin's scramble over the new nonce |
+| `caching_sha2_password` fast authentication (0x01 0x03) | reads the OK that follows |
+| `caching_sha2_password` full authentication (0x01 0x04) on a TLS stream | sends the password and a NUL |
+| the same on a plain stream | `FullAuthenticationNeedsTls`, which names TLS; nothing is sent, the stream is closed. The RSA key exchange is not spoken |
+| any other plugin, in the handshake or in a switch | `UnsupportedPlugin(name)`; the pre-4.1 switch is `mysql_old_password` |
+| an error packet | `Server`, as for a wrong password (1045, `28000`) |
+
+An empty password answers with nothing under both plugins. The client asks for the capabilities
+`LONG_PASSWORD`, `LONG_FLAG`, `PROTOCOL_41`, `TRANSACTIONS`, `SECURE_CONNECTION`, `PLUGIN_AUTH`,
+`PLUGIN_AUTH_LENENC_CLIENT_DATA`, `CONNECT_WITH_DB` for a database and `SSL` after the
+SSLRequest. It asks for no compression, no `LOCAL_FILES`, no `MULTI_STATEMENTS`, no
+`MULTI_RESULTS` and not for `DEPRECATE_EOF`. A server without protocol 41 or without plugin
+authentication, a handshake of another version, a user or database name that holds a NUL and an
+authentication of more than 8 packets are refused. With `read_only` the client sends `SET SESSION
+TRANSACTION READ ONLY` after authentication and returns only when the server took it: the server
+then refuses every write of the session (1792, `25006`).
+
+### 42.3 Statements and values
+
+`query(client, sql)` is `COM_QUERY` over the text protocol. `prepare(client, sql)` is
+`COM_STMT_PREPARE` and gives a `Statement { id, parameters, columns }`; `execute(client,
+statement, parameters)` is `COM_STMT_EXECUTE` over the binary protocol with one
+`Option<MysqlValue>` per `?` mark; `close(client, statement)` is `COM_STMT_CLOSE`;
+`execute_once(client, sql, parameters)` does the three. `ping` is `COM_PING`, `quit` is
+`COM_QUIT` and closes the stream. A command of 16 MiB - 1 bytes or more (a long statement, a
+large parameter) travels as two frames or more, and its reply is read at the sequence number
+after its last frame. `query`, `execute` and `execute_once` give a `ResultSet
+{ columns, rows, affected, last_insert_id, warnings }`: the `Column`s (`schema`, `table`,
+`name`, `charset`, `length`, `kind`, `flags`, `decimals`) and the rows, each a
+`List<Option<MysqlValue>>` with `None` for NULL, or for a statement without a result set its
+affected rows and inserted id.
+
+A parameter is never put into the statement's text: `prepare` sends `sql` as written, and
+`execute` sends each parameter as a typed value behind the NULL bitmap (`Int` as BIGINT, `Bool`
+as TINYINT, `Decimal` as DECIMAL in text, `Text` as VAR_STRING, `Bytes` as BLOB, `None` as
+NULL). `query` sends `sql` as it is; a value from outside belongs in a parameter. Another number
+of parameters than the statement has is `WrongParameterCount(expected, got)` before anything is
+sent.
+
+| column type | `MysqlValue` |
+|---|---|
+| BIT(1) | `Bool` |
+| TINYINT (TINYINT(1), BOOL and BOOLEAN among them), SMALLINT, MEDIUMINT, INT, BIGINT, YEAR, signed and unsigned | `Int`; a BIGINT UNSIGNED above the largest `Int` is `Decimal` with all its digits |
+| DECIMAL | `Decimal`, the server's exact text |
+| FLOAT, DOUBLE | `Decimal`: the language has no floating-point type (the story's `Float`), so the value is its decimal text, as `std.json`'s and `std.data`'s `Decimal` |
+| CHAR, VARCHAR, TEXT, ENUM, SET, JSON | `Text`; bytes that are no UTF-8 become U+FFFD |
+| DATE, TIME, DATETIME, TIMESTAMP | `Text` as the server prints them: `2024-02-29`, `-34:11:12`, `2024-02-29 23:59:58.123456` |
+| BINARY, VARBINARY, BLOB, GEOMETRY, BIT wider than one | `Bytes` (a column whose character set is 63) |
+
+A TINYINT(1) is an `Int`, not a `Bool`: the 1 is a display width, and the column holds -128 to
+127 (0 to 255 unsigned), so a stored 2 reads as 2. BOOL and BOOLEAN are TINYINT(1) on the
+server and read as `Int` 0 or 1; only a BIT(1) is a `Bool`. A `Bool` parameter is still sent as
+TINYINT.
+
+The two protocols give the same value for the same column. The binary protocol sends a FLOAT and
+a DOUBLE as their four and eight bytes; `std.protocol.mysql.binary` (`float_text`,
+`double_text`) prints them as the shortest decimal digits that read back as the same number, by
+Burger and Dybvig's free-format algorithm over natural numbers in base 10^9, of two last digits
+equally near the even one, and in the notation of the server's text protocol: plain digits from
+1e-15 to below 1e15 (`0.1`, `123456.789`, `0.000000000000001`; `1000000000000000.2`, whose point
+has a digit after it), one digit, a fraction and an exponent beyond (`1e15`, `1.5e-16`), `-0` for
+a negative zero. The text protocol carries the server's own text, which for a FLOAT is rounded
+to six significant digits, so the same FLOAT can print with more digits from `execute` than from
+`query`; a DOUBLE prints alike (tested with values of no declared number of decimals). The
+module also prints the binary dates and times as the text protocol does (`date_text`,
+`time_text`, the fraction's digits from the column's decimals) and an unsigned 64-bit integer
+(`unsigned_text`).
+
+Refused, each as a typed error that closes the connection: the server's request for a local file
+(`LOAD DATA LOCAL INFILE`, `Unsupported`; the client never reads a file and sends nothing in
+answer), a second result (`Unsupported("more than one result")`), a row above `limits.row`
+(`RowTooLarge`, refused at its frame header), more rows or columns than the limits, a binary
+column of a type the client does not know (`Unsupported("column type N")`), and every reply that
+is cut, out of sequence, out of shape or followed by bytes (`Closed`, `OutOfOrder`,
+`Malformed`). A server error in place of a result set or between its rows is `Server` and leaves
+the connection usable.
+
+### 42.4 Several connections
+
+A connection carries one statement at a time: two tasks that send on one connection read each
+other's replies. A program whose tasks ask concurrently holds several connections in a
+`Pool<T>`: `pool_of(clients, wait)` makes one of connections already open, which holds as many
+as it starts with; `checkout(pool)` takes one out, waiting up to `wait` (`NoConnection` after
+it); `checkin(pool, client)` puts one back, or puts a new connection in the place of one that
+failed, and quits a connection the pool has no room for. `pool_query(pool, sql)` and
+`pool_execute(pool, sql, parameters)` take a connection, run the statement (`query`,
+`execute_once`) and put the connection back. A connection whose call failed with anything but
+the server's error is closed and not put back: a failed connection is out of the pool, and the
+pool is smaller until the caller hands it a new one. No statement is run a second time on
+another connection. `quit_idle(pool)` quits the connections that are free.
+
+### 42.5 Layering
+
+`mysql` is a protocol name for `layering::` (`docs/layering.md` rules 3 and 5): no module
+outside `std.protocol.*` and no file under `crates/*/src` names it, and none did. The module
+imports `std.net`, `std.io`, `std.tls`, `std.digest`, `std.encoding`, `std.result` and
+`std.text`, all of the base layer, and its own `std.protocol.mysql.binary`, which imports
+nothing.
+
+### 42.6 Tests
+
+- `std/protocol/mysql.ignite`, both targets, 56 tests with a scripted server (`play`: reads each
+  expected request byte for byte, writes its reply; the requests are written out by hand, the
+  scrambles are known answers computed outside the module), over `Pipe.pair()` but for two over
+  TCP: a command of two frames, which a pipe does not hold, and the close of a failed handshake,
+  which only a `TcpStream` tells from its idle timeout:
+  - packets: integers and lengths at every width; a packet over many small deliveries; a
+    payload of 16 MiB - 1 with its empty frame, and one longer, joined when read; a frame out of
+    sequence; a packet one byte above the limit, refused at its header; a cut packet;
+  - the handshake: the server's packet field by field and each refusal; both scrambles for two
+    passwords and two nonces; the response and the SSLRequest byte for byte; each plugin as the
+    server's default; the fast path; full authentication on a plain stream (the typed error, and
+    no byte sent after it); full authentication after the SSLRequest at sequence 2; a switch in
+    either direction; `sha256_password`, `mysql_clear_password` and the pre-4.1 switch refused
+    by name, and what `describe` keeps of a forged name; a refused account; a server without
+    `SECURE_CONNECTION`; eight authentication packets followed and the ninth refused; bytes
+    after the authentication; a NUL in the database name; the stream closed by a failed
+    handshake; a read-only session, and that no other session sends a statement;
+  - statements: a column definition from the protocol's documentation; a result set of 31
+    columns, one per supported type, with a row of values and a row of NULLs, over the text and
+    over the binary protocol with the same expected values (its TINYINT(1) holds 2); a
+    TINYINT(1) holding 0, 1, 2, -1 and, unsigned, 255 as that `Int` in both protocols, a BIT(1)
+    as a `Bool`; OK, an empty result set, a server
+    error first and between rows; the local-file request; a second result; each limit at the
+    bound and one past it; every cut, out-of-sequence and out-of-shape reply; `prepare` with
+    and without parameters and columns, with 4,096 columns and refused with 4,097; the bytes
+    of `execute` for one, six, nine and no parameters, a hostile text among them; a parameter
+    of 16 MiB - 1 bytes, whose command is two frames and whose reply is read at sequence 2;
+    the NULL bitmap's offset; `close`; a wrong parameter count;
+  - the pool: one caller per connection, the wait, a full pool, a connection returned after a
+    result and after a server error, a failed one taken out and replaced, three tasks on one
+    connection.
+- `std/protocol/mysql/binary.ignite`, both targets, 9 tests: 36 doubles and 13 floats against
+  the digits Python's `repr` and NumPy's `float32` print, in the server's notation (the largest,
+  the smallest and the lowest normal number, both notations at their bounds, a tie between two
+  last digits, the zeros, what is no number), unsigned integers up to 2^64 - 1, dates and times
+  at every length the protocol sends.
+- `mysql::real_servers_with_both_plugins_on_both_targets` in `crates/ignite/tests/mysql.rs`:
+  two containers of `mysql:8.0` on free loopback ports, one whose default plugin is
+  `caching_sha2_password` and one whose default is `mysql_native_password`, both with TLS under
+  an authority the test generates; then 10 Ignite tests on each target: the password over TLS
+  only and then the fast path, each plugin directly and after a switch, a wrong password,
+  `sha256_password`, an unknown authority, another host name, a closed port, a table with a
+  column of every type read alike by `query` and by `execute`, a TINYINT(1) holding 0, 1, 2
+  and -1 and a BOOLEAN holding TRUE read as `Int` by both, parameters (a hostile text
+  selects nothing), a read-only session refusing an INSERT, a pool of two connections under
+  three tasks with a killed connection taken out, and the read timeout. It is not `#[ignore]`:
+  it runs where `docker version` succeeds and the image is present (`docker pull mysql:8.0`),
+  and says on standard error why it did nothing anywhere else; it pulls nothing itself.
+  `IGNITE_MYSQL_IMAGE` names another image, `IGNITE_CONTAINER_LABEL` a label for the containers.
+- `mysql_adversary::` in `crates/ignite/tests/mysql_adversary.rs`, two tests. One runs as
+  `mysql::` does, against one container: a parameter of 16 MiB - 1 bytes and a statement of
+  16 MiB, each a command of two frames, and 17 DOUBLE values that print alike from `query` and
+  from `execute`. The other needs no container: 40 connections quit, 40 refused, 40 refused
+  TLS requests and 40 pools of three leave no descriptor on the Rust target and keep one each
+  on the LLVM target, which the test pins exactly (42.2).
+- `layering::`, with `mysql` in the protocol names it reads from std.

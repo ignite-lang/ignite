@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 use ignite_types::{QualName, QuantityKind, Reference, Ty, TypedProgram};
 
 use crate::model::Json;
+use crate::substrate::Handle;
 
 /// Why a JSON text is no value of the type it was decoded as
 /// (`docs/slice.md` 16.16, the inverse of 15.4): the first part that does
@@ -86,6 +87,9 @@ pub enum Value {
         message: String,
         exit_code: i64,
     },
+    /// A store, pipe end, channel end or capability of the model a test
+    /// runs over (`docs/slice.md` 33.5); E118 when it reaches the model.
+    Handle(Handle),
 }
 
 impl Value {
@@ -228,6 +232,7 @@ impl Value {
         match self {
             Value::Closure { .. } => Err("a closure".to_string()),
             Value::IoError { .. } => Err("an `IoError` value".to_string()),
+            Value::Handle(handle) => Err(format!("a `{}` handle", handle.kind().name())),
             Value::List(items) | Value::Tuple(items) | Value::Enum { fields: items, .. } => {
                 items.iter().try_for_each(Value::encodable)
             }
@@ -333,6 +338,11 @@ impl Value {
                 out.push_str("IoError(");
                 write_text(message, out);
                 out.push(')');
+            }
+            Value::Handle(handle) => {
+                out.push('<');
+                out.push_str(handle.kind().name());
+                out.push('>');
             }
         }
     }
@@ -600,6 +610,7 @@ fn decode(json: &Json, ty: &Ty, types: &TypedProgram, path: &str) -> Result<Valu
         | Ty::Capability(_)
         | Ty::TcpStream
         | Ty::PipeStream
+        | Ty::TlsStream
         | Ty::IoError
         | Ty::Store(_)
         | Ty::Sender(_)

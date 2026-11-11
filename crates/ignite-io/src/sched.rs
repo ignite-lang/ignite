@@ -9,14 +9,18 @@
 //! only through the [`Reactor`] interface) until a descriptor is ready, a
 //! timer is due or another thread wakes it. A worker creates its reactor
 //! (an epoll and an eventfd descriptor) when a task first waits for a
-//! descriptor and parks its thread until then. Workers start lazily, one per
-//! spawn up to [`worker_limit`] (`IGNITE_WORKERS`, default
+//! descriptor through it (a lone task that may block the worker does not,
+//! `wait_blocking`) and parks its thread until then. Workers start lazily,
+//! one per spawn up to [`worker_limit`] (`IGNITE_WORKERS`, default
 //! `std::thread::available_parallelism`), and a worker without a task for
-//! [`crate::LINGER`] ends, so an idle server runs `main` and the drain's
-//! thread only (`docs/readiness-io.md` section 6 row 6).
+//! [`crate::LINGER`] since its last task ended ends, so an idle server runs
+//! `main` and the drain's thread only (`docs/readiness-io.md` section 6
+//! row 6).
 //!
 //! A task is a stack (2 MiB reserved as a thread's, a guard page below it,
-//! touched pages only resident; stacks are pooled), a coroutine on it
+//! touched pages only resident; stacks are pooled: a few stay with the
+//! worker their task ran on, for the next task placed there, the rest in
+//! one shared pool), a coroutine on it
 //! (`corosensei`), and its [`Waiter`]. [`park`] switches to the worker's
 //! loop; [`schedule`] makes a parked task runnable on its worker, from any
 //! thread: on the worker itself it joins the run queue, from elsewhere it
@@ -34,32 +38,36 @@
 //! are exchanged whenever a different task resumes, through [`TaskLocals`].
 //!
 //! Stack overflow: a task's guard page is recognised by the `SIGSEGV`
-//! handler installed with the first worker (on an alternate signal stack
-//! each worker sets up), which prints `thread 'worker' has overflowed its
-//! stack` and aborts, as a thread's overflow does; any other fault goes to
-//! the handler that was installed before.
+//! handler (`crate::signal`) installed with the first worker, which runs
+//! on the worker's alternate signal stack (std's on the Rust target, the
+//! LLVM runtime's otherwise: `signal::give_workers_an_alternate_stack`),
+//! prints `thread 'worker' has overflowed its stack` and aborts, as a
+//! thread's overflow does; any other fault goes to the handler that was
+//! installed before.
 //!
 //! A descriptor a task waits for (a socket, a listener, standard input)
 //! is registered once per worker, edge-triggered, through a
-//! [`Readiness`]: an event wakes the tasks waiting to read or to write it,
-//! and a sequence number per direction, taken before each attempt, keeps a
-//! readiness edge between the attempt and the park from being lost
+//! [`Readiness`], by the first wait there that parks its task (the only
+//! task of a worker waits on the thread instead, `wait_alone`): an event
+//! wakes the tasks waiting to read or to write it, and a sequence number
+//! per direction, taken before each attempt, keeps a readiness edge
+//! between the attempt and the park from being lost
 //! (`docs/readiness-io.md` K4).
 
 use std::cell::{Cell, RefCell};
-use std::collections::{BTreeMap, VecDeque};
-use std::ffi::c_void;
+use std::collections::VecDeque;
 use std::io;
-use std::os::fd::{AsFd, AsRawFd, BorrowedFd, RawFd};
+use std::os::fd::{AsFd, BorrowedFd};
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU8, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, Once, OnceLock, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
 
 use corosensei::stack::{DefaultStack, Stack};
 use corosensei::{Coroutine, CoroutineResult, Yielder};
+use nix::sys::eventfd::EventFd;
 
 use crate::reactor::{EpollReactor, Event, Interest, Reactor, Token};
-use crate::wait::{DescriptorWait, WaitList, Waiter, Woken, wake_ready};
+use crate::wait::{DescriptorWait, Limit, WaitList, Waiter, Woken, wake_ready};
 
 /// How the substrate runs tasks (`docs/readiness-io.md` 3.4).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -104,6 +112,22 @@ pub fn worker_limit() -> usize {
     })
 }
 
+/// What a process whose tasks run on workers does once, however many
+/// tasks it starts, done now: the worker limit (without `IGNITE_WORKERS`,
+/// `std::thread::available_parallelism` reads the process' cgroup files),
+/// the handler of a task's stack overflow and the eventfd that ends the
+/// lone waits ([`escalation`]). Called when the process starts to listen
+/// (`crate::net`), so that its first session does not wait for 30 system
+/// calls no later session makes (`story:readiness-session-cost`). A
+/// process that spawns without listening does each at its first use.
+pub(crate) fn prepare() {
+    if readiness() {
+        worker_limit();
+        crate::signal::install_overflow_handler();
+        escalation();
+    }
+}
+
 /// Stack reserved per task: a thread's default, so recursion depth does not
 /// change with the IO mode.
 pub const TASK_STACK: usize = 2 * 1024 * 1024;
@@ -111,15 +135,126 @@ pub const TASK_STACK: usize = 2 * 1024 * 1024;
 /// Free stacks kept for the next tasks.
 const STACK_POOL: usize = 64;
 
-/// Free stacks a thread keeps in front of the pool's lock: a task that a
-/// task spawns (served on the same worker) takes one without the lock.
-const LOCAL_STACK_CACHE: usize = 2;
+/// Free stacks a worker keeps in front of the pool's lock: a stack stays
+/// with the worker its task ran on, and a spawn placed there takes it
+/// back, from a task or from `main` alike, without the pool's lock
+/// (`story:readiness-connect-latency`).
+const WORKER_STACK_CACHE: usize = 2;
 
 /// Tasks a worker runs before it looks at its reactor again although more
 /// are runnable.
 const BUDGET: usize = 128;
 
 type Job = Box<dyn FnOnce() + Send + 'static>;
+
+/// What the scheduler did since the process started, counted
+/// (`story:readiness-connect-latency`): the cost of the connection path
+/// as counts, read by tests instead of a timing. Each count is a relaxed
+/// atomic bumped next to a lock or a system call the event costs anyway.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SchedulerCounts {
+    /// Tasks started: given a stack and handed to a worker; a spawn that
+    /// fails is not counted, nor is the stack it found.
+    pub spawns: u64,
+    /// Stacks mapped fresh because no free one was found.
+    pub stacks_allocated: u64,
+    /// Stacks a spawn took from a worker's cache: the one it placed the
+    /// task on, or another when it starts a worker (which has none).
+    pub stacks_from_cache: u64,
+    /// Stacks a spawn took from the shared pool, under its lock.
+    pub stacks_from_pool: u64,
+    /// Stacks a task left that went to the shared pool (its worker's cache
+    /// was full), under its lock.
+    pub stacks_to_pool: u64,
+    /// Spawns handed to a running worker other than the spawning thread's
+    /// own (`hand_over` and `notify`).
+    pub spawns_handed_over: u64,
+    /// Workers started.
+    pub workers_started: u64,
+    /// Wakes of a parked task from a thread other than its worker's
+    /// (`enqueue`: a hand-over and a notify).
+    pub wakes_across: u64,
+    /// Notifies that found the worker asleep and woke it (an eventfd write
+    /// or an unpark): the system calls of the hand-overs above.
+    pub notifies_sent: u64,
+    /// Waits for a connection made around an `accept`: a `poll` off a
+    /// worker, a wait through the reactor on one. Counted in both IO modes.
+    pub accept_waits: u64,
+    /// Clock reads of the scheduler, its reactors and the waits (`sched`,
+    /// `reactor`, `wait`): every one they make, [`read_clock`]. A read of a
+    /// stream that waits alone on its thread makes none for its idle
+    /// timeout (`crate::wait::Limit`). Counted in both IO modes.
+    pub clock_reads: u64,
+}
+
+/// The counts behind [`scheduler_counts`].
+struct Counters {
+    spawns: AtomicU64,
+    stacks_allocated: AtomicU64,
+    stacks_from_cache: AtomicU64,
+    stacks_from_pool: AtomicU64,
+    stacks_to_pool: AtomicU64,
+    spawns_handed_over: AtomicU64,
+    workers_started: AtomicU64,
+    wakes_across: AtomicU64,
+    notifies_sent: AtomicU64,
+    accept_waits: AtomicU64,
+    clock_reads: AtomicU64,
+}
+
+static COUNTERS: Counters = Counters {
+    spawns: AtomicU64::new(0),
+    stacks_allocated: AtomicU64::new(0),
+    stacks_from_cache: AtomicU64::new(0),
+    stacks_from_pool: AtomicU64::new(0),
+    stacks_to_pool: AtomicU64::new(0),
+    spawns_handed_over: AtomicU64::new(0),
+    workers_started: AtomicU64::new(0),
+    wakes_across: AtomicU64::new(0),
+    notifies_sent: AtomicU64::new(0),
+    accept_waits: AtomicU64::new(0),
+    clock_reads: AtomicU64::new(0),
+};
+
+fn count(counter: &AtomicU64) {
+    // Relaxed: a statistic, ordered with nothing.
+    counter.fetch_add(1, Ordering::Relaxed);
+}
+
+/// An `accept` waits for a connection outside its `accept4`
+/// ([`SchedulerCounts::accept_waits`]).
+pub(crate) fn count_accept_wait() {
+    count(&COUNTERS.accept_waits);
+}
+
+/// The instant now: the one way the scheduler, its reactors and the waits
+/// read the clock, counted ([`SchedulerCounts::clock_reads`]).
+#[inline]
+pub(crate) fn read_clock() -> Instant {
+    count(&COUNTERS.clock_reads);
+    Instant::now()
+}
+
+/// The scheduler's counts so far ([`SchedulerCounts`]); all zero in the IO
+/// mode `threads`, but for [`SchedulerCounts::accept_waits`] and
+/// [`SchedulerCounts::clock_reads`].
+pub fn scheduler_counts() -> SchedulerCounts {
+    let read = |counter: &AtomicU64| counter.load(Ordering::Relaxed);
+    let c = &COUNTERS;
+    SchedulerCounts {
+        spawns: read(&c.spawns),
+        stacks_allocated: read(&c.stacks_allocated),
+        stacks_from_cache: read(&c.stacks_from_cache),
+        stacks_from_pool: read(&c.stacks_from_pool),
+        stacks_to_pool: read(&c.stacks_to_pool),
+        spawns_handed_over: read(&c.spawns_handed_over),
+        workers_started: read(&c.workers_started),
+        wakes_across: read(&c.wakes_across),
+        notifies_sent: read(&c.notifies_sent),
+        accept_waits: read(&c.accept_waits),
+        clock_reads: read(&c.clock_reads),
+    }
+}
 
 /// Per-task state another crate keeps in thread-locals: the scheduler
 /// creates one value per task with the function given to
@@ -191,6 +326,10 @@ struct Shared {
     blocked: AtomicBool,
     /// Tasks placed on the worker and not ended.
     tasks: AtomicUsize,
+    /// Stacks its tasks left ([`WORKER_STACK_CACHE`]): pushed by the
+    /// worker when a task ends, taken by the spawn that places the next
+    /// task here, so the lock is rarely contended.
+    stacks: Mutex<Vec<DefaultStack>>,
 }
 
 /// What other threads hand a worker.
@@ -220,6 +359,7 @@ impl Shared {
             sleeping: AtomicBool::new(false),
             blocked: AtomicBool::new(false),
             tasks: AtomicUsize::new(0),
+            stacks: Mutex::new(Vec::new()),
         }
     }
 
@@ -265,6 +405,7 @@ impl Shared {
     /// sees `sleeping` also sees how the worker sleeps.
     fn notify(&self) {
         if self.sleeping.swap(false, Ordering::SeqCst) {
+            count(&COUNTERS.notifies_sent);
             match self.reactor.get() {
                 Some(reactor) => {
                     let _ = reactor.wake();
@@ -295,13 +436,8 @@ thread_local! {
     /// Tasks runnable on this worker.
     static RUN: RefCell<VecDeque<Waiter>> = const { RefCell::new(VecDeque::new()) };
     /// Deadlines of parked tasks, with a sequence number that keeps the
-    /// keys apart.
-    static TIMERS: RefCell<BTreeMap<(Instant, u64), Waiter>> = const { RefCell::new(BTreeMap::new()) };
-    static TIMER_SEQUENCE: Cell<u64> = const { Cell::new(0) };
-    /// This thread's free stacks ([`LOCAL_STACK_CACHE`]).
-    static LOCAL_STACKS: RefCell<Vec<DefaultStack>> = const { RefCell::new(Vec::new()) };
-    /// The timer of each task slot of this worker ([`SlotTimer`]).
-    static SLOT_TIMERS: RefCell<Vec<SlotTimer>> = const { RefCell::new(Vec::new()) };
+    /// keys apart, and the timer of each task slot ([`SlotTimer`]).
+    static TIMERS: RefCell<Timers> = const { RefCell::new(Timers::new()) };
     /// The guard page of the running task's stack, `start..end`; read by
     /// the `SIGSEGV` handler, so a `const` cell without destructor.
     static GUARD: Cell<(usize, usize)> = const { Cell::new((0, 0)) };
@@ -327,6 +463,7 @@ fn enqueue(waiter: &Waiter, task: &Task) {
         RUN.with(|run| run.borrow_mut().push_back(waiter.clone()));
         return;
     }
+    count(&COUNTERS.wakes_across);
     task.worker
         .hand_over(|incoming| incoming.woken.push(waiter.clone()));
     task.worker.notify();
@@ -356,7 +493,7 @@ fn park_from(
             return Woken::Notified;
         }
         if let Some(deadline) = deadline {
-            if now.take().unwrap_or_else(Instant::now) >= deadline {
+            if now.take().unwrap_or_else(read_clock) >= deadline {
                 return Woken::Deadline;
             }
             arm(task.slot, deadline, waiter);
@@ -368,58 +505,229 @@ fn park_from(
     }
 }
 
+/// A worker's timers: a binary heap of entries keyed by deadline and
+/// sequence number, the earliest on top, at most one per task slot, with
+/// the position of each slot's entry in its [`SlotTimer`], so that the
+/// entry of a task that ends is taken out at once and one armed earlier
+/// moves up in place. No entry is ever left for a task that no longer
+/// waits on it, so the worker never wakes for one. The `BTreeMap` this
+/// replaces was 13 KB of code in every executable and took more
+/// instructions per timer that fired (story `binary-size-back`).
+struct Timers {
+    heap: Vec<Timer>,
+    /// The timer of each task slot of this worker, by slot: kept here, not
+    /// in a vector of its own, as each allocation of a new worker costs the
+    /// first connection it serves.
+    slots: Vec<SlotTimer>,
+    /// The sequence number of the latest entry.
+    sequence: u64,
+    /// The deadline of the worker's first timer: the keys count from it,
+    /// so arming reads no clock.
+    origin: Option<Instant>,
+}
+
+/// An entry of [`Timers`]: a copy moves it, its waiter is in its slot's
+/// [`SlotTimer`].
+#[derive(Clone, Copy)]
+struct Timer {
+    /// The deadline in nanoseconds, 2^63 at [`Timers::origin`], and the
+    /// sequence number: integers order two entries by deadline, then by
+    /// arming, for deadlines within 292 years of the origin.
+    key: (u64, u64),
+    /// The deadline.
+    at: Instant,
+    slot: usize,
+}
+
 /// The timer of the task in one slot of this worker. A task has at most one
-/// entry in `TIMERS` armed for it; a park with a deadline arms one only when
-/// none is armed at or before that deadline, and a wake leaves it in place.
+/// entry in [`Timers`], whose deadline is the one armed; a park with a
+/// deadline arms it only when none is armed at or before that deadline, and
+/// a wake leaves it in place.
 /// When it fires, a task that wants a later deadline by then is armed again
 /// for it ([`Worker::fire_timers`]). A read with an idle timeout therefore
 /// costs no timer operation per wait, only one per timeout period.
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Default)]
 struct SlotTimer {
     /// The deadline of the task's current park, if it has one.
     wanted: Option<Instant>,
-    /// The key of the task's entry in `TIMERS`.
-    armed: Option<(Instant, u64)>,
+    /// The index plus one of the task's entry in the heap, 0 for none.
+    position: u32,
+    /// The waiter of the task's entry, while it has one.
+    waiter: Option<Waiter>,
+}
+
+impl Timers {
+    const fn new() -> Timers {
+        Timers {
+            heap: Vec::new(),
+            slots: Vec::new(),
+            sequence: 0,
+            origin: None,
+        }
+    }
+
+    /// The key of a new entry for `at` ([`Timer::key`]).
+    fn key(&mut self, at: Instant) -> (u64, u64) {
+        const ORIGIN: u64 = 1 << 63;
+        self.sequence += 1;
+        let origin = *self.origin.get_or_insert(at);
+        let ticks = match at.checked_duration_since(origin) {
+            Some(after) => ORIGIN.saturating_add(after.as_nanos() as u64),
+            None => ORIGIN.saturating_sub(origin.duration_since(at).as_nanos() as u64),
+        };
+        (ticks, self.sequence)
+    }
+
+    fn is_empty(&self) -> bool {
+        self.heap.is_empty()
+    }
+
+    /// The timer of `slot`.
+    #[inline]
+    fn slot(&mut self, slot: usize) -> &mut SlotTimer {
+        if self.slots.len() <= slot {
+            self.grow(slot);
+        }
+        &mut self.slots[slot]
+    }
+
+    /// Make room for the timer of `slot`.
+    #[cold]
+    #[inline(never)]
+    fn grow(&mut self, slot: usize) {
+        self.slots.resize(slot + 1, SlotTimer::default());
+    }
+
+    /// Move `timer` up from `index` while it is earlier than its parent,
+    /// and put it where it stops, its position recorded.
+    #[inline]
+    fn sift_up(&mut self, mut index: usize, timer: Timer) {
+        let heap = &mut self.heap[..];
+        let slots = &mut self.slots[..];
+        while index > 0 {
+            let parent = (index - 1) / 2;
+            let above = heap[parent];
+            if timer.key >= above.key {
+                break;
+            }
+            heap[index] = above;
+            slots[above.slot].position = (index + 1) as u32;
+            index = parent;
+        }
+        heap[index] = timer;
+        slots[timer.slot].position = (index + 1) as u32;
+    }
+
+    /// Take out the entry at `index`. The earliest child of each entry on
+    /// the way down moves up into the gap, and the last entry fills the
+    /// leaf left over and moves up from there: as deadlines are mostly
+    /// armed in their order, the last entry is mostly the latest and stays,
+    /// so a task that ends among many costs no comparison against it on
+    /// each level.
+    fn take(&mut self, index: usize) -> Timer {
+        let last = self.heap.pop().expect("an entry to take");
+        let heap = &mut self.heap[..];
+        let slots = &mut self.slots[..];
+        let len = heap.len();
+        if index == len {
+            slots[last.slot].position = 0;
+            return last;
+        }
+        let taken = heap[index];
+        slots[taken.slot].position = 0;
+        let mut gap = index;
+        loop {
+            let first = 2 * gap + 1;
+            if first >= len {
+                break;
+            }
+            let second = first + 1;
+            let child = if second < len && heap[second].key < heap[first].key {
+                second
+            } else {
+                first
+            };
+            let moved = heap[child];
+            heap[gap] = moved;
+            slots[moved.slot].position = (gap + 1) as u32;
+            gap = child;
+        }
+        self.sift_up(gap, last);
+        taken
+    }
+
+    /// The task in `slot` waits until `at`: its entry, with the next
+    /// sequence number, made earlier if it has a later one.
+    fn arm(&mut self, slot: usize, at: Instant, waiter: &Waiter) {
+        let key = self.key(at);
+        match self.slot(slot).position.checked_sub(1) {
+            Some(index) => {
+                let index = index as usize;
+                if key < self.heap[index].key {
+                    self.sift_up(index, Timer { key, at, slot });
+                }
+            }
+            None => {
+                self.slots[slot].waiter = Some(waiter.clone());
+                let timer = Timer { key, at, slot };
+                self.heap.push(timer);
+                self.sift_up(self.heap.len() - 1, timer);
+            }
+        }
+    }
+
+    /// Take out the entry of `slot`, if it has one.
+    fn remove(&mut self, slot: usize) {
+        let Some(index) = self
+            .slots
+            .get(slot)
+            .and_then(|timer| timer.position.checked_sub(1))
+        else {
+            return;
+        };
+        self.take(index as usize);
+        self.slots[slot].waiter = None;
+    }
+
+    /// The earliest entry when it is due at `now`, taken out: its slot and
+    /// waiter; else the next deadline, if any.
+    fn pop_due(&mut self, now: Instant) -> Result<(usize, Waiter), Option<Instant>> {
+        let Some(root) = self.heap.first() else {
+            return Err(None);
+        };
+        if root.at > now {
+            return Err(Some(root.at));
+        }
+        let slot = self.take(0).slot;
+        let waiter = self.slots[slot].waiter.take().expect("an entry's waiter");
+        Ok((slot, waiter))
+    }
 }
 
 fn with_timer<T>(slot: usize, f: impl FnOnce(&mut SlotTimer) -> T) -> T {
-    SLOT_TIMERS.with(|timers| {
-        let mut timers = timers.borrow_mut();
-        if timers.len() <= slot {
-            timers.resize(slot + 1, SlotTimer::default());
-        }
-        f(&mut timers[slot])
-    })
-}
-
-/// Insert a timer entry for `waiter` at `at`; its key.
-fn insert_timer(at: Instant, waiter: &Waiter) -> (Instant, u64) {
-    let sequence = TIMER_SEQUENCE.with(|n| {
-        n.set(n.get() + 1);
-        n.get()
-    });
-    let key = (at, sequence);
-    TIMERS.with(|timers| timers.borrow_mut().insert(key, waiter.clone()));
-    key
+    TIMERS.with(|timers| f(timers.borrow_mut().slot(slot)))
 }
 
 /// The task in `slot` parks until `deadline` at the latest.
 fn arm(slot: usize, deadline: Instant, waiter: &Waiter) {
-    let insert = with_timer(slot, |timer| {
+    TIMERS.with(|timers| {
+        let mut timers = timers.borrow_mut();
+        let timer = timers.slot(slot);
         timer.wanted = Some(deadline);
-        timer.armed.is_none_or(|(at, _)| at > deadline)
+        let position = timer.position;
+        if position == 0 || timers.heap[position as usize - 1].at > deadline {
+            timers.arm(slot, deadline, waiter);
+        }
     });
-    if insert {
-        let key = insert_timer(deadline, waiter);
-        with_timer(slot, |timer| timer.armed = Some(key));
-    }
 }
 
-/// The task in `slot` ended: remove its armed entry.
+/// The task in `slot` ended: remove its entry.
 fn forget_timer(slot: usize) {
-    if let Some(key) = with_timer(slot, std::mem::take).armed {
-        TIMERS.with(|timers| timers.borrow_mut().remove(&key));
-    }
+    TIMERS.with(|timers| {
+        let mut timers = timers.borrow_mut();
+        timers.slot(slot).wanted = None;
+        timers.remove(slot);
+    });
 }
 
 /// Switch from the running task to its worker's loop.
@@ -438,7 +746,7 @@ fn suspend() {
 pub(crate) fn wait_descriptor(
     waiter: &Waiter,
     task: &Task,
-    descriptor: RawFd,
+    descriptor: BorrowedFd<'_>,
     interest: Interest,
     deadline: Option<Instant>,
 ) -> io::Result<DescriptorWait> {
@@ -447,7 +755,7 @@ pub(crate) fn wait_descriptor(
     // Relaxed: set and read on this worker only (its dispatch).
     task.ready.store(0, Ordering::Relaxed);
     let woken = park(waiter, task, deadline);
-    let _ = reactor.deregister(token);
+    let _ = reactor.deregister(token, descriptor);
     let ready = Interest::from_bits(task.ready.swap(0, Ordering::SeqCst));
     Ok(if !ready.is_empty() {
         DescriptorWait::Ready(ready)
@@ -462,57 +770,102 @@ pub(crate) fn wait_descriptor(
 /// could be reserved or no worker thread started. Called with the task
 /// already counted live (`crate::task`).
 pub(crate) fn spawn(job: Job) -> io::Result<()> {
-    install_overflow_handler();
-    let stack = match take_stack() {
-        Some(stack) => stack,
-        None => DefaultStack::new(TASK_STACK)?,
-    };
+    crate::signal::install_overflow_handler();
     let here = HERE.with(Cell::get);
-    let mut workers = lock(&WORKERS);
-    let mut passed: Vec<*const Shared> = Vec::new();
-    while let Some((shared, last)) = choose(&workers, here, &passed) {
-        // SeqCst: this increment, then the `blocked` load, against
-        // `block_alone`'s `blocked` store, then its `tasks` load: either
-        // this spawn sees the worker blocked and goes elsewhere, or the
-        // worker sees a second task and does not block. `last`: every
-        // other worker was passed, so the task waits for this one.
-        shared.tasks.fetch_add(1, Ordering::SeqCst);
-        if !last && shared.blocked.load(Ordering::SeqCst) {
-            shared.tasks.fetch_sub(1, Ordering::SeqCst);
-            passed.push(Arc::as_ptr(&shared));
-            continue;
+    // A stack mapped while `WORKERS` was not held, because no free one
+    // was found under it; the next look places the task with it.
+    let mut spare: Option<DefaultStack> = None;
+    'place: loop {
+        let workers = lock(&WORKERS);
+        let mut passed: Vec<*const Shared> = Vec::new();
+        while let Some((shared, last)) = choose(&workers, here, &passed) {
+            // SeqCst: this increment, then the `blocked` load, against
+            // `block_alone`'s `blocked` store, then its `tasks` load: either
+            // this spawn sees the worker blocked and goes elsewhere, or the
+            // worker sees a second task and does not block. `last`: every
+            // other worker was passed, so the task waits for this one.
+            shared.tasks.fetch_add(1, Ordering::SeqCst);
+            if !last && shared.blocked.load(Ordering::SeqCst) {
+                shared.tasks.fetch_sub(1, Ordering::SeqCst);
+                passed.push(Arc::as_ptr(&shared));
+                continue;
+            }
+            let Some((stack, found)) = free_stack(&workers, Some(&shared), &mut spare) else {
+                shared.tasks.fetch_sub(1, Ordering::SeqCst);
+                drop(workers);
+                spare = Some(map_stack()?);
+                continue 'place;
+            };
+            // The task is counted on `shared`, so the worker does not
+            // retire ([`Worker::retire`]) while it is handed over without
+            // `WORKERS`.
+            drop(workers);
+            if let Some(unused) = spare.take() {
+                give_stack(unused, None);
+            }
+            // Relaxed: a bound for `block_alone`, not an order with any data.
+            escalate(LIVE.fetch_add(1, Ordering::Relaxed) + 1);
+            shared.hand_over(|incoming| incoming.new.push((job, stack)));
+            count(&COUNTERS.spawns);
+            found.count();
+            if Arc::as_ptr(&shared) != here {
+                count(&COUNTERS.spawns_handed_over);
+                shared.notify();
+            }
+            return Ok(());
         }
-        // Relaxed: a bound for `block_alone`, not an order with any data.
-        LIVE.fetch_add(1, Ordering::Relaxed);
-        shared.hand_over(|incoming| incoming.new.push((job, stack)));
-        drop(workers);
-        if Arc::as_ptr(&shared) != here {
-            shared.notify();
+        let Some((stack, found)) = free_stack(&workers, None, &mut spare) else {
+            drop(workers);
+            spare = Some(map_stack()?);
+            continue 'place;
+        };
+        let started = start_worker(workers, job, stack, found);
+        if let Some(unused) = spare.take() {
+            give_stack(unused, None);
         }
-        return Ok(());
+        return started;
     }
+}
+
+/// Start a worker with `job` as its first task on `stack` (`found`: where
+/// it came from), and add it to `workers`.
+fn start_worker(
+    mut workers: MutexGuard<'_, Vec<Arc<Shared>>>,
+    job: Job,
+    stack: DefaultStack,
+    found: Found,
+) -> io::Result<()> {
     let shared = Arc::new(Shared::new());
     // Relaxed: the worker thread is not started yet; its start orders it.
     shared.tasks.store(1, Ordering::Relaxed);
     shared.hand_over(|incoming| incoming.new.push((job, stack)));
     let started = Arc::clone(&shared);
+    // Counted before the worker starts, which may end the task and count
+    // it out of `LIVE` before `spawn` returns here. Relaxed: as above.
+    let live = LIVE.fetch_add(1, Ordering::Relaxed) + 1;
+    // Named, which is a `prctl` per worker started that a thread of
+    // v0.15.0 did not make: by the name the workers are told from a
+    // program's other threads, in `/proc` and by the tests that watch them.
     match std::thread::Builder::new()
         .name(String::from("worker"))
         .spawn(move || work(started))
     {
         Ok(_) => {
+            count(&COUNTERS.spawns);
+            found.count();
+            count(&COUNTERS.workers_started);
             workers.push(shared);
-            // Relaxed: as above.
-            LIVE.fetch_add(1, Ordering::Relaxed);
+            escalate(live);
             Ok(())
         }
         Err(error) => {
+            LIVE.fetch_sub(1, Ordering::Relaxed);
             let (job, stack) = lock(&shared.incoming)
                 .new
                 .pop()
                 .expect("the job handed to the worker");
             drop(workers);
-            give_stack(stack);
+            give_stack(stack, None);
             drop(job);
             Err(error)
         }
@@ -582,34 +935,72 @@ fn choose(
         .map(|shared| (Arc::clone(shared), true))
 }
 
-/// A free stack: from this worker's cache, else from the pool.
-fn take_stack() -> Option<DefaultStack> {
-    let cached = LOCAL_STACKS
-        .try_with(|stacks| stacks.borrow_mut().pop())
-        .ok()
-        .flatten();
-    cached.or_else(|| lock(&STACKS).pop())
+/// A free stack for a task placed on `worker`, found under `WORKERS`
+/// (`workers`): from that worker's cache; for a worker about to start
+/// (`None`), which has none, from the first running worker's cache that
+/// holds one; else from the pool, else the `spare` the spawn mapped
+/// meanwhile. `None` when there is none, and the spawn maps one without
+/// the lock ([`map_stack`]). A running worker's own spawns do not take
+/// from another's cache: its tasks fill its own again, and taking from
+/// the others' would only move their next spawns to the pool. With the
+/// stack, the counter of where it came from, counted once the task is
+/// handed over ([`Found::count`]).
+fn free_stack(
+    workers: &[Arc<Shared>],
+    worker: Option<&Shared>,
+    spare: &mut Option<DefaultStack>,
+) -> Option<(DefaultStack, Found)> {
+    let cached = match worker {
+        Some(shared) => lock(&shared.stacks).pop(),
+        None => workers.iter().find_map(|shared| lock(&shared.stacks).pop()),
+    };
+    if let Some(stack) = cached {
+        return Some((stack, Found(&COUNTERS.stacks_from_cache)));
+    }
+    if let Some(stack) = lock(&STACKS).pop() {
+        return Some((stack, Found(&COUNTERS.stacks_from_pool)));
+    }
+    spare
+        .take()
+        .map(|stack| (stack, Found(&COUNTERS.stacks_allocated)))
 }
 
-/// Keep a stack that a task left: in this worker's cache while it has
-/// room ([`LOCAL_STACK_CACHE`]), else in the pool, else unmap it.
-fn give_stack(stack: DefaultStack) {
-    let stack = match LOCAL_STACKS.try_with(|stacks| {
-        let mut stacks = stacks.borrow_mut();
-        if stacks.len() < LOCAL_STACK_CACHE {
-            stacks.push(stack);
-            None
-        } else {
-            Some(stack)
+/// Where a task's stack came from: its counter, bumped only when the task
+/// was handed over, so that every stack counted belongs to a spawn counted
+/// in [`SchedulerCounts::spawns`].
+struct Found(&'static AtomicU64);
+
+impl Found {
+    fn count(self) {
+        count(self.0);
+    }
+}
+
+/// A fresh stack, mapped while `WORKERS` is not held; counted as
+/// allocated when a task takes it ([`free_stack`]).
+fn map_stack() -> io::Result<DefaultStack> {
+    DefaultStack::new(TASK_STACK)
+}
+
+/// Keep a stack that a task left: in the cache of `worker`, the worker it
+/// ran on, while it has room ([`WORKER_STACK_CACHE`]), else in the pool,
+/// else unmap it.
+fn give_stack(stack: DefaultStack, worker: Option<&Shared>) {
+    let stack = match worker {
+        Some(shared) => {
+            let mut stacks = lock(&shared.stacks);
+            if stacks.len() < WORKER_STACK_CACHE {
+                stacks.push(stack);
+                return;
+            }
+            stack
         }
-    }) {
-        Ok(None) => return,
-        Ok(Some(stack)) => stack,
-        Err(_) => return,
+        None => stack,
     };
     let mut stacks = lock(&STACKS);
     if stacks.len() < STACK_POOL {
         stacks.push(stack);
+        count(&COUNTERS.stacks_to_pool);
     }
 }
 
@@ -618,6 +1009,9 @@ struct Local {
     coroutine: Option<Coroutine<(), (), (), DefaultStack>>,
     yielder: *const Yielder<(), ()>,
     locals: Option<Box<dyn TaskLocals>>,
+    /// The streams the task wrote to and has not flushed, while it does
+    /// not run ([`crate::net::swap_pending`]).
+    pending: crate::net::Pending,
     guard: (usize, usize),
 }
 
@@ -686,6 +1080,7 @@ impl Worker {
             coroutine: Some(coroutine),
             yielder: std::ptr::null(),
             locals: LOCALS.get().map(|make| make()),
+            pending: crate::net::Pending::default(),
             guard,
         });
         self.live += 1;
@@ -723,11 +1118,13 @@ impl Worker {
         task.state.store(RUNNING, Ordering::Relaxed);
         YIELDER.with(|cell| cell.set(local.yielder));
         GUARD.with(|cell| cell.set(local.guard));
+        crate::net::swap_pending(&mut local.pending);
         RUNNING_TASK.with(|running| *running.borrow_mut() = Some(waiter.clone()));
         let result = coroutine.resume(());
         RUNNING_TASK.with(|running| *running.borrow_mut() = None);
         GUARD.with(|cell| cell.set((0, 0)));
         let local = self.slots[slot].as_mut().expect("the resumed task's slot");
+        crate::net::swap_pending(&mut local.pending);
         local.yielder = YIELDER.with(|cell| cell.replace(std::ptr::null()));
         match result {
             CoroutineResult::Yield(()) => {
@@ -745,7 +1142,7 @@ impl Worker {
                 task.state.store(DONE, Ordering::Release);
                 self.restore_locals();
                 forget_timer(slot);
-                give_stack(coroutine.into_stack());
+                give_stack(coroutine.into_stack(), Some(&self.shared));
                 let ended = self.slots[slot].take();
                 drop(ended);
                 self.free.push(slot);
@@ -765,41 +1162,30 @@ impl Worker {
         if TIMERS.with(|timers| timers.borrow().is_empty()) {
             return None;
         }
-        let now = Instant::now();
+        let now = read_clock();
         loop {
-            let first = TIMERS.with(|timers| {
+            let due = TIMERS.with(|timers| {
                 let mut timers = timers.borrow_mut();
-                match timers.first_key_value() {
-                    Some((&(at, _), _)) if at > now => Err(Some(at)),
-                    Some(_) => Ok(timers.pop_first().expect("the first timer")),
-                    None => Err(None),
+                let (slot, waiter) = timers.pop_due(now)?;
+                let timer = timers.slot(slot);
+                match timer.wanted {
+                    Some(later) if later > now => {
+                        timers.arm(slot, later, &waiter);
+                        Ok(None)
+                    }
+                    wanted => Ok(wanted.map(|_| waiter)),
                 }
             });
-            let (key, waiter) = match first {
-                Ok(entry) => entry,
-                Err(next) => return next,
-            };
-            let Some(task) = waiter.task() else {
-                continue;
-            };
-            let wanted = with_timer(task.slot, |timer| {
-                if timer.armed != Some(key) {
-                    return None;
-                }
-                timer.armed = None;
-                Some(timer.wanted)
-            });
-            match wanted {
-                None | Some(None) => {}
-                Some(Some(later)) if later > now => {
-                    let key = insert_timer(later, &waiter);
-                    with_timer(task.slot, |timer| timer.armed = Some(key));
-                }
-                Some(Some(_)) => {
-                    if task.queue() {
-                        RUN.with(|run| run.borrow_mut().push_back(waiter.clone()));
+            match due {
+                Ok(Some(waiter)) => {
+                    if let Some(task) = waiter.task()
+                        && task.queue()
+                    {
+                        RUN.with(|run| run.borrow_mut().push_back(waiter));
                     }
                 }
+                Ok(None) => {}
+                Err(next) => return next,
             }
         }
     }
@@ -808,13 +1194,19 @@ impl Worker {
     /// ended.
     fn retire(&self) -> bool {
         let mut workers = lock(&WORKERS);
-        // Under `WORKERS`, which every spawn holds while it counts a task
-        // and hands it over: neither changes meanwhile.
+        // Under `WORKERS`, which every spawn holds while it counts a task:
+        // a spawn that chose this worker counted its task before it lets
+        // go of the lock and hands the task over, so the count is not 0.
         if self.shared.tasks.load(Ordering::Relaxed) != 0 || !lock(&self.shared.incoming).is_empty()
         {
             return false;
         }
         workers.retain(|shared| !Arc::ptr_eq(shared, &self.shared));
+        // No spawn chooses this worker any more: its free stacks are
+        // unmapped, as a thread's stack is when it ends.
+        let freed = std::mem::take(&mut *lock(&self.shared.stacks));
+        drop(workers);
+        drop(freed);
         true
     }
 }
@@ -837,7 +1229,7 @@ fn dispatch(events: &mut Vec<Event>) {
 fn work(shared: Arc<Shared>) {
     crate::task::mark_task_thread();
     let _worker = crate::census::Counted::new(crate::census::Kind::Workers);
-    alternate_signal_stack();
+    crate::signal::worker_started();
     HERE.with(|here| here.set(Arc::as_ptr(&shared)));
     let _ = shared.thread.set(std::thread::current());
     let mut worker = Worker {
@@ -859,18 +1251,24 @@ fn work(shared: Arc<Shared>) {
             worker.resume(waiter);
             ran += 1;
         }
+        if ran > 0 {
+            // A task ran, so the worker was not without one since: a
+            // session that waits alone runs from its start to its end in
+            // one turn, and the worker lingers from its end on.
+            idle_since = None;
+        }
         let next_timer = worker.fire_timers();
         if runnable() {
             if ran >= BUDGET
                 && let Some(reactor) = worker.shared.reactor.get()
             {
-                let _ = reactor.wait(Some(Instant::now()), &mut events);
+                let _ = reactor.wait(Some(read_clock()), &mut events);
                 dispatch(&mut events);
             }
             continue;
         }
         let deadline = if worker.live == 0 {
-            let now = Instant::now();
+            let now = read_clock();
             let since = *idle_since.get_or_insert(now);
             let end = since + crate::LINGER;
             if now >= end {
@@ -900,7 +1298,7 @@ fn work(shared: Arc<Shared>) {
             }
             None => match deadline {
                 Some(deadline) => {
-                    std::thread::park_timeout(deadline.saturating_duration_since(Instant::now()));
+                    std::thread::park_timeout(deadline.saturating_duration_since(read_clock()));
                 }
                 None => std::thread::park(),
             },
@@ -911,6 +1309,15 @@ fn work(shared: Arc<Shared>) {
     }
 }
 
+/// The page size: 4096 on x86_64, whose base page has no other size, so
+/// that `nix` builds without its `feature` feature there (row 6.2 of
+/// `docs/quality.md`, story `build-time-back`); `sysconf` elsewhere.
+#[cfg(target_arch = "x86_64")]
+fn page_size() -> usize {
+    4096
+}
+
+#[cfg(not(target_arch = "x86_64"))]
 fn page_size() -> usize {
     static PAGE: OnceLock<usize> = OnceLock::new();
     *PAGE.get_or_init(|| {
@@ -922,104 +1329,19 @@ fn page_size() -> usize {
     })
 }
 
-/// The handlers of `SIGSEGV` and `SIGBUS` before [`on_fault`].
-static PREVIOUS: OnceLock<[nix::sys::signal::SigAction; 2]> = OnceLock::new();
-
-/// Install [`on_fault`] for `SIGSEGV` and `SIGBUS` once, keeping the
-/// handlers before it for every fault outside a task's guard page.
-fn install_overflow_handler() {
-    use nix::sys::signal::{SaFlags, SigAction, SigHandler, SigSet, Signal, sigaction};
-    static INSTALL: Once = Once::new();
-    INSTALL.call_once(|| {
-        let ours = SigAction::new(
-            SigHandler::SigAction(on_fault),
-            SaFlags::SA_ONSTACK | SaFlags::SA_SIGINFO,
-            SigSet::empty(),
-        );
-        // SAFETY: `on_fault` is async-signal-safe: it reads a `const`
-        // thread-local cell, writes to stderr with `write`, aborts, or
-        // hands the signal to the handler that was installed before.
-        let previous = unsafe {
-            [
-                sigaction(Signal::SIGSEGV, &ours),
-                sigaction(Signal::SIGBUS, &ours),
-            ]
-        };
-        if let [Ok(segv), Ok(bus)] = previous {
-            let _ = PREVIOUS.set([segv, bus]);
-        }
-    });
-}
-
-/// A worker's alternate signal stack: the overflow handler cannot run on
-/// the stack that overflowed. A thread that has one already (Rust's
-/// runtime gives one to the threads it starts when it handles overflow
-/// itself) keeps it.
-fn alternate_signal_stack() {
-    use nix::libc;
-    const SIZE: usize = 64 * 1024;
-    // SAFETY: `sigaltstack` reads and writes the `stack_t` values given;
-    // the new stack is a fresh private mapping of `SIZE` bytes that stays
-    // mapped for the life of the process (a worker's stack is never given
-    // back, so a signal on it can never land in unmapped memory).
-    unsafe {
-        let mut current: libc::stack_t = std::mem::zeroed();
-        if libc::sigaltstack(std::ptr::null(), &mut current) != 0
-            || current.ss_flags & libc::SS_DISABLE == 0
-        {
-            return;
-        }
-        let memory = libc::mmap(
-            std::ptr::null_mut(),
-            SIZE,
-            libc::PROT_READ | libc::PROT_WRITE,
-            libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
-            -1,
-            0,
-        );
-        if memory == libc::MAP_FAILED {
-            return;
-        }
-        let stack = libc::stack_t {
-            ss_sp: memory,
-            ss_flags: 0,
-            ss_size: SIZE,
-        };
-        libc::sigaltstack(&stack, std::ptr::null_mut());
-    }
-}
-
-/// The `SIGSEGV` and `SIGBUS` handler (module docs).
-extern "C" fn on_fault(signal: i32, info: *mut nix::libc::siginfo_t, context: *mut c_void) {
-    use nix::sys::signal::{SaFlags, SigAction, SigHandler, SigSet, Signal, sigaction};
-    // SAFETY: the kernel passes a valid `siginfo_t` to a handler installed
-    // with `SA_SIGINFO`; `si_addr` is defined for SIGSEGV and SIGBUS.
-    let address = unsafe { (*info).si_addr() } as usize;
-    let (start, end) = GUARD.try_with(Cell::get).unwrap_or((0, 0));
-    if start <= address && address < end {
-        let message = b"\nthread 'worker' has overflowed its stack\nfatal runtime error: stack overflow, aborting\n";
-        let _ = nix::unistd::write(std::io::stderr().as_fd(), message);
-        std::process::abort();
-    }
-    let which = usize::from(signal != Signal::SIGSEGV as i32);
-    match PREVIOUS.get().map(|previous| previous[which].handler()) {
-        Some(SigHandler::SigAction(previous)) => previous(signal, info, context),
-        Some(SigHandler::Handler(previous)) => previous(signal),
-        _ => {
-            let default = SigAction::new(SigHandler::SigDfl, SaFlags::empty(), SigSet::empty());
-            if let Ok(signal) = Signal::try_from(signal) {
-                // SAFETY: restoring the default action is async-signal-safe;
-                // the fault repeats on return and ends the process with it.
-                let _ = unsafe { sigaction(signal, &default) };
-            }
-        }
-    }
+/// The guard page of the running task's stack, `start..end`, `(0, 0)` off
+/// a task: what the stack overflow handler (`crate::signal`) compares a
+/// fault's address with. Reads a `const` thread-local cell only, so it is
+/// async-signal-safe.
+pub(crate) fn guard_page() -> (usize, usize) {
+    GUARD.try_with(Cell::get).unwrap_or((0, 0))
 }
 
 /// The readiness of one descriptor for tasks on workers (module docs): a
 /// socket's or a listener's. Off a worker [`Readiness::wait`] is
-/// [`crate::wait::wait_descriptor`]. Deregistered from every worker when
-/// dropped, so it must be dropped before the descriptor closes.
+/// [`crate::wait::wait_descriptor`]. Forgotten by every worker when
+/// dropped, as its descriptor closes ([`Readiness::deregister`] takes it
+/// out of their epoll instances while it stays open).
 pub(crate) struct Readiness {
     waiter: Waiter,
 }
@@ -1030,9 +1352,18 @@ pub(crate) struct Descriptor {
     read_events: AtomicU64,
     /// Readiness events for writing (room, hang-up, error).
     write_events: AtomicU64,
+    /// Hang-up, error and urgent data, as any event reported them; never
+    /// cleared ([`Readiness::short_read_may_leave_input`]).
+    lasting: AtomicU8,
     waiting: Mutex<Waiting>,
     /// The workers the descriptor is registered with, and its token there.
     registered: Mutex<Vec<(Arc<Shared>, Token)>>,
+    /// The registrations report room to write ([`sides`]): set, and every
+    /// registration changed, by the first wait for room that registers.
+    /// Until then a registration leaves room out, so registering a
+    /// socket, which has room, does not end its worker's next wait for
+    /// nothing. Changed only under `registered`.
+    write_armed: AtomicBool,
     /// The worker it was registered with first, compared only, never
     /// dereferenced: a wait there skips `registered`. The `Arc` in
     /// `registered` keeps that worker's address from being reused until
@@ -1058,6 +1389,13 @@ impl Waiting {
 
 const READ_SIDE: Interest = Interest::READ;
 
+/// What a descriptor is registered for: input, urgent data and hang-up,
+/// and room to write once a task waited for it ([`Descriptor::write_armed`]).
+fn sides(write: bool) -> Interest {
+    let read = Interest::READ | Interest::URGENT | Interest::HANGUP;
+    if write { read | Interest::WRITE } else { read }
+}
+
 fn reads(ready: Interest) -> bool {
     ready.intersects(Interest::READ | Interest::URGENT | Interest::HANGUP | Interest::ERROR)
 }
@@ -1071,6 +1409,12 @@ impl Descriptor {
     /// tasks waiting for its direction.
     pub(crate) fn ready(&self, ready: Interest) {
         let (read, write) = (reads(ready), writes(ready));
+        // SeqCst, before the count: a reader whose mark already counts
+        // this event sees these bits after its read.
+        let lasting = ready.bits() & (Interest::HANGUP | Interest::ERROR | Interest::URGENT).bits();
+        if lasting != 0 {
+            self.lasting.fetch_or(lasting, Ordering::SeqCst);
+        }
         if read {
             self.read_events.fetch_add(1, Ordering::SeqCst);
         }
@@ -1101,8 +1445,10 @@ impl Readiness {
             waiter: Waiter::for_descriptor(Descriptor {
                 read_events: AtomicU64::new(0),
                 write_events: AtomicU64::new(0),
+                lasting: AtomicU8::new(0),
                 waiting: Mutex::new(Waiting::default()),
                 registered: Mutex::new(Vec::new()),
+                write_armed: AtomicBool::new(false),
                 home: AtomicPtr::new(std::ptr::null_mut()),
             }),
         }
@@ -1119,54 +1465,81 @@ impl Readiness {
         self.descriptor().events(interest).load(Ordering::SeqCst)
     }
 
+    /// Whether a read that returned fewer bytes than it asked for may have
+    /// left something to read that no later readiness event announces:
+    /// an event reported the peer's end of stream, an error, or urgent
+    /// data (a read stops before the urgent byte). Such an event raises
+    /// one edge with the bytes before it, which the mark of that read
+    /// already counts. Once true, it stays true. Read after the read whose
+    /// mark was taken before it.
+    pub(crate) fn short_read_may_leave_input(&self) -> bool {
+        self.descriptor().lasting.load(Ordering::SeqCst) != 0
+    }
+
     /// Wait until `descriptor` may be ready for `interest`, after an
     /// attempt begun at `mark` found it not ready, or until `deadline`.
-    /// `Woken` and `Ready` both mean: attempt again. The first wait of a
-    /// task on a worker registers the descriptor there and returns at once.
-    /// A worker that cannot create its reactor (no descriptor free for its
-    /// epoll and eventfd) looks at the descriptor without waiting and parks
-    /// the task for [`RETRY`], until it can: a session keeps running while
-    /// the process is out of descriptors. `now`: the instant `deadline`
-    /// was computed from just before, so this wait reads no clock to learn
-    /// how far it is.
+    /// `Woken` and `Ready` both mean: attempt again. The only task of a
+    /// worker waits on the worker's thread ([`wait_alone`]), registered or
+    /// not, so a session that stays alone on its worker registers nothing.
+    /// Any other wait registers the descriptor with the worker first, if it
+    /// is not, and parks: the registration reports what the descriptor is
+    /// ready for already as its first event. A wait for room to write
+    /// makes every registration report room from then on
+    /// ([`Descriptor::write_armed`]). A worker that cannot create its
+    /// reactor (no descriptor free for its epoll and eventfd) looks at the
+    /// descriptor without waiting and parks the task for [`RETRY`], until
+    /// it can: a session keeps running while the process is out of
+    /// descriptors. `limit` is the caller's across the waits of one
+    /// operation ([`Limit`]): a wait on the thread itself, off a worker or
+    /// alone on one, gives a duration to its `poll` as the timeout and
+    /// reads no clock; a wait that parks reads it once, for the worker's
+    /// timers.
     pub(crate) fn wait(
         &self,
         descriptor: BorrowedFd<'_>,
         interest: Interest,
         mark: u64,
-        deadline: Option<Instant>,
-        now: Option<Instant>,
+        limit: &mut Limit,
     ) -> io::Result<DescriptorWait> {
         let me = Waiter::current();
         let Some(task) = me.task() else {
-            return crate::wait::wait_descriptor(descriptor.as_raw_fd(), interest, deadline);
+            return crate::wait::wait_within(descriptor, interest, limit);
         };
         let state = self.descriptor();
+        if let Some(waited) = wait_alone(task, state, descriptor, interest, mark, limit)? {
+            return Ok(waited);
+        }
         let here = Arc::as_ptr(&task.worker).cast_mut();
-        if state.home.load(Ordering::Acquire) != here {
+        // Relaxed: a first look; it is read again under `registered`.
+        let arm =
+            interest.intersects(Interest::WRITE) && !state.write_armed.load(Ordering::Relaxed);
+        if arm || state.home.load(Ordering::Acquire) != here {
             let mut registered = lock(&state.registered);
+            // Relaxed (here and below): stored only under `registered`.
+            if arm && !state.write_armed.load(Ordering::Relaxed) {
+                for (shared, token) in registered.iter() {
+                    if let Some(reactor) = shared.reactor.get() {
+                        reactor.rearm(*token, descriptor, sides(true))?;
+                    }
+                }
+                state.write_armed.store(true, Ordering::Relaxed);
+            }
             if !registered
                 .iter()
                 .any(|(shared, _)| Arc::ptr_eq(shared, &task.worker))
             {
                 let Ok(reactor) = task.worker.reactor() else {
                     drop(registered);
+                    let (deadline, _) = limit.deadline();
                     return without_reactor(&me, descriptor, interest, deadline);
                 };
-                let token = reactor.register(
-                    descriptor.as_raw_fd(),
-                    Interest::READ | Interest::WRITE | Interest::URGENT | Interest::HANGUP,
-                    self.waiter.clone(),
-                )?;
+                let sides = sides(state.write_armed.load(Ordering::Relaxed));
+                let token = reactor.register(descriptor, sides, self.waiter.clone())?;
                 registered.push((Arc::clone(&task.worker), token));
                 if registered.len() == 1 {
                     state.home.store(here, Ordering::Release);
                 }
-                return Ok(DescriptorWait::Woken);
             }
-        }
-        if let Some(waited) = wait_alone(task, state, descriptor, interest, mark, deadline, now)? {
-            return Ok(waited);
         }
         {
             let mut waiting = lock(&state.waiting);
@@ -1175,6 +1548,7 @@ impl Readiness {
             }
             waiting.of(interest).push(me.clone());
         }
+        let (deadline, now) = limit.deadline();
         let woken = park_from(&me, task, deadline, now);
         let still_queued = lock(&state.waiting).of(interest).remove(&me);
         Ok(if still_queued && woken == Woken::Deadline {
@@ -1190,17 +1564,21 @@ impl Readiness {
 /// worker's thread with [`EpollReactor::poll_one`], as a blocked thread
 /// would, instead of switching to the worker's loop. One `poll` of the
 /// descriptor and the worker's eventfd measured cheaper per reply than the
-/// worker's `epoll_wait` called from the task. The worker counts as
-/// sleeping meanwhile, so a hand-over ([`Shared::notify`]) ends the wait
-/// and the task then parks as usual. `None` when the worker has other work.
+/// worker's `epoll_wait` called from the task, and it needs no
+/// registration. The worker counts as sleeping, not busy, meanwhile, so a
+/// spawn may place a task here, and its hand-over ([`Shared::notify`])
+/// ends the wait. `None` when the worker has other work, or the
+/// hand-over ended the wait before the descriptor was ready: the task
+/// then parks as usual, so the worker runs what came instead of an
+/// attempt that finds nothing. A worker without a reactor waits
+/// ([`wait_blocking`]) without making one while it may.
 fn wait_alone(
     task: &Task,
     state: &Descriptor,
     descriptor: BorrowedFd<'_>,
     interest: Interest,
     mark: u64,
-    deadline: Option<Instant>,
-    now: Option<Instant>,
+    limit: &mut Limit,
 ) -> io::Result<Option<DescriptorWait>> {
     let shared = &task.worker;
     // Relaxed: a hint; a spawn that raises it after this also hands over,
@@ -1208,9 +1586,20 @@ fn wait_alone(
     if shared.tasks.load(Ordering::Relaxed) != 1 || runnable() {
         return Ok(None);
     }
-    let Some(reactor) = shared.reactor.get() else {
+    if shared.reactor.get().is_none()
+        && let Some(waited) = wait_blocking(state, descriptor, interest, mark, limit)
+    {
+        return waited.map(Some);
+    }
+    // Created here by the worker's first wait that may not block it: a
+    // task runs, and `sleeping` is not set yet ([`Shared::notify`]).
+    let Ok(reactor) = shared.reactor() else {
         return Ok(None);
     };
+    // Before `sleeping`: every wake written until then is one the worker
+    // took (it was awake since), and the hand-over check below sees what
+    // came with it.
+    reactor.forget_wakes();
     // SeqCst: the store-load pair with a hand-over (`Shared::hand_over`).
     shared.sleeping.store(true, Ordering::SeqCst);
     if shared.has_pending() {
@@ -1223,15 +1612,98 @@ fn wait_alone(
         shared.sleeping.store(false, Ordering::Relaxed);
         return Ok(Some(DescriptorWait::Woken));
     }
-    let ready = reactor.poll_one(descriptor, interest, deadline, now);
+    // Taken right before the `poll` that uses it: a duration is spent on
+    // the one `poll` it is given to (`Limit::poll_timeout`).
+    let Some(timeout) = limit.poll_timeout() else {
+        shared.sleeping.store(false, Ordering::Relaxed);
+        return Ok(Some(DescriptorWait::Deadline));
+    };
+    let polled = reactor.poll_one(descriptor, interest, timeout);
     shared.sleeping.store(false, Ordering::Relaxed);
-    Ok(Some(if ready? {
-        DescriptorWait::Ready(interest)
-    } else if deadline.is_some_and(|end| Instant::now() >= end) {
-        DescriptorWait::Deadline
+    let polled = polled?;
+    Ok(if polled.ready {
+        Some(DescriptorWait::Ready(interest))
+    } else if polled.timed_out && limit.passed() {
+        Some(DescriptorWait::Deadline)
     } else {
-        DescriptorWait::Woken
-    }))
+        None
+    })
+}
+
+/// [`wait_alone`] on a worker that has no reactor: the task blocks the
+/// worker's thread in one `poll` of the descriptor, under the bounds of
+/// [`block_alone`], so a worker whose tasks only wait alone makes no epoll
+/// instance and no eventfd (`story:readiness-syscalls-per-connection`:
+/// six calls per worker started, which neither v0.15.0's threads nor a
+/// `recv` that blocks make). The worker counts as busy meanwhile: a spawn
+/// finds an idle worker or starts one, as for a blocking `recv`. The
+/// `poll` also watches [`ESCALATION`], so that once as many tasks live as
+/// workers may start ([`escalate`]), the wait ends and waits through the
+/// worker's reactor instead, where a hand-over ends it: a burst of
+/// sessions that wait before their first request does not leave all but
+/// one worker blocked while the last takes the rest. `None` when the task
+/// may not block its worker, or the escalation ended the wait before the
+/// descriptor was ready.
+fn wait_blocking(
+    state: &Descriptor,
+    descriptor: BorrowedFd<'_>,
+    interest: Interest,
+    mark: u64,
+    limit: &mut Limit,
+) -> Option<io::Result<DescriptorWait>> {
+    // Relaxed: a hint that saves a `poll` that would end at once.
+    if ESCALATED.load(Ordering::Relaxed) {
+        return None;
+    }
+    let escalation = escalation()?;
+    let blocking = block_alone()?;
+    // Acquire: pairs with the event count's increment (`Descriptor::ready`).
+    if state.events(interest).load(Ordering::Acquire) != mark {
+        return Some(Ok(DescriptorWait::Woken));
+    }
+    // Taken right before the `poll` that uses it, as in [`wait_alone`].
+    let Some(timeout) = limit.poll_timeout() else {
+        return Some(Ok(DescriptorWait::Deadline));
+    };
+    let polled = crate::reactor::poll_beside(descriptor, interest, escalation.as_fd(), timeout);
+    drop(blocking);
+    Some(match polled {
+        Ok(polled) if polled.ready => Ok(DescriptorWait::Ready(interest)),
+        Ok(polled) if polled.woken => return None,
+        Ok(polled) if polled.timed_out && limit.passed() => Ok(DescriptorWait::Deadline),
+        Ok(_) => Ok(DescriptorWait::Woken),
+        Err(error) => Err(error),
+    })
+}
+
+/// Written once and never read ([`escalate`]): readable from then on, it
+/// ends every `poll` of [`wait_blocking`]. `None` when no eventfd could be
+/// made; no task then blocks its worker in a `poll`.
+static ESCALATION: OnceLock<Option<EventFd>> = OnceLock::new();
+
+/// [`ESCALATION`] was written.
+static ESCALATED: AtomicBool = AtomicBool::new(false);
+
+/// [`ESCALATION`], made by the first wait that blocks its worker in a
+/// `poll`, or by [`escalate`] before it writes it.
+fn escalation() -> Option<&'static EventFd> {
+    ESCALATION
+        .get_or_init(|| crate::reactor::eventfd().ok())
+        .as_ref()
+}
+
+/// A spawn made `live` tasks live: once they are as many as workers may
+/// start, end every `poll` of [`wait_blocking`], now and later. A worker
+/// that blocks in it takes no task, and tasks do not move; without free
+/// workers to start, a spawn that passes it would place its task on a
+/// busier worker. Once per process: [`ESCALATION`] stays readable.
+fn escalate(live: usize) {
+    if live >= worker_limit()
+        && !ESCALATED.swap(true, Ordering::SeqCst)
+        && let Some(escalation) = escalation()
+    {
+        let _ = escalation.write(1);
+    }
 }
 
 /// Workers whose only task is in a blocking read ([`block_alone`]).
@@ -1320,18 +1792,27 @@ fn without_reactor(
     if fds[0].revents().is_some_and(|ready| !ready.is_empty()) {
         return Ok(DescriptorWait::Ready(interest));
     }
-    let retry = Instant::now() + RETRY;
+    let retry = read_clock() + RETRY;
     crate::wait::park(me, Some(deadline.map_or(retry, |end| end.min(retry))));
     Ok(match deadline {
-        Some(end) if Instant::now() >= end => DescriptorWait::Deadline,
+        Some(end) if read_clock() >= end => DescriptorWait::Deadline,
         _ => DescriptorWait::Woken,
     })
 }
 
 impl Readiness {
-    /// Deregister the descriptor from every worker and wake its waiters;
-    /// before the descriptor closes. A later wait registers it again.
-    pub(crate) fn deregister(&self) {
+    /// Deregister `descriptor`, the one every wait of this readiness was
+    /// for, from every worker and wake its waiters; before the descriptor
+    /// closes. A later wait registers it again.
+    pub(crate) fn deregister(&self, descriptor: BorrowedFd<'_>) {
+        self.release(Some(descriptor));
+    }
+
+    /// [`Readiness::deregister`] of `delete`; without one the workers'
+    /// reactors only forget the descriptor ([`EpollReactor::forget`]): its
+    /// owner closes it right after, and the close takes it out of their
+    /// epoll instances without an `epoll_ctl` each.
+    fn release(&self, delete: Option<BorrowedFd<'_>>) {
         let registered = {
             let mut registered = lock(&self.descriptor().registered);
             self.descriptor()
@@ -1341,7 +1822,12 @@ impl Readiness {
         };
         for (shared, token) in registered {
             if let Some(reactor) = shared.reactor.get() {
-                let _ = reactor.deregister(token);
+                match delete {
+                    Some(descriptor) => {
+                        let _ = reactor.deregister(token, descriptor);
+                    }
+                    None => reactor.forget(token),
+                }
             }
         }
         // A new mark under the lock a waiter compares its mark under: a
@@ -1355,14 +1841,91 @@ impl Readiness {
     }
 }
 
+/// Its owner (a stream, a listener's slot) closes the descriptor right
+/// after, and no other descriptor refers to that socket (none is ever
+/// duplicated; a child process's copy closes at its `exec`), so the close
+/// deregisters it.
 impl Drop for Readiness {
     fn drop(&mut self) {
-        self.deregister();
+        self.release(None);
     }
 }
 
 impl std::fmt::Debug for Readiness {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Readiness").finish_non_exhaustive()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The slots of the entries of `timers` in the order they come due at
+    /// `now`, taken out.
+    fn drain(timers: &mut Timers, now: Instant) -> Vec<usize> {
+        std::iter::from_fn(|| timers.pop_due(now).ok())
+            .map(|(slot, _)| slot)
+            .collect()
+    }
+
+    /// Every entry's recorded position is where it is, no slot without an
+    /// entry has one, and no parent is later than its children.
+    fn check(timers: &Timers) {
+        for (index, timer) in timers.heap.iter().enumerate() {
+            assert_eq!(timers.slots[timer.slot].position as usize, index + 1);
+            if index > 0 {
+                assert!(timers.heap[(index - 1) / 2].key <= timer.key);
+            }
+        }
+        let placed = timers.slots.iter().filter(|s| s.position != 0).count();
+        assert_eq!(placed, timers.heap.len());
+    }
+
+    /// [`Timers`] hands out due entries earliest first, in the order they
+    /// were armed on the same deadline, and reports the next deadline.
+    #[test]
+    fn timers_pop_earliest_first() {
+        let waiter = Waiter::current();
+        let start = Instant::now();
+        let at = |n: u64| start + Duration::from_secs(n);
+        let mut timers = Timers::new();
+        for (slot, n) in [(3, 3), (1, 1), (4, 4), (0, 2), (5, 5), (2, 2)] {
+            timers.arm(slot, at(n), &waiter);
+            check(&timers);
+        }
+        assert_eq!(timers.pop_due(at(0)).err(), Some(Some(at(1))));
+        assert_eq!(drain(&mut timers, at(2)), [1, 0, 2]);
+        check(&timers);
+        assert_eq!(drain(&mut timers, at(9)), [3, 4, 5]);
+        assert_eq!(timers.pop_due(at(9)).err(), Some(None));
+        assert!(timers.is_empty());
+    }
+
+    /// The entry of a task that ends is taken out at once, wherever it is,
+    /// so its deadline is never the next one; an entry armed earlier moves
+    /// up in place, a later arming leaves it.
+    #[test]
+    fn timers_remove_at_once_and_move_an_earlier_arming_up() {
+        let waiter = Waiter::current();
+        let start = Instant::now();
+        let at = |n: u64| start + Duration::from_secs(n);
+        let mut timers = Timers::new();
+        for slot in 0..10 {
+            timers.arm(slot, at(slot as u64 + 1), &waiter);
+        }
+        for slot in [0, 9, 4, 1] {
+            timers.remove(slot);
+            check(&timers);
+        }
+        timers.remove(4);
+        assert_eq!(timers.heap.len(), 6);
+        assert_eq!(timers.pop_due(at(0)).err(), Some(Some(at(3))));
+        timers.arm(8, at(1), &waiter);
+        check(&timers);
+        timers.arm(7, at(50), &waiter);
+        check(&timers);
+        assert_eq!(drain(&mut timers, at(9)), [8, 2, 3, 5, 6, 7]);
+        assert!(timers.is_empty());
     }
 }

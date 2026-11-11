@@ -17,15 +17,15 @@ Three consequences follow, and the rest of the language depends on them:
 
 - **Authority is passed, never ambient.** An effect is a capability on a parameter. A
   function that writes to `stream` needs `stream.write`; it cannot write to a stream it was
-  not given. Only a few process-wide operations (`stdin.read`, `stdin.mode`, `stdout.write`,
-  `process.exit`, `net.listen`, `net.connect`, `clock.read`, `process.args`) are named
-  directly.
+  not given. Only a few process-wide operations, such as `stdout.write`, `net.listen` and
+  `clock.read`, are named directly. The [effect names](../reference/effects.md#effect-names)
+  list them all.
 - **Declarations can be evaluated at compile time.** Property expressions must be pure, so
   the compiler can compute every property of a system without touching the machine it runs
   on ([The compile-time evaluator](evaluator.md)).
 - **Decisions can be replayed.** The control machines of `ignite run` are pure functions of
   their events, so a journal of the events is enough to reproduce every decision
-  ([Contracts, policies and control](contracts.md)).
+  ([The run-time model](runtime.md)).
 
 ## Declared and inferred
 
@@ -95,25 +95,22 @@ spawns it pays for those effects on the stream it passes.
 
 ## Where effects start
 
-Somebody has to be allowed to do everything. In Ignite these are the effect roots:
-
-| root | what it may do |
-|---|---|
-| a `test` block | any effect, `spawn` included, without a `requires` |
-| a kind's `K.main` | its set is inferred; the generated `main` that calls it grants everything |
-| the generated `main` of an executable | binds the listeners, builds the component's value and calls `K.main` |
-
-So a program's authority starts at the executable's entry and flows down through
+Somebody has to be allowed to do everything. In Ignite that is the executable's entry. The
+generated `main` binds the listeners, builds the component's value and calls `K.main`, whose
+effects are inferred and granted. A `test` block is the other root: it may perform any
+effect without a `requires`. A program's authority starts there and flows down through
 parameters. A library function never has more than its caller gave it.
 
 ## Where effects are not allowed
 
-| context | rule | diagnostic |
-|---|---|---|
-| a `const` value | pure | [E010](../reference/diagnostics.md#e010) |
-| a record field default | pure | [E010](../reference/diagnostics.md#e010) |
-| a property expression in a `resource`, `component`, `contract`, `policy` or `assembly` | pure | [E116](../reference/diagnostics.md#e116) |
-| the hooks `K.machine` and `K.validate` | pure, with a fixed signature | [E109](../reference/diagnostics.md#e109) |
+Some code must be pure, because the compiler runs it or because its result must not depend
+on the machine:
+
+- a `const` value and a record field default ([E010](../reference/diagnostics.md#e010));
+- a property expression in a system declaration ([E116](../reference/diagnostics.md#e116));
+- the hooks `K.machine` and `K.validate` ([E109](../reference/diagnostics.md#e109)).
+
+The exact rules are in the [effects reference](../reference/effects.md#where-effects-are-not-allowed).
 
 ```ignite,fails=E010
 fn report(line: Text) -> Result<Unit, IoError> requires [stdout.write] {

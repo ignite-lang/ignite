@@ -16,7 +16,7 @@ members = [
 exclude = ["bench/native/rust"]
 
 [workspace.package]
-version = "0.15.0"
+version = "0.16.0"
 edition = "2024"
 publish = false
 
@@ -31,7 +31,48 @@ ignite-rt = { path = "crates/ignite-rt" }
 ignite-llvm = { path = "crates/ignite-llvm" }
 ignite-eval = { path = "crates/ignite-eval" }
 clap ={ version = "4.6", features = ["derive"] }
-nix = { version = "0.31", features = ["term", "fs"] }
+nix = { version = "0.31", features = ["fs"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rcgen = "0.14"
 
 [profile.release.package.ignite-rt]
 codegen-units = 1
+
+[profile.dev.package."*"]
+debug = false
+
+[profile.dev.package.ignite-rt]
+debug = "line-tables-only"
+split-debuginfo = "unpacked"
+
+[profile.dev.package.ignite-io]
+opt-level = 1
+debug = "line-tables-only"
+split-debuginfo = "unpacked"
+
+[profile.dev.package.rustls]
+opt-level = 2
+
+[profile.dev.package.rustls-webpki]
+opt-level = 2
+
+[profile.dev.package.rustls-pki-types]
+opt-level = 2
+
+[profile.dev.package.ring]
+opt-level = 2
+
+[profile.dev.package.untrusted]
+opt-level = 2
+
+[profile.dev.package.subtle]
+opt-level = 2
+
+[profile.dev.package.zeroize]
+opt-level = 2
+
+[profile.dev.package.getrandom]
+opt-level = 2
+
+[profile.dev.package.once_cell]
+opt-level = 2

@@ -1,24 +1,23 @@
 # std.net
 
 The network part of the substrate: TCP listeners and streams, in-process pipes for tests, the
-`ByteStream` interface that both kinds of stream implement, and the `Endpoint` record. Except
-for `Endpoint`, these names are builtins implemented in the substrate, the Rust crate
+`ByteStream` interface that both kinds of stream implement, and the `Endpoint` and `Connection` records. Except
+for those two, these names are builtins implemented in the substrate, the Rust crate
 `ignite-io`, with the same code on every target. They are visible in every module without an
 import.
 
 - Layer: base (substrate).
 - Source: [`std/net.ignite`](https://github.com/ignite-lang/ignite/blob/main/std/net.ignite)
-  declares only `Endpoint`. The builtins are specified in
+  declares only `Endpoint` and `Connection`. The builtins are specified in
   [`docs/slice.md`](https://github.com/ignite-lang/ignite/blob/main/docs/slice.md) sections 7,
   14.4, 16.9 and 18.3 to 18.4.
 - Import: none needed. `import std.net.{TcpStream, ByteStream, Pipe, PipeStream}` is accepted
   and only checks that the names are builtins. `Endpoint` is declared in the file:
   `import std.net.Endpoint`.
 
-The substrate has more builtins: `Stdin`, `Stdout`, `Input`, `IoError`, `Process`, `Clock`
-and `log`. The std modules import `IoError` from `std.io`, the second substrate module, which
-has no file. An import from either substrate module only checks that the name is a builtin.
-`Input` is described here because every stream read returns it.
+The other builtins of the substrate, `Stdin`, `Stdout`, `Stderr`, `Process`, `Clock`, `Store`,
+`IoError` and `log`, are on [std.io](io.md). `Input` is described here because every stream
+read returns it.
 
 ## Effects
 
@@ -27,7 +26,7 @@ Operations on streams and listeners need effects on the value they are called on
 
 | operation | effect it needs |
 |---|---|
-| `TcpListener.bind(a, p)` | `net.listen` |
+| `TcpListener.bind(a, p)`, `TcpListener.bind_kept(a, p)` | `net.listen` |
 | `TcpStream.connect(a, p)` | `net.connect` |
 | `x.accept()` | `x.accept` |
 | `x.read(n)`, `x.received_batches()`, `x.urgent_pending()` | `x.read` |
@@ -42,6 +41,7 @@ Operations on streams and listeners need effects on the value they are called on
 
 ```ignite,fragment
 TcpListener.bind(address: Text, port: Int) -> Result<TcpListener, IoError>
+TcpListener.bind_kept(address: Text, port: Int) -> Result<TcpListener, IoError>
 fn accept(listener: TcpListener) -> Result<TcpStream, IoError>
 fn local_port(listener: TcpListener) -> Int
 ```
@@ -49,6 +49,7 @@ fn local_port(listener: TcpListener) -> Int
 | operation | what it does |
 |---|---|
 | `TcpListener.bind` | listen on `address` and `port`; port 0 picks a free port |
+| `TcpListener.bind_kept` | as `bind`, for a listener the SIGTERM drain keeps open (below) |
 | `accept` | the next connection; retries failures that pass with time (out of descriptors, buffers or memory, a connection aborted before it was accepted), pausing 10 ms, doubling up to 1 s |
 | `local_port` | the port the listener is bound to |
 
@@ -67,7 +68,9 @@ resource ingress: TcpListener {
 A fifth property, `keep_through_drain = true`, keeps the listener open through the SIGTERM
 drain. It is not released and accepts until the process exits. An admin or internal port
 then keeps answering while the others drain, and a task waiting on it does not hold up the
-exit.
+exit. A listener whose address or port the program reads at run time, from its environment or
+configuration, is kept the same way when it is bound with `TcpListener.bind_kept`. One bound
+with `TcpListener.bind` is released.
 
 The generated `main` binds every listener a component uses before it calls the component's
 `main`, with the `--port` override and the `listening on` log line.
@@ -91,11 +94,15 @@ fn close(stream: TcpStream) -> Result<Unit, IoError>
 fn set_idle_timeout(stream: TcpStream, ms: Int) -> Result<Unit, IoError>
 fn write_urgent(stream: TcpStream, data: Bytes) -> Result<Unit, IoError>
 fn urgent_pending(stream: TcpStream) -> Result<Bool, IoError>
+fn peer(stream: TcpStream) -> Endpoint
+fn local(stream: TcpStream) -> Endpoint
 ```
 
 | operation | what it does |
 |---|---|
 | `TcpStream.connect` | open a connection |
+| `peer` | the other end's address and port (`10.0.0.7`, `::1`); no effect, kept after `close` |
+| `local` | this end's address and port: where an accepted connection arrived, where a connected one left from; no effect, kept after `close` |
 | `read` | one read of up to `maximum` bytes: `Data(bytes)`, or `Eof` at the end of the stream |
 | `write_all` | append `data` to the stream's send buffer |
 | `close` | send the buffer and shut down the write half |
@@ -211,6 +218,25 @@ resource name where an `Endpoint` is expected gives that listener's address and 
 through the process arguments `--ref <path>=<address>:<port>` that the driver passes to a
 probe. Outside a run it fails with `no binding for <path>`. The Telnet probe `TelnetPrompt`
 uses it to find its target.
+
+## Connection
+
+```ignite,fragment
+type Connection {
+  peer: Endpoint
+  local: Endpoint
+  tls: Bool = false
+}
+
+fn Connection.unknown() -> Connection
+fn Connection.of(stream: TcpStream) -> Connection
+```
+
+What a server knows of one connection, the view a protocol hands its application:
+`request.connection` in [std.protocol.http](http.md). `Connection.of(stream)` is the view of
+a plain TCP stream, `peer()` and `local()`. `Connection.unknown()` is the view of a stream
+without addresses, such as a pipe end: both ends empty, port 0. `tls` is false until a TLS
+layer exists. Import it with `import std.net.Connection`.
 
 ## Examples
 

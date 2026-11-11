@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-11T17:30:57Z",
+  "actor": "human:timo",
+  "artifact": "story:binary-size-back",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "unit head 5c534a62: timer_adversary 10 passed in both IO modes; binary_size 5, binary_size_adversary 3, dev_build_adversary 7 of 8 (the_build_ahead_blocks_no_signal_and_ends_on_sigterm passes alone); ignite-io 118 and 240 passed in both modes; task test-ignite 452 passed per target; fmt and clippy exit 0"
+  }
+}

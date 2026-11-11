@@ -48,6 +48,7 @@ fn cases() -> Vec<(Ty, Type)> {
         (Ty::TcpListener, t("TcpListener")),
         (Ty::TcpStream, t("TcpStream")),
         (Ty::PipeStream, t("PipeStream")),
+        (Ty::TlsStream, t("TlsStream")),
         (Ty::Quantity(QuantityKind::Duration), t("Duration")),
         (Ty::Quantity(QuantityKind::ByteSize), t("ByteSize")),
         (Ty::Quantity(QuantityKind::Ratio), t("Ratio")),
@@ -158,6 +159,7 @@ const TYPE_CHECKER_METHOD_NAMES: &[&str] = &[
     "received_batches",
     "write_urgent",
     "urgent_pending",
+    "alpn",
     "read_file",
     "write_file",
     "read_directory",
@@ -207,5 +209,43 @@ fn every_type_checker_builtin_name_is_known_to_the_checker() {
     assert!(
         unknown.is_empty(),
         "builtins of the type checker that ignite-check does not know: {unknown:?}"
+    );
+}
+
+/// `Builtin::is_scalar_to_text`, which the Rust target reads for "the
+/// scalar's `Display`": the `to_text` method of `Int`, `Byte`, `U32` and
+/// `Bool`, and no other `to_text`, the static `Int.to_text(n)` included.
+#[test]
+fn the_scalar_to_text_methods_are_the_four_scalars() {
+    let text = "fn f(i: Int, b: Byte, w: U32, t: Bool, s: Text, bytes: Bytes) -> List<Text> = \
+                [i.to_text(), b.to_text(), w.to_text(), t.to_text(), s.to_text(), \
+                bytes.to_text(), Int.to_text(1)]\n";
+    let source = ignite_syntax::SourceFile::new("probe.ignite", text.to_string());
+    let program = ignite_syntax::parse(&source)
+        .unwrap_or_else(|d| panic!("parse failed:\n{}", source.render_all(&d)));
+    let symbols = ignite_check::check_module(&program, &ignite_check::Modules::new())
+        .unwrap_or_else(|d| panic!("check failed:\n{}", source.render_all(&d)));
+    let typed = ignite_types::type_module(&program, &symbols, &ignite_types::TypedModules::new())
+        .unwrap_or_else(|d| panic!("type failed:\n{}", source.render_all(&d)));
+    let mut seen = Vec::new();
+    for e in crate::common::expressions(&program) {
+        if let Some(ignite_types::Callee::Builtin(builtin)) = typed.callee(e) {
+            seen.push((
+                &source.text[e.span.start..e.span.end],
+                builtin.is_scalar_to_text(),
+            ));
+        }
+    }
+    assert_eq!(
+        seen,
+        [
+            ("i.to_text()", true),
+            ("b.to_text()", true),
+            ("w.to_text()", true),
+            ("t.to_text()", true),
+            ("s.to_text()", false),
+            ("bytes.to_text()", false),
+            ("Int.to_text(1)", false),
+        ]
     );
 }

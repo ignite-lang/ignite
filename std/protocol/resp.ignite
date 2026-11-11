@@ -1,0 +1,1706 @@
+package std.protocol.resp
+
+import std.net.{ByteStream, Pipe, PipeStream, TcpStream, TcpListener, Endpoint}
+import std.io.IoError
+import std.text.{bytes_find_from, is_digit, split, to_lower}
+
+// A client of the Redis serialization protocol, RESP2 and RESP3, over any
+// `ByteStream`: a `TcpStream` in programs, a `PipeStream` in tests.
+//
+// - Values: `RespValue` is every RESP3 type, the RESP2 ones among them.
+//   `encode` writes the RESP3 form; `decode` reads one value from bytes
+//   within `RespLimits` (RESP2's `$-1` and `*-1` read as `Null`, RESP3's
+//   streamed strings and aggregates as the value they spell), and
+//   `read_value` reads one from a stream.
+// - Commands: `Client` sends a command as an array of bulk strings
+//   (`encode_command`) and reads its reply; `pipeline` sends many in one
+//   write and returns their replies in order. The typed helpers below
+//   cover strings, hashes, sets, keys, expiry and publishing; a reply of
+//   the wrong type, or the server's error, is an `IoError`. A push frame
+//   (RESP3 out-of-band data) on a command connection is skipped, so under
+//   RESP3 a SUBSCRIBE sent with `command` or `pipeline` waits until the
+//   stream's idle timeout: its confirmation is a push. Use `subscribe`. The
+//   helpers are called as plain fns, `get(client, key)`: the method form
+//   on a binding of type `Client<T>` is E042.
+// - Pub/sub: `subscribe` confirms the first channel, then a task reads the
+//   connection and sends each message on `Subscription.messages` until
+//   every subscription is gone (`unsubscribe`) or the connection ends;
+//   then the channel closes. Reconnecting is the caller's: `retry_delay`
+//   and `resubscribe` (below).
+// - Sentinel: `ask_master` asks one sentinel for the master of a name,
+//   `master_from` and `master_at` ask a list of them in order, and
+//   `watch_master` with `next_master` follows its `+switch-master`
+//   messages.
+//
+// A client is for one task at a time: two tasks that send commands on one
+// connection read each other's replies. A connection whose reply was cut
+// off (`IoError`) is closed, not reused.
+
+type IoResult<T> = Result<T, IoError>
+
+// ---- values -----------------------------------------------------------------
+
+// One RESP value. A line type's text (`Simple`, `Error`, `Double`,
+// `BigNumber`) holds no CR or LF; `Double` and `BigNumber` keep the
+// number's exact text, as `std.json`'s `Decimal` does. `Verbatim` is a
+// three-character format (`txt`, `mkd`) and the text. `Attributed` is a
+// RESP3 attribute map and the value it annotates.
+enum RespValue {
+  Simple(Text),
+  Error(Text),
+  Integer(Int),
+  Blob(Bytes),
+  Null,
+  Double(Text),
+  Boolean(Bool),
+  BlobError(Bytes),
+  Verbatim(Text, Bytes),
+  BigNumber(Text),
+  Array(List<RespValue>),
+  Map(List<(RespValue, RespValue)>),
+  Set(List<RespValue>),
+  Push(List<RespValue>),
+  Attributed(List<(RespValue, RespValue)>, RespValue)
+}
+
+// What one value read may hold. `line`: the text of one line, without
+// its type byte and CR LF. `bulk`: one bulk string, blob error or verbatim
+// string, a streamed string in total. `elements`: the items of one
+// aggregate, a map's pairs. `depth`: aggregates inside aggregates, the
+// value an attribute annotates one level below the attribute.
+// `reply`: the encoded bytes of one value, everything in it included.
+type RespLimits {
+  line: ByteSize = 64 KiB
+  bulk: ByteSize = 16 MiB
+  elements: Int = 1048576
+  depth: Int = 32
+  reply: ByteSize = 64 MiB
+}
+
+// Why bytes are no RESP value.
+enum RespError {
+  UnknownType(Byte),
+  Malformed(Text),
+  LineTooLong,
+  BulkTooLarge,
+  TooManyElements,
+  TooDeep,
+  ReplyTooLarge,
+  Truncated
+}
+
+fn describe(error: RespError) -> Text = match error {
+  UnknownType(b) => "unknown type byte {b}"
+  Malformed(what) => what
+  LineTooLong => "a line longer than the limit"
+  BulkTooLarge => "a bulk string longer than the limit"
+  TooManyElements => "an aggregate with more items than the limit"
+  TooDeep => "aggregates nested deeper than the limit"
+  ReplyTooLarge => "a reply larger than the limit"
+  Truncated => "the stream ended inside a value"
+}
+
+fn protocol_error(error: RespError) -> IoError = IoError.new("resp: {describe(error)}")
+
+// ---- encoding ---------------------------------------------------------------
+
+fn write_line(out: Bytes, kind: Byte, text: Bytes) -> Bytes {
+  var buffer = out
+  buffer.push(kind)
+  buffer.append(text)
+  buffer.append(b"\r\n")
+  buffer
+}
+
+fn write_count(out: Bytes, kind: Byte, count: Int) -> Bytes = write_line(out, kind, count.to_text().to_bytes())
+
+fn write_bulk(out: Bytes, kind: Byte, bytes: Bytes) -> Bytes {
+  var buffer = write_count(out, kind, bytes.len())
+  buffer.append(bytes)
+  buffer.append(b"\r\n")
+  buffer
+}
+
+fn write_items(out: Bytes, kind: Byte, items: List<RespValue>) -> Bytes {
+  var buffer = write_count(out, kind, items.len())
+  for item in items {
+    buffer = write_value(buffer, item)
+  }
+  buffer
+}
+
+fn write_pairs(out: Bytes, kind: Byte, pairs: List<(RespValue, RespValue)>) -> Bytes {
+  var buffer = write_count(out, kind, pairs.len())
+  for pair in pairs {
+    buffer = write_value(buffer, pair.0)
+    buffer = write_value(buffer, pair.1)
+  }
+  buffer
+}
+
+// `out` with the RESP3 encoding of `value` appended.
+fn write_value(out: Bytes, value: RespValue) -> Bytes = match value {
+  Simple(text) => write_line(out, b'+', text.to_bytes())
+  Error(text) => write_line(out, b'-', text.to_bytes())
+  Integer(n) => write_count(out, b':', n)
+  Blob(bytes) => write_bulk(out, b'$', bytes)
+  Null => write_line(out, b'_', Bytes.empty())
+  Double(text) => write_line(out, b',', text.to_bytes())
+  Boolean(b) => write_line(out, b'#', if b { b"t" } else { b"f" })
+  BlobError(bytes) => write_bulk(out, b'!', bytes)
+  Verbatim(format, bytes) => {
+    var body = format.to_bytes()
+    body.push(b':')
+    body.append(bytes)
+    write_bulk(out, b'=', body)
+  }
+  BigNumber(text) => write_line(out, b'(', text.to_bytes())
+  Array(items) => write_items(out, b'*', items)
+  Map(pairs) => write_pairs(out, b'%', pairs)
+  Set(items) => write_items(out, b'~', items)
+  Push(items) => write_items(out, b'>', items)
+  Attributed(pairs, inner) => write_value(write_pairs(out, b'|', pairs), inner)
+}
+
+// The RESP3 encoding of `value`: `decode` reads it back as `value`.
+fn encode(value: RespValue) -> Bytes = write_value(Bytes.with_capacity(64), value)
+
+// A command as a client sends it: an array of bulk strings, its name
+// first.
+fn encode_command(args: List<Bytes>) -> Bytes {
+  var buffer = write_count(Bytes.with_capacity(64), b'*', args.len())
+  for arg in args {
+    buffer = write_bulk(buffer, b'$', arg)
+  }
+  buffer
+}
+
+// The arguments of a command written as texts: `words(["GET", key])`.
+fn words(parts: List<Text>) -> List<Bytes> = parts.map(|part| part.to_bytes())
+
+// ---- decoding ---------------------------------------------------------------
+
+// A value found at an offset and the offset after it, `None` when the
+// bytes end inside it, or why the bytes are no value.
+type Parse<T> = Result<Option<(T, Int)>, RespError>
+
+// The line whose text starts at `at`: the offset of its CR and the
+// offset after its LF.
+fn line_at(data: Bytes, at: Int, limits: RespLimits) -> Parse<Int> {
+  let maximum = limits.line.to_int()
+  match bytes_find_from(data, b"\r\n", at) {
+    Some(end) => {
+      if end - at > maximum {
+        return Err(LineTooLong)
+      }
+      var i = at
+      while i < end {
+        let b = data.at(i)
+        if b == b'\r' || b == b'\n' {
+          return Err(Malformed("a line holds a CR or LF of its own"))
+        }
+        i = i + 1
+      }
+      Ok(Some((end, end + 2)))
+    }
+    None => if data.len() - at > maximum + 1 { Err(LineTooLong) } else { Ok(None) }
+  }
+}
+
+// Whether `line` from `start` on is one or more decimal digits.
+fn digits_from(line: Bytes, start: Int) -> Bool {
+  if start >= line.len() {
+    return false
+  }
+  var i = start
+  while i < line.len() {
+    if !is_digit(line.at(i)) {
+      return false
+    }
+    i = i + 1
+  }
+  true
+}
+
+fn signed(line: Bytes) -> Int = if !line.is_empty() && (line.at(0) == b'-' || line.at(0) == b'+') { 1 } else { 0 }
+
+// A signed 64-bit integer: an optional sign, then decimal digits.
+fn integer_of(line: Bytes) -> Option<Int> {
+  let start = signed(line)
+  if !digits_from(line, start) {
+    return None
+  }
+  let digits = line.slice(start, line.len()).to_text()
+  if line.at(0) == b'-' { Int.parse("-" + digits) } else { Int.parse(digits) }
+}
+
+// A big number: an optional sign, then decimal digits, any number of them.
+fn is_big_number(line: Bytes) -> Bool = digits_from(line, signed(line))
+
+// The end of the digits of `line` from `at` on.
+fn digits_end(line: Bytes, at: Int) -> Int {
+  var i = at
+  while i < line.len() && is_digit(line.at(i)) {
+    i = i + 1
+  }
+  i
+}
+
+// A double: `inf`, `-inf`, `nan`, or an optional sign, digits, an
+// optional fraction and an optional exponent.
+fn is_double(line: Bytes) -> Bool {
+  let text = line.to_text()
+  if text == "inf" || text == "-inf" || text == "nan" {
+    return true
+  }
+  let start = signed(line)
+  var i = digits_end(line, start)
+  if i == start {
+    return false
+  }
+  if i < line.len() && line.at(i) == b'.' {
+    let fraction = i + 1
+    i = digits_end(line, fraction)
+    if i == fraction {
+      return false
+    }
+  }
+  if i < line.len() && (line.at(i) == b'e' || line.at(i) == b'E') {
+    var exponent = i + 1
+    if exponent < line.len() && (line.at(exponent) == b'-' || line.at(exponent) == b'+') {
+      exponent = exponent + 1
+    }
+    i = digits_end(line, exponent)
+    if i == exponent {
+      return false
+    }
+  }
+  i == line.len()
+}
+
+fn length_of(line: Bytes) -> Result<Int, RespError> = match integer_of(line) {
+  Some(n) => if n < -1 { Err(Malformed("a negative length")) } else { Ok(n) }
+  None => Err(Malformed("a length that is no number"))
+}
+
+// A bulk string, blob error or verbatim string whose length line is
+// `line` and whose bytes start at `after`.
+fn blob_at(data: Bytes, kind: Byte, line: Bytes, after: Int, limits: RespLimits) -> Parse<RespValue> {
+  let n = length_of(line)?
+  if n == 0 - 1 {
+    return if kind == b'$' { Ok(Some((Null, after))) } else { Err(Malformed("a negative length")) }
+  }
+  if n > limits.bulk.to_int() {
+    return Err(BulkTooLarge)
+  }
+  let stop = after + n
+  if data.len() < stop + 2 {
+    return Ok(None)
+  }
+  if data.at(stop) != b'\r' || data.at(stop + 1) != b'\n' {
+    return Err(Malformed("a bulk string not ended by CR LF"))
+  }
+  let bytes = data.slice(after, stop)
+  match kind {
+    b'!' => Ok(Some((BlobError(bytes), stop + 2)))
+    b'=' => if n < 4 || bytes.at(3) != b':' {
+      Err(Malformed("a verbatim string without its format"))
+    } else {
+      Ok(Some((Verbatim(bytes.slice(0, 3).to_text(), bytes.slice(4, n)), stop + 2)))
+    }
+    _ => Ok(Some((Blob(bytes), stop + 2)))
+  }
+}
+
+// A streamed string (`$?`): parts `;<length>` with their bytes, ended by
+// `;0`.
+fn streamed_blob(data: Bytes, at: Int, limits: RespLimits) -> Parse<RespValue> {
+  var out = Bytes.empty()
+  var i = at
+  loop {
+    if i >= data.len() {
+      return Ok(None)
+    }
+    if data.at(i) != b';' {
+      return Err(Malformed("a part of a streamed string that does not start with ;"))
+    }
+    let (end, after) = match line_at(data, i + 1, limits)? {
+      Some(found) => found
+      None => return Ok(None)
+    }
+    let n = length_of(data.slice(i + 1, end))?
+    if n < 0 {
+      return Err(Malformed("a negative length"))
+    }
+    if n == 0 {
+      return Ok(Some((Blob(out), after)))
+    }
+    if out.len() + n > limits.bulk.to_int() {
+      return Err(BulkTooLarge)
+    }
+    let stop = after + n
+    if data.len() < stop + 2 {
+      return Ok(None)
+    }
+    if data.at(stop) != b'\r' || data.at(stop + 1) != b'\n' {
+      return Err(Malformed("a bulk string not ended by CR LF"))
+    }
+    out.append(data.slice(after, stop))
+    i = stop + 2
+  }
+}
+
+// Consecutive items as pairs: the first and the second, the third and
+// the fourth.
+fn paired(items: List<RespValue>) -> List<(RespValue, RespValue)> {
+  var pairs: List<(RespValue, RespValue)> = []
+  var i = 0
+  while i + 1 < items.len() {
+    pairs.push((items.at(i), items.at(i + 1)))
+    i = i + 2
+  }
+  pairs
+}
+
+fn pairs_kind(kind: Byte) -> Bool = kind == b'%' || kind == b'|'
+
+// The aggregate of `kind` over `items`, which ends at `at`; an attribute
+// is followed by the value it annotates, one level deeper, so a chain of
+// attributes is held to `RespLimits.depth` as nesting is.
+fn aggregate(data: Bytes, kind: Byte, items: List<RespValue>, at: Int, depth: Int, limits: RespLimits) -> Parse<RespValue> = match kind {
+  b'%' => Ok(Some((Map(paired(items)), at)))
+  b'~' => Ok(Some((Set(items), at)))
+  b'>' => Ok(Some((Push(items), at)))
+  b'|' => match value_at(data, at, depth + 1, limits)? {
+    Some((inner, end)) => Ok(Some((Attributed(paired(items), inner), end)))
+    None => Ok(None)
+  }
+  _ => Ok(Some((Array(items), at)))
+}
+
+// An aggregate of a known count, written in `line`, whose items start at
+// `after`.
+fn counted_at(data: Bytes, kind: Byte, line: Bytes, after: Int, depth: Int, limits: RespLimits) -> Parse<RespValue> {
+  let n = length_of(line)?
+  if n == 0 - 1 {
+    return if kind == b'*' { Ok(Some((Null, after))) } else { Err(Malformed("a negative length")) }
+  }
+  if n > limits.elements {
+    return Err(TooManyElements)
+  }
+  if depth >= limits.depth {
+    return Err(TooDeep)
+  }
+  let count = if pairs_kind(kind) { n * 2 } else { n }
+  var items: List<RespValue> = []
+  var i = after
+  while items.len() < count {
+    match value_at(data, i, depth + 1, limits)? {
+      Some((item, end)) => {
+        items.push(item)
+        i = end
+      }
+      None => return Ok(None)
+    }
+  }
+  aggregate(data, kind, items, i, depth, limits)
+}
+
+// A streamed aggregate (`*?`, `~?`, `%?`): items until a line `.`.
+fn streamed_at(data: Bytes, kind: Byte, after: Int, depth: Int, limits: RespLimits) -> Parse<RespValue> {
+  if depth >= limits.depth {
+    return Err(TooDeep)
+  }
+  let per_entry = if pairs_kind(kind) { 2 } else { 1 }
+  var items: List<RespValue> = []
+  var i = after
+  loop {
+    if i >= data.len() {
+      return Ok(None)
+    }
+    if data.at(i) == b'.' {
+      let (end, next) = match line_at(data, i + 1, limits)? {
+        Some(found) => found
+        None => return Ok(None)
+      }
+      if end != i + 1 {
+        return Err(Malformed("the end of a streamed aggregate holds text"))
+      }
+      if items.len() % per_entry != 0 {
+        return Err(Malformed("a streamed map ends inside a pair"))
+      }
+      return aggregate(data, kind, items, next, depth, limits)
+    }
+    if items.len() >= limits.elements * per_entry {
+      return Err(TooManyElements)
+    }
+    match value_at(data, i, depth + 1, limits)? {
+      Some((item, end)) => {
+        items.push(item)
+        i = end
+      }
+      None => return Ok(None)
+    }
+  }
+}
+
+// The value whose type byte is at `at`, inside `depth` aggregates.
+fn value_at(data: Bytes, at: Int, depth: Int, limits: RespLimits) -> Parse<RespValue> {
+  if at >= data.len() {
+    return Ok(None)
+  }
+  let kind = data.at(at)
+  let (end, after) = match line_at(data, at + 1, limits)? {
+    Some(found) => found
+    None => return Ok(None)
+  }
+  let line = data.slice(at + 1, end)
+  let streamed = line == b"?"
+  match kind {
+    b'+' => Ok(Some((Simple(line.to_text()), after)))
+    b'-' => Ok(Some((Error(line.to_text()), after)))
+    b':' => match integer_of(line) {
+      Some(n) => Ok(Some((Integer(n), after)))
+      None => Err(Malformed("an integer that is no number"))
+    }
+    b'_' => if line.is_empty() { Ok(Some((Null, after))) } else { Err(Malformed("a null that holds text")) }
+    b',' => if is_double(line) { Ok(Some((Double(line.to_text()), after))) } else { Err(Malformed("a double that is no number")) }
+    b'#' => if line == b"t" {
+      Ok(Some((Boolean(true), after)))
+    } else if line == b"f" {
+      Ok(Some((Boolean(false), after)))
+    } else {
+      Err(Malformed("a boolean that is neither t nor f"))
+    }
+    b'(' => if is_big_number(line) { Ok(Some((BigNumber(line.to_text()), after))) } else { Err(Malformed("a big number that is no number")) }
+    b'$' => if streamed { streamed_blob(data, after, limits) } else { blob_at(data, kind, line, after, limits) }
+    b'!' | b'=' => blob_at(data, kind, line, after, limits)
+    b'*' | b'~' | b'%' => if streamed { streamed_at(data, kind, after, depth, limits) } else { counted_at(data, kind, line, after, depth, limits) }
+    b'>' | b'|' => counted_at(data, kind, line, after, depth, limits)
+    _ => Err(UnknownType(kind))
+  }
+}
+
+// The value at `at` within `limits.reply`.
+fn decode_at(data: Bytes, at: Int, limits: RespLimits) -> Parse<RespValue> {
+  let maximum = limits.reply.to_int()
+  match value_at(data, at, 0, limits)? {
+    Some((value, end)) => if end - at > maximum { Err(ReplyTooLarge) } else { Ok(Some((value, end))) }
+    None => if data.len() - at > maximum { Err(ReplyTooLarge) } else { Ok(None) }
+  }
+}
+
+// What bytes read so far hold: a value and the bytes after it, the start
+// of a value that needs more bytes, or no value.
+enum Split { Complete(RespValue, Bytes), Partial, Invalid(RespError) }
+
+// The first value of `data` within `limits`, without reading.
+fn decode(data: Bytes, limits: RespLimits) -> Split = match decode_at(data, 0, limits) {
+  Ok(Some((value, end))) => Complete(value, data.slice(end, data.len()))
+  Ok(None) => Partial
+  Err(error) => Invalid(error)
+}
+
+// ---- reading ----------------------------------------------------------------
+
+// The size of one read: a framing fact, not a limit.
+const READ_SIZE: Int = 65536
+
+// A value read, the bytes read so far and the offset after the value; the
+// end of the stream between values; or bytes that are no value.
+enum Next { Value(RespValue, Bytes, Int), Ended, Broken(RespError) }
+
+// The next value from `stream`, starting with the bytes of `buffer` from
+// `at` on. Bytes before `at` are dropped when more are read, so a buffer
+// of many values is not copied once per value.
+fn next_value<T: ByteStream>(stream: T, limits: RespLimits, buffer: Bytes, at: Int) -> IoResult<Next> {
+  var data = buffer
+  var start = at
+  loop {
+    match decode_at(data, start, limits) {
+      Ok(Some((value, end))) => return Ok(Value(value, data, end))
+      Ok(None) => {}
+      Err(error) => return Ok(Broken(error))
+    }
+    match stream.read(READ_SIZE)? {
+      Eof => return Ok(if start >= data.len() { Ended } else { Broken(Truncated) })
+      Data(more) => {
+        if start > 0 {
+          data = data.slice(start, data.len())
+          start = 0
+        }
+        data.append(more)
+      }
+    }
+  }
+}
+
+// What comes next on a stream: a value and the bytes read after it, the
+// end of the stream between values, or bytes that are no value.
+enum Read { Got(RespValue, Bytes), Closed, Failed(RespError) }
+
+// Reads the next value from `stream`, starting with the bytes already
+// read in `buffer`.
+fn read_value<T: ByteStream>(stream: T, limits: RespLimits, buffer: Bytes) -> IoResult<Read> = match next_value(stream, limits, buffer, 0)? {
+  Value(value, data, end) => Ok(Got(value, data.slice(end, data.len())))
+  Ended => Ok(Closed)
+  Broken(error) => Ok(Failed(error))
+}
+
+// ---- commands ---------------------------------------------------------------
+
+// A connection that sends commands and reads their replies.
+type Client<T> {
+  stream: T
+  limits: RespLimits = RespLimits {}
+}
+
+// A client of the server at `endpoint`: the connection gives up after
+// `timeout`, and so does a read that waits longer for a reply.
+fn connect(endpoint: Endpoint, timeout: Duration) -> IoResult<Client<TcpStream>> {
+  let stream = TcpStream.connect_within(endpoint.address, endpoint.port, timeout)?
+  stream.set_idle_timeout(timeout.to_ms())?
+  Ok(Client { stream })
+}
+
+// Sends every command in one write and reads one reply per command: the
+// replies in the commands' order. A push frame among them is skipped; a
+// reply nothing asked for, a connection that ends first or bytes that are
+// no value are an `IoError`.
+fn pipeline<T: ByteStream>(client: Client<T>, commands: List<List<Bytes>>) -> IoResult<List<RespValue>> {
+  var out = Bytes.with_capacity(64)
+  for args in commands {
+    out.append(encode_command(args))
+  }
+  client.stream.write_all(out)?
+  var replies: List<RespValue> = []
+  var data = Bytes.empty()
+  var at = 0
+  while replies.len() < commands.len() {
+    match next_value(client.stream, client.limits, data, at)? {
+      Value(value, rest, end) => {
+        data = rest
+        at = end
+        match value {
+          Push(_) => {}
+          _ => replies.push(value)
+        }
+      }
+      Ended => return Err(IoError.new("resp: the connection ended before every reply"))
+      Broken(error) => return Err(protocol_error(error))
+    }
+  }
+  while at < data.len() {
+    match next_value(client.stream, client.limits, data, at)? {
+      Value(Push(_), rest, end) => {
+        data = rest
+        at = end
+      }
+      Value(_, _, _) => return Err(IoError.new("resp: a reply no command asked for"))
+      Ended => return Err(protocol_error(Truncated))
+      Broken(error) => return Err(protocol_error(error))
+    }
+  }
+  Ok(replies)
+}
+
+// Sends one command and reads its reply, the server's error included.
+fn command<T: ByteStream>(client: Client<T>, args: List<Bytes>) -> IoResult<RespValue> {
+  let replies = pipeline(client, [args])?
+  Ok(replies.at(0))
+}
+
+// `value` without the attributes around it.
+fn plain(value: RespValue) -> RespValue = match value {
+  Attributed(_, inner) => plain(inner)
+  other => other
+}
+
+// The server's error as it sent it, or a reply of the wrong type for
+// `name`.
+fn failure(name: Text, value: RespValue) -> IoError = match value {
+  Error(text) => IoError.new(text)
+  BlobError(bytes) => IoError.new(bytes.to_text())
+  other => IoError.new("resp: unexpected reply to {name}: {other.debug()}")
+}
+
+fn text_of(value: RespValue) -> Option<Text> = match plain(value) {
+  Blob(bytes) => Some(bytes.to_text())
+  Simple(text) => Some(text)
+  Verbatim(_, bytes) => Some(bytes.to_text())
+  _ => None
+}
+
+fn ok_of(name: Text, value: RespValue) -> IoResult<Unit> = match plain(value) {
+  Simple(text) => if text == "OK" { Ok(()) } else { Err(failure(name, Simple(text))) }
+  other => Err(failure(name, other))
+}
+
+fn bytes_of(name: Text, value: RespValue) -> IoResult<Option<Bytes>> = match plain(value) {
+  Blob(bytes) => Ok(Some(bytes))
+  Simple(text) => Ok(Some(text.to_bytes()))
+  Verbatim(_, bytes) => Ok(Some(bytes))
+  Null => Ok(None)
+  other => Err(failure(name, other))
+}
+
+fn int_of(name: Text, value: RespValue) -> IoResult<Int> = match plain(value) {
+  Integer(n) => Ok(n)
+  other => Err(failure(name, other))
+}
+
+fn flag_of(name: Text, value: RespValue) -> IoResult<Bool> = match plain(value) {
+  Integer(n) => Ok(n != 0)
+  Boolean(b) => Ok(b)
+  other => Err(failure(name, other))
+}
+
+fn items_of(name: Text, value: RespValue) -> IoResult<List<RespValue>> = match plain(value) {
+  Array(items) => Ok(items)
+  Set(items) => Ok(items)
+  other => Err(failure(name, other))
+}
+
+fn members_of(name: Text, value: RespValue) -> IoResult<List<Bytes>> {
+  var members = []
+  for item in items_of(name, value)? {
+    match bytes_of(name, item)? {
+      Some(bytes) => members.push(bytes)
+      None => return Err(failure(name, Null))
+    }
+  }
+  Ok(members)
+}
+
+// A map's pairs: a RESP3 map, or a RESP2 array of names and values.
+fn pairs_of(name: Text, value: RespValue) -> IoResult<List<(RespValue, RespValue)>> = match plain(value) {
+  Map(pairs) => Ok(pairs)
+  Array(items) => if items.len() % 2 == 0 { Ok(paired(items)) } else { Err(failure(name, Array(items))) }
+  other => Err(failure(name, other))
+}
+
+fn key_args(name: Text, keys: List<Text>) -> List<Bytes> {
+  var args = [name.to_bytes()]
+  for key in keys {
+    args.push(key.to_bytes())
+  }
+  args
+}
+
+// PING: whether the server answers.
+fn ping<T: ByteStream>(client: Client<T>) -> IoResult<Unit> = match plain(command(client, [b"PING"])?) {
+  Simple(text) => if text == "PONG" { Ok(()) } else { Err(failure("PING", Simple(text))) }
+  other => Err(failure("PING", other))
+}
+
+// HELLO: switch the connection to protocol `version` (2 or 3); the
+// server's description of itself.
+fn hello<T: ByteStream>(client: Client<T>, version: Int) -> IoResult<List<(RespValue, RespValue)>> =
+  pairs_of("HELLO", command(client, [b"HELLO", version.to_text().to_bytes()])?)
+
+// AUTH with a user name and a password.
+fn auth<T: ByteStream>(client: Client<T>, user: Text, password: Text) -> IoResult<Unit> =
+  ok_of("AUTH", command(client, words(["AUTH", user, password]))?)
+
+// -- strings --
+
+// GET: the value of `key`, `None` when it has none.
+fn get<T: ByteStream>(client: Client<T>, key: Text) -> IoResult<Option<Bytes>> = bytes_of("GET", command(client, words(["GET", key]))?)
+
+// SET `key` to `value`.
+fn set<T: ByteStream>(client: Client<T>, key: Text, value: Bytes) -> IoResult<Unit> =
+  ok_of("SET", command(client, [b"SET", key.to_bytes(), value])?)
+
+// SET with PX: `value` that expires after `ttl`, in milliseconds.
+fn set_for<T: ByteStream>(client: Client<T>, key: Text, value: Bytes, ttl: Duration) -> IoResult<Unit> =
+  ok_of("SET", command(client, [b"SET", key.to_bytes(), value, b"PX", ttl.to_ms().to_text().to_bytes()])?)
+
+// SET with NX: whether `key` had no value and now has `value`.
+fn set_if_absent<T: ByteStream>(client: Client<T>, key: Text, value: Bytes) -> IoResult<Bool> =
+  match plain(command(client, [b"SET", key.to_bytes(), value, b"NX"])?) {
+    Null => Ok(false)
+    other => {
+      ok_of("SET", other)?
+      Ok(true)
+    }
+  }
+
+// MGET: the values of `keys`, in their order.
+fn mget<T: ByteStream>(client: Client<T>, keys: List<Text>) -> IoResult<List<Option<Bytes>>> {
+  var values = []
+  for item in items_of("MGET", command(client, key_args("MGET", keys))?)? {
+    values.push(bytes_of("MGET", item)?)
+  }
+  Ok(values)
+}
+
+// INCRBY: the value of `key` after adding `by`.
+fn incr_by<T: ByteStream>(client: Client<T>, key: Text, by: Int) -> IoResult<Int> =
+  int_of("INCRBY", command(client, words(["INCRBY", key, by.to_text()]))?)
+
+// INCR: the value of `key` after adding one.
+fn incr<T: ByteStream>(client: Client<T>, key: Text) -> IoResult<Int> = int_of("INCR", command(client, words(["INCR", key]))?)
+
+// -- hashes --
+
+// HGET: the value of `field` in the hash `key`.
+fn hget<T: ByteStream>(client: Client<T>, key: Text, field: Text) -> IoResult<Option<Bytes>> =
+  bytes_of("HGET", command(client, words(["HGET", key, field]))?)
+
+// HSET: set each field; the number of fields that are new.
+fn hset<T: ByteStream>(client: Client<T>, key: Text, fields: List<(Text, Bytes)>) -> IoResult<Int> {
+  var args = [b"HSET", key.to_bytes()]
+  for field in fields {
+    args.push(field.0.to_bytes())
+    args.push(field.1)
+  }
+  int_of("HSET", command(client, args)?)
+}
+
+// HGETALL: every field of the hash `key` and its value.
+fn hgetall<T: ByteStream>(client: Client<T>, key: Text) -> IoResult<List<(Text, Bytes)>> {
+  var fields = []
+  for pair in pairs_of("HGETALL", command(client, words(["HGETALL", key]))?)? {
+    match (text_of(pair.0), bytes_of("HGETALL", pair.1)?) {
+      (Some(field), Some(value)) => fields.push((field, value))
+      _ => return Err(failure("HGETALL", Map([pair])))
+    }
+  }
+  Ok(fields)
+}
+
+// HDEL: the number of `fields` removed from the hash `key`.
+fn hdel<T: ByteStream>(client: Client<T>, key: Text, fields: List<Text>) -> IoResult<Int> {
+  var args = [b"HDEL", key.to_bytes()]
+  for field in fields {
+    args.push(field.to_bytes())
+  }
+  int_of("HDEL", command(client, args)?)
+}
+
+// HEXISTS: whether the hash `key` has `field`.
+fn hexists<T: ByteStream>(client: Client<T>, key: Text, field: Text) -> IoResult<Bool> =
+  flag_of("HEXISTS", command(client, words(["HEXISTS", key, field]))?)
+
+// -- sets --
+
+fn member_args(name: Text, key: Text, members: List<Bytes>) -> List<Bytes> {
+  var args = [name.to_bytes(), key.to_bytes()]
+  args.append(members)
+  args
+}
+
+// SADD: the number of `members` that are new in the set `key`.
+fn sadd<T: ByteStream>(client: Client<T>, key: Text, members: List<Bytes>) -> IoResult<Int> =
+  int_of("SADD", command(client, member_args("SADD", key, members))?)
+
+// SREM: the number of `members` removed from the set `key`.
+fn srem<T: ByteStream>(client: Client<T>, key: Text, members: List<Bytes>) -> IoResult<Int> =
+  int_of("SREM", command(client, member_args("SREM", key, members))?)
+
+// SMEMBERS: the members of the set `key`, in the server's order.
+fn smembers<T: ByteStream>(client: Client<T>, key: Text) -> IoResult<List<Bytes>> =
+  members_of("SMEMBERS", command(client, words(["SMEMBERS", key]))?)
+
+// SISMEMBER: whether `member` is in the set `key`.
+fn sismember<T: ByteStream>(client: Client<T>, key: Text, member: Bytes) -> IoResult<Bool> =
+  flag_of("SISMEMBER", command(client, [b"SISMEMBER", key.to_bytes(), member])?)
+
+// SCARD: the number of members of the set `key`.
+fn scard<T: ByteStream>(client: Client<T>, key: Text) -> IoResult<Int> = int_of("SCARD", command(client, words(["SCARD", key]))?)
+
+// -- keys --
+
+// DEL: the number of `keys` removed.
+fn del<T: ByteStream>(client: Client<T>, keys: List<Text>) -> IoResult<Int> = int_of("DEL", command(client, key_args("DEL", keys))?)
+
+// EXISTS: the number of `keys` that exist, a key named twice counted twice.
+fn exists<T: ByteStream>(client: Client<T>, keys: List<Text>) -> IoResult<Int> = int_of("EXISTS", command(client, key_args("EXISTS", keys))?)
+
+// RENAME `from` to `to`.
+fn rename<T: ByteStream>(client: Client<T>, from: Text, to: Text) -> IoResult<Unit> = ok_of("RENAME", command(client, words(["RENAME", from, to]))?)
+
+// TYPE: the type of the value of `key`, `none` when it has none.
+fn key_type<T: ByteStream>(client: Client<T>, key: Text) -> IoResult<Text> {
+  let reply = command(client, words(["TYPE", key]))?
+  match text_of(reply) {
+    Some(name) => Ok(name)
+    None => Err(failure("TYPE", plain(reply)))
+  }
+}
+
+// -- expiry --
+
+// How long a key lives: it does not exist, it has no expiry, or the time
+// it has left.
+enum Expiry { Missing, Persistent, Remaining(Duration) }
+
+// PEXPIRE: whether `key` exists and now expires after `ttl`.
+fn expire<T: ByteStream>(client: Client<T>, key: Text, ttl: Duration) -> IoResult<Bool> =
+  flag_of("PEXPIRE", command(client, words(["PEXPIRE", key, ttl.to_ms().to_text()]))?)
+
+// PERSIST: whether `key` had an expiry and now has none.
+fn persist<T: ByteStream>(client: Client<T>, key: Text) -> IoResult<Bool> = flag_of("PERSIST", command(client, words(["PERSIST", key]))?)
+
+// PTTL: how long `key` lives, to the millisecond.
+fn ttl<T: ByteStream>(client: Client<T>, key: Text) -> IoResult<Expiry> = match int_of("PTTL", command(client, words(["PTTL", key]))?)? {
+  -2 => Ok(Missing)
+  -1 => Ok(Persistent)
+  n => Ok(Remaining(1 ms * n))
+}
+
+// -- publishing --
+
+// PUBLISH: the number of subscribers that received `message`.
+fn publish<T: ByteStream>(client: Client<T>, channel: Text, message: Bytes) -> IoResult<Int> =
+  int_of("PUBLISH", command(client, [b"PUBLISH", channel.to_bytes(), message])?)
+
+// ---- pub/sub ----------------------------------------------------------------
+
+// The channels and the patterns (PSUBSCRIBE) of a subscription.
+type Topics {
+  channels: List<Text> = []
+  patterns: List<Text> = []
+}
+
+// A message published on `channel`; `pattern` is the subscribed pattern
+// it matched, `None` for a channel subscribed by name.
+type Message {
+  channel: Text
+  pattern: Option<Text> = None
+  payload: Bytes
+}
+
+// A connection in pub/sub mode: a task reads it and sends each message on
+// `messages`, which closes when the subscription ends.
+type Subscription<T> {
+  stream: T
+  topics: Topics
+  messages: Receiver<Message>
+}
+
+// The messages a subscription holds before its reader waits for the
+// receiver, which leaves further messages to the connection's buffers.
+const MESSAGE_CAPACITY: Int = 1024
+
+fn subscribe_commands(topics: Topics) -> Bytes {
+  var out = Bytes.empty()
+  if !topics.channels.is_empty() {
+    out.append(encode_command(key_args("SUBSCRIBE", topics.channels)))
+  }
+  if !topics.patterns.is_empty() {
+    out.append(encode_command(key_args("PSUBSCRIBE", topics.patterns)))
+  }
+  out
+}
+
+// A pub/sub frame's kind, lowercase, and its other items: an array
+// (RESP2) or a push (RESP3) whose first item names it.
+fn event_of(value: RespValue) -> Option<(Text, List<RespValue>)> {
+  let items = match plain(value) {
+    Array(items) => items
+    Push(items) => items
+    _ => return None
+  }
+  if items.is_empty() {
+    return None
+  }
+  match text_of(items.at(0)) {
+    Some(kind) => Some((kind.to_lower(), items.slice(1, items.len())))
+    None => None
+  }
+}
+
+fn payload_of(value: RespValue) -> Bytes = match plain(value) {
+  Blob(bytes) => bytes
+  Simple(text) => text.to_bytes()
+  Verbatim(_, bytes) => bytes
+  _ => Bytes.empty()
+}
+
+// The message a `message`, `smessage` or `pmessage` frame carries.
+fn message_of(kind: Text, args: List<RespValue>) -> Option<Message> {
+  if (kind == "message" || kind == "smessage") && args.len() == 2 {
+    return match text_of(args.at(0)) {
+      Some(channel) => Some(Message { channel, payload = payload_of(args.at(1)) })
+      None => None
+    }
+  }
+  if kind == "pmessage" && args.len() == 3 {
+    return match (text_of(args.at(0)), text_of(args.at(1))) {
+      (Some(pattern), Some(channel)) => Some(Message { channel, pattern = Some(pattern), payload = payload_of(args.at(2)) })
+      _ => None
+    }
+  }
+  None
+}
+
+fn is_unsubscribe(kind: Text) -> Bool = kind == "unsubscribe" || kind == "punsubscribe" || kind == "sunsubscribe"
+
+fn is_subscribe(kind: Text) -> Bool = kind == "subscribe" || kind == "psubscribe" || kind == "ssubscribe"
+
+// The subscriptions left after a subscribe or unsubscribe confirmation.
+fn remaining(args: List<RespValue>) -> Option<Int> = if args.len() == 2 {
+  match plain(args.at(1)) {
+    Integer(n) => Some(n)
+    _ => None
+  }
+} else {
+  None
+}
+
+// Subscribes to `topics` on `stream`: the first confirmation is read here,
+// so a refusal (`-NOAUTH`) is this call's error; then a task reads the
+// connection and sends each message on `Subscription.messages`. The
+// channel closes when an unsubscribe leaves no subscription, when the
+// connection ends or sends bytes that are no value, or when the receiver
+// is closed.
+fn subscribe<T: ByteStream>(stream: T, topics: Topics, limits: RespLimits) -> IoResult<Subscription<T>> {
+  if topics.channels.is_empty() && topics.patterns.is_empty() {
+    return Err(IoError.new("resp: a subscription names a channel or a pattern"))
+  }
+  stream.write_all(subscribe_commands(topics))?
+  let (data, at) = match next_value(stream, limits, Bytes.empty(), 0)? {
+    Value(value, read, end) => match event_of(value) {
+      Some((kind, _)) => if is_subscribe(kind) { (read, end) } else { return Err(failure("SUBSCRIBE", value)) }
+      None => return Err(failure("SUBSCRIBE", value))
+    }
+    Ended => return Err(IoError.new("resp: the connection ended before the subscription was confirmed"))
+    Broken(error) => return Err(protocol_error(error))
+  }
+  let (sender, receiver) = Channel.bounded(MESSAGE_CAPACITY)
+  spawn listen(stream, limits, data, at, sender)
+  Ok(Subscription { stream, topics, messages = receiver })
+}
+
+// The reader task of a subscription; the channel closes when it ends.
+fn listen<T: ByteStream>(stream: T, limits: RespLimits, buffer: Bytes, at: Int, messages: Sender<Message>) -> IoResult<Unit> {
+  _ = deliver(stream, limits, buffer, at, messages)
+  messages.close()
+  Ok(())
+}
+
+fn deliver<T: ByteStream>(stream: T, limits: RespLimits, buffer: Bytes, at: Int, messages: Sender<Message>) -> IoResult<Unit> {
+  var data = buffer
+  var start = at
+  loop {
+    match next_value(stream, limits, data, start)? {
+      Value(value, rest, end) => {
+        data = rest
+        start = end
+        match event_of(value) {
+          Some((kind, args)) => match message_of(kind, args) {
+            Some(message) => if !messages.send(message) {
+              return Ok(())
+            }
+            None => if is_unsubscribe(kind) && remaining(args) == Some(0) {
+              return Ok(())
+            }
+          }
+          None => {}
+        }
+      }
+      _ => return Ok(())
+    }
+  }
+}
+
+// Ends every subscription of `subscription`: its reader task ends when
+// the server confirms that none is left, and its channel closes. The
+// connection stays open; it is closed, not reused, since the reader may
+// have read past the last confirmation.
+fn unsubscribe<T: ByteStream>(subscription: Subscription<T>) -> IoResult<Unit> {
+  var out = Bytes.empty()
+  if !subscription.topics.channels.is_empty() {
+    out.append(encode_command([b"UNSUBSCRIBE"]))
+  }
+  if !subscription.topics.patterns.is_empty() {
+    out.append(encode_command([b"PUNSUBSCRIBE"]))
+  }
+  subscription.stream.write_all(out)
+}
+
+// Reconnecting is the caller's. When `messages.receive()` gives `None`
+// without an `unsubscribe`, the connection is gone: close it, open a new
+// stream and `resubscribe` on it, waiting `retry_delay(attempt)` before
+// each attempt that follows a failed one:
+//
+//   var attempt = 0
+//   loop {
+//     Clock.sleep(retry_delay(attempt))
+//     match TcpStream.connect_within(address, port, 1 seconds) {
+//       Ok(stream) => match resubscribe(stream, ended, RespLimits {}) {
+//         Ok(next) => return Ok(next)
+//         Err(_) => attempt = attempt + 1
+//       }
+//       Err(_) => attempt = attempt + 1
+//     }
+//   }
+//
+// Messages published while no connection was subscribed are not
+// delivered: pub/sub keeps none.
+
+// The wait before reconnect attempt `attempt` (0 for the first): 100 ms,
+// doubled per attempt, at most 10 seconds.
+fn retry_delay(attempt: Int) -> Duration {
+  var delay = 100 ms
+  var i = 0
+  while i < attempt && delay < 10 seconds {
+    delay = delay * 2
+    i = i + 1
+  }
+  if delay > 10 seconds { 10 seconds } else { delay }
+}
+
+// A new subscription on `stream` to the topics of one that ended.
+fn resubscribe<T: ByteStream>(stream: T, ended: Subscription<T>, limits: RespLimits) -> IoResult<Subscription<T>> = subscribe(stream, ended.topics, limits)
+
+// ---- Sentinel ---------------------------------------------------------------
+
+// The address of a master as a sentinel names it: its address and its
+// port, as texts.
+fn endpoint_of(items: List<RespValue>) -> Option<Endpoint> {
+  if items.len() != 2 {
+    return None
+  }
+  match (text_of(items.at(0)), text_of(items.at(1))) {
+    (Some(address), Some(port)) => match Int.parse(port) {
+      Some(p) => if p > 0 && p < 65536 && !address.is_empty() { Some(Endpoint { address, port = p }) } else { None }
+      None => None
+    }
+    _ => None
+  }
+}
+
+// SENTINEL get-master-addr-by-name: the master of `name` as the sentinel
+// on `stream` knows it, `None` when it monitors no master of that name.
+fn ask_master<T: ByteStream>(stream: T, name: Text, limits: RespLimits) -> IoResult<Option<Endpoint>> {
+  let reply = command(Client { stream, limits }, words(["SENTINEL", "get-master-addr-by-name", name]))?
+  match plain(reply) {
+    Null => Ok(None)
+    Array(items) => match endpoint_of(items) {
+      Some(master) => Ok(Some(master))
+      None => Err(failure("SENTINEL", Array(items)))
+    }
+    other => Err(failure("SENTINEL", other))
+  }
+}
+
+fn no_master(name: Text, reasons: List<Text>) -> IoError = IoError.new("resp: no sentinel named the master of {name}: {reasons.join("; ")}")
+
+// The master of `name` from the first of `sentinels` that names one, asked
+// in order; a sentinel that fails or knows no such master is skipped.
+fn master_from<T: ByteStream>(sentinels: List<T>, name: Text, limits: RespLimits) -> IoResult<Endpoint> {
+  var reasons = []
+  var i = 0
+  while i < sentinels.len() {
+    match ask_master(sentinels.at(i), name, limits) {
+      Ok(Some(master)) => return Ok(master)
+      Ok(None) => reasons.push("sentinel {i} knows no master of that name")
+      Err(error) => reasons.push("sentinel {i}: {error.message}")
+    }
+    i = i + 1
+  }
+  Err(no_master(name, reasons))
+}
+
+// `master_from` over TCP: each sentinel is connected within `timeout`,
+// asked, and closed; one that cannot be reached is skipped.
+fn master_at(sentinels: List<Endpoint>, name: Text, timeout: Duration, limits: RespLimits) -> IoResult<Endpoint> {
+  var reasons = []
+  for sentinel in sentinels {
+    let at = "{sentinel.address}:{sentinel.port}"
+    match TcpStream.connect_within(sentinel.address, sentinel.port, timeout) {
+      Ok(stream) => {
+        let answer = match stream.set_idle_timeout(timeout.to_ms()) {
+          Ok(_) => ask_master(stream, name, limits)
+          Err(error) => Err(error)
+        }
+        _ = stream.close()
+        match answer {
+          Ok(Some(master)) => return Ok(master)
+          Ok(None) => reasons.push("{at} knows no master of that name")
+          Err(error) => reasons.push("{at}: {error.message}")
+        }
+      }
+      Err(error) => reasons.push("{at}: {error.message}")
+    }
+  }
+  Err(no_master(name, reasons))
+}
+
+// The channel on which a sentinel announces a new master.
+const SWITCH_MASTER: Text = "+switch-master"
+
+// Subscribes on the sentinel on `stream` to its `+switch-master`
+// announcements.
+fn watch_master<T: ByteStream>(stream: T, limits: RespLimits) -> IoResult<Subscription<T>> =
+  subscribe(stream, Topics { channels = [SWITCH_MASTER] }, limits)
+
+// The new master of `name` that a `+switch-master` message announces:
+// `<name> <old address> <old port> <new address> <new port>`.
+fn switched_master(message: Message, name: Text) -> Option<Endpoint> {
+  if message.channel != SWITCH_MASTER {
+    return None
+  }
+  let parts = message.payload.to_text().split(" ")
+  if parts.len() != 5 || parts.at(0) != name {
+    return None
+  }
+  endpoint_of([Blob(parts.at(3).to_bytes()), Blob(parts.at(4).to_bytes())])
+}
+
+// Waits on `subscription` (`watch_master`) for the next new master of
+// `name`; `None` when the subscription ends first.
+fn next_master<T>(subscription: Subscription<T>, name: Text) -> Option<Endpoint> {
+  loop {
+    match subscription.messages.receive() {
+      Some(message) => match switched_master(message, name) {
+        Some(master) => return Some(master)
+        None => {}
+      }
+      None => return None
+    }
+  }
+}
+
+// ---- tests ------------------------------------------------------------------
+
+// A connected pair of pipe ends; each gives up on a peer silent for 5 s,
+// so a read that never completes fails the test instead of hanging it.
+test fn connected() -> IoResult<(PipeStream, PipeStream)> {
+  let (client, server) = Pipe.pair()
+  client.set_idle_timeout(5000)?
+  server.set_idle_timeout(5000)?
+  Ok((client, server))
+}
+
+// Flushes the task's pending writes as their own delivery and waits 50 ms,
+// so the next write is a separate delivery the reader reads on its own.
+test fn pause() -> IoResult<Unit> {
+  let (a, b) = Pipe.pair()
+  a.set_idle_timeout(50)?
+  _ = a.read(1)?
+  _ = b.close()
+  Ok(())
+}
+
+// A scripted server: for each exchange, reads exactly its request, then
+// writes its reply; an empty request writes the reply at once. A request
+// that differs is answered with an error that names both, and ends the
+// script. The stream is closed at the end.
+test fn script<S: ByteStream>(server: S, exchanges: List<(Bytes, Bytes)>) -> IoResult<Unit> {
+  var data = Bytes.empty()
+  for exchange in exchanges {
+    let request = exchange.0
+    while data.len() < request.len() {
+      match server.read(READ_SIZE)? {
+        Data(more) => data.append(more)
+        Eof => {
+          _ = server.close()
+          return Ok(())
+        }
+      }
+    }
+    let got = data.slice(0, request.len())
+    if got != request {
+      server.write_all("-ERR script expected {request.to_text().debug()}, got {got.to_text().debug()}\r\n".to_bytes())?
+      return server.close()
+    }
+    data = data.slice(request.len(), data.len())
+    server.write_all(exchange.1)?
+  }
+  server.close()
+}
+
+// The command `parts` as it is sent.
+test fn sent(parts: List<Text>) -> Bytes = encode_command(words(parts))
+
+// A client over a pipe whose other end runs `exchanges`.
+test fn scripted(exchanges: List<(Bytes, Bytes)>) -> IoResult<Client<PipeStream>> {
+  let (client, server) = connected()?
+  spawn script(server, exchanges)
+  Ok(Client { stream = client })
+}
+
+test fn every_type() -> List<RespValue> = [
+  Simple("OK"),
+  Error("ERR unknown command"),
+  Integer(0),
+  Integer(-9223372036854775807 - 1),
+  Integer(9223372036854775807),
+  Blob(b""),
+  Blob(b"a\r\nb\x00\xff"),
+  Null,
+  Double("3.14"),
+  Double("-1.5e-10"),
+  Double("inf"),
+  Double("-inf"),
+  Double("nan"),
+  Boolean(true),
+  Boolean(false),
+  BlobError(b"SYNTAX invalid syntax"),
+  Verbatim("txt", b"Some string"),
+  Verbatim("mkd", b""),
+  BigNumber("3492890328409238509324850943850943825024385"),
+  BigNumber("-1"),
+  Array([]),
+  Array([Integer(1), Array([Blob(b"x"), Null])]),
+  Map([(Simple("first"), Integer(1)), (Blob(b"second"), Map([]))]),
+  Set([Simple("orange"), Simple("apple"), Boolean(true)]),
+  Push([Blob(b"message"), Blob(b"news"), Blob(b"hi")]),
+  Attributed([(Simple("ttl"), Integer(3600))], Array([Integer(2039123), Integer(9543892)]))
+]
+
+test "every RESP3 type encodes as the specification writes it" {
+  assert encode(Simple("OK")) == b"+OK\r\n"
+  assert encode(Error("ERR x")) == b"-ERR x\r\n"
+  assert encode(Integer(-12)) == b":-12\r\n"
+  assert encode(Blob(b"hello")) == b"$5\r\nhello\r\n"
+  assert encode(Blob(b"")) == b"$0\r\n\r\n"
+  assert encode(Null) == b"_\r\n"
+  assert encode(Double("1.23")) == b",1.23\r\n"
+  assert encode(Boolean(true)) == b"#t\r\n"
+  assert encode(Boolean(false)) == b"#f\r\n"
+  assert encode(BlobError(b"SYNTAX invalid syntax")) == b"!21\r\nSYNTAX invalid syntax\r\n"
+  assert encode(Verbatim("txt", b"Some string")) == b"=15\r\ntxt:Some string\r\n"
+  assert encode(BigNumber("3492890328409238509324850943850943825024385")) == b"(3492890328409238509324850943850943825024385\r\n"
+  assert encode(Array([Integer(1), Integer(2)])) == b"*2\r\n:1\r\n:2\r\n"
+  assert encode(Map([(Simple("first"), Integer(1))])) == b"%1\r\n+first\r\n:1\r\n"
+  assert encode(Set([Simple("a")])) == b"~1\r\n+a\r\n"
+  assert encode(Push([Simple("pubsub")])) == b">1\r\n+pubsub\r\n"
+  assert encode(Attributed([(Simple("key"), Simple("value"))], Integer(1))) == b"|1\r\n+key\r\n+value\r\n:1\r\n"
+  assert encode_command(words(["GET", "k"])) == b"*2\r\n$3\r\nGET\r\n$1\r\nk\r\n"
+}
+
+test "every RESP3 type decodes back to itself, the bytes after it kept" {
+  for value in every_type() {
+    var bytes = encode(value)
+    bytes.append(b"+next\r\n")
+    assert decode(bytes, RespLimits {}) == Complete(value, b"+next\r\n")
+  }
+}
+
+test "every prefix of a value is partial, and the whole of one is complete" {
+  for value in every_type() {
+    let bytes = encode(value)
+    var n = 0
+    while n < bytes.len() {
+      assert decode(bytes.slice(0, n), RespLimits {}) == Partial
+      n = n + 1
+    }
+    assert decode(bytes, RespLimits {}) == Complete(value, Bytes.empty())
+  }
+}
+
+test "RESP2 nulls, signs and streamed RESP3 values decode" {
+  let limits = RespLimits {}
+  assert decode(b"$-1\r\n", limits) == Complete(Null, Bytes.empty())
+  assert decode(b"*-1\r\n", limits) == Complete(Null, Bytes.empty())
+  assert decode(b":+7\r\n", limits) == Complete(Integer(7), Bytes.empty())
+  assert decode(b"(+12\r\n", limits) == Complete(BigNumber("+12"), Bytes.empty())
+  assert decode(b"$?\r\n;4\r\nHell\r\n;5\r\no wor\r\n;1\r\nd\r\n;0\r\n", limits) == Complete(Blob(b"Hello word"), Bytes.empty())
+  assert decode(b"*?\r\n:1\r\n:2\r\n.\r\n", limits) == Complete(Array([Integer(1), Integer(2)]), Bytes.empty())
+  assert decode(b"~?\r\n+a\r\n.\r\n", limits) == Complete(Set([Simple("a")]), Bytes.empty())
+  assert decode(b"%?\r\n+a\r\n:1\r\n+b\r\n:2\r\n.\r\n", limits) == Complete(Map([(Simple("a"), Integer(1)), (Simple("b"), Integer(2))]), Bytes.empty())
+  assert decode(b"*?\r\n:1\r\n", limits) == Partial
+  assert decode(b"$?\r\n;4\r\nHe", limits) == Partial
+}
+
+test "bytes that are no value are refused with the reason" {
+  let limits = RespLimits {}
+  assert decode(b"?x\r\n", limits) == Invalid(UnknownType(b'?'))
+  assert decode(b":12a\r\n", limits) == Invalid(Malformed("an integer that is no number"))
+  assert decode(b":99999999999999999999\r\n", limits) == Invalid(Malformed("an integer that is no number"))
+  assert decode(b":\r\n", limits) == Invalid(Malformed("an integer that is no number"))
+  assert decode(b"$3\r\nabcd\r\n", limits) == Invalid(Malformed("a bulk string not ended by CR LF"))
+  assert decode(b"$-2\r\n", limits) == Invalid(Malformed("a negative length"))
+  assert decode(b"!-1\r\n", limits) == Invalid(Malformed("a negative length"))
+  assert decode(b"%-1\r\n", limits) == Invalid(Malformed("a negative length"))
+  assert decode(b"$x\r\n", limits) == Invalid(Malformed("a length that is no number"))
+  assert decode(b"_x\r\n", limits) == Invalid(Malformed("a null that holds text"))
+  assert decode(b"#x\r\n", limits) == Invalid(Malformed("a boolean that is neither t nor f"))
+  assert decode(b",1.\r\n", limits) == Invalid(Malformed("a double that is no number"))
+  assert decode(b",1e\r\n", limits) == Invalid(Malformed("a double that is no number"))
+  assert decode(b"(1.5\r\n", limits) == Invalid(Malformed("a big number that is no number"))
+  assert decode(b"=3\r\ntxt\r\n", limits) == Invalid(Malformed("a verbatim string without its format"))
+  assert decode(b"+a\rb\r\n", limits) == Invalid(Malformed("a line holds a CR or LF of its own"))
+  assert decode(b"+a\nb\r\n", limits) == Invalid(Malformed("a line holds a CR or LF of its own"))
+  assert decode(b"$?\r\n:1\r\n", limits) == Invalid(Malformed("a part of a streamed string that does not start with ;"))
+  assert decode(b"*?\r\n.x\r\n", limits) == Invalid(Malformed("the end of a streamed aggregate holds text"))
+  assert decode(b"%?\r\n+a\r\n.\r\n", limits) == Invalid(Malformed("a streamed map ends inside a pair"))
+}
+
+test "every limit refuses one past it and admits it" {
+  let line = RespLimits { line = 4 bytes }
+  assert decode(b"+abcd\r\n", line) == Complete(Simple("abcd"), Bytes.empty())
+  assert decode(b"+abcde\r\n", line) == Invalid(LineTooLong)
+  assert decode(b"+abcd\r", line) == Partial
+  assert decode(b"+abcdef", line) == Invalid(LineTooLong)
+  let bulk = RespLimits { bulk = 3 bytes }
+  assert decode(b"$3\r\nabc\r\n", bulk) == Complete(Blob(b"abc"), Bytes.empty())
+  assert decode(b"$4\r\n", bulk) == Invalid(BulkTooLarge)
+  assert decode(b"$?\r\n;2\r\nab\r\n;2\r\ncd\r\n;0\r\n", bulk) == Invalid(BulkTooLarge)
+  let elements = RespLimits { elements = 2 }
+  assert decode(b"*2\r\n:1\r\n:2\r\n", elements) == Complete(Array([Integer(1), Integer(2)]), Bytes.empty())
+  assert decode(b"*3\r\n", elements) == Invalid(TooManyElements)
+  assert decode(b"%3\r\n", elements) == Invalid(TooManyElements)
+  assert decode(b"*?\r\n:1\r\n:2\r\n:3\r\n.\r\n", elements) == Invalid(TooManyElements)
+  let depth = RespLimits { depth = 2 }
+  assert decode(b"*1\r\n*1\r\n:1\r\n", depth) == Complete(Array([Array([Integer(1)])]), Bytes.empty())
+  assert decode(b"*1\r\n*1\r\n*1\r\n:1\r\n", depth) == Invalid(TooDeep)
+  assert decode(b"*1\r\n*1\r\n*?\r\n", depth) == Invalid(TooDeep)
+  let reply = RespLimits { reply = 8 bytes }
+  assert decode(b"$2\r\nab\r\n", reply) == Complete(Blob(b"ab"), Bytes.empty())
+  assert decode(b"$3\r\nabc\r\n", reply) == Invalid(ReplyTooLarge)
+  assert decode(b"*2\r\n$9\r\n", reply) == Partial
+  assert decode(b"*2\r\n$9\r\nabc", reply) == Invalid(ReplyTooLarge)
+}
+
+test "the limits default to 64 KiB lines, 16 MiB bulk strings and 64 MiB replies" {
+  let limits = RespLimits {}
+  assert limits.line.to_int() == 65536
+  assert limits.bulk.to_int() == 16777216
+  assert limits.elements == 1048576
+  assert limits.depth == 32
+  assert limits.reply.to_int() == 67108864
+}
+
+test "a value split over many small writes is read as one, the next kept" {
+  let (client, server) = connected()?
+  let parts = [b"*2\r", b"\n$5\r\nhel", b"lo\r\n:4", b"2\r\n+ne", b"xt\r\n"]
+  for part in parts {
+    server.write_all(part)?
+    pause()?
+  }
+  _ = server.close()
+  match read_value(client, RespLimits {}, Bytes.empty())? {
+    Got(value, rest) => {
+      assert value == Array([Blob(b"hello"), Integer(42)])
+      assert read_value(client, RespLimits {}, rest)? == Got(Simple("next"), Bytes.empty())
+      assert read_value(client, RespLimits {}, Bytes.empty())? == Closed
+    }
+    _ => {
+      assert false, "the value is read"
+    }
+  }
+  assert client.received_batches() == 5
+}
+
+test "a stream that ends inside a value is truncated" {
+  let (client, server) = connected()?
+  server.write_all(b"$5\r\nhel")?
+  _ = server.close()
+  assert read_value(client, RespLimits {}, Bytes.empty())? == Failed(Truncated)
+}
+
+test "the string commands send their arguments and read their replies" {
+  let client = scripted([
+    (sent(["SET", "session:1", "alice"]), b"+OK\r\n"),
+    (sent(["GET", "session:1"]), b"$5\r\nalice\r\n"),
+    (sent(["GET", "missing"]), b"$-1\r\n"),
+    (sent(["SET", "session:2", "bob", "PX", "1500"]), b"+OK\r\n"),
+    (sent(["SET", "lock", "1", "NX"]), b"+OK\r\n"),
+    (sent(["SET", "lock", "1", "NX"]), b"_\r\n"),
+    (sent(["MGET", "session:1", "missing"]), b"*2\r\n$5\r\nalice\r\n$-1\r\n"),
+    (sent(["INCR", "hits"]), b":1\r\n"),
+    (sent(["INCRBY", "hits", "-5"]), b":-4\r\n"),
+    (sent(["PING"]), b"+PONG\r\n")
+  ])?
+  set(client, "session:1", b"alice")?
+  assert get(client, "session:1")? == Some(b"alice")
+  assert get(client, "missing")? == None
+  set_for(client, "session:2", b"bob", 1500 ms)?
+  assert set_if_absent(client, "lock", b"1")?
+  assert !set_if_absent(client, "lock", b"1")?
+  assert mget(client, ["session:1", "missing"])? == [Some(b"alice"), None]
+  assert incr(client, "hits")? == 1
+  assert incr_by(client, "hits", 0 - 5)? == -4
+  ping(client)?
+}
+
+test "the hash, set, key and expiry commands read RESP2 and RESP3 replies alike" {
+  let client = scripted([
+    (sent(["HSET", "user:1", "name", "alice", "role", "admin"]), b":2\r\n"),
+    (sent(["HGET", "user:1", "name"]), b"$5\r\nalice\r\n"),
+    (sent(["HGETALL", "user:1"]), b"*4\r\n$4\r\nname\r\n$5\r\nalice\r\n$4\r\nrole\r\n$5\r\nadmin\r\n"),
+    (sent(["HGETALL", "user:1"]), b"%2\r\n$4\r\nname\r\n$5\r\nalice\r\n$4\r\nrole\r\n$5\r\nadmin\r\n"),
+    (sent(["HEXISTS", "user:1", "name"]), b":1\r\n"),
+    (sent(["HDEL", "user:1", "role", "none"]), b":1\r\n"),
+    (sent(["SADD", "tags", "a", "b"]), b":2\r\n"),
+    (sent(["SMEMBERS", "tags"]), b"*2\r\n$1\r\na\r\n$1\r\nb\r\n"),
+    (sent(["SMEMBERS", "tags"]), b"~2\r\n$1\r\na\r\n$1\r\nb\r\n"),
+    (sent(["SISMEMBER", "tags", "a"]), b"#t\r\n"),
+    (sent(["SREM", "tags", "a"]), b":1\r\n"),
+    (sent(["SCARD", "tags"]), b":1\r\n"),
+    (sent(["EXISTS", "tags", "user:1", "x"]), b":2\r\n"),
+    (sent(["TYPE", "tags"]), b"+set\r\n"),
+    (sent(["RENAME", "tags", "labels"]), b"+OK\r\n"),
+    (sent(["PEXPIRE", "labels", "60000"]), b":1\r\n"),
+    (sent(["PTTL", "labels"]), b":59998\r\n"),
+    (sent(["PERSIST", "labels"]), b":1\r\n"),
+    (sent(["PTTL", "labels"]), b":-1\r\n"),
+    (sent(["PTTL", "gone"]), b":-2\r\n"),
+    (sent(["DEL", "labels", "user:1"]), b":2\r\n"),
+    (sent(["PUBLISH", "news", "hi"]), b":3\r\n")
+  ])?
+  assert hset(client, "user:1", [("name", b"alice"), ("role", b"admin")])? == 2
+  assert hget(client, "user:1", "name")? == Some(b"alice")
+  let fields = [("name", b"alice"), ("role", b"admin")]
+  assert hgetall(client, "user:1")? == fields
+  assert hgetall(client, "user:1")? == fields
+  assert hexists(client, "user:1", "name")?
+  assert hdel(client, "user:1", ["role", "none"])? == 1
+  assert sadd(client, "tags", [b"a", b"b"])? == 2
+  assert smembers(client, "tags")? == [b"a", b"b"]
+  assert smembers(client, "tags")? == [b"a", b"b"]
+  assert sismember(client, "tags", b"a")?
+  assert srem(client, "tags", [b"a"])? == 1
+  assert scard(client, "tags")? == 1
+  assert exists(client, ["tags", "user:1", "x"])? == 2
+  assert key_type(client, "tags")? == "set"
+  rename(client, "tags", "labels")?
+  assert expire(client, "labels", 60 seconds)?
+  assert ttl(client, "labels")? == Remaining(59998 ms)
+  assert persist(client, "labels")?
+  assert ttl(client, "labels")? == Persistent
+  assert ttl(client, "gone")? == Missing
+  assert del(client, ["labels", "user:1"])? == 2
+  assert publish(client, "news", b"hi")? == 3
+}
+
+test "a pipeline sends its commands in one write and returns the replies in order" {
+  let (client_end, server) = connected()?
+  let requests = [words(["SET", "a", "1"]), words(["INCR", "a"]), words(["GET", "a"]), words(["GET", "b"])]
+  var all = Bytes.empty()
+  for request in requests {
+    all.append(encode_command(request))
+  }
+  spawn script(server, [(all, b"+OK\r\n:2\r\n$1\r\n2\r\n_\r\n")])
+  let client = Client { stream = client_end }
+  assert pipeline(client, requests)? == [Simple("OK"), Integer(2), Blob(b"2"), Null]
+  assert server.received_batches() == 1
+  assert pipeline(client, [])? == []
+}
+
+test "the server's error is the command's value and the typed helper's IoError" {
+  let client = scripted([
+    (sent(["GET", "h"]), b"-WRONGTYPE Operation against a key holding the wrong kind of value\r\n"),
+    (sent(["GET", "h"]), b"-WRONGTYPE Operation against a key holding the wrong kind of value\r\n"),
+    (sent(["INCR", "s"]), b"$1\r\nx\r\n"),
+    (sent(["SET", "k", "v"]), b"!21\r\nSYNTAX invalid syntax\r\n")
+  ])?
+  assert command(client, words(["GET", "h"]))? == Error("WRONGTYPE Operation against a key holding the wrong kind of value")
+  match get(client, "h") {
+    Err(error) => {
+      assert error.message == "WRONGTYPE Operation against a key holding the wrong kind of value"
+    }
+    Ok(_) => {
+      assert false, "an error reply fails GET"
+    }
+  }
+  match incr(client, "s") {
+    Err(error) => {
+      assert error.message == "resp: unexpected reply to INCR: RespValue.Blob([120])"
+    }
+    Ok(_) => {
+      assert false, "a bulk string is no INCR reply"
+    }
+  }
+  match set(client, "k", b"v") {
+    Err(error) => {
+      assert error.message == "SYNTAX invalid syntax"
+    }
+    Ok(_) => {
+      assert false, "a blob error fails SET"
+    }
+  }
+}
+
+test "a push before a reply is skipped, a reply nothing asked for and a cut reply are errors" {
+  let client = scripted([
+    (sent(["GET", "k"]), b">2\r\n$10\r\ninvalidate\r\n*1\r\n$1\r\nk\r\n$1\r\nv\r\n>1\r\n+late\r\n"),
+    (sent(["GET", "k"]), b"$1\r\nv\r\n+extra\r\n"),
+    (sent(["GET", "k"]), b"$5\r\nab")
+  ])?
+  assert get(client, "k")? == Some(b"v")
+  match get(client, "k") {
+    Err(error) => {
+      assert error.message == "resp: a reply no command asked for"
+    }
+    Ok(_) => {
+      assert false, "an extra reply is an error"
+    }
+  }
+  match get(client, "k") {
+    Err(error) => {
+      assert error.message == "resp: the stream ended inside a value"
+    }
+    Ok(_) => {
+      assert false, "a cut reply is an error"
+    }
+  }
+}
+
+test "a connection that ends before the reply is an error" {
+  let (client, server) = connected()?
+  _ = server.close()
+  match get(Client { stream = client }, "k") {
+    Err(error) => {
+      assert error.message == "resp: the connection ended before every reply"
+    }
+    Ok(_) => {
+      assert false, "a closed connection is an error"
+    }
+  }
+}
+
+test "attributes around a reply are seen through, and HELLO 3 reads the server's map" {
+  let client = scripted([
+    (sent(["GET", "k"]), b"|1\r\n+ttl\r\n:10\r\n$1\r\nv\r\n"),
+    (sent(["HELLO", "3"]), b"%2\r\n$6\r\nserver\r\n$5\r\nredis\r\n$5\r\nproto\r\n:3\r\n"),
+    (sent(["AUTH", "app", "secret"]), b"+OK\r\n")
+  ])?
+  assert get(client, "k")? == Some(b"v")
+  assert hello(client, 3)? == [(Blob(b"server"), Blob(b"redis")), (Blob(b"proto"), Integer(3))]
+  auth(client, "app", "secret")?
+}
+
+test "a subscription yields its messages in order until every subscription is gone" {
+  let (client, server) = connected()?
+  var confirmations = Bytes.empty()
+  confirmations.append(encode(Array([Blob(b"subscribe"), Blob(b"news"), Integer(1)])))
+  confirmations.append(encode(Array([Blob(b"subscribe"), Blob(b"alerts"), Integer(2)])))
+  confirmations.append(encode(Push([Blob(b"message"), Blob(b"news"), Blob(b"first")])))
+  confirmations.append(encode(Array([Blob(b"psubscribe"), Blob(b"user.*"), Integer(3)])))
+  var published = Bytes.empty()
+  published.append(encode(Array([Blob(b"message"), Blob(b"alerts"), Blob(b"second")])))
+  published.append(encode(Array([Blob(b"pmessage"), Blob(b"user.*"), Blob(b"user.7"), Blob(b"third")])))
+  published.append(encode(Array([Blob(b"pong"), Blob(b"")])))
+  var ended = Bytes.empty()
+  ended.append(encode(Array([Blob(b"unsubscribe"), Blob(b"news"), Integer(2)])))
+  ended.append(encode(Array([Blob(b"unsubscribe"), Blob(b"alerts"), Integer(1)])))
+  ended.append(encode(Array([Blob(b"message"), Blob(b"news"), Blob(b"too late")])))
+  ended.append(encode(Array([Blob(b"punsubscribe"), Blob(b"user.*"), Integer(0)])))
+  ended.append(encode(Array([Blob(b"message"), Blob(b"news"), Blob(b"after the end")])))
+  var subscribing = sent(["SUBSCRIBE", "news", "alerts"])
+  subscribing.append(sent(["PSUBSCRIBE", "user.*"]))
+  var unsubscribing = sent(["UNSUBSCRIBE"])
+  unsubscribing.append(sent(["PUNSUBSCRIBE"]))
+  spawn script(server, [(subscribing, confirmations), (Bytes.empty(), published), (unsubscribing, ended)])
+  let subscription: Subscription<PipeStream> = subscribe(client, Topics { channels = ["news", "alerts"], patterns = ["user.*"] }, RespLimits {})?
+  assert subscription.messages.receive() == Some(Message { channel = "news", payload = b"first" })
+  assert subscription.messages.receive() == Some(Message { channel = "alerts", payload = b"second" })
+  assert subscription.messages.receive() == Some(Message { channel = "user.7", pattern = Some("user.*"), payload = b"third" })
+  unsubscribe(subscription)?
+  assert subscription.messages.receive() == Some(Message { channel = "news", payload = b"too late" })
+  assert subscription.messages.receive() == None
+  _ = client.close()
+}
+
+test "a refused subscription is the call's error" {
+  let client = scripted([(sent(["SUBSCRIBE", "news"]), b"-NOAUTH Authentication required.\r\n")])?
+  match subscribe(client.stream, Topics { channels = ["news"] }, RespLimits {}) {
+    Err(error) => {
+      assert error.message == "NOAUTH Authentication required."
+    }
+    Ok(_) => {
+      assert false, "a refusal fails subscribe"
+    }
+  }
+  match subscribe(client.stream, Topics {}, RespLimits {}) {
+    Err(error) => {
+      assert error.message == "resp: a subscription names a channel or a pattern"
+    }
+    Ok(_) => {
+      assert false, "a subscription names a topic"
+    }
+  }
+}
+
+test "a subscription whose connection ends closes its channel, and resubscribing resumes it" {
+  let (first, server) = connected()?
+  var replies = encode(Array([Blob(b"subscribe"), Blob(b"news"), Integer(1)]))
+  replies.append(encode(Array([Blob(b"message"), Blob(b"news"), Blob(b"one")])))
+  spawn script(server, [(sent(["SUBSCRIBE", "news"]), replies)])
+  let subscription: Subscription<PipeStream> = subscribe(first, Topics { channels = ["news"] }, RespLimits {})?
+  assert subscription.messages.receive() == Some(Message { channel = "news", payload = b"one" })
+  assert subscription.messages.receive() == None
+  _ = first.close()
+  let (second, again) = connected()?
+  var resumed = encode(Push([Blob(b"subscribe"), Blob(b"news"), Integer(1)]))
+  resumed.append(encode(Push([Blob(b"message"), Blob(b"news"), Blob(b"two")])))
+  spawn script(again, [(sent(["SUBSCRIBE", "news"]), resumed)])
+  let next: Subscription<PipeStream> = resubscribe(second, subscription, RespLimits {})?
+  assert next.messages.receive() == Some(Message { channel = "news", payload = b"two" })
+  assert next.messages.receive() == None
+  _ = second.close()
+}
+
+test "the retry delay doubles from 100 ms to at most 10 seconds" {
+  assert retry_delay(0) == 100 ms
+  assert retry_delay(1) == 200 ms
+  assert retry_delay(3) == 800 ms
+  assert retry_delay(7) == 10 seconds
+  assert retry_delay(1000) == 10 seconds
+}
+
+test fn sentinel(exchanges: List<(Bytes, Bytes)>) -> IoResult<PipeStream> {
+  let (client, server) = connected()?
+  spawn script(server, exchanges)
+  Ok(client)
+}
+
+test "the master comes from the first sentinel that names one" {
+  let ask = sent(["SENTINEL", "get-master-addr-by-name", "cache"])
+  let failing = sentinel([(ask, b"-IDONTKNOW I don't know\r\n")])?
+  let unknowing = sentinel([(ask, b"*-1\r\n")])?
+  let knowing = sentinel([(ask, b"*2\r\n$8\r\n10.0.0.5\r\n$4\r\n6379\r\n")])?
+  let never = sentinel([])?
+  assert master_from([failing, unknowing, knowing, never], "cache", RespLimits {})? == Endpoint { address = "10.0.0.5", port = 6379 }
+  let none = sentinel([(ask, b"_\r\n")])?
+  let wrong = sentinel([(ask, b"*2\r\n$8\r\n10.0.0.5\r\n$4\r\nport\r\n")])?
+  match master_from([none, wrong], "cache", RespLimits {}) {
+    Err(error) => {
+      assert error.message == "resp: no sentinel named the master of cache: sentinel 0 knows no master of that name; sentinel 1: resp: unexpected reply to SENTINEL: RespValue.Array([RespValue.Blob([49, 48, 46, 48, 46, 48, 46, 53]), RespValue.Blob([112, 111, 114, 116])])"
+    }
+    Ok(_) => {
+      assert false, "no sentinel names a master"
+    }
+  }
+}
+
+test fn sentinel_on_tcp(listener: TcpListener, reply: Bytes) -> IoResult<Unit> {
+  let stream = listener.accept()?
+  stream.set_idle_timeout(5000)?
+  script(stream, [(sent(["SENTINEL", "get-master-addr-by-name", "cache"]), reply)])
+}
+
+test "master_at asks sentinels over TCP in order" {
+  let unknowing = TcpListener.bind("127.0.0.1", 0)?
+  let knowing = TcpListener.bind("127.0.0.1", 0)?
+  spawn sentinel_on_tcp(unknowing, b"*-1\r\n")
+  spawn sentinel_on_tcp(knowing, b"*2\r\n$9\r\n127.0.0.1\r\n$4\r\n7000\r\n")
+  let sentinels = [
+    Endpoint { address = "127.0.0.1", port = unknowing.local_port() },
+    Endpoint { address = "127.0.0.1", port = knowing.local_port() }
+  ]
+  assert master_at(sentinels, "cache", 2 seconds, RespLimits {})? == Endpoint { address = "127.0.0.1", port = 7000 }
+}
+
+test "a +switch-master message names the new master, and next_master follows it" {
+  let switch = Message { channel = "+switch-master", payload = b"cache 10.0.0.5 6379 10.0.0.6 6380" }
+  assert switched_master(switch, "cache") == Some(Endpoint { address = "10.0.0.6", port = 6380 })
+  assert switched_master(switch, "other") == None
+  assert switched_master(Message { channel = "+switch-master", payload = b"cache 10.0.0.5 6379" }, "cache") == None
+  assert switched_master(Message { channel = "news", payload = b"cache 10.0.0.5 6379 10.0.0.6 6380" }, "cache") == None
+  let (client, server) = connected()?
+  var replies = encode(Array([Blob(b"subscribe"), Blob(b"+switch-master"), Integer(1)]))
+  replies.append(encode(Array([Blob(b"message"), Blob(b"+switch-master"), Blob(b"other 10.0.0.1 1 10.0.0.2 2")])))
+  replies.append(encode(Array([Blob(b"message"), Blob(b"+switch-master"), Blob(b"cache 10.0.0.5 6379 10.0.0.6 6380")])))
+  spawn script(server, [(sent(["SUBSCRIBE", "+switch-master"]), replies)])
+  let watch = watch_master(client, RespLimits {})?
+  assert next_master(watch, "cache") == Some(Endpoint { address = "10.0.0.6", port = 6380 })
+  assert next_master(watch, "cache") == None
+  _ = client.close()
+}

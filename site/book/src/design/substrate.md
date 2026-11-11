@@ -1,95 +1,74 @@
 # One substrate, two targets
 
-Ignite compiles one checked program to native executables in two ways: through generated
-Rust and cargo, or through LLVM IR and clang. Both ways call the same IO code, a Rust crate
-written once, so a socket, a task or an error report behaves the same whichever target built
-the program. This page explains that split, what each target does, and why both are kept.
-The commands and their options are in [Building for Rust and LLVM](../guide/targets.md).
+Ignite compiles one checked program to native executables in two ways: through LLVM IR and
+clang, or through generated Rust and cargo. Both ways call the same IO code, written once in
+Rust. A socket, a task or an error report behaves the same whichever target built the
+program. This page explains that split, what each target does, and why both are kept. The
+commands are in [Build for the Rust target and static executables](../guide/targets.md).
 
 ## The substrate is written once
 
-Everything a compiled program does to the outside world goes through
-[`crates/ignite-io`](https://github.com/ignite-lang/ignite/tree/main/crates/ignite-io):
-
-| area | what `ignite-io` provides |
-|---|---|
-| network | TCP listener and stream, with write coalescing |
-| in-process streams | `Pipe.pair()` and `PipeStream`, the test-only pipe that coalesces as TCP does |
-| terminal | stdin, stdout, terminal mode |
-| tasks | `spawn`, one OS thread per task, and `run`, the process entry |
-| process | arguments (`--port`, `--ref`), exit, the drain on SIGTERM |
-| failures | the reports of `assert`, `?`, overflow and index errors |
-| tests | the runner of `ignite test` |
+Everything a compiled program does to the outside world goes through one substrate: TCP
+listeners and streams, the in-process pipe of the tests, stdin and stdout and the terminal
+mode, files under a directory, child processes, tasks, the process entry and exit, the drain
+on SIGTERM, and the reports of a failed `assert`, `?`, overflow or index. The test runner of
+`ignite test` is part of it too.
 
 Two rules keep it small and shared:
 
-- **The substrate knows no application protocol.** It knows sockets, pipes, stdio and tasks.
-  Telnet, HTTP, the console and the control machines are Ignite code in `std/` or in the
-  program; see [Protocols and roles](protocols.md#a-general-layer-knows-no-protocol).
-- **A target differs only in how it suspends a task, not in how it does IO.** Neither target
-  has IO code of its own.
+- **The substrate knows no application protocol.** It knows sockets, pipes, stdio, files and
+  tasks. Telnet, HTTP, the console and the control machines are Ignite code in `std/` or in
+  the program ([Protocols and roles](protocols.md#a-general-layer-knows-no-protocol)).
+- **No target suspends a task itself.** The substrate does, as it does IO, so neither target
+  has IO code of its own and both get the same scheduling.
 
-In release v0.15.0 the substrate is blocking: `std::net`, one OS thread per task, no event
-loop. Being built: a readiness scheduler inside `ignite-io` that runs spawned tasks as
-stackful tasks on a few worker threads, one epoll loop each, with no change to either
-target's code generation
-([`docs/readiness-io.md`](https://github.com/ignite-lang/ignite/blob/main/docs/readiness-io.md),
-[roadmap](../roadmap.md)). It replaces the earlier plan of tokio, Rust futures and LLVM
-coroutines.
-
-## The Rust target
-
-Selected with `--target rust`. The compiler generates a Rust project and cargo builds it:
-
-| step | output |
-|---|---|
-| `ignite-rustgen` | a program crate, plus an `ignite-std` crate with the std code the program reaches |
-| cargo | the executables, linked against `ignite-io` as an ordinary crate |
-
-Generated code calls `ignite-io` directly and synchronously. Protocol roles are monomorphised:
-the generated std calls `Telnet::serve::<ignite_io::TcpStream>`, with no `dyn ByteStream`.
-`ignite emit FILE` prints the generated Rust; it is an artifact, never edited or committed.
+Up to release v0.15.0 every task was one OS thread with blocking IO. Since v0.16.0 the substrate
+runs spawned tasks as stackful tasks on a few worker threads, each waiting on its sockets with
+one epoll loop. Neither target's code generation changes. `IGNITE_IO=threads` selects one
+thread per task again. The decision is in
+[`docs/readiness-io.md`](https://github.com/ignite-lang/ignite/blob/main/docs/readiness-io.md).
 
 ## The LLVM target
 
-The default. The compiler emits LLVM IR text and clang compiles and links it. Building a
-program never runs cargo or rustc.
-
-| step | output |
-|---|---|
-| `ignite-llvm` | `std.ll` (the std the program reaches), `program.ll`, one `main_<exe>.ll` per executable |
-| `clang -c` | object files, `-O0 -g` by default, `-O2` with `--release`, for `--triple` or clang's own target |
-| clang as linker | each executable, linked with `libignite_rt.a` and `--gc-sections` |
-
-`libignite_rt.a` is
-[`crates/ignite-rt`](https://github.com/ignite-lang/ignite/tree/main/crates/ignite-rt), built
-once per clone: `ignite-io` behind a C ABI. Every function is `extern "C"` with the prefix
-`ignite_rt_`. The adapter converts values, keeps a table of IO handles, runs the per-task
-arenas and the spawn handshake, and does no IO of its own.
+The default. The compiler emits LLVM IR text: the part of the standard library the program
+reaches, the program, and one entry per executable. clang compiles and links it with the
+runtime archive `libignite_rt.a`, which is the substrate behind a C ABI. Building a program
+never runs cargo or rustc. The `ignite` binary carries the runtime archive, so a build needs
+only clang.
 
 The IR owns what the Rust target delegates to rustc:
 
 - the layout of every value, and a copy function per aggregate type for value semantics;
-- memory: a bump arena per task, freed at task end, with marks to release what a stretch of code allocated;
+- memory: a bump arena per task, freed at task end, with marks to release what a stretch of
+  code allocated;
 - checked arithmetic: overflow is a failure, not LLVM's wrap-around or undefined behaviour;
 - debug metadata, so a debugger shows Ignite source lines.
 
 The contract is
 [`docs/llvm.md`](https://github.com/ignite-lang/ignite/blob/main/docs/llvm.md).
 
+## The Rust target
+
+Selected with `--target rust`. The compiler generates a Rust project, the program and the
+part of the standard library it reaches, and cargo builds it against the substrate as an
+ordinary crate. Generated code calls the substrate directly and synchronously. Protocol
+roles are monomorphised: the generated std calls `Telnet::serve::<ignite_io::TcpStream>`,
+with no `dyn ByteStream`. `ignite emit FILE` prints the generated Rust. It is an artifact,
+never edited.
+
 ## The same behaviour on both
 
 The two targets are held to one behaviour, and the tests check it rather than assume it:
 
-- the failure reports (overflow, a failed `assert` or `?`, an index out of range) are the same
-  text on both;
+- integer overflow is a failure on both, not a wrap-around:
+  `task ended with error: + failed at <file>:<line>:<column>: 9223372036854775807 + 9`;
+- a failed `assert`, a failed `?` and an out-of-range index end the task with the same
+  report on both;
 - `ignite test FILE --target all` runs every inline test on every target;
-- the end-to-end tests run the examples' binaries from both targets over real sockets and
-  real stdin and stdout;
-- the fixture `eval_equivalence.ignite` gives the same `debug` text for each of its pure
-  functions in the compile-time evaluator, a Rust build and an LLVM build;
-- `control_trace.ignite` steps the `std.control` reducers in the evaluator and on both
-  targets and compares the results.
+- the repository's end-to-end tests run the examples' binaries from both targets over real
+  sockets and real stdin and stdout;
+- the compile-time evaluator, a Rust build and an LLVM build give the same result for the
+  same pure functions and the same control reducers.
 
 ## Why two targets
 
@@ -109,42 +88,21 @@ The design says: "The strongest benefits of the LLVM route are control of repres
 fewer semantic compromises through a host language, and a natural long-term backend for the
 implementation subset." And: "Rust code generation remains a credible shortcut to the first
 native controller." It calls faster builds, smaller binaries and higher throughput
-"hypotheses to benchmark". The measured build times are in the
-[targets guide](../guide/targets.md#build-times-as-measured).
+"hypotheses to benchmark". Whether one target produces faster or smaller programs is a
+question for those benchmarks, not an assumption.
 
 ## Which target is the default
 
-LLVM. `--target llvm` is the default of every command that builds (`build`, `test`, `run`,
-`plan --for-apply`, `conformance`; their `--help` says `[default: llvm]`), and `--target rust`
-selects the Rust target. Both targets stay, and every feature lands on both. The sources:
+LLVM, on every command that builds: `build`, `test`, `run`, `plan --for-apply` and
+`conformance`. Build time is the budget Ignite is designed around, and LLVM builds a program
+in a fraction of the Rust target's time. A dev build of the todo example took 1.30 s on LLVM
+against 4.12 s on Rust at release v0.15.0, on the dedicated timing host. The current values
+are on the [Quality](../quality.md) page.
 
-- [`docs/vision.md`](https://github.com/ignite-lang/ignite/blob/main/docs/vision.md),
-  decision D2 in section 8, taken with option B, "LLVM primary": LLVM becomes the default
-  `--target` and the Rust target stays the test oracle. Contradiction X25 recorded that the
-  code still defaulted to Rust; it was resolved on 2026-11-04 (build time is why Ignite exists,
-  section 1) and carried out on 2026-11-05.
-- [`docs/llvm.md`](https://github.com/ignite-lang/ignite/blob/main/docs/llvm.md): the LLVM
-  target is the default; the Rust target stays as the differential check.
-- [`docs/vision.md`](https://github.com/ignite-lang/ignite/blob/main/docs/vision.md),
-  invariant 7: "Every language feature lands on both native targets with a golden and a
-  fixture, until D2 says otherwise."
+Both targets stay. The Rust target is the differential check, and every language feature
+lands on both. The decision and its history are in
+[`docs/vision.md`](https://github.com/ignite-lang/ignite/blob/main/docs/vision.md) and
+[`docs/llvm.md`](https://github.com/ignite-lang/ignite/blob/main/docs/llvm.md).
+[Install](../guide/install.md) says what each target needs on your machine.
 
-The measured reason is in the [targets guide](../guide/targets.md#build-times-as-measured):
-`todod` builds in 1.30 s on LLVM against 4.12 s on Rust (dev, release v0.15.0, the dedicated
-timing host).
-
-## Where the code lives
-
-| path | role |
-|---|---|
-| `crates/ignite-io` | the substrate, both targets |
-| `crates/ignite-rustgen` | the Rust target |
-| `crates/ignite-llvm` | the LLVM target |
-| `crates/ignite-rt` | the LLVM target's runtime archive, the C ABI over `ignite-io` |
-| `crates/ignite` | the CLI that drives cargo or clang |
-
-The rule that keeps it this way, from the repository's `AGENTS.md`: the only hand-written Rust
-a compiled program runs is `ignite-io` (Rust target) or `ignite-rt` over `ignite-io` (LLVM
-target). Install the compiler as described in [Install](../guide/install.md).
-
-Next: [The compile-time evaluator](evaluator.md).
+Next: [the roadmap](../roadmap.md) for what is designed and not built yet.

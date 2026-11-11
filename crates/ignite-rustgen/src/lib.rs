@@ -40,7 +40,7 @@
 //! `const` declarations. A constant is a zero-argument fn, so a non-local
 //! name that is a constant is emitted as `N()` and is never a place.
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Write as _;
 use std::fs;
 use std::io;
@@ -418,6 +418,7 @@ fn generate_program(
         || !executable_infos.is_empty();
     let cargo_toml = cargo_toml(
         &package_name,
+        &lib_rs,
         &executables,
         &options.substrate_path,
         uses_std,
@@ -549,7 +550,7 @@ impl PreparedStd {
         for (index, module) in self.modules.iter().enumerate() {
             let text = module.render(
                 retained.map(|retained| retained.items[index].as_slice()),
-                retained.map(|retained| &retained.names),
+                retained.map(|retained| &retained.names[index]),
             );
             tree.insert(&std_segments(&module.path), text);
         }
@@ -705,17 +706,111 @@ fn plain_ident(rust: &str) -> &str {
     rust.strip_prefix("r#").unwrap_or(rust)
 }
 
-/// Dependencies are source identifiers under the same conservative rule
-/// as the original pruning walk. Compute them once per immutable template.
+/// Dependencies are source identifiers under the conservative rule of the
+/// original pruning walk (a name in a string or comment counts), resolved
+/// within the item's module as Rust resolves them there: to the module's
+/// own items of that name, to those its `use` lines import (by name or by
+/// glob), and to those of a module the item names by a `crate::` path (a
+/// variant of an enum not imported, `crate::modes::Mode::Loud`). The
+/// roots, which lie outside the library, reach every item of each name
+/// they contain. Compute them once per immutable template.
 #[derive(Debug)]
 struct StdDependencies {
+    /// Items by name, for the roots.
     definitions: BTreeMap<String, Vec<(usize, usize)>>,
+    /// Per module and item, the distinct identifiers of its text.
     references: Vec<Vec<Vec<String>>>,
+    /// Per module and item, the items those identifiers resolve to.
+    targets: Vec<Vec<Vec<(usize, usize)>>>,
 }
 
 struct RetainedStd {
     items: Vec<Vec<bool>>,
-    names: BTreeSet<String>,
+    /// Per module, the identifiers of its kept items: its `use` lines keep
+    /// those names only, so no line imports an item that was dropped.
+    names: Vec<BTreeSet<String>>,
+}
+
+/// The modules one std module's names can resolve to.
+struct Scope {
+    own: usize,
+    /// Modules a `use` line takes a name from, by that name.
+    named: HashMap<String, Vec<usize>>,
+    /// Modules a `use` line takes every name from.
+    globs: Vec<usize>,
+}
+
+impl Scope {
+    fn of(own: usize, module: &LoweredModule, by_path: &HashMap<String, usize>) -> Scope {
+        let mut scope = Scope {
+            own,
+            named: HashMap::new(),
+            globs: Vec::new(),
+        };
+        for target in &module.uses {
+            let Some(&from) = by_path.get(&target.path) else {
+                continue;
+            };
+            for name in &target.names {
+                if name == "*" {
+                    scope.globs.push(from);
+                } else {
+                    scope
+                        .named
+                        .entry(plain_ident(name).to_string())
+                        .or_default()
+                        .push(from);
+                }
+            }
+        }
+        scope
+    }
+
+    /// Whether `name` in an item that names the modules `by_paths` by a
+    /// `crate::` path may be `module`'s item of that name.
+    fn sees(&self, module: usize, name: &str, by_paths: &[usize]) -> bool {
+        module == self.own
+            || self.globs.contains(&module)
+            || by_paths.contains(&module)
+            || self
+                .named
+                .get(name)
+                .is_some_and(|from| from.contains(&module))
+    }
+}
+
+/// The std modules the Rust source `text` names by a `crate::` path: for
+/// each `crate::a::b::…`, the longest prefix that is a module of `by_path`.
+fn path_modules(text: &str, by_path: &HashMap<String, usize>) -> Vec<usize> {
+    let mut found = Vec::new();
+    for (start, _) in text.match_indices("crate::") {
+        let path: String = text[start..]
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | ':' | '#'))
+            .collect();
+        let segments: Vec<&str> = path.split("::").collect();
+        for end in (1..=segments.len()).rev() {
+            if let Some(&module) = by_path.get(&segments[..end].join("::")) {
+                if !found.contains(&module) {
+                    found.push(module);
+                }
+                break;
+            }
+        }
+    }
+    found
+}
+
+/// The Rust path of std module `path` inside the `ignite-std` crate, as its
+/// importers' `use` lines write it (`use_targets`): `std.a.b` is
+/// `crate::a::b`.
+fn std_rust_path(path: &str) -> String {
+    let mut rust = String::from("crate");
+    for segment in std_segments(path) {
+        rust.push_str("::");
+        rust.push_str(&ident(segment));
+    }
+    rust
 }
 
 impl StdDependencies {
@@ -737,23 +832,55 @@ impl StdDependencies {
             }
             references.push(items);
         }
+        let by_path: HashMap<String, usize> = modules
+            .iter()
+            .enumerate()
+            .map(|(index, module)| (std_rust_path(&module.path), index))
+            .collect();
+        let targets = modules
+            .iter()
+            .enumerate()
+            .map(|(index, module)| {
+                let scope = Scope::of(index, module, &by_path);
+                references[index]
+                    .iter()
+                    .zip(&module.items)
+                    .map(|(names, item): (&Vec<String>, &Item)| {
+                        let by_paths = path_modules(&item.text, &by_path);
+                        names
+                            .iter()
+                            .filter_map(|name| Some((name, definitions.get(name)?)))
+                            .flat_map(|(name, defined)| {
+                                defined
+                                    .iter()
+                                    .copied()
+                                    .filter(|&(module, _)| scope.sees(module, name, &by_paths))
+                                    .collect::<Vec<_>>()
+                            })
+                            .collect()
+                    })
+                    .collect()
+            })
+            .collect();
         Self {
             definitions,
             references,
+            targets,
         }
     }
 
     fn reachable(&self, modules: &[LoweredModule], roots: &[&str]) -> RetainedStd {
-        // Generated operator chains can repeat a few names millions of times.
-        // Borrow every token and queue each distinct name once; only the final
-        // use-filter set needs owned strings. Roots and item bodies stay alive
-        // throughout this walk, and rendering order comes from the modules.
-        let mut names = HashSet::new();
-        let mut pending = Vec::new();
+        // Generated operator chains can repeat a few names millions of times:
+        // each root name is looked up once, and an item's names were made
+        // distinct and resolved once in `new`.
+        let mut seen = HashSet::new();
+        let mut pending: Vec<(usize, usize)> = Vec::new();
         for root in roots {
             rust_identifiers(root, |name| {
-                if names.insert(name) {
-                    pending.push(name);
+                if seen.insert(name)
+                    && let Some(defined) = self.definitions.get(name)
+                {
+                    pending.extend(defined.iter().copied());
                 }
             });
         }
@@ -761,24 +888,29 @@ impl StdDependencies {
             .iter()
             .map(|module| vec![false; module.items.len()])
             .collect();
-        while let Some(name) = pending.pop() {
-            if let Some(defined) = self.definitions.get(name) {
-                for &(module, item) in defined {
-                    if !items[module][item] {
-                        items[module][item] = true;
-                        for reference in &self.references[module][item] {
-                            if names.insert(reference.as_str()) {
-                                pending.push(reference.as_str());
-                            }
-                        }
-                    }
-                }
+        while let Some((module, item)) = pending.pop() {
+            if !items[module][item] {
+                items[module][item] = true;
+                pending.extend(
+                    self.targets[module][item]
+                        .iter()
+                        .copied()
+                        .filter(|&(module, item)| !items[module][item]),
+                );
             }
         }
-        RetainedStd {
-            items,
-            names: names.into_iter().map(str::to_string).collect(),
-        }
+        let names = items
+            .iter()
+            .enumerate()
+            .map(|(module, kept)| {
+                kept.iter()
+                    .enumerate()
+                    .filter(|(_, kept)| **kept)
+                    .flat_map(|(item, _)| self.references[module][item].iter().cloned())
+                    .collect()
+            })
+            .collect();
+        RetainedStd { items, names }
     }
 }
 
@@ -1259,6 +1391,7 @@ pub fn generate_tests(
     }];
     let cargo_toml = cargo_toml(
         TEST_PACKAGE,
+        &lib,
         &executables,
         &options.substrate_path,
         true,
@@ -1280,8 +1413,139 @@ pub fn generate_tests(
 /// build whose executable is gone is removed, and `src/bin` with it when no
 /// executable is left, so cargo does not find a stale binary.
 pub fn write_project(project: &GeneratedProject, out: &Path) -> io::Result<()> {
+    write_with_manifest(project, &project.cargo_toml, out)
+}
+
+/// The linker script of a release executable (row 3.8 of
+/// `docs/quality.md`, story `rust-peak-memory-at-one-connection`): the
+/// functions of the standard library's backtrace symbolizer
+/// (`std::backtrace_rs` and the crates it reads debug information with)
+/// in one run at the start of the code, before every other function.
+/// They are about 170 kB that run only to print a backtrace, and fat LTO
+/// leaves them between functions of the standard library a server runs
+/// at its start. The kernel maps the pages of a file around every page a
+/// process touches (64 KiB by default), so there they were resident
+/// memory of every process; in one run only its end is next to code that
+/// runs. `.init` follows the code, as the LLVM linker orders the two
+/// itself, so the run starts the mapping under that linker; under GNU ld
+/// only the procedure linkage table is before it. The script adds to the
+/// linker's own layout (`INSERT`), which those two read; it changes no
+/// instruction and adds no section.
+pub const RELEASE_LAYOUT: &str = "SECTIONS
+{
+  .text : {
+    *(.text.*12backtrace_rs* .text.*5gimli* .text.*9addr2line* .text.*14rustc_demangle* .text.*11miniz_oxide*)
+    *(.text .text.*)
+  }
+  .init : { KEEP (*(SORT_NONE(.init))) }
+} INSERT BEFORE .fini;
+";
+
+/// The name the package of a release build `links` to: the key by which
+/// the driver gives cargo the link arguments ([`release_layout_config`]).
+const LAYOUT_LINKS: &str = "ignite-layout";
+
+/// The file of [`RELEASE_LAYOUT`] in the project directory.
+const LAYOUT_SCRIPT: &str = "layout.ld";
+
+/// The build script of a release project, in the project directory.
+const LAYOUT_BUILD: &str = "layout.rs";
+
+/// The build script of a release project: the link arguments of
+/// [`release_layout_config`], for a cargo run that was not given them (a
+/// `cargo build --release` by hand, or a host whose target triple the
+/// driver did not name). The driver's own run overrides it, so cargo
+/// neither compiles nor runs it.
+const LAYOUT_BUILD_RS: &str = "fn main() {
+    println!(\"cargo::rerun-if-changed=layout.ld\");
+    println!(\"cargo::rustc-link-arg-bins=-T\");
+    println!(
+        \"cargo::rustc-link-arg-bins={}/layout.ld\",
+        env!(\"CARGO_MANIFEST_DIR\")
+    );
+}
+";
+
+/// [`write_project`] for the release build of a program on Linux: the
+/// project with [`RELEASE_LAYOUT`] as `layout.ld`, linked into its
+/// executables. The manifest names the script's link arguments by a
+/// `links` key with a build script; a dev build's manifest has neither,
+/// so `cargo build` of it compiles nothing more. `false` for a program
+/// without an executable, which is written as [`write_project`] writes it:
+/// nothing of it is linked with the script, and cargo refuses link
+/// arguments for executables from the build script of a package that has
+/// none.
+pub fn write_release_project(project: &GeneratedProject, out: &Path) -> io::Result<bool> {
+    if project.executables.is_empty() {
+        write_project(project, out)?;
+        return Ok(false);
+    }
+    write_with_manifest(project, &release_manifest(&project.cargo_toml), out)?;
+    write_layout_files(out)?;
+    Ok(true)
+}
+
+/// [`RELEASE_LAYOUT`] and the build script that names it, in the project
+/// directory `out`.
+fn write_layout_files(out: &Path) -> io::Result<()> {
+    write_if_changed(out.join(LAYOUT_SCRIPT), RELEASE_LAYOUT)?;
+    write_if_changed(out.join(LAYOUT_BUILD), LAYOUT_BUILD_RS)
+}
+
+/// The manifest of [`write_layout_probe`]'s project without the layout.
+const PROBE_MANIFEST: &str = "[package]
+name = \"ignite-layout-probe\"
+version = \"0.0.0\"
+edition = \"2024\"
+
+[workspace]
+";
+
+/// The project that asks a linker whether it reads [`RELEASE_LAYOUT`],
+/// written to `out`: one executable with an empty `main` and no
+/// dependency. With `layout` its manifest names the script as a release
+/// project's does ([`write_release_project`], [`release_layout_config`]);
+/// without, it is the same program linked as the linker lays it out
+/// itself. A release build that failed with the script builds the two to
+/// tell a linker that refuses the script from any other failure.
+pub fn write_layout_probe(out: &Path, layout: bool) -> io::Result<()> {
     fs::create_dir_all(out.join("src"))?;
-    write_if_changed(out.join("Cargo.toml"), &project.cargo_toml)?;
+    let manifest = if layout {
+        release_manifest(PROBE_MANIFEST)
+    } else {
+        PROBE_MANIFEST.to_string()
+    };
+    write_if_changed(out.join("Cargo.toml"), &manifest)?;
+    write_if_changed(out.join("src").join("main.rs"), "fn main() {}\n")?;
+    write_layout_files(out)
+}
+
+/// The manifest `manifest` with the `links` key and the build script of a
+/// release project in its `[package]` table, which starts it.
+fn release_manifest(manifest: &str) -> String {
+    manifest.replacen(
+        "[package]\n",
+        &format!("[package]\nlinks = \"{LAYOUT_LINKS}\"\nbuild = \"{LAYOUT_BUILD}\"\n"),
+        1,
+    )
+}
+
+/// The value of `--config` that gives cargo the link arguments of the
+/// release project at `out` ([`write_release_project`]) for the target
+/// `triple`: `-T` and the linker script, for the executables only. With it
+/// cargo does not compile the project's build script.
+pub fn release_layout_config(triple: &str, out: &Path) -> io::Result<String> {
+    let script = std::path::absolute(out.join(LAYOUT_SCRIPT))?;
+    Ok(format!(
+        "target.{triple}.{LAYOUT_LINKS}.rustc-link-arg-bins=[\"-T\", {}]",
+        toml_string(&script.to_string_lossy())
+    ))
+}
+
+/// [`write_project`] with `manifest` as `Cargo.toml`.
+fn write_with_manifest(project: &GeneratedProject, manifest: &str, out: &Path) -> io::Result<()> {
+    fs::create_dir_all(out.join("src"))?;
+    write_if_changed(out.join("Cargo.toml"), manifest)?;
     write_if_changed(out.join("src").join("lib.rs"), &project.lib_rs)?;
     let bin = out.join("src").join("bin");
     let names: Vec<String> = project
@@ -1609,9 +1873,9 @@ fn rust_type_in(ty: &Type, params: &BTreeSet<String>) -> String {
         "Unit" => "()".to_string(),
         "Tuple" => format!("({})", args.join(", ")),
         "List" => generic("Vec"),
-        "TcpListener" | "TcpStream" | "PipeStream" | "Stdin" | "Stdout" | "Stderr" | "Input"
-        | "IoError" | "Exposure" | "Directory" | "Launcher" | "ChildProcess" | "Entropy"
-        | "Setting" | "CommandLine" | "Environment" => {
+        "TcpListener" | "TcpStream" | "PipeStream" | "TlsStream" | "Stdin" | "Stdout"
+        | "Stderr" | "Input" | "IoError" | "Exposure" | "Directory" | "Launcher"
+        | "ChildProcess" | "Entropy" | "Setting" | "CommandLine" | "Environment" => {
             format!("::ignite_io::{}", ty.name.name)
         }
         "Store" => generic("::ignite_io::Store"),
@@ -1770,24 +2034,6 @@ fn literal_bytes(list: &Expr) -> Option<Vec<u8>> {
 fn byte_items(bytes: &[u8]) -> String {
     let items: Vec<String> = bytes.iter().map(u8::to_string).collect();
     format!("[{}u8]", items.join("u8, "))
-}
-
-/// Whether `pattern` binds `name`.
-fn pattern_binds(pattern: &Pattern, name: &str) -> bool {
-    match &pattern.kind {
-        PatternKind::Binding(id) => id.name == name,
-        PatternKind::Rest(Some(id)) => id.name == name,
-        PatternKind::Or(items) | PatternKind::Tuple(items) | PatternKind::List(items) => {
-            items.iter().any(|p| pattern_binds(p, name))
-        }
-        PatternKind::Variant { args, .. } => args.iter().any(|p| pattern_binds(p, name)),
-        PatternKind::Range { start, end } => pattern_binds(start, name) || pattern_binds(end, name),
-        PatternKind::Wildcard
-        | PatternKind::Int(_)
-        | PatternKind::Str(_)
-        | PatternKind::Bool(_)
-        | PatternKind::Rest(None) => false,
-    }
 }
 
 fn borrow(expr: &Expr, text: String) -> String {
@@ -2596,6 +2842,7 @@ impl<'a> Generator<'a> {
             Ty::Capability(kind) => format!("::ignite_io::{}", kind.name()),
             Ty::TcpStream => "::ignite_io::TcpStream".to_string(),
             Ty::PipeStream => "::ignite_io::PipeStream".to_string(),
+            Ty::TlsStream => "::ignite_io::TlsStream".to_string(),
             Ty::IoError => "::ignite_io::IoError".to_string(),
             Ty::Input => "::ignite_io::Input".to_string(),
             Ty::Param(name) => ident(name),
@@ -3227,15 +3474,11 @@ impl<'a> Generator<'a> {
             ExprKind::Binary { op, .. } => self.is_text_add(expr, *op),
             _ => matches!(
                 self.callee(expr),
-                Some(Callee::Builtin(
-                    Builtin::IntToText
-                        | Builtin::IntToTextMethod
-                        | Builtin::ByteToText
-                        | Builtin::U32ToText
-                        | Builtin::BoolToText
-                        | Builtin::TextConcat
-                        | Builtin::TextTrim
-                ))
+                Some(Callee::Builtin(builtin)) if builtin.is_scalar_to_text()
+                    || matches!(
+                        builtin,
+                        Builtin::IntToText | Builtin::TextConcat | Builtin::TextTrim
+                    )
             ),
         }
     }
@@ -3317,7 +3560,7 @@ impl<'a> Generator<'a> {
         let types = self.types?;
         let rebinds = rest.iter().any(|s| match &s.kind {
             StmtKind::Let { name: other, .. } => other.name == name.name,
-            StmtKind::LetPattern { pattern, .. } => pattern_binds(pattern, &name.name),
+            StmtKind::LetPattern { pattern, .. } => pattern.binds(&name.name),
             _ => false,
         });
         let root = place_root(text)?;
@@ -3921,13 +4164,8 @@ impl<'a> Generator<'a> {
                 && none.is_empty()
                 && matches!(
                     self.callee(part),
-                    Some(Callee::Builtin(
-                        Builtin::TextToText
-                            | Builtin::IntToTextMethod
-                            | Builtin::ByteToText
-                            | Builtin::U32ToText
-                            | Builtin::BoolToText
-                    ))
+                    Some(Callee::Builtin(builtin))
+                        if *builtin == Builtin::TextToText || builtin.is_scalar_to_text()
                 )
                 && !self.place_in(receiver, modified)
             {
@@ -4590,6 +4828,10 @@ impl<'a> Generator<'a> {
                 format!("::ignite_io::Channel::bounded({capacity})")
             }
             ("Pipe", "pair", []) => "::ignite_io::Pipe::pair()".to_string(),
+            ("Tls", "client", [stream, server_name, options]) => format!(
+                "::ignite_io::TlsStream::client({stream}, {server_name}, {})",
+                substrate_tls_options(options)
+            ),
             ("Directory", "temporary", []) => "::ignite_io::Directory::temporary()".to_string(),
             ("Launcher", "new", []) => "::ignite_io::Launcher::new()".to_string(),
             ("Entropy", "new", []) => "::ignite_io::Entropy::new()".to_string(),
@@ -4779,7 +5021,8 @@ impl<'a> Generator<'a> {
                 | Builtin::PipeStreamSetIdleTimeout
                 | Builtin::PipeStreamReceivedBatches
                 | Builtin::PipeStreamWriteUrgent
-                | Builtin::PipeStreamUrgentPending,
+                | Builtin::PipeStreamUrgentPending
+                | Builtin::TlsStreamAlpn,
             )) => {
                 let r = self.receiver(receiver);
                 let a = self.args(args);
@@ -4929,12 +5172,7 @@ impl<'a> Generator<'a> {
                 let a = self.args(args);
                 return format!("({r}.{})({})", ident(field), a.join(", "));
             }
-            Some(Callee::Builtin(
-                Builtin::IntToTextMethod
-                | Builtin::ByteToText
-                | Builtin::U32ToText
-                | Builtin::BoolToText,
-            )) => {
+            Some(Callee::Builtin(builtin)) if builtin.is_scalar_to_text() => {
                 let r = self.receiver(receiver);
                 return format!("{r}.to_string()");
             }
@@ -4976,6 +5214,13 @@ impl<'a> Generator<'a> {
                 let r = self.receiver(receiver);
                 return format!(
                     "{{ let (address, port) = {r}.peer(); {endpoint} {{ address, port }} }}"
+                );
+            }
+            Some(Callee::Builtin(Builtin::TcpStreamLocal)) => {
+                let endpoint = self.enum_name(&ignite_types::endpoint_name());
+                let r = self.receiver(receiver);
+                return format!(
+                    "{{ let (address, port) = {r}.local(); {endpoint} {{ address, port }} }}"
                 );
             }
             _ => {}
@@ -5187,10 +5432,10 @@ impl<'a> Generator<'a> {
     /// place that needs the value copies it once there; any other is
     /// copied out at the start of the arm (pushed to `out`).
     fn lend_bindings(&mut self, pattern: &Pattern, out: &mut Vec<(String, String)>) {
-        let mut names = Vec::new();
-        pattern_bindings(pattern, &mut names);
         let scope = self.scopes.len() - 1;
-        for id in names {
+        for id in pattern.bindings() {
+            // An uppercase binding may name a variant: it is not in the
+            // arm's scope.
             if !self.scopes[scope].contains(&id.name) {
                 continue;
             }
@@ -5770,6 +6015,7 @@ impl<'a> Generator<'a> {
             Ty::Fn(..) | Ty::EffectFn(..) => fixed("<fn>"),
             Ty::TcpStream => fixed("<TcpStream>"),
             Ty::PipeStream => fixed("<PipeStream>"),
+            Ty::TlsStream => fixed("<TlsStream>"),
             Ty::TcpListener => fixed("<TcpListener>"),
             Ty::Store(_) => fixed("<Store>"),
             Ty::Sender(_) => fixed("<Sender>"),
@@ -6493,22 +6739,6 @@ fn binding_value(access: &str) -> String {
     }
 }
 
-/// The names `pattern` binds, in order; an uppercase binding may name a
-/// variant and is told apart by the caller.
-fn pattern_bindings<'p>(pattern: &'p Pattern, out: &mut Vec<&'p Ident>) {
-    match &pattern.kind {
-        PatternKind::Binding(id) => out.push(id),
-        PatternKind::Rest(Some(id)) => out.push(id),
-        PatternKind::Or(items) | PatternKind::Tuple(items) | PatternKind::List(items) => {
-            items.iter().for_each(|item| pattern_bindings(item, out));
-        }
-        PatternKind::Variant { args, .. } => {
-            args.iter().for_each(|arg| pattern_bindings(arg, out));
-        }
-        _ => {}
-    }
-}
-
 /// Whether a value of type `ty` can be read through a reference where
 /// the generated code reads a borrowed parameter: the types a `for` over
 /// a list place lends its elements as ([`Generator::borrowed_for`]).
@@ -6563,6 +6793,22 @@ const INVOCATION_FIELDS: [&str; 8] = [
     "input",
 ];
 const CHILD_EXIT_FIELDS: [&str; 5] = ["ending", "code", "stdout", "stderr", "dropped"];
+/// The fields of `std.tls.TlsOptions`, which `ignite_io::TlsOptions` has
+/// under the same names.
+const TLS_OPTIONS_FIELDS: [&str; 4] = ["alpn", "authorities", "verify", "handshake_timeout"];
+
+/// The `ignite_io::TlsOptions` of the generated `std.tls.TlsOptions`
+/// `value`, field by field.
+fn substrate_tls_options(value: &str) -> String {
+    let fields: Vec<String> = TLS_OPTIONS_FIELDS
+        .iter()
+        .map(|f| format!("{f}: o.{}", ident(f)))
+        .collect();
+    format!(
+        "{{ let o = {value}; ::ignite_io::TlsOptions {{ {} }} }}",
+        fields.join(", ")
+    )
+}
 
 /// The `ignite_io::Invocation` of the generated `std.process.Invocation`
 /// value `value`, field by field.
@@ -7208,13 +7454,93 @@ fn toml_string(text: &str) -> String {
     out
 }
 
+/// The generated crate's release profile: `Int` overflow fails as in a dev
+/// build (`docs/slice.md` section 4), and the program, `ignite-std`,
+/// `ignite-io` and the Rust standard library are optimised as one unit
+/// (fat LTO, one codegen unit), which keeps a release executable within
+/// 10 % of its v0.15.0 size with the readiness scheduler linked (row 3.2
+/// of `docs/quality.md`, story `readiness-binary-size`). The crates
+/// `ignite-io` calls the system and switches stacks through, `nix` and
+/// `corosensei`, are built at `opt-level = "s"` (story `binary-size-back`):
+/// it makes an executable's start about 200 instructions shorter, and its
+/// counts per request and session stay within noise; it does not make the
+/// executable smaller (about 570 bytes larger stripped). `ignite-io`
+/// itself keeps the default level, which costs fewer instructions per
+/// request.
+const RELEASE_PROFILE: &str = "\n[profile.release]\noverflow-checks = true\ncodegen-units = 1\nlto = true\n\n[profile.release.package.nix]\nopt-level = \"s\"\n\n[profile.release.package.corosensei]\nopt-level = \"s\"\n";
+
+/// The generated crate's dev profile: the crates from outside the project
+/// (`ignite-io` and what it needs: `nix`, `libc`, the scheduler's
+/// coroutines) carry no debug information whatever the profile's own
+/// `debug`, `ignite-io` line tables only, so a backtrace still names its
+/// frames' files and lines. A fresh build compiles them all, and on a
+/// host without cargo configuration full debug information was a third of
+/// the work of compiling `ignite-io` (row 6.2 of `docs/quality.md`, story
+/// `build-time-back`). The members, the program and `ignite-std`, get line
+/// tables by name ([`dev_member_profile`]). Build scripts and their
+/// dependencies (`autocfg`, `cfg_aliases`) go without debug assertions and
+/// overflow checks: compiling and running them comes before the crates they
+/// build, and `libc`'s is on the way to the program (80 M instructions of a
+/// fresh build fewer). With `ignite-std`'s line tables a backtrace names
+/// the files and lines of the standard library's frames and of the
+/// `ignite-io` instances in them too. The line tables are split out of
+/// the objects (`split-debuginfo = "unpacked"`: `.dwo` files beside them
+/// in the target directory, which gdb and the standard library's
+/// symbolizer read), so the linker neither copies nor relocates them and
+/// a dev link compresses nothing (rows 3.2 and 6.2, story
+/// `binary-size-back`).
+const DEV_PROFILE: &str = "\n[profile.dev.package.\"*\"]\ndebug = false\n\n[profile.dev.package.ignite-io]\ndebug = \"line-tables-only\"\nsplit-debuginfo = \"unpacked\"\n\n[profile.dev.build-override]\ndebug-assertions = false\noverflow-checks = false\n";
+
+/// The dev profile of a member of the generated project, `package`: line
+/// tables, enough for a backtrace's files and lines, instead of the
+/// profile's own `debug` (full on a host without cargo configuration),
+/// which cost a fifth of compiling the program and `ignite-std` (row 6.2).
+/// A package table, unlike `[profile.dev] debug`, is not overridden by
+/// `CARGO_PROFILE_DEV_DEBUG`. The line tables are split out of the
+/// objects, as `ignite-io`'s ([`DEV_PROFILE`]).
+fn dev_member_profile(package: &str) -> String {
+    format!(
+        "\n[profile.dev.package.{}]\ndebug = \"line-tables-only\"\nsplit-debuginfo = \"unpacked\"\n",
+        toml_string(package)
+    )
+}
+
+/// The packages `ignite-io` depends on, its optional ones aside: what
+/// [`prebuild_manifest`] lets the driver build while it generates.
+pub const SUBSTRATE_DEPENDENCIES: &[&str] = &["corosensei", "nix", "termios"];
+
+/// The manifest of a crate that depends on `ignite-io` at `substrate` with
+/// the generated project's profiles. A `cargo build -p` of
+/// [`SUBSTRATE_DEPENDENCIES`] from it, into the target directory of the
+/// program's build, builds the units that build then finds fresh: the
+/// driver starts it before it parses, types and generates, so on a fresh
+/// output those crates are compiled while it works (row 6.2 of
+/// `docs/quality.md`, story `build-time-back`). `ignite-io`'s optional
+/// features change none of those units.
+pub fn prebuild_manifest(substrate: &Path) -> String {
+    let substrate = substrate.to_string_lossy().replace('\\', "/");
+    let mut out = String::new();
+    out.push_str("[package]\nname = \"ignite-prebuild\"\nversion = \"0.0.0\"\n");
+    out.push_str("edition = \"2024\"\n\n[workspace]\n");
+    out.push_str(RELEASE_PROFILE);
+    out.push_str(DEV_PROFILE);
+    out.push_str("\n[lib]\npath = \"lib.rs\"\n\n[dependencies]\n");
+    out.push_str(&ignite_io_dependency(&substrate, &[]));
+    out
+}
+
 fn cargo_toml(
     package_name: &str,
+    lib_rs: &str,
     executables: &[Executable],
     substrate: &Path,
     uses_std: bool,
     feature: Option<&str>,
 ) -> String {
+    let mut features: Vec<&str> = feature.into_iter().collect();
+    let mut sources = vec![lib_rs];
+    sources.extend(executables.iter().map(|e| e.source.as_str()));
+    features.extend(substrate_features(&sources));
     let substrate = substrate.to_string_lossy().replace('\\', "/");
     let mut out = String::new();
     out.push_str("[package]\n");
@@ -7222,7 +7548,12 @@ fn cargo_toml(
     out.push_str("version = \"0.0.0\"\n");
     out.push_str("edition = \"2024\"\n");
     out.push_str("\n[workspace]\n");
-    out.push_str("\n[profile.release]\noverflow-checks = true\n");
+    out.push_str(RELEASE_PROFILE);
+    out.push_str(DEV_PROFILE);
+    out.push_str(&dev_member_profile(package_name));
+    if uses_std {
+        out.push_str(&dev_member_profile(STD_PACKAGE));
+    }
     out.push_str("\n[lib]\n");
     let lib = crate_name(package_name);
     if lib != package_name.replace('-', "_") {
@@ -7239,7 +7570,7 @@ fn cargo_toml(
         );
     }
     out.push_str("\n[dependencies]\n");
-    out.push_str(&ignite_io_dependency(&substrate, feature));
+    out.push_str(&ignite_io_dependency(&substrate, &features));
     if uses_std {
         let _ = writeln!(out, "{STD_PACKAGE} = {{ path = \"std\" }}");
     }
@@ -7273,18 +7604,57 @@ fn std_cargo_toml(substrate: &Path, lib_rs: &str) -> String {
     out.push_str("\n[lib]\n");
     out.push_str("path = \"src/lib.rs\"\n");
     out.push_str("\n[dependencies]\n");
-    out.push_str(&ignite_io_dependency(&substrate, None));
+    out.push_str(&ignite_io_dependency(
+        &substrate,
+        &substrate_features(&[lib_rs]),
+    ));
     out
 }
 
-/// The `ignite-io` dependency line, with `feature` enabled when given.
-fn ignite_io_dependency(substrate: &str, feature: Option<&str>) -> String {
-    match feature {
-        Some(feature) => format!(
-            "ignite-io = {{ path = {}, features = [{}] }}\n",
-            toml_string(substrate),
-            toml_string(feature)
-        ),
-        None => format!("ignite-io = {{ path = {} }}\n", toml_string(substrate)),
+/// The items of `ignite-io`'s feature `process` (its `child` and `pipe`
+/// modules) as generated code names them.
+const PROCESS_ITEMS: &[&str] = &[
+    "::ignite_io::Launcher",
+    "::ignite_io::ChildProcess",
+    "::ignite_io::ChildExit",
+    "::ignite_io::Invocation",
+    "::ignite_io::Pipe",
+];
+
+/// The optional `ignite-io` features a crate of Rust `sources` needs:
+/// `process` when one names a child process or pipe item
+/// ([`PROCESS_ITEMS`]), so a program without either builds `ignite-io`
+/// without those modules (story `build-time-back`); `tls` when one names
+/// a TLS item of the substrate (`::ignite_io::Tls..`), so a program
+/// without TLS builds without rustls and ring. Cargo unifies features, so
+/// the crate (program or `ignite-std`) that names one turns it on for the
+/// build. Neither feature changes a dependency of `ignite-io` but rustls,
+/// so the packages built ahead ([`prebuild_manifest`]) are the same.
+fn substrate_features(sources: &[&str]) -> Vec<&'static str> {
+    let names = |items: &[&str]| {
+        sources
+            .iter()
+            .any(|source| items.iter().any(|item| source.contains(item)))
+    };
+    let mut features = Vec::new();
+    if names(PROCESS_ITEMS) {
+        features.push("process");
     }
+    if names(&["::ignite_io::Tls"]) {
+        features.push("tls");
+    }
+    features
+}
+
+/// The `ignite-io` dependency line, with `features` enabled.
+fn ignite_io_dependency(substrate: &str, features: &[&str]) -> String {
+    if features.is_empty() {
+        return format!("ignite-io = {{ path = {} }}\n", toml_string(substrate));
+    }
+    let features: Vec<String> = features.iter().map(|f| toml_string(f)).collect();
+    format!(
+        "ignite-io = {{ path = {}, features = [{}] }}\n",
+        toml_string(substrate),
+        features.join(", ")
+    )
 }

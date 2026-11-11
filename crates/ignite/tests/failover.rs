@@ -217,13 +217,18 @@ fn ten_thousand_failing_sessions_leak_nothing() {
     assert!(server.alive());
     assert_eq!(server.session("still\n"), b"ok still\n");
     let deadline = Instant::now() + TIMEOUT;
-    while server.open_fds() > fds && Instant::now() < deadline {
+    let once = fds + 1;
+    while server.open_fds() > once && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(10));
     }
     // The baseline may still count the warm session's socket, released a
-    // moment after the client saw it close, so fewer is not a leak.
+    // moment after the client saw it close, so fewer is not a leak. One
+    // more is the eventfd the process makes once, at the first wait that
+    // blocks a worker in a `poll` (`ESCALATION` in `ignite-io`'s
+    // `sched.rs`): the two sessions before the baseline make it only when
+    // their task ran before the client's bytes arrived.
     let open = server.open_fds();
-    assert!(open <= fds, "handles leaked: {open} open, {fds} before");
+    assert!(open <= once, "handles leaked: {open} open, {fds} before");
     let grown = server.rss_kib().saturating_sub(rss);
     assert!(
         grown < 32 * 1024,

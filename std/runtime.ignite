@@ -172,9 +172,8 @@ test "a pipe pair counts while it lives" {
   assert Runtime.census().pipes == before.pipes
 }
 
-// A capability counts on both targets. Its release is checked on the Rust
-// target only: on the LLVM target no capability handle is released yet
-// (`docs/leak-guard.md` 1.2, Q8), which `leak::` records.
+// A capability counts on both targets while it lives and leaves the census
+// with the block that made it (`docs/slice.md` 30.3).
 test fn capability_counted(before: Census) -> Int {
   let entropy = Entropy.new()
   let drawn = entropy.random_bytes(1)
@@ -184,6 +183,7 @@ test fn capability_counted(before: Census) -> Int {
 test "a capability counts while it lives" {
   let before = Runtime.census()
   assert capability_counted(before) == 1
+  assert Runtime.census().capabilities == before.capabilities
 }
 
 test "a store counts, and stays" {

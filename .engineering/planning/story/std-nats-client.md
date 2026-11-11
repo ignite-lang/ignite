@@ -2,11 +2,13 @@
 format: aep.planning-md/3
 id: story:std-nats-client
 kind: story
-status: proposed
+status: implemented
 title: 'std.protocol.nats: NATS core client'
-revision: 3
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T01:26:00Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-11-10T01:15:24Z", actor: "human:timo", revision: 4}
+- {from: "active", to: "implemented", at: "2026-11-10T19:39:18Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"test_result":1,"review_outcome":2}}}
 ---
 # Story: std-nats-client
 

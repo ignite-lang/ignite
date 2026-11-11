@@ -1,4 +1,4 @@
-# Local apply, host and inspect
+# Host and apply
 
 `ignite run` runs an assembly in the foreground and stops with it. Local apply separates the
 two jobs: a long-running **host** owns a state directory and supervises what runs there, and
@@ -124,28 +124,19 @@ Replan after an edit and apply again. The saved plan shows `add`, `replace`, `re
 A plan is bound to its sources: if an input changed between `plan` and `apply`, the plan is
 rejected and must be made again. Apply never rebuilds behind your back.
 
-## Durability and recovery
+## When something fails
 
-- Acceptance is synced to disk before `apply` gets an answer, and every effect intent before
-  the host carries it out.
-- The revision is committed only when every action converged. A failed operation keeps the
-  previous committed revision and reports the partial state; it does not claim a rollback.
-- The retry key is the state identity plus the plan id. Retrying an accepted plan returns the
-  same operation; a disconnected client should `inspect` or retry, not assume a rejection.
-- After a crash, the restarted host reconciles every intent without a recorded completion. A
-  process it cannot prove it owns is neither signalled nor adopted: the operation becomes
-  `recovery_required` with the evidence, and `inspect` shows the next action.
-- One apply runs at a time per state; a second distinct apply is rejected as busy.
+- The retry key is the state identity plus the plan id. A client that lost its connection
+  should `inspect` or retry the same plan, not assume a rejection. A retry returns the same
+  operation.
+- One apply runs at a time per state. A second distinct apply is rejected as busy.
+- A failed operation keeps the previous committed revision. When `inspect` reports
+  `recovery_required`, follow its `nextAction`; [Recover a host](../howto/recover.md) covers
+  the case no corrective plan resolves.
 
-## Exit statuses
-
-| command | 0 | 1 | 2 | 3 |
-|---|---|---|---|---|
-| `ignite host` | stopped | | another host or run holds the state | host or storage failure |
-| `ignite plan --for-apply` | plan written | diagnostics | | no running host, or a storage failure |
-| `ignite apply` | completed, or already completed | failed, outcome unknown or recovery required | plan, admission or revision rejected | host or storage failure |
-| `ignite inspect` | status read | | | |
-
-The design and the complete rules, including the known gaps, are in
+What the host syncs, commits and reconciles is in
+[The run-time model](../design/runtime.md#the-host). The exit statuses of `host`, `plan
+--for-apply`, `apply` and `inspect` are in the
+[command-line reference](../reference/cli.md#ignite-apply). The complete rules, including the
+known gaps, are in
 [`docs/slice.md`](https://github.com/ignite-lang/ignite/blob/main/docs/slice.md) section 17.
-Every command and flag is in the [command-line reference](../reference/cli.md).

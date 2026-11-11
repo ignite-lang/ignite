@@ -1,0 +1,140 @@
+package attack
+
+// Adversary cases for `story:channel-release-on-close` and
+// `story:llvm-release-all-handles`: a handle the LLVM lowering releases
+// must still work wherever it is reachable, and the forms a server uses
+// to reach a stored end must not grow the census. Each test passes on
+// the Rust target; `crates/ignite/tests/leak.rs` runs them on both.
+
+import std.runtime.{soak}
+
+test type Waiter {
+  id: Int
+  wake: Receiver<Int>
+}
+
+test fn finish(r: Receiver<Int>, done: Sender<Int>) -> Result<Unit, IoError> {
+  let sent = done.send(1)
+  Ok(())
+}
+
+// The original end is the spawn's last mention, so the block hands its
+// owner to the task; the alias `r` is kept and used after the task ended.
+test "an alias stays usable after its original was handed to a task" {
+  let tasks = Runtime.census().tasks
+  let (dtx, drx) = Channel.bounded(1)
+  let (tx, rx) = Channel.bounded(1)
+  let r: Receiver<Int> = rx
+  spawn finish(rx, dtx)
+  assert drx.receive() == Some(1)
+  assert Runtime.settle(tasks, 5 seconds)
+  assert tx.try_send(7)
+  assert r.receive_within(1 seconds) == Some(7)
+}
+
+// The same with the alias a record field.
+test "a record field stays usable after its end was handed to a task" {
+  let tasks = Runtime.census().tasks
+  let (dtx, drx) = Channel.bounded(1)
+  let (tx, rx) = Channel.bounded(1)
+  let w = Waiter { id = 1, wake = rx }
+  spawn finish(rx, dtx)
+  assert drx.receive() == Some(1)
+  assert Runtime.settle(tasks, 5 seconds)
+  assert tx.try_send(8)
+  assert w.wake.receive_within(1 seconds) == Some(8)
+}
+
+test fn peek(senders: Store<Sender<Int>>, id: Int) -> Bool {
+  let found = senders.get(id)
+  match found {
+    Some(s) => true
+    None => false
+  }
+}
+
+// A stored end read back twice and dropped by each reading block stays
+// the store's.
+test "a stored end read back and dropped stays the store's" {
+  let senders: Store<Sender<Int>> = Store.new()
+  let (tx, rx) = Channel.bounded(1)
+  let id = senders.next_id()
+  senders.put(id, tx)
+  assert peek(senders, id)
+  assert peek(senders, id)
+  match senders.remove(id) {
+    Some(s) => {
+      let t: Sender<Int> = s
+      assert t.try_send(3)
+    }
+    None => {
+      assert false
+    }
+  }
+  assert rx.receive_within(1 seconds) == Some(3)
+}
+
+// A sender sent through a channel and dropped by the sending block is the
+// receiver's.
+test "an end sent through a channel is the receiver's" {
+  let ends: (Sender<Sender<Int>>, Receiver<Sender<Int>>) = Channel.bounded(1)
+  let (tx, rx) = Channel.bounded(1)
+  assert ends.0.send(tx)
+  match ends.1.receive_within(1 seconds) {
+    Some(s) => {
+      let t: Sender<Int> = s
+      assert t.try_send(4)
+    }
+    None => {
+      assert false
+    }
+  }
+  assert rx.receive_within(1 seconds) == Some(4)
+}
+
+// Broadcast over every stored sender, the push server's loop.
+test fn broadcast_once(senders: Store<Sender<Int>>) -> Unit {
+  let (tx, rx) = Channel.bounded(1)
+  let id = senders.next_id()
+  senders.put(id, tx)
+  for s in senders.values() {
+    let rung = s.try_send(1)
+  }
+  match senders.remove(id) {
+    Some(found) => {
+      let t: Sender<Int> = found
+      t.close()
+    }
+    None => {}
+  }
+  let got = rx.receive_within(0 ms)
+}
+
+test "a broadcast over stored senders is released (G30)" {
+  let senders: Store<Sender<Int>> = Store.new()
+  assert soak(2000, |run| broadcast_once(senders)).growth == []
+}
+
+// A stored sender looked at through a temporary, then removed and closed.
+test fn probe_once(senders: Store<Sender<Int>>) -> Unit {
+  let (tx, rx) = Channel.bounded(1)
+  let id = senders.next_id()
+  senders.put(id, tx)
+  let present = match senders.get(id) {
+    Some(s) => true
+    None => false
+  }
+  match senders.remove(id) {
+    Some(found) => {
+      let t: Sender<Int> = found
+      t.close()
+    }
+    None => {}
+  }
+  let got = rx.receive_within(0 ms)
+}
+
+test "a stored end read through a temporary is released (G30)" {
+  let senders: Store<Sender<Int>> = Store.new()
+  assert soak(2000, |run| probe_once(senders)).growth == []
+}

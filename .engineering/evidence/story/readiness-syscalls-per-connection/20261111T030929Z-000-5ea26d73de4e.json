@@ -1,0 +1,14 @@
+{
+  "at": "2026-11-11T03:09:29Z",
+  "actor": "human:timo",
+  "artifact": "story:readiness-syscalls-per-connection",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "review_outcome",
+    "source": "review-result:adversary-connect-pass-1",
+    "review": "review-result:adversary-connect-pass-1",
+    "outcome": "fixed"
+  }
+}

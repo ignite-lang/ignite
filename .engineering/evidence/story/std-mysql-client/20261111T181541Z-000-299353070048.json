@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-11T18:15:41Z",
+  "actor": "human:timo",
+  "artifact": "story:std-mysql-client",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "unit head 70155bb6: std/protocol/mysql.ignite 55 passed and mysql/binary.ignite 9 passed on both targets; task test-ignite 516 passed per target; mysql:: and mysql_adversary:: 3 passed (9 + 3 real-server cases and 5 descriptor cases per target against MySQL 8.0); 6 of 6 mutants killed; layering 6 passed; fmt and clippy exit 0"
+  }
+}

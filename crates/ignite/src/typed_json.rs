@@ -138,6 +138,7 @@ pub fn ty(t: &Ty) -> Json {
         Ty::TcpListener => "TcpListener",
         Ty::TcpStream => "TcpStream",
         Ty::PipeStream => "PipeStream",
+        Ty::TlsStream => "TlsStream",
         Ty::IoError => "IoError",
         Ty::Input => "Input",
         Ty::Never => "Never",

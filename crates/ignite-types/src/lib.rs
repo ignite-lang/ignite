@@ -88,8 +88,12 @@ use ignite_syntax::ast::{
 };
 use ignite_syntax::diagnostic::Diagnostic;
 
-pub use builtins::{census, census_name, child_exit, child_exit_name, endpoint, endpoint_name};
+pub use builtins::{
+    census, census_name, child_exit, child_exit_name, endpoint, endpoint_name, tls_options,
+    tls_options_name,
+};
 pub use ignite_check::RFC_MODULE;
+pub use typer::literal_wait_steps;
 
 /// The module of the reducers (`docs/slice.md` 16.6): a kind's hook
 /// `K.machine` returns its `Machine`, and the run driver calls its `step`.
@@ -172,6 +176,10 @@ pub enum Ty {
     /// One end of an in-memory stream pair, `Pipe.pair()` (`docs/slice.md`
     /// 18.4): a handle like `TcpStream`.
     PipeStream,
+    /// A TLS client session over a `TcpStream`, `Tls.client(..)`
+    /// (`docs/slice.md` 38): a handle like
+    /// `TcpStream` that implements `ByteStream`.
+    TlsStream,
     IoError,
     Input,
     /// The type of `return`, `break`, `continue` and `Process.exit`.
@@ -561,6 +569,7 @@ impl fmt::Display for Ty {
             Ty::TcpListener => write!(f, "TcpListener"),
             Ty::TcpStream => write!(f, "TcpStream"),
             Ty::PipeStream => write!(f, "PipeStream"),
+            Ty::TlsStream => write!(f, "TlsStream"),
             Ty::IoError => write!(f, "IoError"),
             Ty::Input => write!(f, "Input"),
             Ty::Tuple(elements) => {
@@ -651,6 +660,9 @@ pub enum Builtin {
     IntToText,
     Log,
     TcpListenerBind,
+    /// `TcpListener.bind_kept(address, port)`: [`Builtin::TcpListenerBind`]
+    /// of a listener the SIGTERM drain keeps (`docs/slice.md` 16.13).
+    TcpListenerBindKept,
     TcpListenerAccept,
     TcpListenerLocalPort,
     TcpStreamConnect,
@@ -879,6 +891,9 @@ pub enum Builtin {
     /// `s.peer() -> std.net.Endpoint` on a `TcpStream`: the other end's
     /// address and port; pure (`docs/slice.md` 26.1).
     TcpStreamPeer,
+    /// `s.local() -> std.net.Endpoint` on a `TcpStream`: this end's address
+    /// and port; pure, as `peer`.
+    TcpStreamLocal,
     /// `s.timed_out() -> Bool` on a `TcpStream`: whether the last read
     /// ended because the idle timeout passed; effect `<root>.read` (26.2).
     TcpStreamTimedOut,
@@ -905,6 +920,15 @@ pub enum Builtin {
     ReceiverClosed,
     /// `r.close()` on a `Receiver<T>`.
     ReceiverClose,
+    /// `Tls.client(stream: TcpStream, server_name: Text, options:
+    /// std.tls.TlsOptions) -> Result<TlsStream, IoError>`: the client
+    /// handshake on `stream`; effect `net.connect` (`docs/slice.md`
+    /// 38). The six stream methods of a
+    /// `TlsStream` are the `Stream*` builtins.
+    TlsClient,
+    /// `s.alpn() -> Text` on a `TlsStream`: the protocol the server chose
+    /// by ALPN, empty for none; pure.
+    TlsStreamAlpn,
 }
 
 /// What a `Call` or `Method` expression calls.
@@ -1963,6 +1987,7 @@ pub fn equality(ty: &Ty, modules: &TypedModules) -> Option<Equality> {
             | Ty::Capability(_)
             | Ty::TcpStream
             | Ty::PipeStream
+            | Ty::TlsStream
             | Ty::IoError
             | Ty::Store(_)
             | Ty::Sender(_)

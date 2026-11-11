@@ -131,24 +131,35 @@ enum Effect {
 Members and signals are named by their path text (`Terminal.server`,
 `Terminal.promptProbe.attempts`).
 
+## Machines
+
+A `machine` hook builds one of four records and wraps it in its `Machine` variant. The table
+lists the fields a hook sets. Every other field of the record is the reducer's own state, has
+a default, and is left out.
+
+| machine | record | fields a hook sets |
+|---|---|---|
+| `Supervise` | `Supervisor` | `id`, `member`, `restart: Restart`; optional `rollout: Option<DrainRollout>` (default `None`), `has_listener: Bool` (default `true`) |
+| `Schedule` | `ProbeScheduler` | `id`, `member`, `target`, `signal: Text`, `interval`, `timeout: Duration` |
+| `Evaluate` | `Evaluator` | `id`, `contract`, `signal: Text`, `target: Ratio`, `window: Window`, `missing_data: MissingData`, `minimum_completeness: Ratio`; optional `consequence: Option<Text>` (default `None`) |
+| `Roll` | `Rollout` | `id`, `member: Text`, `policy: DrainRollout` |
+
+`HttpHealth.machine` in the todo example builds a scheduler:
+
+```ignite,fragment
+fn HttpHealth.machine(self: HttpHealth, id: Text) -> Machine = Machine.Schedule(ProbeScheduler {
+  id = "{id}.scheduler"
+  member = id
+  target = self.target.to_text()
+  signal = self.checks.to_text()
+  interval = self.interval
+  timeout = self.timeout
+})
+```
+
 ## Supervisor
 
 ```ignite,fragment
-type Supervisor {
-  id: Text
-  member: Text
-  restart: Restart
-  rollout: Option<DrainRollout> = None
-  has_listener: Bool = true
-  state: SupervisorState = Stopped
-  generation: Int = 1
-  pid: Option<Int> = None
-  failures: List<Duration> = []
-  attempt: Int = 0
-  timer: Option<Int> = None
-  kill_requested: Bool = false
-}
-
 enum SupervisorState { Starting, Running, Backoff, Failed, Draining, Stopped }
 ```
 
@@ -169,24 +180,6 @@ policy does.
 
 ## Probe scheduler
 
-```ignite,fragment
-type ProbeScheduler {
-  id: Text
-  member: Text
-  target: Text
-  signal: Text
-  interval: Duration
-  timeout: Duration
-  target_ready: Bool = false
-  next_id: Int = 1
-  slot: Option<Duration> = None
-  in_flight: Option<Int> = None
-  in_flight_slot: Option<Duration> = None
-  deadline_timer: Option<Int> = None
-  slot_timer: Option<Int> = None
-}
-```
-
 The scheduler of one probe member. Slots open every `interval` from the target's first
 `Ready` on. Each slot dispatches one attempt with a deadline of `timeout`.
 
@@ -198,34 +191,6 @@ The scheduler of one probe member. Slots open every `interval` from the target's
 - `Start` forgets the schedule. The target's next `Ready` reopens it.
 
 ## Evaluator
-
-```ignite,fragment
-type Evaluator {
-  id: Text
-  contract: Text
-  signal: Text
-  interval: Duration = 0 ms
-  target: Ratio
-  window: Window
-  missing_data: MissingData
-  minimum_completeness: Ratio
-  consequence: Option<Text> = None
-  epoch: Duration = 0 ms
-  horizon: Option<Duration> = None
-  buckets: List<Bucket> = []
-  current: Option<Bucket> = None
-  sum_good: Int = 0
-  sum_executed: Int = 0
-  period_timer: Option<Int> = None
-  fired: List<Duration> = []
-}
-
-type Bucket {
-  from: Duration
-  good: Int = 0
-  executed: Int = 0
-}
-```
 
 The evaluator of one [contract](contract.md). It counts each `Verdict` of its signal in the
 bucket of its slot, keeps the window's counts, and publishes a `Standing` at every emission
@@ -287,19 +252,6 @@ fn expected_slots(horizon: Duration, interval: Duration, from: Duration, to: Dur
 ## Rollout
 
 ```ignite,fragment
-type Rollout {
-  id: Text
-  member: Text
-  policy: DrainRollout
-  state: RolloutState = Idle
-  generation: Int = 1
-  old_pid: Option<Int> = None
-  new_pid: Option<Int> = None
-  released_at: Option<Duration> = None
-  deadline_timer: Option<Int> = None
-  start_first: Bool = false
-}
-
 enum RolloutState { Idle, Building, Draining, Starting, Retiring, Done, Aborted }
 ```
 
@@ -318,7 +270,7 @@ The rollout of one member under its [`DrainRollout`](policy.md) policy, started 
 drains the old one only after the new one is ready. A new process that never becomes ready
 leaves the old one serving.
 
-## Journal segments and constants
+## Journal segments
 
 ```ignite,fragment
 type Segment {
@@ -332,17 +284,6 @@ type Segment {
 
 `Segment` is one record of the journal's `segment` kind: a run's start, resume or stop, the
 clock mode, the generation, and the declared members the run cannot build.
-
-| constant | value | kind |
-|---|---|---|
-| `SIGKILL` | 9 | signal |
-| `SIGTERM` | 15 | signal |
-| `BACKOFF_TIMER` | 1 | supervisor timer |
-| `READINESS_TIMER` | 2 | supervisor timer |
-| `SLOT_TIMER` | 0 | scheduler timer; deadline timers carry the attempt id |
-| `PERIOD_TIMER` | 1 | evaluator timer |
-| `DEADLINE_TIMER` | 1 | rollout timer |
-| `BUCKETS_PER_WINDOW` | 10000 | |
 
 ## Transition (apply)
 

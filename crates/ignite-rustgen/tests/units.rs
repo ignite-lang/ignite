@@ -1246,6 +1246,220 @@ fn codes(result: Result<GeneratedProject, Vec<Diagnostic>>) -> Vec<(&'static str
     found
 }
 
+/// The release profile of the generated crate: `Int` overflow fails as in
+/// a dev build, and the crate is optimised as one unit with fat LTO, which
+/// keeps row 3.2's Rust release binaries within 10 % of v0.15.0
+/// (story `readiness-binary-size`).
+#[test]
+fn release_profile_checks_overflow_and_links_as_one_unit() {
+    let project = try_generate(vec![]).expect("generates");
+    let profile: Vec<&str> = project
+        .cargo_toml
+        .split("\n[profile.release]\n")
+        .nth(1)
+        .expect("a [profile.release] table")
+        .lines()
+        .take_while(|line| !line.is_empty() && !line.starts_with('['))
+        .collect();
+    assert_eq!(
+        profile,
+        ["overflow-checks = true", "codegen-units = 1", "lto = true"],
+        "{}",
+        project.cargo_toml
+    );
+}
+
+/// The release profile builds the crates `ignite-io` calls the system and
+/// switches stacks through, `nix` and `corosensei`, at `opt-level = "s"`,
+/// which makes the start shorter (story `binary-size-back`); `ignite-io`
+/// itself keeps the default level, which runs fewer instructions per
+/// request.
+#[test]
+fn release_profile_builds_nix_and_corosensei_at_opt_level_s() {
+    let project = try_generate(vec![]).expect("generates");
+    for package in ["nix", "corosensei"] {
+        assert_eq!(
+            table(
+                &project.cargo_toml,
+                &format!("profile.release.package.{package}")
+            ),
+            ["opt-level = \"s\""],
+            "{package}"
+        );
+    }
+    assert!(
+        !project
+            .cargo_toml
+            .contains("[profile.release.package.ignite-io]"),
+        "{}",
+        project.cargo_toml
+    );
+}
+
+/// The lines of the table `[<name>]` of a manifest, up to the next table.
+fn table<'a>(manifest: &'a str, name: &str) -> Vec<&'a str> {
+    manifest
+        .split(&format!("\n[{name}]\n"))
+        .nth(1)
+        .unwrap_or_else(|| panic!("a [{name}] table in\n{manifest}"))
+        .lines()
+        .take_while(|line| !line.is_empty() && !line.starts_with('['))
+        .collect()
+}
+
+/// The dev profile of the generated crate (story `build-time-back`, row
+/// 6.2 rust): the crates from outside the project are built without debug
+/// information, `ignite-io` with line tables, so a backtrace still names
+/// its frames' files and lines; the program, a member of the project, has
+/// line tables too, by name, which the dev profile's own `debug` (full on
+/// a host without cargo configuration, or `CARGO_PROFILE_DEV_DEBUG`) does
+/// not override. A program without std names no `ignite-std` table, which
+/// cargo would warn about. Build scripts and what they need (`autocfg`)
+/// are built without debug assertions and overflow checks: compiling and
+/// running them is on the way to the program's first build. The line
+/// tables are split out of the objects (rows 3.2 and 6.2, story
+/// `binary-size-back`).
+#[test]
+fn dev_profile_builds_dependencies_without_debug_information() {
+    let project = try_generate(vec![]).expect("generates");
+    assert_eq!(
+        table(&project.cargo_toml, "profile.dev.package.\"*\""),
+        ["debug = false"]
+    );
+    assert_eq!(
+        table(&project.cargo_toml, "profile.dev.build-override"),
+        ["debug-assertions = false", "overflow-checks = false"]
+    );
+    assert_eq!(
+        table(&project.cargo_toml, "profile.dev.package.ignite-io"),
+        [
+            "debug = \"line-tables-only\"",
+            "split-debuginfo = \"unpacked\""
+        ]
+    );
+    assert_eq!(
+        table(&project.cargo_toml, "profile.dev.package.\"demo\""),
+        [
+            "debug = \"line-tables-only\"",
+            "split-debuginfo = \"unpacked\""
+        ]
+    );
+    assert!(
+        !project
+            .cargo_toml
+            .contains("[profile.dev.package.\"ignite-std\"]"),
+        "{}",
+        project.cargo_toml
+    );
+}
+
+/// The manifest the driver builds the dependencies of `ignite-io` from while
+/// it generates the program (story `build-time-back`, row 6.2 rust): the
+/// generated project's profiles, so cargo finds the units fresh in the
+/// program's build, and `ignite-io` without features.
+#[test]
+fn prebuild_manifest_has_the_projects_profiles_and_ignite_io() {
+    let substrate = std::path::Path::new("/sub/ignite-io");
+    let manifest = ignite_rustgen::prebuild_manifest(substrate);
+    let project = try_generate(vec![]).expect("generates");
+    for name in [
+        "profile.release",
+        "profile.dev.package.\"*\"",
+        "profile.dev.package.ignite-io",
+        "profile.dev.build-override",
+    ] {
+        assert_eq!(
+            table(&manifest, name),
+            table(&project.cargo_toml, name),
+            "{manifest}"
+        );
+    }
+    assert_eq!(
+        table(&manifest, "dependencies"),
+        ["ignite-io = { path = \"/sub/ignite-io\" }"]
+    );
+    assert_eq!(table(&manifest, "lib"), ["path = \"lib.rs\""]);
+}
+
+/// [`ignite_rustgen::SUBSTRATE_DEPENDENCIES`] names every dependency of
+/// `ignite-io` that is not optional: those are the packages the driver
+/// builds ahead.
+#[test]
+fn substrate_dependencies_are_ignite_ios_own() {
+    let manifest = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../ignite-io/Cargo.toml"),
+    )
+    .unwrap();
+    let mut names: Vec<&str> = table(&manifest, "dependencies")
+        .into_iter()
+        .filter(|line| !line.contains("optional = true"))
+        .filter_map(|line| line.split([' ', '=', '.']).next())
+        .collect();
+    names.sort_unstable();
+    let mut listed = ignite_rustgen::SUBSTRATE_DEPENDENCIES.to_vec();
+    listed.sort_unstable();
+    assert_eq!(names, listed);
+}
+
+/// The features of `ignite-io` the driver sets from the generated sources
+/// (`process`, `tls`) or for tests (`runner`): only `tls` reaches a
+/// dependency, an optional one, so the packages built ahead
+/// ([`ignite_rustgen::prebuild_manifest`], which turns on none) are the
+/// ones the program's build finds fresh whatever it turns on.
+#[test]
+fn only_tls_changes_a_dependency_of_ignite_io() {
+    let manifest = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../ignite-io/Cargo.toml"),
+    )
+    .unwrap();
+    let features = table(&manifest, "features");
+    assert_eq!(
+        features,
+        [
+            "process = []",
+            "runner = [\"process\"]",
+            "tls = [\"dep:rustls\"]"
+        ]
+    );
+}
+
+/// The `features = [..]` of the `nix` line in `lines`.
+fn nix_features<'a>(lines: &[&'a str]) -> Vec<&'a str> {
+    let line = lines
+        .iter()
+        .find(|line| line.starts_with("nix "))
+        .unwrap_or_else(|| panic!("a nix line in {lines:?}"));
+    line.split("features = [")
+        .nth(1)
+        .and_then(|rest| rest.split(']').next())
+        .map(|list| {
+            list.split(',')
+                .map(|name| name.trim().trim_matches('"'))
+                .filter(|name| !name.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The `nix` features every generated project compiles (story
+/// `build-time-back`, row 6.2 rust): `ignite-io`'s own and the workspace's.
+/// Not `term`, whose termios types cost a fifth of `nix` before its
+/// metadata, on the path of every build: raw mode is the `termios` crate's.
+#[test]
+fn ignite_io_builds_nix_without_term() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let workspace = std::fs::read_to_string(root.join("Cargo.toml")).unwrap();
+    let manifest = std::fs::read_to_string(root.join("crates/ignite-io/Cargo.toml")).unwrap();
+    let mut features = nix_features(&table(&workspace, "workspace.dependencies"));
+    features.extend(nix_features(&table(&manifest, "dependencies")));
+    features.sort_unstable();
+    features.dedup();
+    assert_eq!(
+        features,
+        ["dir", "event", "fs", "poll", "resource", "signal", "socket"]
+    );
+}
+
 #[test]
 fn no_system_is_a_library_without_executables() {
     let project = try_generate(vec![]).expect("generates");
@@ -1645,6 +1859,104 @@ fn write_project_creates_layout() {
     );
     assert!(project.executables.is_empty());
     assert!(!out.join("src/bin").exists());
+}
+
+/// A release project is the project with the linker script of the release
+/// layout: its manifest names the script's link arguments by a `links` key
+/// and a build script in `[package]`, and `--config` gives cargo the same
+/// arguments with the script's absolute path. `write_project` over it
+/// leaves a manifest that names neither, as a dev build has it.
+#[test]
+fn write_release_project_adds_the_layout_script_and_its_link_arguments() {
+    let project = GeneratedProject {
+        executables: vec![ignite_rustgen::Executable {
+            name: "served".to_string(),
+            source: "fn main() {}\n".to_string(),
+        }],
+        ..try_generate(user_decls()).unwrap()
+    };
+    let out = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("units-release-project");
+    let _ = std::fs::remove_dir_all(&out);
+    assert!(ignite_rustgen::write_release_project(&project, &out).unwrap());
+    let manifest = std::fs::read_to_string(out.join("Cargo.toml")).unwrap();
+    assert!(
+        manifest
+            .starts_with("[package]\nlinks = \"ignite-layout\"\nbuild = \"layout.rs\"\nname = "),
+        "{manifest}"
+    );
+    assert_eq!(
+        manifest.replacen("links = \"ignite-layout\"\nbuild = \"layout.rs\"\n", "", 1),
+        project.cargo_toml
+    );
+    assert_eq!(
+        std::fs::read_to_string(out.join("layout.ld")).unwrap(),
+        ignite_rustgen::RELEASE_LAYOUT
+    );
+    let script = std::fs::read_to_string(out.join("layout.rs")).unwrap();
+    assert!(script.contains("cargo::rustc-link-arg-bins=-T"), "{script}");
+    let config = ignite_rustgen::release_layout_config("x86_64-unknown-linux-gnu", &out).unwrap();
+    assert_eq!(
+        config,
+        format!(
+            "target.x86_64-unknown-linux-gnu.ignite-layout.rustc-link-arg-bins=[\"-T\", \"{}\"]",
+            out.join("layout.ld").display()
+        )
+    );
+    ignite_rustgen::write_project(&project, &out).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(out.join("Cargo.toml")).unwrap(),
+        project.cargo_toml
+    );
+}
+
+/// A program without an executable has nothing the script is linked into,
+/// and cargo refuses the build script's link arguments for executables in
+/// a package that has none: its release project is the project
+/// `write_project` writes, with no script and no build script.
+#[test]
+fn write_release_project_of_a_program_without_an_executable_adds_nothing() {
+    let project = try_generate(user_decls()).unwrap();
+    assert!(project.executables.is_empty());
+    let out = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("units-release-library");
+    let _ = std::fs::remove_dir_all(&out);
+    assert!(!ignite_rustgen::write_release_project(&project, &out).unwrap());
+    assert_eq!(
+        std::fs::read_to_string(out.join("Cargo.toml")).unwrap(),
+        project.cargo_toml
+    );
+    assert!(!out.join("layout.ld").exists());
+    assert!(!out.join("layout.rs").exists());
+}
+
+/// The project that asks a linker about the release layout: one empty
+/// `main` and no dependency; with the layout its manifest names the script
+/// as a release project's does, without it the same manifest less the two
+/// keys.
+#[test]
+fn write_layout_probe_is_an_empty_program_with_or_without_the_layout() {
+    let out = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("units-layout-probe");
+    let _ = std::fs::remove_dir_all(&out);
+    ignite_rustgen::write_layout_probe(&out, true).unwrap();
+    let with = std::fs::read_to_string(out.join("Cargo.toml")).unwrap();
+    assert!(
+        with.starts_with("[package]\nlinks = \"ignite-layout\"\nbuild = \"layout.rs\"\nname = "),
+        "{with}"
+    );
+    assert!(!with.contains("[dependencies]"), "{with}");
+    assert_eq!(
+        std::fs::read_to_string(out.join("src/main.rs")).unwrap(),
+        "fn main() {}\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(out.join("layout.ld")).unwrap(),
+        ignite_rustgen::RELEASE_LAYOUT
+    );
+    assert!(out.join("layout.rs").is_file());
+    ignite_rustgen::write_layout_probe(&out, false).unwrap();
+    assert_eq!(
+        std::fs::read_to_string(out.join("Cargo.toml")).unwrap(),
+        with.replacen("links = \"ignite-layout\"\nbuild = \"layout.rs\"\n", "", 1)
+    );
 }
 
 fn ptuple(items: Vec<Pattern>) -> Pattern {
