@@ -86,7 +86,6 @@
     "crates/ignite/tests/fixtures/process_builtins/case_gaps.ignite::main g2": "a main does IO; the evaluator has none",
     "crates/ignite/tests/fixtures/process_builtins/case_gaps.ignite::main g3": "a main does IO; the evaluator has none",
     "crates/ignite/tests/fixtures/process_builtins/case_gaps.ignite::main g8": "a main does IO; the evaluator has none",
-    "crates/ignite/tests/fixtures/siblings/demo.ignite::module greeting": "`module(\"demo.ops\")` has no field `greeting`",
     "crates/ignite/tests/fixtures/slice16/callee_forms.ignite::the callee is evaluated before the arguments": "builtin `PipePair` has no value at compile time",
     "crates/ignite/tests/fixtures/slice16/calls.ignite::effectful fn values called through a field and an index": "builtin `PipePair` has no value at compile time",
     "crates/ignite/tests/fixtures/slice16/closures.ignite::a closure handed to a spawned task": "builtin `PipePair` has no value at compile time",

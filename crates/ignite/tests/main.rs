@@ -26,6 +26,7 @@ mod default_target;
 mod differential;
 mod drain;
 mod eval;
+mod eval_model;
 mod failover;
 mod file_ids;
 mod file_ids_adversary;

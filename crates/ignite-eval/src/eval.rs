@@ -1711,6 +1711,11 @@ impl<'p> Evaluator<'p> {
                 .map(|(_, v)| v)
                 .ok_or_else(|| internal(format!("no field `{name}`"))),
             Value::IoError { message, .. } if name == "message" => Ok(Value::Text(message)),
+            Value::Module { module, fns } => fns
+                .into_iter()
+                .find(|(field, _)| field == name)
+                .map(|(_, q)| Value::Fn(q))
+                .ok_or_else(|| internal(format!("`module(\"{module}\")` has no field `{name}`"))),
             Value::Member { member, .. } => {
                 let info = member_of(cx, &member)
                     .map(|(_, info)| info)
