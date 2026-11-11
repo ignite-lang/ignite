@@ -520,32 +520,13 @@ fn returns_handles(e: &Expr, cx: &Cx<'_>) -> bool {
     }
 }
 
-/// The names `pattern` binds.
+/// The names `pattern` binds ([`Pattern::bindings`]).
 fn pattern_names(pattern: &Pattern) -> Vec<String> {
-    let mut out = Vec::new();
-    collect_names(pattern, &mut out);
-    out
-}
-
-fn collect_names(pattern: &Pattern, out: &mut Vec<String>) {
-    match &pattern.kind {
-        PatternKind::Binding(id) => out.push(id.name.clone()),
-        PatternKind::Rest(Some(id)) => out.push(id.name.clone()),
-        PatternKind::Or(items)
-        | PatternKind::Tuple(items)
-        | PatternKind::List(items)
-        | PatternKind::Variant { args: items, .. } => {
-            for item in items {
-                collect_names(item, out);
-            }
-        }
-        PatternKind::Rest(None)
-        | PatternKind::Wildcard
-        | PatternKind::Int(_)
-        | PatternKind::Str(_)
-        | PatternKind::Bool(_)
-        | PatternKind::Range { .. } => {}
-    }
+    pattern
+        .bindings()
+        .into_iter()
+        .map(|id| id.name.clone())
+        .collect()
 }
 
 /// The calls of the `spawn` statements that hand the binding `name` over to
