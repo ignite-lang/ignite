@@ -517,12 +517,16 @@ without waiting for a person.
 - Quality gate (`docs/quality.md`): in the release commit, run `task quality RUN=vX.Y.Z`, which
   appends the run to `quality/history.jsonl` and regenerates `quality/trend.md` and the book's
   quality page. The release is refused, and not cut, when it fails: a count, size or
-  hill-climb row worse by any amount than at the last release (a binary-size row held by a
-  `decision` excepted, below; the nearest `v*` tag reachable
+  hill-climb row worse by any amount than at the last release (a cell of the binary-size rows
+  3.2 and 3.9 held by a new `decision` excepted, below; the nearest `v*` tag reachable
   from HEAD, as `git describe` finds it; its records in the history, never a refused
   candidate's; the bar before the first tag), or a bar a `decision` moved worse than the last
   release, whatever the value (a timing or benchmark bar against its bar in the tag's
-  `quality/baseline.json`); the refusal names the decision to withdraw. Timing values there are
+  `quality/baseline.json`); the refusal names the decision to withdraw. The bars of 3.2 and 3.9
+  are not judged by that second check: there a new `decision` is what lets a cell grow, so a
+  cell above the last release is listed when its bar carries one and refused when it does not,
+  and a decision on a cell that is not above the last release is refused until it is removed
+  (the binary-size bullet below). Timing values there are
   `host: local` and refuse nothing. Pre-release tags (`v*-rc*`) are not created: the check would
   take one as the last release. Then run `task quality-remote BASE=<last release tag> HEAD=<release commit>
   RUN=vX.Y.Z` with `IGNITE_PERF_AWS_PROFILE` set (spending on it is approved; one spot
@@ -563,10 +567,18 @@ without waiting for a person.
   value at the last release, its value now and the decision. A decision is new when
   `quality/baseline.json` at the last release (its tag for 3.2, BASE for 3.9) does not hold it:
   one carried over from the last release named that release's code and does not let a cell grow
-  again. A grown cell whose bar has no `decision`, or the last release's, is refused, and the
-  refusal says a decision is missing or a new one is needed, so a release does not grow by
-  accident; so is a grown cell when the last release's baseline cannot be read. A merge is
-  judged as before: a size is held against its bar, and a bar
+  again. Decisions are compared by their letters and digits, case folded: the last release's
+  decision in other case or punctuation, or with a sentence added, is the last release's; one
+  character of it changed reads as new, so a person reads what a decision says; a text with
+  fewer than 40 letters and digits is no decision. A grown cell whose bar has no `decision`, or
+  the last release's, is refused, and the refusal says a decision is missing or a new one is
+  needed, so a release does not grow by accident; so is a grown cell when the last release's
+  baseline cannot be read. A decision on a cell of 3.2 or 3.9 that is not above the last
+  release holds nothing and refuses the release until it is removed, so the decisions on these
+  bars at a release are those of the cells that grew in it. The release's records of the grown
+  cells in `quality/history.jsonl` carry the decision, and the release's row of
+  `quality/trend.md` lists the cells, both values and the decision. A merge is judged as
+  before: a size is held against its bar, and a bar
   moves worse against `main` only with a `decision` of its own. The cells a run prints are
   reported to Timo with the code that added the bytes before the release is cut.
 - Timing and benchmark rows (5.3, 6.1, 6.2, 3.3, 3.7, 3.8, 3.9) are judged only on the records

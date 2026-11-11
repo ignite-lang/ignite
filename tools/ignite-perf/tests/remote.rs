@@ -506,7 +506,9 @@ fn a_grown_cell_of_the_size_row_passes_by_a_decision_and_is_listed() {
     let grown = row("3.9", "rust/todo", &[723], &[864]);
     for base in [
         size_baseline(None),
-        size_baseline(Some("story:w (2026-11-08): the scheduler's bytes")),
+        size_baseline(Some(
+            "story:w (2026-11-08): the scheduler's run queue adds the bytes",
+        )),
     ] {
         let judged = remote::judge(&baseline, Some(&base), std::slice::from_ref(&grown)).unwrap();
         assert_eq!(
@@ -541,7 +543,7 @@ fn a_grown_cell_of_the_size_row_passes_by_a_decision_and_is_listed() {
 /// the row, on another row, on a tolerance, for a slow unit, for an intermittent difference.
 #[test]
 fn a_grown_cell_held_by_the_bases_decision_is_refused() {
-    let decision = "story:w (2026-11-08): the scheduler's bytes";
+    let decision = "story:w (2026-11-08): the scheduler's run queue adds the bytes";
     let held = |place: &str| {
         Json::parse(&format!(
             r#"{{"metrics": {{"3.9": {{"direction": "lower", "tolerance": "5%", "unit": "permille",
@@ -652,7 +654,12 @@ fn a_grown_cell_is_refused_when_the_bases_baseline_cannot_be_read() {
         "`refusals` has no baseline of the base and passed a grown cell"
     );
     assert_eq!(
-        remote::judge(&baseline, None, &[row("3.9", "rust/todo", &[723], &[723])]).unwrap(),
+        remote::judge(
+            &size_baseline(None),
+            None,
+            &[row("3.9", "rust/todo", &[723], &[723])]
+        )
+        .unwrap(),
         remote::Judged::default(),
         "a cell that did not grow needs no baseline of the base"
     );
@@ -970,7 +977,9 @@ fn gate_adv2_quality_remote_refuses_a_one_pass_release_before_anything_else() {
 /// one permille either, and several cells are each judged on their own bar.
 #[test]
 fn sizerule_adv1_a_size_cell_inside_the_tolerance_is_refused_without_a_decision() {
-    let baseline = size_baseline(Some("story:x: the bytes"));
+    let baseline = size_baseline(Some(
+        "story:x (2026-11-11): the TLS client session adds the bytes",
+    ));
     let judged = remote::judge(
         &baseline,
         Some(&size_baseline(None)),
@@ -984,7 +993,9 @@ fn sizerule_adv1_a_size_cell_inside_the_tolerance_is_refused_without_a_decision(
     .unwrap();
     assert_eq!(
         judged.grown,
-        ["3.9 rust/todo: 0.723× at the base, 0.724× now; decision: story:x: the bytes"],
+        [
+            "3.9 rust/todo: 0.723× at the base, 0.724× now; decision: story:x (2026-11-11): the TLS client session adds the bytes"
+        ],
         "the cells listed"
     );
     assert_eq!(judged.refused.len(), 2, "{:?}", judged.refused);
@@ -996,4 +1007,325 @@ fn sizerule_adv1_a_size_cell_inside_the_tolerance_is_refused_without_a_decision(
             "{target}, one permille above the base without a decision: {refusal}"
         );
     }
+}
+
+// ---- the size rule, fix round 2 ----------------------------------------------------------
+
+/// The decision BASE's baseline held, in the tests of how a decision reads.
+const HELD: &str = "story:w (2026-11-08): the scheduler's run queue adds the bytes.";
+
+/// A decision is read by its letters and digits, case folded: one with fewer than 40 of them
+/// names nothing; one that is the last release's, or contains it, is the last release's (upper
+/// case, the final dot dropped, other punctuation, a zero-width space, a sentence appended or
+/// put before it). One character of it changed reads as new: the check reads that the text
+/// differs, a person reads what it says. A text of the last release with fewer than 40 letters
+/// and digits is no decision either and carries nothing over. The cases are those of
+/// `quality::a_decision_is_read_by_its_letters_and_digits` of the gate, which holds its own
+/// copy of the function to them.
+#[test]
+fn a_decision_is_read_by_its_letters_and_digits() {
+    use remote::DecisionRead;
+    let held = std::collections::BTreeSet::from([HELD.to_string()]);
+    let cases = [
+        (HELD.to_string(), DecisionRead::LastReleases, "itself"),
+        (
+            HELD.to_uppercase(),
+            DecisionRead::LastReleases,
+            "in upper case",
+        ),
+        (
+            HELD.trim_end_matches('.').to_string(),
+            DecisionRead::LastReleases,
+            "without its final dot",
+        ),
+        (
+            "Story:W, 2026-11-08 - the  scheduler's run-queue adds the bytes".to_string(),
+            DecisionRead::LastReleases,
+            "with other punctuation and spacing",
+        ),
+        (
+            HELD.replace(' ', "\u{200b} "),
+            DecisionRead::LastReleases,
+            "with zero-width spaces in it",
+        ),
+        (
+            format!("{HELD} It holds the TLS client session too."),
+            DecisionRead::LastReleases,
+            "with a sentence appended",
+        ),
+        (
+            format!("Accepted again for this release: {HELD}"),
+            DecisionRead::LastReleases,
+            "with a sentence put before it",
+        ),
+        (
+            HELD.replace("bytes", "bytez"),
+            DecisionRead::New,
+            "with one character changed",
+        ),
+        (
+            "story:x (2026-11-11): the TLS client session adds 40 B".to_string(),
+            DecisionRead::New,
+            "another decision of 40 letters and digits",
+        ),
+        (
+            "story:x (2026-11-11): the TLS client session adds 4 B".to_string(),
+            DecisionRead::NamesNothing,
+            "39 letters and digits",
+        ),
+        (
+            "\u{200b}".to_string(),
+            DecisionRead::NamesNothing,
+            "a zero-width space",
+        ),
+        (".".to_string(), DecisionRead::NamesNothing, "a dot"),
+        ("x".to_string(), DecisionRead::NamesNothing, "one letter"),
+        (String::new(), DecisionRead::NamesNothing, "nothing"),
+        (
+            "-- .. -- .. -- .. -- .. -- .. -- .. -- .. -- .. -- .. -- ..".to_string(),
+            DecisionRead::NamesNothing,
+            "60 characters, no letter or digit",
+        ),
+    ];
+    for (decision, read, what) in cases {
+        assert_eq!(
+            remote::read_decision(&decision, &held),
+            read,
+            "the last release's decision {what}: {decision:?}"
+        );
+    }
+    let short = std::collections::BTreeSet::from(["x".to_string(), ".".to_string(), String::new()]);
+    assert_eq!(
+        remote::read_decision(
+            "story:x (2026-11-11): the TLS client session adds 40 B",
+            &short
+        ),
+        DecisionRead::New,
+        "a text of the last release that names nothing carried over"
+    );
+}
+
+/// The judge reads the decision of a grown cell that way: BASE's decision reworded does not
+/// let the cell grow again, one character changed does, and a text that names nothing is no
+/// decision, whether BASE's baseline was read or not.
+#[test]
+fn a_grown_cell_is_held_only_by_a_decision_new_in_its_letters_and_digits() {
+    let base = size_baseline(Some(HELD));
+    let judge = |decision: &str, base: Option<&Json>| {
+        remote::judge(
+            &size_baseline(Some(decision)),
+            base,
+            &[row("3.9", "rust/todo", &[723], &[864])],
+        )
+        .unwrap()
+    };
+    for decision in [
+        HELD.to_uppercase(),
+        HELD.trim_end_matches('.').to_string(),
+        format!("{HELD} It holds the TLS client session too."),
+    ] {
+        let judged = judge(&decision, Some(&base));
+        assert!(
+            judged.grown.is_empty()
+                && judged.held.is_empty()
+                && judged.refused.len() == 1
+                && judged.refused[0].contains("is the last release's")
+                && judged.refused[0].contains("a new `decision` naming the added code is needed"),
+            "{decision:?}: {judged:?}"
+        );
+    }
+    let changed = judge(&HELD.replace("bytes", "bytez"), Some(&base));
+    assert!(
+        changed.refused.is_empty() && changed.grown.len() == 1,
+        "one character changed: {changed:?}"
+    );
+    for decision in ["\u{200b}", ".", "x", "story:x: the bytes"] {
+        for base in [Some(&base), None] {
+            let judged = judge(decision, base);
+            assert!(
+                judged.grown.is_empty()
+                    && judged.refused.len() == 1
+                    && judged.refused[0]
+                        .starts_with("3.9 rust/todo: 0.723× at the base, 0.864× now")
+                    && judged.refused[0].contains("names nothing")
+                    && judged.refused[0].contains("a `decision` naming the added code is missing"),
+                "{decision:?}: {judged:?}"
+            );
+        }
+    }
+}
+
+/// A decision on the bar of a size cell that is not above BASE holds nothing, and the run
+/// refuses it until it is removed: a decision written for a candidate that was not cut does
+/// not wait on the bar to hold a later growth nobody decided. A row that is no size row is
+/// judged as before, a decision on its bar or not.
+#[test]
+fn a_decision_on_a_size_cell_not_above_the_base_is_refused() {
+    let decision = "story:x (2026-11-11): the TLS client session adds the bytes";
+    let baseline = size_baseline(Some(decision));
+    let base = size_baseline(None);
+    for (head, base) in [
+        (723, Some(&base)),
+        (700, Some(&base)),
+        (723, None),
+        (700, None),
+    ] {
+        let judged =
+            remote::judge(&baseline, base, &[row("3.9", "rust/todo", &[723], &[head])]).unwrap();
+        assert!(
+            judged.grown.is_empty()
+                && judged.held.is_empty()
+                && judged.refused.len() == 1
+                && judged.refused[0].starts_with("3.9 rust/todo: 0.723× at the base, 0.")
+                && judged.refused[0].contains(decision)
+                && judged.refused[0].contains("holds nothing")
+                && judged.refused[0].contains("remove it"),
+            "0.723× to {head} permille, a decision on the bar: {judged:?}"
+        );
+    }
+    let others = remote::judge(
+        &baseline,
+        Some(&base),
+        &[
+            row("3.9", "llvm/todo", &[720], &[720]),
+            row("3.8", "rust/todo/get-1", &[900], &[900]),
+        ],
+    )
+    .unwrap();
+    assert_eq!(
+        others,
+        remote::Judged::default(),
+        "a size cell without a decision, and a row that is no size row with one"
+    );
+}
+
+/// The release's record of a grown cell carries the decision that holds it, so the release's
+/// row of `quality/trend.md` is generated from `quality/history.jsonl` alone; every other
+/// record of the run has no `decision`.
+#[test]
+fn the_record_of_a_grown_cell_carries_its_decision() {
+    let decision = "story:x (2026-11-11): the TLS client session adds the bytes";
+    let rows = [
+        row("3.9", "rust/todo", &[723], &[864]),
+        row("3.9", "llvm/todo", &[720], &[720]),
+    ];
+    let judged = remote::judge(
+        &size_baseline(Some(decision)),
+        Some(&size_baseline(None)),
+        &rows,
+    )
+    .unwrap();
+    assert_eq!(
+        judged.held,
+        [remote::Held {
+            metric: "3.9".to_string(),
+            target: "rust/todo".to_string(),
+            decision: decision.to_string(),
+        }],
+        "the cells a decision holds"
+    );
+    let machine = Json::parse(r#"{"instance_type": "c7i.large"}"#).unwrap();
+    let lines = remote::history_lines_held(
+        &rows,
+        &machine,
+        "b0",
+        "h1",
+        "v0.16.0",
+        "2026-11-11",
+        &judged.held,
+    );
+    assert!(
+        lines[0].contains(&format!(
+            r#""date":"2026-11-11","decision":"{decision}","host":"ec2:c7i.large""#
+        )) && lines[0].contains(r#""target":"rust/todo""#),
+        "the grown cell's record: {}",
+        lines[0]
+    );
+    assert!(
+        !lines[1].contains("decision"),
+        "a cell that did not grow: {}",
+        lines[1]
+    );
+    assert_eq!(
+        remote::history_lines_held(&rows, &machine, "b0", "h1", "run", "2026-11-11", &[]),
+        remote::history_lines(&rows, &machine, "b0", "h1", "run", "2026-11-11"),
+        "the records of a run that holds no cell"
+    );
+}
+
+/// The release path of a run judges through `remote::judge_release`: `quality/baseline.json`
+/// of the working tree is the baseline, the committed one of the BASE revision says which
+/// decisions are the last release's, and the texts it returns are what the run prints. A
+/// decision BASE's baseline holds refuses the cell and lists nothing; one it does not hold is
+/// listed; a BASE whose baseline cannot be read refuses the cell and says why; a run that is
+/// no release is not judged.
+#[test]
+fn the_release_judgement_reads_the_bases_baseline_and_returns_what_it_prints() {
+    let new = "story:x (2026-11-11): the TLS client session adds the bytes";
+    let root = repository_with_baseline(
+        "release-judgement",
+        Some(&size_baseline(Some(HELD)).dumps(true)),
+    );
+    let rows = [row("3.9", "rust/todo", &[723], &[864])];
+    let carried = remote::judge_release(&root, "HEAD", "v0.16.0", &rows).unwrap();
+    assert!(
+        carried.judged.grown.is_empty()
+            && carried.judged.refused.len() == 1
+            && carried.judged.refused[0].contains("is the last release's"),
+        "the decision of the base, still on the bar: {carried:?}"
+    );
+    assert_eq!(carried.listed, "", "a refused cell is listed");
+    assert!(
+        carried.refusal.starts_with(
+            "release v0.16.0 refused:\n  3.9 rust/todo: 0.723× at the base, 0.864× now"
+        ) && carried.refusal.ends_with('\n'),
+        "the refusal the run prints: {:?}",
+        carried.refusal
+    );
+
+    std::fs::write(
+        root.join("quality/baseline.json"),
+        size_baseline(Some(new)).dumps(true),
+    )
+    .unwrap();
+    let passed = remote::judge_release(&root, "HEAD", "v0.16.0", &rows).unwrap();
+    assert!(
+        passed.judged.refused.is_empty() && passed.judged.held.len() == 1,
+        "a decision the base does not hold: {passed:?}"
+    );
+    assert_eq!(
+        passed.listed,
+        format!(
+            "release v0.16.0: the size row above the base, each cell held by the decision on its bar:\n  3.9 rust/todo: 0.723× at the base, 0.864× now; decision: {new}\n"
+        ),
+        "the list the run prints"
+    );
+    assert_eq!((passed.note.as_str(), passed.refusal.as_str()), ("", ""));
+
+    let unread = remote::judge_release(&root, "v0.0.0", "v0.16.0", &rows).unwrap();
+    assert!(
+        unread.judged.refused.len() == 1
+            && unread.judged.refused[0]
+                .contains("quality/baseline.json at the base could not be read")
+            && unread.listed.is_empty(),
+        "a base whose baseline cannot be read: {unread:?}"
+    );
+    assert!(
+        unread.note.contains("v0.0.0:quality/baseline.json")
+            && unread.note.contains("could not be read")
+            && unread.note.ends_with('\n'),
+        "why the base's baseline was not read: {:?}",
+        unread.note
+    );
+
+    assert_eq!(
+        remote::judge_release(&root, "HEAD", "run", &rows).unwrap(),
+        remote::ReleaseJudgement::default(),
+        "a run that is no release"
+    );
+    std::fs::remove_file(root.join("quality/baseline.json")).unwrap();
+    assert!(
+        remote::judge_release(&root, "HEAD", "v0.16.0", &rows).is_err(),
+        "a repository without a baseline was judged"
+    );
 }
