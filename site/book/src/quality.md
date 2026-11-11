@@ -33,26 +33,26 @@ run lists every such cell. Without that decision, or with one the release before
 the cell is listed as worse. A merge holds these rows to their bars like any other, and bytes are
 never bought with time.
 
-Current values: run `v0.16.0` on 2026-11-10, commit `e009426f`.
+Current values: run `run` on 2026-11-10, commit `e009426f`.
 
 ## 1 Semantics: one meaning across the three consumers
 
 | # | metric | kind | target | bar | current | trend |
 |---|---|---|---|---|---|---|
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | eval | 2 | 4 | = |
-| 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | llvm | 0 | 4 | = |
-| 1.2 | differential corpus size | ratchet | eval | 770 | 494 | +19 better |
-| 1.2 | differential corpus size | ratchet | llvm | 931 | 856 | +94 better |
-| 1.2 | differential corpus size | ratchet | rust | 931 | 856 | +94 better |
-| 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/builtins | 112 | 149 | +3 worse |
+| 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | llvm | 0 | 4 | +4 worse |
+| 1.2 | differential corpus size | ratchet | eval | 770 | 494 | +42 better |
+| 1.2 | differential corpus size | ratchet | llvm | 931 | 856 | +168 better |
+| 1.2 | differential corpus size | ratchet | rust | 931 | 856 | +168 better |
+| 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/builtins | 112 | 149 | +16 worse |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/patterns | 13 | 13 | = |
-| 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | llvm/builtins | 12 | 13 | = |
-| 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | llvm/patterns | 30 | 46 | = |
-| 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | rust/builtins | 43 | 57 | +2 worse |
+| 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | llvm/builtins | 12 | 13 | −1 better |
+| 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | llvm/patterns | 30 | 46 | +16 worse |
+| 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | rust/builtins | 43 | 57 | +3 worse |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | rust/patterns | 71 | 83 | = |
 | 1.4 | generated-code goldens changed without a `CODEGEN_REVISION` bump | gate | all | 0 | 0 | = |
 | 1.5 | random programs on which the consumers disagree | gate | | unmeasured: no program generator yet (out of scope of story:quality-ratchet) | | |
-| 1.6 | corpus units the evaluator cannot run | ratchet | eval | 161 | 362 | +75 worse |
+| 1.6 | corpus units the evaluator cannot run | ratchet | eval | 161 | 362 | +126 worse |
 | 1.7 | known differences marked intermittent | gate | all | 1 | 1 | = |
 
 ## 2 Front end: the checker refuses exactly the wrong programs
@@ -64,7 +64,7 @@ Current values: run `v0.16.0` on 2026-11-10, commit `e009426f`.
 | 2.2 | accepted programs that fail in a backend | gate | rust | 0 | 0 | = |
 | 2.3 | soundness holes open (effects, ownership, exhaustiveness) | ratchet | | unmeasured: the planning store tags no story as a soundness hole; known open: story:map-put-handle-roots, story:immutable-binding-e006 | | |
 | 2.4 | compiler panics on any input | gate | | unmeasured: no fuzzer yet (out of scope of story:quality-ratchet) | | |
-| 2.5 | diagnostic fixtures (one diagnostic per error site, its span) | ratchet | all | 336 | 336 | = |
+| 2.5 | diagnostic fixtures (one diagnostic per error site, its span) | ratchet | all | 336 | 336 | +7 better |
 | 2.6 | checking time stays linear (limit tests) | gate | all | 6 | 5 | = |
 
 ## 3 Generated code and runtime behaviour
@@ -73,14 +73,14 @@ Current values: run `v0.16.0` on 2026-11-10, commit `e009426f`.
 |---|---|---|---|---|---|---|
 | 3.1 | copies in the generated code of the golden corpus | ratchet | llvm | 90 | 90 | = |
 | 3.1 | copies in the generated code of the golden corpus | ratchet | rust | 166 | 166 | = |
-| 3.2 | binary size | ratchet | llvm/terminald/dev | 15560616 B | 15560616 B | +6416048 worse |
-| 3.2 | binary size | ratchet | llvm/terminald/release | 1627008 B | 1631808 B | −611016 better |
-| 3.2 | binary size | ratchet | llvm/todod/dev | 16272232 B | 16272232 B | +6423152 worse |
-| 3.2 | binary size | ratchet | llvm/todod/release | 2140192 B | 2227760 B | −609592 better |
-| 3.2 | binary size | ratchet | rust/terminald/dev | 7617776 B | 7598120 B | −22512 better |
-| 3.2 | binary size | ratchet | rust/terminald/release | 763184 B | 764880 B | −146456 better |
-| 3.2 | binary size | ratchet | rust/todod/dev | 8920888 B | 9080912 B | +156624 |
-| 3.2 | binary size | ratchet | rust/todod/release | 1038712 B | 1079336 B | −140000 better |
+| 3.2 | binary size | ratchet | llvm/terminald/dev | 15560616 B | 15560616 B | +7729600 worse |
+| 3.2 | binary size | ratchet | llvm/terminald/release | 1627008 B | 1631808 B | +119016 worse |
+| 3.2 | binary size | ratchet | llvm/todod/dev | 16272232 B | 16272232 B | +7740760 worse |
+| 3.2 | binary size | ratchet | llvm/todod/release | 2140192 B | 2227760 B | +119968 worse |
+| 3.2 | binary size | ratchet | rust/terminald/dev | 7617776 B | 7598120 B | +1168848 worse |
+| 3.2 | binary size | ratchet | rust/terminald/release | 763184 B | 764880 B | +58440 worse |
+| 3.2 | binary size | ratchet | rust/todod/dev | 8920888 B | 9080912 B | +1370120 worse |
+| 3.2 | binary size | ratchet | rust/todod/release | 1038712 B | 1079336 B | +68120 worse |
 | 3.3 | throughput against plain Rust | ratchet | llvm/terminal/connect-8 | 0.929× | 0.874× | ec2:c7i.metal-24xl, −2 |
 | 3.3 | throughput against plain Rust | ratchet | llvm/terminal/rr-1 | 0.987× | 0.981× | ec2:c7i.metal-24xl, −6 |
 | 3.3 | throughput against plain Rust | ratchet | llvm/terminal/rr-64 | 0.971× | 0.871× | ec2:c7i.metal-24xl, +12 better |
@@ -101,8 +101,8 @@ Current values: run `v0.16.0` on 2026-11-10, commit `e009426f`.
 | 3.3 | throughput against plain Rust | ratchet | go/todo/patch-16 | reference, no bar | 0.899× | ec2:c7i.metal-24xl |
 | 3.4 | peak RSS, leaked handles and threads after a load run | gate | | unmeasured: no number: the named tests gate it in task gate | | |
 | 3.5 | runtime entries that can unwind a panic across `extern "C"` | gate | llvm | 0 | 0 | = |
-| 3.6 | `unsafe` sites in the substrate a target links | ratchet | llvm | 79 | 95 | = |
-| 3.6 | `unsafe` sites in the substrate a target links | ratchet | rust | 12 | 25 | = |
+| 3.6 | `unsafe` sites in the substrate a target links | ratchet | llvm | 79 | 95 | +13 worse |
+| 3.6 | `unsafe` sites in the substrate a target links | ratchet | rust | 12 | 25 | +13 worse |
 | 3.7 | p99 latency against plain Rust | ratchet | llvm/terminal/connect-8 | 1.105× | 1.467× | ec2:c7i.metal-24xl, −3 better |
 | 3.7 | p99 latency against plain Rust | ratchet | llvm/terminal/rr-1 | 0.992× | 0.992× | ec2:c7i.metal-24xl, −8 better |
 | 3.7 | p99 latency against plain Rust | ratchet | llvm/terminal/rr-64 | 0.700× | 0.700× | ec2:c7i.metal-24xl, −19 better |
@@ -162,9 +162,9 @@ Current values: run `v0.16.0` on 2026-11-10, commit `e009426f`.
 | 4.2 | gaps per claimed spec | ratchet | rust/rfc855 | 0 | 0 | = |
 | 4.2 | gaps per claimed spec | ratchet | rust/rfc9110 | 2 | 2 | = |
 | 4.2 | gaps per claimed spec | ratchet | rust/rfc9112 | 1 | 1 | = |
-| 4.3 | inline tests per target | ratchet | eval | 427 | 234 | +17 better |
-| 4.3 | inline tests per target | ratchet | llvm | 517 | 452 | +77 better |
-| 4.3 | inline tests per target | ratchet | rust | 517 | 452 | +77 better |
+| 4.3 | inline tests per target | ratchet | eval | 427 | 234 | +25 better |
+| 4.3 | inline tests per target | ratchet | llvm | 517 | 452 | +102 better |
+| 4.3 | inline tests per target | ratchet | rust | 517 | 452 | +102 better |
 | 4.4 | std functions with no inline test | ratchet | | unmeasured: no instrument yet: needs the call graph of the test bodies | | |
 
 ## 5 Operations: run, apply, host
