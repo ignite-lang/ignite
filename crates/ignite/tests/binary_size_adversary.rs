@@ -100,6 +100,92 @@ fn a_rust_build_keeps_the_build_rustflags_of_the_cargo_configuration() {
     );
 }
 
+/// Adversary pass 2: since `ece12a40` a dynamic Rust build passes no
+/// `rustflags` of its own. The case above builds in dev with
+/// `build.rustflags`; these are the other ways a user's flags reach rustc
+/// and the other profile: `RUSTFLAGS` in a dev build and `build.rustflags`
+/// in a release build each put their run path into the executable. The
+/// release build also writes no split debug information: the `.dwo` files
+/// are the dev profile's (`dev_member_profile` in
+/// `crates/ignite-rustgen/src/lib.rs`), and the executable has no debug
+/// section.
+#[test]
+fn a_rust_build_takes_the_users_rustflags_in_dev_and_release() {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/backtrace.ignite");
+    let real_home = std::env::var_os("CARGO_HOME").map_or_else(
+        || Path::new(&std::env::var_os("HOME").expect("HOME")).join(".cargo"),
+        PathBuf::from,
+    );
+    for (variable, release) in [("RUSTFLAGS", false), ("CARGO_BUILD_RUSTFLAGS", true)] {
+        let marker = format!("/rustflags-marker-{}", variable.to_lowercase());
+        let profile = if release { "release" } else { "debug" };
+        let dir = tmp(&format!("size-user-rustflags-{profile}"));
+        let home = dir.join("cargo-home");
+        std::fs::create_dir_all(&home).unwrap();
+        std::os::unix::fs::symlink(real_home.join("registry"), home.join("registry")).unwrap();
+        let target = dir.join("cargo");
+        let mut command = Command::new(env!("CARGO_BIN_EXE_ignite"));
+        command
+            .arg("build")
+            .arg(&source)
+            .args(["--target", "rust"])
+            .arg("--out")
+            .arg(dir.join("out"))
+            .arg("--target-dir")
+            .arg(&target)
+            .current_dir("/")
+            .env("CARGO_HOME", &home)
+            .env_remove("RUSTFLAGS")
+            .env_remove("CARGO_BUILD_RUSTFLAGS")
+            .env_remove("CARGO_ENCODED_RUSTFLAGS")
+            .env_remove("CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS")
+            .env(variable, format!("-C link-arg=-Wl,-rpath,{marker}"));
+        if release {
+            command.arg("--release");
+        }
+        let build = command.output().expect("start ignite build");
+        assert!(
+            build.status.success(),
+            "ignite build ({variable}, {profile}): {}{}",
+            text(&build.stdout),
+            text(&build.stderr)
+        );
+        let executable = target.join(profile).join("overflow");
+        let dynamic = Command::new("readelf")
+            .arg("-dW")
+            .arg(&executable)
+            .output()
+            .expect("start readelf");
+        let dynamic = text(&dynamic.stdout);
+        assert!(
+            dynamic.contains(&marker),
+            "the run path of {variable} is not in the {profile} executable:\n{dynamic}"
+        );
+        if release {
+            let split: Vec<PathBuf> = std::fs::read_dir(target.join("release/deps"))
+                .expect("the release build's deps")
+                .filter_map(Result::ok)
+                .map(|entry| entry.path())
+                .filter(|path| path.extension().is_some_and(|ext| ext == "dwo"))
+                .collect();
+            assert!(
+                split.is_empty(),
+                "a release build wrote split debug information: {split:?}"
+            );
+            let sections = Command::new("readelf")
+                .arg("-SW")
+                .arg(&executable)
+                .output()
+                .expect("start readelf");
+            let sections = text(&sections.stdout);
+            assert!(
+                !sections.contains(".debug_"),
+                "the release executable has debug sections:\n{sections}"
+            );
+        }
+    }
+}
+
 /// A program that fails inside the standard library (`std.time`'s
 /// `days_from_civil` multiplies past the range of `Int`), built in dev
 /// for the Rust target: the backtrace under `gdb` has the frame of
