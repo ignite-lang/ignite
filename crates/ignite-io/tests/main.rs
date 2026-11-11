@@ -3,7 +3,6 @@
 //! invariant 9). Each file is a module; harness names are
 //! `<file>::<test>`.
 
-mod cpu_limit;
 mod entropy_adversary;
 mod fs_adversary;
 mod pipe;

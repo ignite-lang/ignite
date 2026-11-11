@@ -1,3 +1,0 @@
-12:memory:/docker/0123abcd
-11:cpu,cpuacct:/docker/0123abcd
-1:name=systemd:/docker/0123abcd

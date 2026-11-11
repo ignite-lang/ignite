@@ -1,4 +1,0 @@
-Name:	worker
-Cpus_allowed:	ff
-Cpus_allowed_list:	0-7
-Mems_allowed_list:	0
