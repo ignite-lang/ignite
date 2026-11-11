@@ -427,25 +427,25 @@
       "area": "Generated code and runtime behaviour",
       "bars": {
         "llvm/terminald/dev": {
-          "value": 15560616
+          "value": 7264448
         },
         "llvm/terminald/release": {
-          "value": 1627008
+          "value": 1394760
         },
         "llvm/todod/dev": {
-          "value": 16272232
+          "value": 7969688
         },
         "llvm/todod/release": {
-          "value": 2140192
+          "value": 1968184
         },
         "rust/terminald/dev": {
-          "value": 7617776
+          "value": 6347480
         },
         "rust/terminald/release": {
-          "value": 763184
+          "value": 744296
         },
         "rust/todod/dev": {
-          "value": 8920888
+          "value": 7590064
         },
         "rust/todod/release": {
           "value": 1038712
