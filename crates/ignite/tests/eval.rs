@@ -336,6 +336,75 @@ fn ioerror_equality_inside_assert() {
     );
 }
 
+/// A builtin method with no value at compile time (a handle's) is refused
+/// as `evaluation failed: builtin `X` has no value at compile time`, the
+/// reason `eval_cannot_run` records for the statics that make handles;
+/// the receiver is a member, the one handle the evaluator holds.
+#[test]
+fn a_handle_method_has_no_value_at_compile_time() {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("eval-handle-methods");
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("handle_methods.ignite");
+    std::fs::write(
+        &file,
+        "package handle_methods\n\n\
+         fn port(listener: TcpListener) -> Int = listener.local_port()\n\n\
+         fn timed_out(stream: TcpStream) -> Bool = stream.timed_out()\n\n\
+         fn alpn(stream: TlsStream) -> Text = stream.alpn()\n\n\
+         fn id(child: ChildProcess) -> Int = child.id()\n",
+    )
+    .unwrap();
+    let loaded = ignite::load(&file, None).unwrap_or_else(|e| panic!("{e}"));
+    let modules = loaded.modules();
+    let mut evaluator = Evaluator::new(&modules, Fuel::default());
+    for (name, builtin) in [
+        ("port", "TcpListenerLocalPort"),
+        ("timed_out", "TcpStreamTimedOut"),
+        ("alpn", "TlsStreamAlpn"),
+        ("id", "ChildProcessId"),
+    ] {
+        let member = Value::Member {
+            system: "S".to_string(),
+            member: "m".to_string(),
+        };
+        let report = failed(call(&mut evaluator, "handle_methods", name, vec![member]));
+        assert_eq!(
+            report,
+            format!("evaluation failed: builtin `{builtin}` has no value at compile time"),
+            "{name}"
+        );
+    }
+}
+
+/// A builtin whose receiver value has another shape than its rule takes
+/// (an evaluator defect: a typed program gives none) keeps the refusal's
+/// text and names the receiver, as the evaluator did before
+/// `story:duplicated-rules-back`; a handle receiver is not named.
+#[test]
+fn a_receiver_of_another_shape_is_named() {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("eval-receiver-shape");
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("receiver_shape.ignite");
+    std::fs::write(
+        &file,
+        "package receiver_shape\n\nfn size(text: Text) -> Int = text.len()\n",
+    )
+    .unwrap();
+    let loaded = ignite::load(&file, None).unwrap_or_else(|e| panic!("{e}"));
+    let modules = loaded.modules();
+    let mut evaluator = Evaluator::new(&modules, Fuel::default());
+    let report = failed(call(
+        &mut evaluator,
+        "receiver_shape",
+        "size",
+        vec![Value::Int(7)],
+    ));
+    assert_eq!(
+        report,
+        "evaluation failed: builtin `TextLen` has no value at compile time (receiver: `7`)"
+    );
+}
+
 #[test]
 fn e118_closures_are_unencodable() {
     let loaded = ignite::load(&fixture("e118_unencodable_value.ignite"), None)
@@ -402,4 +471,53 @@ fn design_file_properties_evaluate_within_default_fuel() {
         most.1, most.0, count
     );
     assert!(most.0 < Fuel::DEFAULT_LIMIT / 10, "{most:?}");
+}
+
+/// The handle methods the evaluator's model of a test runs (stores,
+/// settings, the command line, the environment, pipes, channels) have no
+/// value outside a test: called with no model, as in a constant or a plan,
+/// each is refused with the text of the arm `story:duplicated-rules-back`
+/// deleted, `builtin `X` has no value at compile time`.
+#[test]
+fn a_model_method_outside_a_test_has_no_value_at_compile_time() {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("eval-model-methods");
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("model_methods.ignite");
+    std::fs::write(
+        &file,
+        "package model_methods\n\n\
+         fn next(store: Store<Int>) -> Int = store.next_id()\n\n\
+         fn values(store: Store<Int>) -> List<Int> = store.values()\n\n\
+         fn value(setting: Setting) -> Text = setting.value()\n\n\
+         fn arguments(command_line: CommandLine) -> List<Text> = command_line.arguments()\n\n\
+         fn get(environment: Environment) -> Option<Text> = environment.get(\"HOME\")\n\n\
+         fn batches(pipe: PipeStream) -> Int = pipe.received_batches()\n\n\
+         fn send(sender: Sender<Int>) -> Bool = sender.send(1)\n\n\
+         fn closed(receiver: Receiver<Int>) -> Bool = receiver.closed()\n",
+    )
+    .unwrap();
+    let loaded = ignite::load(&file, None).unwrap_or_else(|e| panic!("{e}"));
+    let modules = loaded.modules();
+    let mut evaluator = Evaluator::new(&modules, Fuel::default());
+    for (name, builtin) in [
+        ("next", "StoreNextId"),
+        ("values", "StoreValues"),
+        ("value", "SettingValue"),
+        ("arguments", "CommandLineArguments"),
+        ("get", "EnvironmentGet"),
+        ("batches", "PipeStreamReceivedBatches"),
+        ("send", "SenderSend"),
+        ("closed", "ReceiverClosed"),
+    ] {
+        let member = Value::Member {
+            system: "S".to_string(),
+            member: "m".to_string(),
+        };
+        let report = failed(call(&mut evaluator, "model_methods", name, vec![member]));
+        assert_eq!(
+            report,
+            format!("evaluation failed: builtin `{builtin}` has no value at compile time"),
+            "{name}"
+        );
+    }
 }

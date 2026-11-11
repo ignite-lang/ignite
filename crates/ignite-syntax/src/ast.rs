@@ -1005,6 +1005,48 @@ impl Pattern {
             id: NodeId::fresh(),
         }
     }
+
+    /// The names the pattern binds, in source order: each `name` and
+    /// `..name` under a tuple, a list, a variant's payload or an
+    /// alternative of `|`. Every alternative contributes, so a name two
+    /// alternatives bind is listed twice. A range binds nothing: its bounds
+    /// are literals or constants (`docs/slice.md` 13.7). A bare lowercase
+    /// name that resolves to a constant is listed too, as the syntax tree
+    /// cannot tell it from a binding; a caller with the symbol table
+    /// filters it, as the checker's `pattern` walk does.
+    pub fn bindings(&self) -> Vec<&Ident> {
+        let mut out = Vec::new();
+        self.find_binding(&mut |id| {
+            out.push(id);
+            false
+        });
+        out
+    }
+
+    /// Whether the pattern binds `name` (one of [`Pattern::bindings`]).
+    pub fn binds(&self, name: &str) -> bool {
+        self.find_binding(&mut |id| id.name == name).is_some()
+    }
+
+    /// The first binding, in source order, that `found` accepts; `found`
+    /// sees every binding up to it.
+    fn find_binding<'p>(&'p self, found: &mut impl FnMut(&'p Ident) -> bool) -> Option<&'p Ident> {
+        match &self.kind {
+            PatternKind::Binding(id) | PatternKind::Rest(Some(id)) => found(id).then_some(id),
+            PatternKind::Or(items)
+            | PatternKind::Tuple(items)
+            | PatternKind::List(items)
+            | PatternKind::Variant { args: items, .. } => {
+                items.iter().find_map(|item| item.find_binding(found))
+            }
+            PatternKind::Rest(None)
+            | PatternKind::Wildcard
+            | PatternKind::Int(_)
+            | PatternKind::Str(_)
+            | PatternKind::Bool(_)
+            | PatternKind::Range { .. } => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

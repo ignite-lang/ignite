@@ -4066,7 +4066,7 @@ impl Checker {
             }
             PatternKind::Or(alternatives) => {
                 for alternative in alternatives {
-                    if let Some(name) = first_binding(alternative) {
+                    if let Some(name) = alternative.bindings().first() {
                         self.error(
                             "E049",
                             name.span,
@@ -4500,23 +4500,6 @@ pub fn builtin_applies(ty: &Type, method: &str) -> bool {
         "Ratio" => method == "ppm",
         "IoError" => method == "with_exit_code",
         _ => false,
-    }
-}
-
-/// The first name `pattern` binds, if any.
-fn first_binding(pattern: &Pattern) -> Option<&Ident> {
-    match &pattern.kind {
-        PatternKind::Binding(name) => Some(name),
-        PatternKind::Rest(name) => name.as_ref(),
-        PatternKind::Tuple(items) | PatternKind::List(items) | PatternKind::Or(items) => {
-            items.iter().find_map(first_binding)
-        }
-        PatternKind::Variant { args, .. } => args.iter().find_map(first_binding),
-        PatternKind::Wildcard
-        | PatternKind::Range { .. }
-        | PatternKind::Int(_)
-        | PatternKind::Str(_)
-        | PatternKind::Bool(_) => None,
     }
 }
 
