@@ -945,7 +945,9 @@ impl TcpStream {
 
     /// The idle timeout in milliseconds, 0 for none, and the socket, whose
     /// `SO_RCVTIMEO` carries the timeout for a read that blocks in `recv`
-    /// (`crate::idle`).
+    /// (`crate::idle`). Read by a TLS session, which restores the timeout
+    /// after its handshake, and by tests.
+    #[cfg(any(test, feature = "tls"))]
     pub(crate) fn idle_ms(&self) -> (&AtomicI64, &std::net::TcpStream) {
         (&self.inner.idle, &self.inner.socket)
     }

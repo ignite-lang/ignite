@@ -1027,96 +1027,277 @@ fn child_silent_burst() {
     wait_for_tasks();
 }
 
-/// The serving side of the connect workload (row 3.7 and 3.3
+/// The serving side of the connect workload (rows 3.7 and 3.3
 /// `terminal/connect-8`, `story:readiness-syscalls-per-connection`) in
-/// system calls per connection, counted by `strace -f -c` over the whole
-/// server process, less a run of the same server that serves none. A
-/// session does what `Telnet.serve` does for the workload's client: set
-/// the idle timeout, send the prompt, read the line, look for urgent
-/// data, send `bye`, close. The client connects, waits for the prompt,
-/// pauses (`COUNTED_PAUSE`, so the traced server waits in its read as an
+/// system calls per connection: `strace -f -yy` over the whole server
+/// process, less a run of the same server that serves none. Counted are
+/// the calls of the connection path ([`TRACED`]; `close`, `read`, `write`
+/// and `epoll_ctl` only on a socket or an eventfd, see [`parse_trace`]),
+/// not what starting or ending a thread costs, so the count does not
+/// depend on how many workers start or retire. A session does what
+/// `Telnet.serve` does for the workload's client: set the idle timeout,
+/// send the prompt, read the line, look for urgent data, send `bye`,
+/// close. The client connects, waits for the prompt, pauses
+/// ([`COUNTED_PAUSE`], so the traced server waits in its read as an
 /// untraced one does), sends `quit`, reads to the end and closes, again.
-/// The bounds are v0.15.0's `terminald` on the Rust target under the same
-/// count: 13.62 per connection with 8 clients of 25 connections each and
-/// 14.52 with 50 connections in sequence (the head before this story:
-/// 19.43 and 16.36).
+///
+/// The bounds are v0.15.0's `terminald`, Rust target, release build,
+/// counted by this same method ([`count_a_given_server`] with
+/// `SCHEDULER_COUNT_SERVER` naming the binary), the lowest of five
+/// rounds: [`V0_15_0_CONCURRENT`] with 8 clients of 25 connections each
+/// (rounds 12.95 to 13.01; the LLVM target's 12.96 to 13.02),
+/// [`V0_15_0_SEQUENTIAL`] with 50 connections in sequence (13.94 to
+/// 14.24; LLVM 14.24 to 14.78). Two calls this
+/// story removed are also bounded by name: no `EPOLL_CTL_DEL` of a socket
+/// (its close takes it out of epoll) and no registration of a socket for
+/// room to write (no session here fills its send buffer).
 #[test]
 fn a_connection_costs_no_more_system_calls_than_at_v0_15_0() {
+    strace_works();
     let mut failures = Vec::new();
-    for (clients, each, bound) in [(8, 25, 13.62), (1, 50, 14.52)] {
-        let none = served_calls(0, 0);
-        let served = served_calls(clients, each);
-        let connections = (clients * each) as f64;
-        let per = |calls: &BTreeMap<String, (u64, u64)>, name: &str| {
-            calls.get(name).map_or(0.0, |(count, _)| *count as f64)
-        };
-        let mut names: Vec<&String> = none.keys().chain(served.keys()).collect();
-        names.sort();
-        names.dedup();
-        let mut table = String::new();
-        let mut total = 0.0;
-        for name in names {
-            let calls = (per(&served, name) - per(&none, name)) / connections;
-            let failed = (served.get(name).map_or(0, |c| c.1) as f64
-                - none.get(name).map_or(0, |c| c.1) as f64)
-                / connections;
-            total += calls;
-            if calls.abs() >= 0.005 {
-                table.push_str(&format!("{name:>14} {calls:6.2} ({failed:.2} failed)\n"));
-            }
-        }
-        let shape = format!("{clients} clients x {each}: {total:.2} per connection");
-        println!("{shape}, v0.15.0 {bound}\n{table}");
+    for (clients, each, bound) in [(8, 25, V0_15_0_CONCURRENT), (1, 50, V0_15_0_SEQUENTIAL)] {
+        let (shape, total, served) = count_shape(None, clients, each);
+        println!("v0.15.0 {bound}; {shape}");
         if total > bound {
-            failures.push(format!("{shape}, more than v0.15.0's {bound}\n{table}"));
+            failures.push(format!("{shape}\nmore than v0.15.0's {bound}"));
+        }
+        if served.deleted > 0 {
+            failures.push(format!(
+                "{shape}\n{} EPOLL_CTL_DEL of a socket, none expected: a dropped stream's \
+                 close takes it out of epoll",
+                served.deleted
+            ));
+        }
+        if served.armed > 0 {
+            failures.push(format!(
+                "{shape}\n{} registrations of a socket for room to write, none expected: \
+                 no session waits for room",
+                served.armed
+            ));
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
-/// The client's pause between the prompt and its request.
-const COUNTED_PAUSE: Duration = Duration::from_millis(20);
-/// The connections the counted server serves before it exits.
-const COUNTED_CONNECTIONS: &str = "SCHEDULER_COUNTED_CONNECTIONS";
-/// The counted server's prompt: `terminald`'s, with IAC GA.
-const COUNTED_PROMPT: &[u8] = b"terminal> \xff\xf9";
+/// v0.15.0's count per connection with 8 clients of 25 connections, by
+/// [`count_a_given_server`] over its `terminald` (Rust target, release).
+const V0_15_0_CONCURRENT: f64 = 12.95;
+/// The same with 50 connections in sequence.
+const V0_15_0_SEQUENTIAL: f64 = 13.94;
 
-/// Run the counted server under `strace -f -c` for `clients` clients of
-/// `each` connections; its system calls by name, with their failures.
-fn served_calls(clients: usize, each: usize) -> BTreeMap<String, (u64, u64)> {
+/// The count of [`a_connection_costs_no_more_system_calls_than_at_v0_15_0`]
+/// over a `terminald` binary named by `SCHEDULER_COUNT_SERVER` (started
+/// with `--port`, ended with SIGTERM), for the shape
+/// `SCHEDULER_COUNT_SHAPE` (`8x25` or `1x50`, default both): how its
+/// bounds were measured, and how the LLVM target is counted. Does nothing
+/// without the variable.
+#[test]
+fn count_a_given_server() {
+    let Some(server) = std::env::var_os("SCHEDULER_COUNT_SERVER") else {
+        return;
+    };
+    strace_works();
+    let shape = std::env::var("SCHEDULER_COUNT_SHAPE").unwrap_or_default();
+    for (clients, each) in [(8, 25), (1, 50)] {
+        if shape.is_empty() || shape == format!("{clients}x{each}") {
+            let (shape, _, _) = count_shape(Some(Path::new(&server)), clients, each);
+            println!("{shape}");
+        }
+    }
+}
+
+/// `strace` runs and may trace a child here; otherwise the count cannot
+/// be taken, and the test says which prerequisite is missing.
+fn strace_works() {
+    let status = Command::new("strace")
+        .args(["-o", "/dev/null", "true"])
+        .stderr(std::process::Stdio::null())
+        .status()
+        .unwrap_or_else(|e| panic!("strace is needed to count system calls and did not run: {e}"));
+    assert!(
+        status.success(),
+        "strace cannot trace a child here (ptrace is blocked): {status:?}"
+    );
+}
+
+/// The system calls [`parse_trace`] counts: the connection path. Thread
+/// start and end (`clone3`, `mmap`, `mprotect`, `sigaltstack`,
+/// `rt_sigprocmask`, a worker's `epoll_create1` and `eventfd2`) are not
+/// traced.
+const TRACED: &str = "trace=accept,accept4,getpeername,setsockopt,recvfrom,recvmsg,read,\
+                      sendto,sendmsg,write,shutdown,close,poll,ppoll,epoll_wait,epoll_pwait,\
+                      epoll_ctl,futex,fcntl";
+
+/// What one traced run of a server made.
+#[derive(Default)]
+struct Traced {
+    /// Calls by name.
+    calls: BTreeMap<String, u64>,
+    /// `EPOLL_CTL_DEL` of a socket.
+    deleted: u64,
+    /// `EPOLL_CTL_ADD` or `EPOLL_CTL_MOD` of a socket with `EPOLLOUT`.
+    armed: u64,
+    /// Events an `epoll_wait` returned with room to write only.
+    write_only: u64,
+}
+
+/// Whether the argument text `argument` (a descriptor as `strace -yy`
+/// prints it) is a TCP socket.
+fn socket(argument: &str) -> bool {
+    argument
+        .trim_start()
+        .trim_start_matches(|c: char| c.is_ascii_digit())
+        .starts_with("<TCP")
+}
+
+/// Whether `argument` is an eventfd, a worker's wake.
+fn eventfd(argument: &str) -> bool {
+    argument
+        .trim_start()
+        .trim_start_matches(|c: char| c.is_ascii_digit())
+        .starts_with("<{eventfd-")
+}
+
+/// The calls of a `strace -f -yy` trace: every call [`TRACED`] names,
+/// except `close` of what is no socket (a retiring worker's epoll and
+/// eventfd, files), `read` and `write` of what is neither a socket nor an
+/// eventfd (standard output, a thread's start reading its CPU limits),
+/// `epoll_ctl` of what is no socket (a worker's own eventfd when its
+/// reactor is made), and `fcntl(F_GETFD)` (a debug build's check before
+/// each `close`, std's `debug_assert_fd_is_open`).
+fn parse_trace(text: &str) -> Traced {
+    let mut traced = Traced::default();
+    for line in text.lines() {
+        let Some((_, call)) = line.split_once(' ') else {
+            continue;
+        };
+        let call = call.trim_start();
+        if call.starts_with("epoll_wait(") || call.starts_with("<... epoll_wait resumed>") {
+            traced.write_only += call.matches("{events=EPOLLOUT,").count() as u64;
+        }
+        if call.starts_with('<') || call.starts_with('-') || call.starts_with('+') {
+            continue;
+        }
+        let Some((name, arguments)) = call.split_once('(') else {
+            continue;
+        };
+        let counted = match name {
+            "close" => socket(arguments),
+            "read" | "write" => socket(arguments) || eventfd(arguments),
+            "fcntl" => !arguments.contains("F_GETFD"),
+            "epoll_ctl" => {
+                let target = ["EPOLL_CTL_ADD, ", "EPOLL_CTL_MOD, ", "EPOLL_CTL_DEL, "]
+                    .iter()
+                    .find_map(|operation| arguments.split_once(operation))
+                    .is_some_and(|(_, target)| socket(target));
+                if target && arguments.contains("EPOLL_CTL_DEL") {
+                    traced.deleted += 1;
+                }
+                if target && !arguments.contains("EPOLL_CTL_DEL") && arguments.contains("EPOLLOUT")
+                {
+                    traced.armed += 1;
+                }
+                target
+            }
+            _ => true,
+        };
+        if counted {
+            *traced.calls.entry(name.to_string()).or_default() += 1;
+        }
+    }
+    traced
+}
+
+/// Count one shape: the run serving `clients` x `each` connections less
+/// the run serving none, per connection, of `server` (a `terminald`) or of
+/// [`child_counted_server`]. The shape's line with the table, the total,
+/// and the serving run.
+fn count_shape(server: Option<&Path>, clients: usize, each: usize) -> (String, f64, Traced) {
+    let none = traced_run(server, 0, 0);
+    let served = traced_run(server, clients, each);
+    let connections = (clients * each) as f64;
+    let mut names: Vec<&String> = none.calls.keys().chain(served.calls.keys()).collect();
+    names.sort();
+    names.dedup();
+    let mut table = String::new();
+    let mut total = 0.0;
+    for name in names {
+        let count = |traced: &Traced| traced.calls.get(name).copied().unwrap_or(0) as f64;
+        let calls = (count(&served) - count(&none)) / connections;
+        total += calls;
+        if calls.abs() >= 0.005 {
+            table.push_str(&format!("{name:>12} {calls:6.2}\n"));
+        }
+    }
+    let shape = format!(
+        "{clients} clients x {each}: {total:.2} per connection; EPOLL_CTL_DEL of a socket {}, \
+         registrations for room to write {}, wakes with room to write only {}\n{table}",
+        served.deleted, served.armed, served.write_only
+    );
+    (shape, total, served)
+}
+
+/// Runs of [`traced_run`] in this process, to name their trace files.
+static TRACES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Run `server` (a `terminald`, ended with SIGTERM) or
+/// [`child_counted_server`] under `strace` for `clients` clients of `each`
+/// connections; what it made.
+fn traced_run(server: Option<&Path>, clients: usize, each: usize) -> Traced {
     use std::io::{BufRead, BufReader, Read};
-    let summary = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
-        "scheduler-calls-{}-{clients}x{each}.txt",
-        std::process::id()
+    let trace = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "scheduler-trace-{}-{}.txt",
+        std::process::id(),
+        TRACES.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     ));
-    let mut server = Command::new("strace")
-        .args(["-f", "-c", "-o"])
-        .arg(&summary)
-        .arg(std::env::current_exe().unwrap())
-        .args([
-            "scheduler::child_counted_server",
-            "--exact",
-            "--nocapture",
-            "--test-threads=1",
-        ])
-        .env(CHILD, "1")
+    let mut command = Command::new("strace");
+    command
+        .args(["-f", "-yy", "-e", TRACED, "-o"])
+        .arg(&trace)
         .env_remove("IGNITE_IO")
-        .env("IGNITE_WORKERS", "4")
-        .env(COUNTED_CONNECTIONS, (clients * each).to_string())
-        .stdout(std::process::Stdio::piped())
-        .spawn()
-        .expect("strace runs (the count needs it installed)");
-    let mut out = BufReader::new(server.stdout.take().unwrap());
-    let mut line = String::new();
-    let port: u16 = loop {
-        line.clear();
-        assert!(
-            out.read_line(&mut line).unwrap() > 0,
-            "the server ended before it told its port"
-        );
-        // After the harness' `test <name> ... ` on the same line.
-        if let Some((_, port)) = line.trim().rsplit_once("port ") {
-            break port.parse().unwrap();
+        .stdout(std::process::Stdio::piped());
+    let given = server.map(|server| {
+        let port = std::net::TcpListener::bind((LOCALHOST, 0))
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        command.arg(server).args(["--port", &port.to_string()]);
+        port
+    });
+    if given.is_none() {
+        command
+            .arg(std::env::current_exe().unwrap())
+            .args([
+                "scheduler::child_counted_server",
+                "--exact",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env(CHILD, "1")
+            .env("IGNITE_WORKERS", "4")
+            .env(COUNTED_CONNECTIONS, (clients * each).to_string());
+    }
+    let mut tracer = command.spawn().expect("strace runs");
+    let mut out = BufReader::new(tracer.stdout.take().unwrap());
+    let port = match given {
+        Some(port) => {
+            assert!(until(|| listening(port)), "the server never listened");
+            port
+        }
+        None => {
+            let mut line = String::new();
+            loop {
+                line.clear();
+                assert!(
+                    out.read_line(&mut line).unwrap() > 0,
+                    "the server ended before it told its port"
+                );
+                // After the harness' `test <name> ... ` on the same line.
+                if let Some((_, port)) = line.trim().rsplit_once("port ") {
+                    break port.parse().unwrap();
+                }
+            }
         }
     };
     let workers: Vec<_> = (0..clients)
@@ -1131,37 +1312,61 @@ fn served_calls(clients: usize, each: usize) -> BTreeMap<String, (u64, u64)> {
     for worker in workers {
         worker.join().unwrap();
     }
+    if given.is_some() {
+        terminate_child_of(tracer.id());
+    }
     let mut rest = String::new();
     out.read_to_string(&mut rest).unwrap();
-    let status = server.wait().unwrap();
-    assert!(status.success(), "the server failed: {status:?}\n{rest}");
-    let text = std::fs::read_to_string(&summary).unwrap();
-    let _ = std::fs::remove_file(&summary);
-    let mut calls = BTreeMap::new();
-    for row in text.lines() {
-        let parts: Vec<&str> = row.split_whitespace().collect();
-        if parts.len() < 5 || !parts[0].starts_with(|c: char| c.is_ascii_digit()) {
-            continue;
-        }
-        let name = parts[parts.len() - 1];
-        // A debug build's `OwnedFd` drop asks `fcntl(F_GETFD)` before each
-        // `close` (std's `debug_assert_fd_is_open`); a release server, as
-        // the bounds counted, makes no `fcntl`, and the substrate calls none
-        // on this path.
-        if name == "total" || (cfg!(debug_assertions) && name == "fcntl") {
-            continue;
-        }
-        let count: u64 = parts[3].parse().unwrap();
-        let failed: u64 = if parts.len() == 6 {
-            parts[4].parse().unwrap()
-        } else {
-            0
-        };
-        calls.insert(name.to_string(), (count, failed));
-    }
-    assert!(!calls.is_empty(), "no strace summary:\n{text}");
-    calls
+    let status = tracer.wait().unwrap();
+    assert!(
+        given.is_some() || status.success(),
+        "the server failed: {status:?}\n{rest}"
+    );
+    let text = std::fs::read_to_string(&trace).unwrap();
+    let _ = std::fs::remove_file(&trace);
+    let traced = parse_trace(&text);
+    assert!(!traced.calls.is_empty(), "no calls traced:\n{text}");
+    traced
 }
+
+/// Whether a socket of this machine listens on `port` (`/proc/net/tcp`,
+/// `/proc/net/tcp6`: local port in hex, state `0A`).
+fn listening(port: u16) -> bool {
+    let local = format!(":{port:04X}");
+    ["/proc/net/tcp", "/proc/net/tcp6"].iter().any(|table| {
+        std::fs::read_to_string(table)
+            .unwrap_or_default()
+            .lines()
+            .any(|row| {
+                let fields: Vec<&str> = row.split_whitespace().collect();
+                fields.len() > 3 && fields[1].ends_with(&local) && fields[3] == "0A"
+            })
+    })
+}
+
+/// Send SIGTERM to the process `strace` (`tracer`) started.
+fn terminate_child_of(tracer: u32) {
+    let children =
+        std::fs::read_to_string(format!("/proc/{tracer}/task/{tracer}/children")).unwrap();
+    let child: i32 = children
+        .split_whitespace()
+        .next()
+        .expect("strace's child")
+        .parse()
+        .unwrap();
+    nix::sys::signal::kill(
+        nix::unistd::Pid::from_raw(child),
+        nix::sys::signal::Signal::SIGTERM,
+    )
+    .unwrap();
+}
+
+/// The client's pause between the prompt and its request.
+const COUNTED_PAUSE: Duration = Duration::from_millis(20);
+/// The connections the counted server serves before it exits.
+const COUNTED_CONNECTIONS: &str = "SCHEDULER_COUNTED_CONNECTIONS";
+/// The counted server's prompt: `terminald`'s, with IAC GA.
+const COUNTED_PROMPT: &[u8] = b"terminal> \xff\xf9";
 
 /// One connection of the counted workload's client (see
 /// [`a_connection_costs_no_more_system_calls_than_at_v0_15_0`]).
@@ -1187,7 +1392,7 @@ fn counted_session(port: u16) {
     while peer.read(&mut buffer).unwrap() > 0 {}
 }
 
-/// The server counted by [`served_calls`]: an accept loop on the main
+/// The server counted by [`traced_run`]: an accept loop on the main
 /// thread, as a compiled server runs it, that spawns one session per
 /// connection, `Telnet.serve`'s calls for the workload's client.
 #[test]
@@ -1217,5 +1422,73 @@ fn child_counted_server() {
             let _ = stream.close();
         });
     }
+    wait_for_tasks();
+}
+
+/// A socket already registered with a worker for reading (a reader parked
+/// on it while another task shared the worker) is registered without room
+/// to write (`story:readiness-syscalls-per-connection`, lazy `EPOLLOUT`).
+/// A task on the same worker that then waits for room to write must still
+/// be woken when the peer drains the socket: the first wait for room
+/// changes that registration, it does not only make a new one.
+#[test]
+fn a_writer_is_woken_on_a_socket_already_registered_for_reading() {
+    passed(&child(
+        "scheduler::child_writer_after_a_registered_reader",
+        &[("IGNITE_WORKERS", "1")],
+    ));
+}
+
+#[test]
+fn child_writer_after_a_registered_reader() {
+    use std::io::{Read, Write};
+    if !in_child() {
+        return;
+    }
+    const TOTAL: usize = 32 * 1024 * 1024;
+    let (stream, mut peer) = pair();
+    // A second task on the worker, so neither the reader nor the writer
+    // waits alone on the worker's thread: both register and park.
+    let (keep, kept) = Channel::bounded::<bool>(1);
+    spawn(move || {
+        kept.receive();
+    });
+    let reader = stream.clone();
+    let (read, got) = mpsc::channel();
+    spawn(move || {
+        let _ = read.send(reader.read(64));
+    });
+    // The reader has parked, so the socket is registered for reading.
+    std::thread::sleep(Duration::from_millis(200));
+    let (wrote, written) = mpsc::channel();
+    spawn(move || {
+        let chunk = vec![7u8; 64 * 1024];
+        for _ in 0..TOTAL / chunk.len() {
+            stream.write_from(&chunk).unwrap();
+        }
+        ignite_io::flush();
+        wrote.send(()).unwrap();
+    });
+    std::thread::sleep(Duration::from_millis(200));
+    assert!(
+        written.try_recv().is_err(),
+        "the peer took {TOTAL} bytes unread"
+    );
+    let mut buffer = vec![0u8; 1024 * 1024];
+    let mut received = 0;
+    while received < TOTAL {
+        let count = peer
+            .read(&mut buffer)
+            .unwrap_or_else(|e| panic!("the writer stalled after {received} bytes: {e}"));
+        assert!(count > 0, "end of stream after {received} bytes");
+        received += count;
+    }
+    written
+        .recv_timeout(LIMIT)
+        .expect("the writer finished once the peer read");
+    peer.write_all(b"hi").unwrap();
+    let got = got.recv_timeout(LIMIT).expect("the reader ran");
+    assert_eq!(got.unwrap(), Input::Data(b"hi".to_vec()));
+    drop(keep);
     wait_for_tasks();
 }
