@@ -7328,13 +7328,13 @@ fn toml_string(text: &str) -> String {
 /// `ignite-io` and the Rust standard library are optimised as one unit
 /// (fat LTO, one codegen unit), which keeps a release executable within
 /// 10 % of its v0.15.0 size with the readiness scheduler linked (row 3.2
-/// of `docs/quality.md`, story `readiness-binary-size`). `ignite-io` is
-/// optimised for size (`opt-level = "s"`), as the workspace builds it for
-/// the LLVM target, and so are the crates it calls the system and switches
-/// stacks through, `nix` and `corosensei` (row 3.9 rust; on the LLVM target
-/// the same two tables made the executable larger). Story
-/// `binary-size-back`; their speed is measured on the dedicated host only.
-const RELEASE_PROFILE: &str = "\n[profile.release]\noverflow-checks = true\ncodegen-units = 1\nlto = true\n\n[profile.release.package.ignite-io]\nopt-level = \"s\"\n\n[profile.release.package.nix]\nopt-level = \"s\"\n\n[profile.release.package.corosensei]\nopt-level = \"s\"\n";
+/// of `docs/quality.md`, story `readiness-binary-size`). The crates
+/// `ignite-io` calls the system and switches stacks through, `nix` and
+/// `corosensei`, are optimised for size (`opt-level = "s"`; row 3.9 rust,
+/// story `binary-size-back`): their instruction counts per request and
+/// session stayed within noise. `ignite-io` itself keeps the default
+/// level, which costs fewer instructions per request.
+const RELEASE_PROFILE: &str = "\n[profile.release]\noverflow-checks = true\ncodegen-units = 1\nlto = true\n\n[profile.release.package.nix]\nopt-level = \"s\"\n\n[profile.release.package.corosensei]\nopt-level = \"s\"\n";
 
 /// The generated crate's dev profile: the crates from outside the project
 /// (`ignite-io` and what it needs: `nix`, `libc`, the scheduler's

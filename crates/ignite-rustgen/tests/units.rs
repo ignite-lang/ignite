@@ -1269,15 +1269,14 @@ fn release_profile_checks_overflow_and_links_as_one_unit() {
     );
 }
 
-/// The release profile builds the substrate for size (story
-/// `binary-size-back`, rows 3.2 and 3.9 rust): `ignite-io`, as the
-/// workspace builds it for the LLVM target, and the crates it calls the
-/// system and switches stacks through, `nix` and `corosensei`, at
-/// `opt-level = "s"`.
+/// The release profile builds the crates `ignite-io` calls the system and
+/// switches stacks through, `nix` and `corosensei`, for size (story
+/// `binary-size-back`, row 3.9 rust); `ignite-io` itself keeps the
+/// default level, which runs fewer instructions per request.
 #[test]
 fn release_profile_builds_the_substrate_for_size() {
     let project = try_generate(vec![]).expect("generates");
-    for package in ["ignite-io", "nix", "corosensei"] {
+    for package in ["nix", "corosensei"] {
         assert_eq!(
             table(
                 &project.cargo_toml,
@@ -1287,6 +1286,13 @@ fn release_profile_builds_the_substrate_for_size() {
             "{package}"
         );
     }
+    assert!(
+        !project
+            .cargo_toml
+            .contains("[profile.release.package.ignite-io]"),
+        "{}",
+        project.cargo_toml
+    );
 }
 
 /// The lines of the table `[<name>]` of a manifest, up to the next table.
