@@ -620,7 +620,7 @@ meaning. The generator emits exactly the Rust on the right.
 | `t.to_bytes()` | `t.clone().into_bytes()`; `t.into_bytes()` when `t` is a fresh text nothing else owns (a literal, a `+` chain or interpolation, `to_text` of Int, Byte or Bool, `concat`, `trim`) | `t.as_bytes()` to a lent bytes parameter and in the other borrowed forms of 20.3.7 |
 | `b.to_text()` | `String::from_utf8_lossy(&b).into_owned()` | |
 | `b.slice(i, j).to_text()` | `String::from_utf8_lossy(::ignite_io::checked::slice_ref(&b, i, j, <site>)).into_owned()`: the slice is borrowed, not copied, with the failure of `checked::slice` | Bytes |
-| `b.index_of(n, i) -> Option<Int>` | `::ignite_io::text::index_of(&b, &n, i)`: the offset of the first `n` at or after `i` (a negative `i` reads as 0; `None` when `i` is past the end, also for an empty `n`), by a scan for the first byte of `n` and a compare of the rest (story `unsafe-sites-back`; before, `memchr` or `memmem`); `t.to_bytes()` and a checked `slice` are borrowed, not copied. The LLVM runtime's `bytes_index_of` calls the same function (-1 for `None`). Story `text-fast-search` | Bytes |
+| `b.index_of(n, i) -> Option<Int>` | `::ignite_io::text::index_of(&b, &n, i)`: the offset of the first `n` at or after `i` (a negative `i` reads as 0; `None` when `i` is past the end, also for an empty `n`), by a scan for the first byte of `n` eight bytes at a time (a word XOR eight copies of the byte, then the zero-byte test) and a compare of the rest (story `unsafe-sites-back`; before, `memchr` or `memmem`: the word scan costs no more instructions per request of `todod`); `t.to_bytes()` and a checked `slice` are borrowed, not copied. The LLVM runtime's `bytes_index_of` calls the same function (-1 for `None`). Story `text-fast-search` | Bytes |
 | `t.pieces(s) -> List<Text>` | `::ignite_io::text::pieces(&t, &s)`: the texts between the separators, empty pieces kept, `[t]` for an empty `s`; no piece is checked for UTF-8 again, since valid text cut at a valid separator stays valid. `std.text.split` is this builtin. The LLVM runtime's `text_pieces` uses the same search. Story `text-fast-search` | Text |
 | `b.at(i)` | `b[(i) as usize]`, then `.clone()` when the element is not `Int`, `Byte` or `Bool` (also `l[i]`) | Bytes, List |
 | `l.map(f)` | `l.iter().cloned().map(f).collect::<Vec<_>>()` | List; `l.iter().map(..)` without the copy in the cases of 20.3.7 |
@@ -11270,7 +11270,7 @@ Story `http-reply-cost-back` (rows 3.3 `rust/todo/get-1` and 3.8 `todo/get-1` of
   --trace-malloc=yes` over 200 replies after 50 on one connection
   (`reply_cost::a_get_reply_allocates_no_more_than_at_v0_15_0`, the bounds measured by
   `reply_cost::count_a_given_todod` over the v0.15.0 binaries): Rust target 37 at v0.15.0, 53
-  at wave 10, 37 now; LLVM target 1, 1, 0.
+  at wave 10, 37 at the unit's merge, 40 after `unsafe-sites-back`, 36 now; LLVM target 1, 1, 0.
 - The 16 came with `Request.connection` (section 37): `session` copied the connection into the
   request it kept for the answer (its two addresses, 2 allocations), `asked` copied it again (2),
   the request asked was copied once more for `handle` or `reply` (8) and `Respond`'s response was
@@ -11285,6 +11285,33 @@ Story `http-reply-cost-back` (rows 3.3 `rust/todo/get-1` and 3.8 `todo/get-1` of
   copied), and `ignite_io::flush` gives the emptied list of streams to send back to the task
   instead of dropping it, so the task's next write does not allocate it again (the one
   allocation per reply of the LLVM target).
+- Story `unsafe-sites-back` removed the counting allocator's own `realloc`: every growth of a
+  buffer became a new allocation, a copy and a free, and the three growths of rendering a reply
+  made the Rust count 40. The allocator reallocates through the system allocator again
+  (`census::tests::a_growing_buffer_is_reallocated_not_allocated_again` counts the calls that
+  reach `alloc` and `realloc`), and an inline reply is rendered into one buffer made with room
+  for its head (`HEAD_ROOM`, 128 bytes, and each header field) and its body (`render_fields`'s
+  `after`, `text_with_room`): the head is written into it, the body is appended to it from the
+  response instead of being copied first, and the buffer becomes the bytes sent, each step
+  taking the buffer of the one before, not copying it (on the Rust target a conversion is a
+  move only as a function's last expression, which `head_bytes` and `render_framed` keep;
+  `allocations::text_is_appended_in_place_and_a_final_conversion_takes_the_buffer` of
+  `crates/ignite-rustgen` reads the generated code). Rust target 36 now, LLVM target
+  0.
+- A task's stack overflow is reported on the worker's alternate signal stack. On the Rust target
+  that stack is std's, which every thread std starts has; `ignite-io` makes none. The LLVM
+  runtime, whose `main` is not Rust's, gives each worker its own
+  (`ignite_io::signal::give_workers_an_alternate_stack`, set by `init`). On the Rust target
+  `ignite-io` puts the ignore back over its handler for a signal found ignored at the start,
+  and std gives its threads a stack only when it installed a handler, for a signal not
+  ignored. An overflow faults with `SIGSEGV`, so by the start on the Rust target: nothing
+  ignored, or only `SIGBUS`, the overflow is reported and the process aborts; `SIGSEGV`
+  ignored, alone or with `SIGBUS`, the overflow ends the process by `SIGSEGV` with no report, as
+  a v0.15.0 program started so did (also when only `SIGSEGV` is ignored and std gave the
+  thread a stack), and other faults of an ignored signal reach the ignore too. The LLVM target
+  reports the overflow in all four starts (`stack_overflow::` and
+  `stack_overflow_adversary::` of `crates/ignite`; `scheduler::started_with_faults_ignored_*`
+  and `reply_adversary::started_with_only_*` of `crates/ignite-io`).
 - `serve_listener` starts the register of held requests (`Holds.start()`, the task
   `keep_holds`) only when the application has a `reply`, the only way to hold a request:
   `reply_cost::a_server_without_reply_starts_no_task_for_held_requests` builds

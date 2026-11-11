@@ -46,6 +46,21 @@ struct Handler {
     callback: bool,
 }
 
+impl Handler {
+    /// Jump back to the `setjmp` of this handler's jump buffer: the task
+    /// wrapper's, or the callback guard's.
+    fn jump(self) -> ! {
+        // SAFETY: a `Handler` is made only by `guard_push` and
+        // `guard_callback` from the jump buffer of a still-live generated
+        // frame that called `setjmp`, and is popped before its jump, so
+        // `jb` is live; the frames between it and here are generated code
+        // and this runtime's failure entries, which hold nothing that needs
+        // a destructor beyond what the jump of a task wrapper already skips
+        // (crate docs).
+        unsafe { longjmp(self.jb, 1) }
+    }
+}
+
 thread_local! {
     /// Jump buffers of the task-entry wrappers and callback guards open on
     /// this thread, the innermost last. A task registers one; a nested
@@ -135,25 +150,17 @@ pub(crate) fn fail(report: String) -> ! {
         .try_with(|handlers| handlers.borrow_mut().pop())
         .ok()
         .flatten();
-    if let Some(Handler { jb, callback: true }) = handler {
+    if let Some(guard @ Handler { callback: true, .. }) = handler {
         let _ = PENDING.try_with(|pending| *pending.borrow_mut() = Some(report));
-        // SAFETY: `jb` is the jump buffer of a still-live generated callback
-        // that called `setjmp` and registered it through `guard_callback`;
-        // the frames between it and here are generated code and this
-        // runtime's failure entries, which hold nothing that needs a
-        // destructor beyond what a task wrapper's jump already skips.
-        unsafe { longjmp(jb, 1) }
+        guard.jump()
     }
     net::release_task_handles();
-    match handler.map(|handler| handler.jb) {
-        Some(jb) => {
+    match handler {
+        Some(wrapper) => {
             ignite_io::task_failed(&report);
             ignite_io::flush();
             drop(report);
-            // SAFETY: `jb` is a jump buffer a still-live task wrapper set
-            // with `setjmp` and registered through `guard_push`; the C
-            // frames between it and here carry no destructors (crate docs).
-            unsafe { longjmp(jb, 1) }
+            wrapper.jump()
         }
         None => {
             ignite_io::log(&format!("error: {report}"));

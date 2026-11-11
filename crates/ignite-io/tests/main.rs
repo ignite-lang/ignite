@@ -8,6 +8,7 @@ mod entropy_adversary;
 mod fs_adversary;
 mod pipe;
 mod reactor;
+mod reply_adversary;
 mod scheduler;
 mod scheduler_adversary;
 mod stdio;

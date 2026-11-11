@@ -38,10 +38,12 @@
 //! are exchanged whenever a different task resumes, through [`TaskLocals`].
 //!
 //! Stack overflow: a task's guard page is recognised by the `SIGSEGV`
-//! handler (`crate::signal`) installed with the first worker (on an
-//! alternate signal stack each worker sets up), which prints `thread
-//! 'worker' has overflowed its stack` and aborts, as a thread's overflow
-//! does; any other fault goes to the handler that was installed before.
+//! handler (`crate::signal`) installed with the first worker, which runs
+//! on the worker's alternate signal stack (std's on the Rust target, the
+//! LLVM runtime's otherwise: `signal::give_workers_an_alternate_stack`),
+//! prints `thread 'worker' has overflowed its stack` and aborts, as a
+//! thread's overflow does; any other fault goes to the handler that was
+//! installed before.
 //!
 //! A descriptor a task waits for (a socket, a listener, standard input)
 //! is registered once per worker, edge-triggered, through a
@@ -1217,7 +1219,7 @@ fn dispatch(events: &mut Vec<Event>) {
 fn work(shared: Arc<Shared>) {
     crate::task::mark_task_thread();
     let _worker = crate::census::Counted::new(crate::census::Kind::Workers);
-    alternate_signal_stack();
+    crate::signal::worker_started();
     HERE.with(|here| here.set(Arc::as_ptr(&shared)));
     let _ = shared.thread.set(std::thread::current());
     let mut worker = Worker {
@@ -1314,44 +1316,6 @@ fn page_size() -> usize {
 /// async-signal-safe.
 pub(crate) fn guard_page() -> (usize, usize) {
     GUARD.try_with(Cell::get).unwrap_or((0, 0))
-}
-
-/// A worker's alternate signal stack: the overflow handler cannot run on
-/// the stack that overflowed. A thread that has one already (Rust's
-/// runtime gives one to the threads it starts when it handles overflow
-/// itself) keeps it.
-fn alternate_signal_stack() {
-    use nix::libc;
-    const SIZE: usize = 64 * 1024;
-    // SAFETY: `sigaltstack` reads and writes the `stack_t` values given;
-    // the new stack is a fresh private mapping of `SIZE` bytes that stays
-    // mapped for the life of the process (a worker's stack is never given
-    // back, so a signal on it can never land in unmapped memory).
-    unsafe {
-        let mut current: libc::stack_t = std::mem::zeroed();
-        if libc::sigaltstack(std::ptr::null(), &mut current) != 0
-            || current.ss_flags & libc::SS_DISABLE == 0
-        {
-            return;
-        }
-        let memory = libc::mmap(
-            std::ptr::null_mut(),
-            SIZE,
-            libc::PROT_READ | libc::PROT_WRITE,
-            libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
-            -1,
-            0,
-        );
-        if memory == libc::MAP_FAILED {
-            return;
-        }
-        let stack = libc::stack_t {
-            ss_sp: memory,
-            ss_flags: 0,
-            ss_size: SIZE,
-        };
-        libc::sigaltstack(&stack, std::ptr::null_mut());
-    }
 }
 
 /// The readiness of one descriptor for tasks on workers (module docs): a

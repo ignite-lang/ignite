@@ -1127,7 +1127,7 @@ pub mod wait;
 // epoll workers, the IO mode `readiness`.
 mod sched;
 // The one place a signal's disposition is changed.
-mod signal;
+pub mod signal;
 pub use sched::{
     IoMode, SchedulerCounts, TASK_STACK, TaskLocals, cpu_limit, io_mode, scheduler_counts,
     set_task_locals, worker_limit,

@@ -355,8 +355,8 @@ const KEPT_PENDING: usize = 8;
 /// reported by the stream's next `read`, `write_all` or `close`. The
 /// emptied list goes back to the task while it is small ([`KEPT_PENDING`]),
 /// unless the task registered a stream meanwhile, so that its next write
-/// does not allocate a list again (an allocation per reply of a server,
-/// `story:http-reply-cost-back`).
+/// does not allocate a list again (an allocation per server's reply,
+/// counted by `reply_cost::a_get_reply_allocates_no_more_than_at_v0_15_0`).
 pub fn flush() {
     let mut pending = PENDING
         .try_with(|pending| std::mem::take(&mut pending.borrow_mut().0))
@@ -1143,8 +1143,8 @@ mod tests {
     /// `flush` gives a small pending list back to the task, so a reply's
     /// write allocates none, and drops a large one, so a task that wrote
     /// to many streams once does not keep the list at that size until it
-    /// ends (adversary F2 on `story:http-reply-cost-back`: 10,000 pipe
-    /// pairs left 16,384 slots of 16 bytes). Counted as the capacity of
+    /// ends (10,000 pipe pairs left 16,384 slots of 16 bytes behind a
+    /// server's reply). Counted as the capacity of
     /// the running thread's list after the flush.
     #[test]
     fn a_flush_keeps_a_small_pending_list_and_drops_a_large_one() {
