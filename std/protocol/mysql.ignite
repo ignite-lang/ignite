@@ -2414,3 +2414,49 @@ test "an empty pool has no connection until one is handed to it" {
   checkin(pool, session([(command(3, "SELECT 1"), one_row())])?)
   assert is_one(pool_query(pool, "SELECT 1"))
 }
+
+// ---- tests: adversary, pass 1 --------------------------------------------------
+
+// A scripted server on TCP for one connection (a pipe holds no command of
+// 16 MiB): `exchanges` as `play` runs them, then the stream is closed.
+test fn serve_once(listener: TcpListener, exchanges: List<(Bytes, Bytes)>) -> Result<Unit, IoError> {
+  let stream = listener.accept()?
+  stream.set_idle_timeout(5000)?
+  _ = play(stream, exchanges)?
+  stream.close()
+}
+
+test "adversary: a command of two frames is answered at sequence 2, and its reply is read" {
+  // COM_STMT_EXECUTE of statement 7 with one BLOB parameter of 16 MiB - 1
+  // bytes: a payload of 16 MiB + 17 bytes, which travels as frame 0
+  // (16 MiB - 1 bytes) and frame 1 (18 bytes). A server numbers its reply
+  // after the last frame it read: 2, not 1 (MySQL 8.0 does; the real-server
+  // case is `mysql_adversary::` in `crates/ignite/tests`).
+  var body = b"\x17\x07\x00\x00\x00\x00\x01\x00\x00\x00\x00\x01\xfc\x00\xfd\xff\xff\xff"
+  body.append(filled(MAX_FRAME))
+  var wire = b"\xff\xff\xff\x00"
+  wire.append(body.slice(0, MAX_FRAME))
+  wire.append(b"\x12\x00\x00\x01")
+  wire.append(body.slice(MAX_FRAME, body.len()))
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  spawn serve_once(listener, [(wire, ok_packet(2))])
+  let stream = TcpStream.connect_within("127.0.0.1", listener.local_port(), 2 seconds)?
+  stream.set_idle_timeout(5000)?
+  let client = Client { stream }
+  let stored = execute(client, Statement { id = 7, parameters = 1, columns = 0 }, [Some(Bytes(filled(MAX_FRAME)))])
+  assert stored == Ok(ResultSet {})
+}
+
+test "adversary: the description of a refused plugin holds no line break, no escape and not all of a long name" {
+  // The plugin's name is the server's text: a hostile server, or anyone on
+  // the path of a plain connection, chooses it and with it what a caller
+  // that logs `describe(error)` writes.
+  let forged = "x\nERROR forged line\x1b[2J"
+  let stream = scripted([(Bytes.empty(), frames(greeting_with(forged, nonce(), with_tls()), 0))])?
+  let error = refusal(start(stream, account()))?
+  assert error == UnsupportedPlugin(forged)
+  let said = describe(error)
+  assert !said.contains("\n") && !said.contains("\x1b"), said
+  let long = describe(UnsupportedPlugin(filled(100000).to_text()))
+  assert long.len() < 1000
+}

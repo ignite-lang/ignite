@@ -521,3 +521,17 @@ test "a time prints its sign, its hours with the days in them, and its fraction"
   assert time_text(b"\x00\x00\x00\x00\x00\x01\x02", 0) == None
   assert time_text(b"\x00\x00\x00\x00\x00\x01\x02\x03\x40", 0) == None
 }
+
+// ---- tests: adversary, pass 1 --------------------------------------------------
+
+test "adversary: a double halfway between two shortest digits prints the even one, as the server and Python's repr do" {
+  // 1000000000000000.25 and 2^50 + 0.25 are exact; 17 digits tell each from
+  // its neighbours, and both ...2 and ...3 read back as it. MySQL 8.0 prints
+  // these columns as ...2 over the text protocol (`SELECT
+  // 1000000000000000.25e0`), and so do Python's repr and every shortest
+  // round-trip printer that breaks the tie to even.
+  assert double_text(b"\x02\x00\x34\x26\xf5\x6b\x0c\x43") == Some("1000000000000000.2")
+  assert double_text(b"\x01\x00\x00\x00\x00\x00\x10\x43") == Some("1125899906842624.2")
+  // The same tie above the half: ...75 goes to ...8 either way.
+  assert double_text(b"\x06\x00\x34\x26\xf5\x6b\x0c\x43") == Some("1000000000000000.8")
+}
