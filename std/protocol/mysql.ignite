@@ -160,11 +160,14 @@ type Done {
 // its place.
 //
 // - `Int`: TINYINT, SMALLINT, MEDIUMINT, INT, BIGINT, YEAR, signed or
-//   unsigned, when it fits an `Int`.
+//   unsigned, when it fits an `Int`. A TINYINT(1) is one of them: the 1 is
+//   a display width, and the column holds -128 to 127, or 0 to 255
+//   unsigned. BOOL and BOOLEAN are TINYINT(1) on the server, so they read
+//   as `Int` 0 or 1.
 // - `Decimal`: the exact decimal text of a DECIMAL, of a FLOAT or a DOUBLE
 //   (the language has no floating-point type) and of a BIGINT UNSIGNED
 //   above the largest `Int`.
-// - `Bool`: TINYINT(1) and BIT(1).
+// - `Bool`: BIT(1) only.
 // - `Text`: character columns (CHAR, VARCHAR, TEXT, ENUM, SET), JSON, and
 //   DATE, TIME, DATETIME and TIMESTAMP as the server prints them
 //   (`2024-02-29 23:59:58.123456`). Bytes that are no UTF-8 become U+FFFD.
@@ -885,9 +888,6 @@ fn string_value(column: Column, bytes: Bytes) -> MysqlValue = if column.kind == 
 // The value of `column` that the text protocol sent as `bytes`.
 fn text_value(column: Column, bytes: Bytes) -> MysqlValue {
   let kind = column.kind
-  if kind == 1 && column.length == 1 {
-    return Bool(bytes != b"0")
-  }
   if is_integer(kind) {
     let digits = bytes.to_text()
     return match Int.parse(digits) {
@@ -917,10 +917,6 @@ fn whole_value(payload: Bytes, at: Int, width: Int, unsigned: Bool) -> Outcome<(
 fn binary_value(column: Column, payload: Bytes, at: Int) -> Outcome<(MysqlValue, Int)> {
   let kind = column.kind
   let unsigned = column.flags & UNSIGNED != 0
-  if kind == 1 && column.length == 1 {
-    let (value, end) = take_int(payload, at, 1)?
-    return Ok((Bool(value != 0), end))
-  }
   if kind == 1 {
     return whole_value(payload, at, 1, unsigned)
   }
@@ -1995,7 +1991,7 @@ test fn binary_row(values: List<Option<Bytes>>) -> Bytes {
 // protocol sends it, the same value as the binary protocol sends it, and
 // what both decode to.
 test fn typed() -> List<(Bytes, Bytes, Bytes, MysqlValue)> = [
-  (column_of("flag", 1, 1, 0, 63, 0), b"1", b"\x01", Bool(true)),
+  (column_of("flag", 1, 1, 0, 63, 0), b"2", b"\x02", Int(2)),
   (column_of("tiny", 1, 4, 0, 63, 0), b"-128", b"\x80", Int(-128)),
   (column_of("utiny", 1, 3, 32, 63, 0), b"255", b"\xff", Int(255)),
   (column_of("small", 2, 6, 0, 63, 0), b"-32768", b"\x00\x80", Int(-32768)),
@@ -2089,10 +2085,10 @@ test "a text result set gives its columns and decodes every column type, NULL as
   assert result.affected == 0 && result.last_insert_id == 0 && result.warnings == 0
 }
 
-test "a text value follows its column: a false flag, a cleared bit, an integer that fits no Int" {
+test "a text value follows its column: a zero flag, a cleared bit, an integer that fits no Int" {
   let flag = parse_column(column_of("flag", 1, 1, 0, 63, 0))?
-  assert text_value(flag, b"0") == Bool(false)
-  assert text_value(flag, b"1") == Bool(true)
+  assert text_value(flag, b"0") == Int(0)
+  assert text_value(flag, b"1") == Int(1)
   let bit = parse_column(column_of("bit", 16, 1, 32, 63, 0))?
   assert text_value(bit, b"\x00") == Bool(false)
   let wide = parse_column(column_of("huge", 8, 20, 32, 63, 0))?
@@ -2102,6 +2098,27 @@ test "a text value follows its column: a false flag, a cleared bit, an integer t
   assert text_value(parse_column(column_of("odd", 99, 4, 0, 45, 0))?, b"abc") == Text("abc")
   assert text_value(parse_column(column_of("odd", 99, 4, 0, 63, 0))?, b"abc") == Bytes(b"abc")
   assert text_value(parse_column(column_of("shape", 255, 4, 144, 63, 0))?, b"\x00\x01") == Bytes(b"\x00\x01")
+}
+
+test "a TINYINT(1) is an integer in the text and in the binary protocol, a BIT(1) alone is a Bool" {
+  // The 1 is a display width: the column holds -128 to 127, or 0 to 255.
+  let flag = parse_column(column_of("flag", 1, 1, 0, 63, 0))?
+  let unsigned = parse_column(column_of("flag", 1, 1, 32, 63, 0))?
+  assert text_value(flag, b"2") == Int(2)
+  assert text_value(flag, b"0") == Int(0)
+  assert text_value(flag, b"1") == Int(1)
+  assert text_value(flag, b"-1") == Int(-1)
+  assert text_value(unsigned, b"255") == Int(255)
+  assert binary_value(flag, b"\x02", 0) == Ok((Int(2), 1))
+  assert binary_value(flag, b"\x00", 0) == Ok((Int(0), 1))
+  assert binary_value(flag, b"\x01", 0) == Ok((Int(1), 1))
+  assert binary_value(flag, b"\xff", 0) == Ok((Int(-1), 1))
+  assert binary_value(unsigned, b"\xff", 0) == Ok((Int(255), 1))
+  let bit = parse_column(column_of("bit", 16, 1, 32, 63, 0))?
+  assert text_value(bit, b"\x01") == Bool(true)
+  assert text_value(bit, b"\x00") == Bool(false)
+  assert binary_value(bit, b"\x01\x01", 0) == Ok((Bool(true), 2))
+  assert binary_value(bit, b"\x01\x00", 0) == Ok((Bool(false), 2))
 }
 
 test "a statement without a result set is its affected rows, last insert id and warnings" {

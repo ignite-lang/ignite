@@ -11588,13 +11588,18 @@ sent.
 
 | column type | `MysqlValue` |
 |---|---|
-| TINYINT(1), BIT(1) | `Bool` |
-| TINYINT, SMALLINT, MEDIUMINT, INT, BIGINT, YEAR, signed and unsigned | `Int`; a BIGINT UNSIGNED above the largest `Int` is `Decimal` with all its digits |
+| BIT(1) | `Bool` |
+| TINYINT (TINYINT(1), BOOL and BOOLEAN among them), SMALLINT, MEDIUMINT, INT, BIGINT, YEAR, signed and unsigned | `Int`; a BIGINT UNSIGNED above the largest `Int` is `Decimal` with all its digits |
 | DECIMAL | `Decimal`, the server's exact text |
 | FLOAT, DOUBLE | `Decimal`: the language has no floating-point type (the story's `Float`), so the value is its decimal text, as `std.json`'s and `std.data`'s `Decimal` |
 | CHAR, VARCHAR, TEXT, ENUM, SET, JSON | `Text`; bytes that are no UTF-8 become U+FFFD |
 | DATE, TIME, DATETIME, TIMESTAMP | `Text` as the server prints them: `2024-02-29`, `-34:11:12`, `2024-02-29 23:59:58.123456` |
 | BINARY, VARBINARY, BLOB, GEOMETRY, BIT wider than one | `Bytes` (a column whose character set is 63) |
+
+A TINYINT(1) is an `Int`, not a `Bool`: the 1 is a display width, and the column holds -128 to
+127 (0 to 255 unsigned), so a stored 2 reads as 2. BOOL and BOOLEAN are TINYINT(1) on the
+server and read as `Int` 0 or 1; only a BIT(1) is a `Bool`. A `Bool` parameter is still sent as
+TINYINT.
 
 The two protocols give the same value for the same column. The binary protocol sends a FLOAT and
 a DOUBLE as their four and eight bytes; `std.protocol.mysql.binary` (`float_text`,
@@ -11643,7 +11648,7 @@ nothing.
 
 ### NN.6 Tests
 
-- `std/protocol/mysql.ignite`, both targets, 55 tests with a scripted server (`play`: reads each
+- `std/protocol/mysql.ignite`, both targets, 56 tests with a scripted server (`play`: reads each
   expected request byte for byte, writes its reply; the requests are written out by hand, the
   scrambles are known answers computed outside the module), over `Pipe.pair()` but for two over
   TCP: a command of two frames, which a pipe does not hold, and the close of a failed handshake,
@@ -11662,7 +11667,9 @@ nothing.
     handshake; a read-only session, and that no other session sends a statement;
   - statements: a column definition from the protocol's documentation; a result set of 31
     columns, one per supported type, with a row of values and a row of NULLs, over the text and
-    over the binary protocol with the same expected values; OK, an empty result set, a server
+    over the binary protocol with the same expected values (its TINYINT(1) holds 2); a
+    TINYINT(1) holding 0, 1, 2, -1 and, unsigned, 255 as that `Int` in both protocols, a BIT(1)
+    as a `Bool`; OK, an empty result set, a server
     error first and between rows; the local-file request; a second result; each limit at the
     bound and one past it; every cut, out-of-sequence and out-of-shape reply; `prepare` with
     and without parameters and columns, with 4,096 columns and refused with 4,097; the bytes
@@ -11680,10 +11687,11 @@ nothing.
 - `mysql::real_servers_with_both_plugins_on_both_targets` in `crates/ignite/tests/mysql.rs`:
   two containers of `mysql:8.0` on free loopback ports, one whose default plugin is
   `caching_sha2_password` and one whose default is `mysql_native_password`, both with TLS under
-  an authority the test generates; then 9 Ignite tests on each target: the password over TLS
+  an authority the test generates; then 10 Ignite tests on each target: the password over TLS
   only and then the fast path, each plugin directly and after a switch, a wrong password,
   `sha256_password`, an unknown authority, another host name, a closed port, a table with a
-  column of every type read alike by `query` and by `execute`, parameters (a hostile text
+  column of every type read alike by `query` and by `execute`, a TINYINT(1) holding 0, 1, 2
+  and -1 and a BOOLEAN holding TRUE read as `Int` by both, parameters (a hostile text
   selects nothing), a read-only session refusing an INSERT, a pool of two connections under
   three tasks with a killed connection taken out, and the read timeout. It is not `#[ignore]`:
   it runs where `docker version` succeeds and the image is present (`docker pull mysql:8.0`),
