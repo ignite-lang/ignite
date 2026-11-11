@@ -2212,8 +2212,9 @@ pub fn render_site_page(baseline: &Baseline, history: &[Record]) -> String {
         "# Quality\n\n\
 <!-- Generated from quality/baseline.json and quality/history.jsonl by `task quality`; site::quality_page_is_generated checks it. -->\n\n\
 Ignite keeps a written set of quality metrics. Today's values are the bar: a merge may not make a\n\
-gated metric worse, a release may not be worse than the release before it, and an improvement is\n\
-written into the bar in the same change, so the bar only moves one way. The list, its kinds and its\n\
+gated metric worse, and an improvement is written into the bar in the same change, so the bar only\n\
+moves one way. A release measures every row against the release before it; a row that is worse is\n\
+tracked: the release notes list it with the story that takes it. The list, its kinds and its\n\
 instruments are in [`docs/quality.md`](https://github.com/ignite-lang/ignite-lang/blob/main/docs/quality.md);\n\
 the bars are in `quality/baseline.json` and every measured value in `quality/history.jsonl`.\n\n\
 - **gate**: a count of failures; the bar is never above today, usually 0.\n\
@@ -2242,8 +2243,8 @@ reference without a bar.\n\n",
 `quality/baseline.json`: a release that adds code may leave a cell of them above the release before\n\
 it when the cell's bar carries a new decision naming the code that added the bytes, and the release\n\
 run lists every such cell. Without that decision, or with one the release before it already held,\n\
-the release is refused. A merge holds these rows to their bars like any other, and bytes are never\n\
-bought with time.\n\n",
+the cell is listed as worse. A merge holds these rows to their bars like any other, and bytes are\n\
+never bought with time.\n\n",
             sizes.join(", ")
         ));
     }
@@ -2450,12 +2451,17 @@ pub struct Grown {
     pub decision: String,
 }
 
-/// What the release check found: every reason the release is refused, and
-/// every grown cell of a size row a decision holds.
+/// What the release check found: every row worse than the last release
+/// (`refused`, the name of the rule before 2026-11-11; [`record`] prints
+/// them as tracked), and every grown cell of a size row a decision holds.
+/// `unjudged` is set when the check had no reference to compare with (the
+/// last release's tag unreadable, or no record of it in the history): then
+/// `refused` says why, and that still stops the release.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Release {
     pub refused: Vec<String>,
     pub grown: Vec<Grown>,
+    pub unjudged: bool,
 }
 
 /// The section of a release run's output that lists `grown`, one line per
@@ -2513,6 +2519,7 @@ pub fn release_judged_against(
     let refuse = |refused: Vec<String>| Release {
         refused,
         grown: Vec::new(),
+        unjudged: true,
     };
     let last_release = last_release.into();
     let released = history.iter().any(|r| r.run.starts_with('v'));
@@ -2655,7 +2662,11 @@ pub fn release_judged_against(
     if let LastRelease::Tag(tag) = &last_release {
         refused.extend(decided_against_the_tag(baseline, at_tag, tag));
     }
-    Release { refused, grown }
+    Release {
+        refused,
+        grown,
+        unjudged: false,
+    }
 }
 
 /// The timing and benchmark bars a `decision` moved worse than the bar of
@@ -2724,10 +2735,39 @@ pub fn run_judged(
     (release, listed)
 }
 
+/// What [`record`] writes to stderr for the rows of the release `run` that
+/// the release check finds worse than at the last release (`worse`, the
+/// `refused` of [`Release`]): they are tracked and refuse no release (the
+/// operator, 2026-11-11: "track the numbers, but let's not block the
+/// release"); the release notes list each with the story that takes it.
+/// Nothing for an empty list.
+pub fn tracked_section(run: &str, worse: &[String]) -> String {
+    if worse.is_empty() {
+        return String::new();
+    }
+    format!(
+        "release {run}: worse than the last release, tracked and not refused:\n  {}\n",
+        worse.join("\n  ")
+    )
+}
+
+#[test]
+fn a_release_prints_its_worse_rows_as_tracked() {
+    assert_eq!(tracked_section("v0.16.0", &[]), "");
+    let worse = [
+        "3.7 llvm/terminal/connect-8: 1.099 at the last release, 1.282 now".to_string(),
+        "1.2 eval: 770 at the last release, 771 now".to_string(),
+    ];
+    assert_eq!(
+        tracked_section("v0.16.0", &worse),
+        "release v0.16.0: worse than the last release, tracked and not refused:\n  3.7 llvm/terminal/connect-8: 1.099 at the last release, 1.282 now\n  1.2 eval: 770 at the last release, 771 now\n"
+    );
+}
+
 /// The records [`record`] appends to the history for the run `label`: one
 /// per value. Under a release's label the record of a cell in `grown`
 /// carries the decision that holds it, which the release's row of the trend
-/// is generated from; a refused release is labelled `run` and carries none.
+/// is generated from.
 pub fn run_records(
     values: &[Value],
     grown: &[Grown],
@@ -2765,9 +2805,10 @@ pub fn run_records(
 
 /// `task quality`: read every source's measured values from
 /// `target/quality/` (the gate tests and `ignite-perf quality` wrote them),
-/// refuse a release (`IGNITE_QUALITY_RUN=vX.Y.Z`) whose count rows are worse
-/// than the last, print the cells of a size row a decision lets grow
-/// ([`grown_section`], refused or not), append one record per metric and target to
+/// print the rows of a release (`IGNITE_QUALITY_RUN=vX.Y.Z`) that are worse
+/// than at the last ([`tracked_section`]: tracked, the release is not refused
+/// by them), print the cells of a size row a decision lets grow
+/// ([`grown_section`]), append one record per metric and target to
 /// `quality/history.jsonl` with its `host` (`IGNITE_QUALITY_HOST`, default
 /// `local`) and regenerate `quality/trend.md`, the table of
 /// `docs/quality.md` and the book page. The sizes of `ignite-perf quality`
@@ -2806,8 +2847,21 @@ fn record() {
     let mut errors = check(&baseline, "perf", &perf, None);
     let run = std::env::var("IGNITE_QUALITY_RUN").unwrap_or_else(|_| "run".to_string());
     let history = read_history();
-    let (Release { refused, grown }, listed) =
-        run_judged(&run, &baseline, &history, &values, last_release_tag(&run));
+    let (
+        Release {
+            refused,
+            grown,
+            unjudged,
+        },
+        listed,
+    ) = run_judged(&run, &baseline, &history, &values, last_release_tag(&run));
+    // Rows worse than the last release are tracked. A check that compared
+    // nothing has no rows: what it says stops the release.
+    let (worse, stops) = if unjudged {
+        (Vec::new(), refused)
+    } else {
+        (refused, Vec::new())
+    };
     // Written to stderr itself, not with `eprintln!`: the harness captures
     // that of a passing test, and a release that passes still shows its
     // grown cells.
@@ -2824,7 +2878,10 @@ fn record() {
             .unwrap()
             .as_secs(),
     );
-    let label = if refused.is_empty() {
+    std::io::stderr()
+        .write_all(tracked_section(&run, &worse).as_bytes())
+        .unwrap();
+    let label = if stops.is_empty() {
         run.clone()
     } else {
         "run".to_string()
@@ -2837,9 +2894,9 @@ fn record() {
     std::fs::write(history_path(), text).unwrap();
     write_pages(&baseline, &read_history());
     errors.extend(
-        refused
+        stops
             .iter()
-            .map(|e| format!("release {run} refused: {e}")),
+            .map(|e| format!("release {run} was compared with no release: {e}")),
     );
     assert!(
         errors.is_empty(),
@@ -5541,5 +5598,66 @@ fn the_release_run_reads_the_tags_decisions_and_returns_its_list() {
         listed,
         list.replace("v0.1.0", "v99.0.0"),
         "the list against the baseline at {tag}"
+    );
+}
+
+// ---- rule adversary 1: a release that tracks its worse rows -------------
+
+/// A release whose check compared no row: the tag of the last release could
+/// not be read, or the tag has no record in the history. `record` prints as
+/// tracked, and records under the release's label, only what a check without
+/// `unjudged` found; with it what the check says stops the release
+/// and the run is labelled `run`. Row 4.2 stands at 9 here and at 1 at the
+/// last release. (The adversary's case, moved onto the field `record` reads.)
+#[test]
+fn rule_adv1_a_release_that_compared_no_row_is_not_printed_as_tracked() {
+    let baseline = baseline_of(&[(
+        "4.2",
+        metric(Direction::Lower, Tolerance::Count(0), &[("rust", 1)]),
+    )]);
+    let released = vec![
+        release_record("bar", "a", 1),
+        release_record("v0.15.0", "b", 1),
+    ];
+    let unrecorded = vec![
+        release_record("bar", "a", 1),
+        release_record("v0.14.0", "b", 1),
+    ];
+    let cases = [
+        (
+            "the tag lookup failed",
+            &released,
+            LastRelease::Unreadable("git: No such file or directory".to_string()),
+        ),
+        ("no tag is fetched", &released, LastRelease::NoTag),
+        (
+            "the tag has no record in the history",
+            &unrecorded,
+            LastRelease::Tag("v0.15.0".to_string()),
+        ),
+    ];
+    let mut passed = Vec::new();
+    for (case, history, lookup) in cases {
+        let (release, _) = run_judged("v0.16.0", &baseline, history, &[gaps(9)], lookup);
+        assert_eq!(release.refused.len(), 1, "{case}: {release:?}");
+        if !release.unjudged {
+            passed.push(format!("{case}: {:?}", release.refused));
+        }
+    }
+    let (compared, _) = run_judged(
+        "v0.16.0",
+        &baseline,
+        &released,
+        &[gaps(9)],
+        LastRelease::Tag("v0.15.0".to_string()),
+    );
+    assert!(
+        !compared.unjudged && compared.refused.len() == 1,
+        "a release compared with its last release, one row worse: {compared:?}"
+    );
+    assert!(
+        passed.is_empty(),
+        "a release whose check compared no row (4.2 rust: 1 at the last release, 9 now) is printed as a tracked row, recorded under its label and passed:\n  {}",
+        passed.join("\n  ")
     );
 }

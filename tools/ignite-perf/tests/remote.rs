@@ -1294,11 +1294,11 @@ fn the_release_judgement_reads_the_bases_baseline_and_returns_what_it_prints() {
     );
     assert_eq!(carried.listed, "", "a refused cell is listed");
     assert!(
-        carried.refusal.starts_with(
-            "release v0.16.0 refused:\n  3.9 rust/todo: 0.723× at the base, 0.864× now"
-        ) && carried.refusal.ends_with('\n'),
+        carried.tracked.starts_with(
+            "release v0.16.0: worse than the base, tracked and not refused:\n  3.9 rust/todo: 0.723× at the base, 0.864× now"
+        ) && carried.tracked.ends_with('\n'),
         "the refusal the run prints: {:?}",
-        carried.refusal
+        carried.tracked
     );
 
     std::fs::write(
@@ -1318,7 +1318,7 @@ fn the_release_judgement_reads_the_bases_baseline_and_returns_what_it_prints() {
         ),
         "the list the run prints"
     );
-    assert_eq!((passed.note.as_str(), passed.refusal.as_str()), ("", ""));
+    assert_eq!((passed.note.as_str(), passed.tracked.as_str()), ("", ""));
 
     let unread = remote::judge_release(&root, "v0.0.0", "v0.16.0", &rows).unwrap();
     assert!(
@@ -1345,5 +1345,74 @@ fn the_release_judgement_reads_the_bases_baseline_and_returns_what_it_prints() {
     assert!(
         remote::judge_release(&root, "HEAD", "v0.16.0", &rows).is_err(),
         "a repository without a baseline was judged"
+    );
+}
+
+/// Rule adversary 1: a release run with one size cell a new decision holds and one size cell
+/// that is worse without a decision. Since 2026-11-11 the run keeps the release's label and
+/// passes the held cells to its records whatever else it lists: the held cell's record carries
+/// its decision, the worse cell's carries none, and both are printed, each in its own list.
+#[test]
+fn rule_adv1_a_held_cell_and_a_worse_cell_of_one_run_are_recorded_apart() {
+    let decision = "story:x (2026-11-11): the TLS client session adds the bytes";
+    let root = repository_with_baseline(
+        "rule-adv1-held-and-worse",
+        Some(&size_baseline(None).dumps(true)),
+    );
+    let rows = [
+        row("3.9", "rust/todo", &[723], &[864]),
+        row("3.9", "llvm/todo", &[720], &[900]),
+    ];
+    std::fs::write(
+        root.join("quality/baseline.json"),
+        size_baseline(Some(decision)).dumps(true),
+    )
+    .unwrap();
+    let judgement = remote::judge_release(&root, "HEAD", "v0.16.0", &rows).unwrap();
+    assert_eq!(
+        judgement
+            .judged
+            .held
+            .iter()
+            .map(|cell| cell.target.as_str())
+            .collect::<Vec<_>>(),
+        ["rust/todo"],
+        "{judgement:?}"
+    );
+    assert!(
+        judgement.tracked.starts_with(
+            "release v0.16.0: worse than the base, tracked and not refused:\n  3.9 llvm/todo: 0.720× at the base, 0.900× now"
+        ) && !judgement.tracked.contains("rust/todo"),
+        "{:?}",
+        judgement.tracked
+    );
+    assert!(
+        judgement.listed.contains("3.9 rust/todo") && !judgement.listed.contains("llvm/todo"),
+        "{:?}",
+        judgement.listed
+    );
+    let machine = Json::parse(r#"{"instance_type":"c7i.large"}"#).unwrap();
+    let lines = remote::history_lines_held(
+        &rows,
+        &machine,
+        "b0",
+        "h1",
+        "v0.16.0",
+        "2026-11-11",
+        &judgement.judged.held,
+    );
+    assert!(
+        lines[0].contains(&format!(r#""decision":"{decision}""#))
+            && lines[0].contains(r#""run":"v0.16.0""#)
+            && lines[0].contains(r#""target":"rust/todo""#),
+        "{}",
+        lines[0]
+    );
+    assert!(
+        !lines[1].contains("decision")
+            && lines[1].contains(r#""run":"v0.16.0""#)
+            && lines[1].contains(r#""target":"llvm/todo""#),
+        "{}",
+        lines[1]
     );
 }

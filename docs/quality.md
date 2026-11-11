@@ -82,13 +82,22 @@ listed it, one `main` does not already hold for it. Every outcome of a run is in
 
 ## `task quality` and releases
 
+Rule since 2026-11-11 (the operator: "Let's just track the numbers, but let's not block the
+release"): no measured number refuses a release. Where this document says that a release run
+"refuses" a row or a cell, the run computes that list as before and prints it as `worse than the
+last release, tracked and not refused` (`task quality RUN=vX.Y.Z`, on stderr) or `worse than the
+base, tracked and not refused` (`task quality-remote RUN=vX.Y.Z`, on stdout); it records the run
+under the release's label and exits 0. The release notes list every such row with its value at
+the last release, its value now and the id of the story that takes it. A merge is judged as
+before: `task gate` holds every bar.
+
 `task quality` measures every instrumented metric once: the three per-merge tests, then
 `ignite-perf quality`, then `quality::record`, which appends the run to `quality/history.jsonl`
 with its host and regenerates `quality/trend.md`, the table below and the book page.
 `IGNITE_BLESS=1 task quality` writes improvements of the count rows into the bars and gives a
 timing row without a bar its first value. With `RUN=vX.Y.Z` the run is a release:
-`quality::record` refuses it when a row is worse than at the last release by any amount, and
-then records the run as `run`, not as the release. The last release is the one that was
+`quality::record` prints a row that is worse than at the last release by any amount as tracked
+(`quality::tracked_section`) and records the run as the release. The last release is the one that was
 published: the nearest `v*` tag reachable from HEAD (`git describe`) other than the candidate,
 and its values are the history's last local run under that label; records under any other `v*` label (a candidate
 the gate refused, the candidate itself) are never the reference, a tag without a record in the
@@ -216,17 +225,13 @@ Timing on the shared workstation is not comparable between runs, so the timing r
   decides; where they do not, the row is worse. With 5 passes two equal builds have disjoint
   samples on one row by chance in 1 of 252 runs (1 of 20 with 3). A run judges 41 noisy rows (5
   timing rows, 36 llvm and rust benchmark rows), so if the rows are independent two equal
-  builds are refused by this rule in about 15 % of runs. A release needs every row unrefused.
-  A row refused beyond its tolerance stands at once. A row refused only by the every-sample-worse
-  rule, inside its tolerance, is measured in one further run of `task quality-remote` with the
-  same BASE and HEAD; a row two runs refuse stands; a row refused for the first time in the
-  second run gets one third run under the same rule; a release candidate has at most three runs,
-  and after the third every row refused in it stands. This is an operator procedure: no code
-  enforces it. A release run takes at least 5 passes (`--passes`, `--bench-passes`; fewer is an error before
+  builds show a row by this rule in about 15 % of runs. A row found this way is printed as
+  tracked and listed in the release notes with its story (the rule at the head of section
+  "`task quality` and releases"); a release has one run. A release run takes at least 5 passes (`--passes`, `--bench-passes`; fewer is an error before
   anything starts). No `decision` holds a row, the size row 3.9 by a new decision excepted
-  ("Against plain Rust", Releases). A refused run's records are labelled `run`, and
-  the mode exits 1. Both trees are measured on the same host in the same run, so the refusal
-  does not compare across machines.
+  ("Against plain Rust", Releases). The run's records carry the release's label and the mode
+  exits 0. Both trees are measured on the same host in the same run, so the comparison is not
+  across machines.
 - **Cost.** The first run (BASE = HEAD, an A/A run) took 0.23 instance-hours from launch to
   terminated, 0.23 USD at the spot price, of which about 7 minutes were the termination; its
   passes agreed within 0.3 %. Each record carries its run's cost (`machine`).
@@ -276,7 +281,7 @@ behaviour (`bench/native/`, rows 3.3, 3.7, 3.8 and 3.9), after the timing rows
   improvement is written into them (`IGNITE_BLESS=1`).
 - **Releases.** With `RUN=vX.Y.Z` a row whose HEAD ratio is worse than BASE's in the same run beyond
   the metric's tolerance (3.3 10 %, 3.7 20 %, 3.8 10 %, 3.9 5 %), or worse in every pass than
-  every pass of BASE, refuses the release, as a timing row does. Row 3.9 is a size row
+  every pass of BASE, is printed as tracked, as a timing row is. Row 3.9 is a size row
   (`"release_growth": "decision"`, section "`task quality` and releases"): a cell of it that
   would be refused is held when its bar in `quality/baseline.json` carries a new `decision`, and
   the run prints it on stdout (`release vX.Y.Z: the size row above the base`: the cell, BASE's

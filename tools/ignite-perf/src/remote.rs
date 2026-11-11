@@ -27,10 +27,12 @@
 //! BASE's median as `base_value`. The record names no instance, account or zone. With
 //! `--run vX.Y.Z` the run is a release: a row whose HEAD median is worse than BASE's (the last
 //! release, measured on the same host in the same run) beyond the metric's tolerance in
-//! `quality/baseline.json`, or worse in every pass than every pass of BASE, refuses it, and the
-//! records are labelled `run`. A cell of the size row (3.9) that is worse is held by a new
-//! `decision` on its bar, one `quality/baseline.json` at BASE does not hold, and printed instead
-//! ([`judge`]).
+//! `quality/baseline.json`, or worse in every pass than every pass of BASE, is printed as
+//! worse than the base and tracked: it does not refuse the release (the operator, 2026-11-11:
+//! "track the numbers, but let's not block the release"), the records keep the release's
+//! label and the mode exits 0. A cell of the size row (3.9) that is worse is held by a new
+//! `decision` on its bar, one `quality/baseline.json` at BASE does not hold, and printed as
+//! held ([`judge`]); without one it is among the tracked rows.
 //!
 //! `--dry-run` makes the read-only calls, makes every call that creates with EC2's
 //! `--dry-run` (the answer `DryRunOperation` is success) and prints the rest without making
@@ -104,7 +106,7 @@ pub struct RemoteArgs {
     /// `$XDG_CACHE_HOME/ignite/quality-remote/<run id>`.
     #[arg(long)]
     pub state: Option<PathBuf>,
-    /// `bar`, `vX.Y.Z` (a release, refused when worse than BASE) or `run`.
+    /// `bar`, `vX.Y.Z` (a release: its rows worse than BASE are printed as tracked) or `run`.
     #[arg(long, default_value = "run")]
     pub run: String,
 }
@@ -1639,7 +1641,8 @@ pub fn refusals(baseline: &Json, rows: &[Row]) -> R<Vec<String>> {
     Ok(judge(baseline, None, rows)?.refused)
 }
 
-/// What a release run found: every reason the release is refused, and every grown cell of the
+/// What a release run found: every row worse than the base (`refused`, the name of the rule
+/// before 2026-11-11: the run prints them as tracked and refuses nothing), and every grown cell of the
 /// size row a decision holds, one line each (the cell, BASE's value, HEAD's, the decision).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Judged {
@@ -1714,8 +1717,9 @@ pub struct ReleaseJudgement {
     pub note: String,
     /// For stdout: the grown cells of the size row, each with the decision that holds it.
     pub listed: String,
-    /// For stderr: the refusals.
-    pub refusal: String,
+    /// For stdout: the rows worse than the base ([`Judged::refused`]). They are tracked and
+    /// refuse no release: the release notes list each with the story that takes it.
+    pub tracked: String,
 }
 
 /// The release path of a run: for `run` `vX.Y.Z` the `rows` judged ([`judge`]) against
@@ -1745,11 +1749,11 @@ pub fn judge_release(repo: &Path, base: &str, run: &str, rows: &[Row]) -> R<Rele
             judged.grown.join("\n  ")
         )
     };
-    let refusal = if judged.refused.is_empty() {
+    let tracked = if judged.refused.is_empty() {
         String::new()
     } else {
         format!(
-            "release {run} refused:\n  {}\n",
+            "release {run}: worse than the base, tracked and not refused:\n  {}\n",
             judged.refused.join("\n  ")
         )
     };
@@ -1757,7 +1761,7 @@ pub fn judge_release(repo: &Path, base: &str, run: &str, rows: &[Row]) -> R<Rele
         judged,
         note,
         listed,
-        refusal,
+        tracked,
     })
 }
 
@@ -2138,8 +2142,7 @@ pub fn main(args: &RemoteArgs) -> R<i32> {
     let baseline = crate::perf::read_json(&args.repo.join("quality/baseline.json"))?;
     let release = judge_release(&args.repo, &base, &args.run, &rows)?;
     eprint!("{}", release.note);
-    let refused = !release.judged.refused.is_empty();
-    let label = if refused { "run" } else { args.run.as_str() };
+    let label = args.run.as_str();
     let lines = history_lines_held(
         &rows,
         &machine(&info),
@@ -2147,7 +2150,7 @@ pub fn main(args: &RemoteArgs) -> R<i32> {
         &head,
         label,
         &civil_date(secs),
-        if refused { &[] } else { &release.judged.held },
+        &release.judged.held,
     );
     let history = args.repo.join("quality/history.jsonl");
     let mut file = fs::OpenOptions::new()
@@ -2197,9 +2200,6 @@ pub fn main(args: &RemoteArgs) -> R<i32> {
     }
     println!("appended {} records to {}", lines.len(), history.display());
     print!("{}", release.listed);
-    if refused {
-        eprint!("{}", release.refusal);
-        return Ok(1);
-    }
+    print!("{}", release.tracked);
     Ok(0)
 }
