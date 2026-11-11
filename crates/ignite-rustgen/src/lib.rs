@@ -7380,6 +7380,30 @@ fn toml_string(text: &str) -> String {
 const RELEASE_PROFILE: &str =
     "\n[profile.release]\noverflow-checks = true\ncodegen-units = 1\nlto = true\n";
 
+/// The generated crate's dev profile: the crates from outside the project
+/// (`ignite-io` and what it needs: `nix`, `libc`, the scheduler's
+/// coroutines) carry no debug information whatever the profile's own
+/// `debug`, `ignite-io` line tables only, so a backtrace still names its
+/// frames' files and lines. A fresh build compiles them all, and on a
+/// host without cargo configuration full debug information was a third of
+/// the work of compiling `ignite-io` (row 6.2 of `docs/quality.md`, story
+/// `build-time-back`). The members, the program and `ignite-std`, get line
+/// tables by name ([`dev_member_profile`]).
+const DEV_PROFILE: &str = "\n[profile.dev.package.\"*\"]\ndebug = false\n\n[profile.dev.package.ignite-io]\ndebug = \"line-tables-only\"\n";
+
+/// The dev profile of a member of the generated project, `package`: line
+/// tables, enough for a backtrace's files and lines, instead of the
+/// profile's own `debug` (full on a host without cargo configuration),
+/// which cost a fifth of compiling the program and `ignite-std` (row 6.2).
+/// A package table, unlike `[profile.dev] debug`, is not overridden by
+/// `CARGO_PROFILE_DEV_DEBUG`.
+fn dev_member_profile(package: &str) -> String {
+    format!(
+        "\n[profile.dev.package.{}]\ndebug = \"line-tables-only\"\n",
+        toml_string(package)
+    )
+}
+
 fn cargo_toml(
     package_name: &str,
     lib_rs: &str,
@@ -7400,6 +7424,11 @@ fn cargo_toml(
     out.push_str("edition = \"2024\"\n");
     out.push_str("\n[workspace]\n");
     out.push_str(RELEASE_PROFILE);
+    out.push_str(DEV_PROFILE);
+    out.push_str(&dev_member_profile(package_name));
+    if uses_std {
+        out.push_str(&dev_member_profile(STD_PACKAGE));
+    }
     out.push_str("\n[lib]\n");
     let lib = crate_name(package_name);
     if lib != package_name.replace('-', "_") {

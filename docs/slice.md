@@ -773,6 +773,7 @@ For `ignite build terminal.ignite --target rust --out DIR` (the default target u
 ```
 DIR/Cargo.toml          [package] name = <package last segment>, edition 2024, [workspace] empty,
                         [profile.release] overflow-checks = true, codegen-units = 1, lto = true (release size, `docs/quality.md` row 3.2)
+                        [profile.dev.package."*"] debug = false, [profile.dev.package.ignite-io] debug = "line-tables-only", [profile.dev.package."<package>"] and, with std, [profile.dev.package."ignite-std"] debug = "line-tables-only" (the crates from outside the project without debug information, `ignite-io` and the members with line tables for backtraces; build time, row 6.2)
                         [dependencies] ignite-io = { path = <substrate> }, ignite-std = { path = "std" } when the program imports a std module
                         one [[bin]] per component: name = executable, path = src/bin/<executable>.rs
 DIR/src/lib.rs          the program's imports as `use`, every type, enum, protocol and fn
@@ -782,7 +783,10 @@ DIR/std/src/lib.rs      one nested `pub mod` per std module (`pub mod protocol {
 ```
 
 Every `.ignite` file under the standard-library root is part of `ignite-std`, checked in
-import order. `ignite build` then runs `cargo build --manifest-path DIR/Cargo.toml
+import order. When `DIR/Cargo.lock` does not exist, the build copies the lock of the
+workspace the substrate lives in (`<substrate>/../../Cargo.lock`, when there is one) to it,
+so cargo resolves from its versions and the local cache instead of asking the registry
+(row 6.2). `ignite build` then runs `cargo build --manifest-path DIR/Cargo.toml
 --target-dir TARGET` with `TARGET` from `--target-dir` (default `DIR/target`) and prints one
 line per built executable: `built TARGET/debug/<executable>`. Exit status: 0 built, 1
 diagnostics (in any file, rendered with that file's path), 2 cargo failed (its output passed
@@ -11255,3 +11259,41 @@ Story `http-reply-cost-back` (rows 3.3 `rust/todo/get-1` and 3.8 `todo/get-1` of
   each of its servers answers its only connection: 1 without `reply` (2 before), 2 with one (as
   before).
 - `valgrind` is a prerequisite of `reply_cost::`, as `strace` is of `scheduler::`.
+
+## NN A dev build, a check and a plan take no longer than at v0.15.0
+
+Story `build-time-back`: rows 6.2 (`llvm`, `rust`), 6.1 (`all/check`, `all/plan`) and the dev
+cells of 3.2 of `docs/quality.md` at v0.15.0 or better. The dedicated host has no cargo
+configuration, so its dev profile has full debug information; every rule below holds for it
+and for a configured `debug` alike.
+
+- Runtime archive. The workspace's dev profile builds every crate from outside the workspace
+  without debug information (`[profile.dev.package."*"] debug = false`) and `ignite-rt` and
+  `ignite-io` with line tables (`debug = "line-tables-only"`); it replaces the five `debug =
+  false` lines of the TLS engine's crates. `ring`'s build script compiles its C and assembly
+  with `-g3` in every profile, so `.cargo/config.toml` sets `CFLAGS = "-g0"`, which `cc`
+  passes last (a `CFLAGS` of the environment wins). A dev executable on the LLVM target holds no compile
+  unit of a third-party crate (`dev_build::dev_todod_links_no_third_party_debug_information`,
+  with the archive built as configured and with `CARGO_PROFILE_DEV_DEBUG=2`).
+- Linker. A dev build on the LLVM target without `--triple` and `--static` links with
+  `-fuse-ld=lld` when `ld.lld` lies beside the clang it runs, its symbolic links resolved, and
+  with clang's default linker otherwise (`docs/llvm.md` section 1); both carry a build id
+  (`dev_build::dev_link_uses_lld_beside_clang_else_the_default_linker`). The dedicated host
+  installs `lld-<major>` of the LLVM it installs (`tools/ignite-perf/src/remote-user-data.sh`,
+  `remote::the_host_installs_lld_beside_its_clang`).
+- Rust target. The generated `Cargo.toml` builds the crates from outside the project without
+  debug information and `ignite-io`, the program and `ignite-std` with line tables (section
+  6.2), whatever the profile's own `debug`; a build or a test build into
+  a directory without `Cargo.lock` starts from the substrate workspace's lock, so cargo makes no
+  index request (`dev_build::fresh_rust_build_makes_no_index_request`).
+- Loader. The dependencies of each module (`module_dependencies`) are computed once per load
+  and kept with the parsed module (`dependency_scan_tests::check_and_plan_scan_each_module_once`
+  in `crates/ignite/src/lib.rs`); `plan.json` of the terminal design is unchanged
+  (`plan::design_model_is_byte_identical_across_processes_and_directories`).
+- Backtraces. Under `gdb`, a dev executable that fails names file and line of the Ignite fn
+  and of `ignite-rt`'s and `ignite-io`'s frames on the LLVM target, and of `ignite-io`'s and
+  the generated program's frames on the Rust target, whose failure report names the Ignite
+  line (`dev_build::dev_backtrace_names_ignite_and_substrate_lines_on_both_targets`).
+- Not taken: `incremental = false` in the generated dev profile (`ignite-perf` builds with
+  `CARGO_INCREMENTAL=0` already, so row 6.2 would not see it, and a user's rebuild would lose
+  it); `nix` without its `socket` feature, which needs four `unsafe` calls (row 3.6).

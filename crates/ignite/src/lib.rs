@@ -399,6 +399,13 @@ fn builtin_dependencies(source: &SourceFile, own: Option<&str>) -> BTreeSet<Stri
         .collect()
 }
 
+#[cfg(test)]
+thread_local! {
+    /// The [`module_dependencies`] calls of this thread, by module path.
+    static DEPENDENCY_SCANS: std::cell::RefCell<BTreeMap<String, usize>> =
+        const { std::cell::RefCell::new(BTreeMap::new()) };
+}
+
 /// Imports and literal `module("p")` calls are dependencies before typing:
 /// module records resolve their functions without an accompanying import.
 /// Walk expression chains iteratively, including defaults and test bodies.
@@ -409,6 +416,14 @@ fn builtin_dependencies(source: &SourceFile, own: Option<&str>) -> BTreeSet<Stri
 /// `std.net`, `docs/slice.md` 26.1).
 fn module_dependencies(program: &Program, source: &SourceFile) -> BTreeSet<String> {
     use ignite_syntax::ast::{Block, Decl, Expr, ExprKind, StmtKind};
+
+    #[cfg(test)]
+    DEPENDENCY_SCANS.with(|scans| {
+        *scans
+            .borrow_mut()
+            .entry(program_module(program))
+            .or_default() += 1;
+    });
 
     enum Node<'a> {
         Expr(&'a Expr),
@@ -634,6 +649,27 @@ struct Parsed {
     path: String,
     source: SourceFile,
     program: Program,
+    /// [`module_dependencies`] of the module, computed once: the loader
+    /// asks for them when it follows the module's imports and again when
+    /// it orders the modules ([`import_order`]), and computing them lexes
+    /// the module's text.
+    dependencies: std::sync::OnceLock<BTreeSet<String>>,
+}
+
+impl Parsed {
+    fn new(path: String, source: SourceFile, program: Program) -> Self {
+        Self {
+            path,
+            source,
+            program,
+            dependencies: std::sync::OnceLock::new(),
+        }
+    }
+
+    fn dependencies(&self) -> &BTreeSet<String> {
+        self.dependencies
+            .get_or_init(|| module_dependencies(&self.program, &self.source))
+    }
 }
 
 /// `std.a.b` is `<root>/a/b.ignite`; `None` for a path outside `std`.
@@ -710,19 +746,15 @@ fn load_modules(
         let source = read_source(&file)?;
         let program = parse(&source)?;
         check_package(&path, &source, &program)?;
+        let module = Parsed::new(path.clone(), source, program);
         pending.extend(
-            module_dependencies(&program, &source)
-                .into_iter()
-                .filter(|module| !seen.contains(module)),
+            module
+                .dependencies()
+                .iter()
+                .filter(|module| !seen.contains(*module))
+                .cloned(),
         );
-        parsed.insert(
-            path.clone(),
-            Parsed {
-                path,
-                source,
-                program,
-            },
-        );
+        parsed.insert(path, module);
     }
 
     let order = import_order(&parsed)?;
@@ -733,6 +765,7 @@ fn load_modules(
             path,
             source,
             program,
+            ..
         } = parsed.remove(&path).expect("ordered modules are parsed");
         let symbols =
             ignite_check::check_module(&program, &checked).map_err(|d| diagnostics(&source, d))?;
@@ -774,9 +807,10 @@ fn import_order(parsed: &BTreeMap<String, Parsed>) -> Result<Vec<String>, Error>
     let edges: BTreeMap<&str, BTreeSet<&str>> = parsed
         .iter()
         .map(|(path, module)| {
-            let targets = module_dependencies(&module.program, &module.source)
-                .into_iter()
-                .filter_map(|m| parsed.get_key_value(&m).map(|(k, _)| k.as_str()))
+            let targets = module
+                .dependencies()
+                .iter()
+                .filter_map(|m| parsed.get_key_value(m).map(|(k, _)| k.as_str()))
                 .collect();
             (path.as_str(), targets)
         })
@@ -1008,13 +1042,13 @@ impl ParsedFile {
     /// Every module the program and its siblings import, standard-library
     /// or not; the loader skips the ones that are no standard-library file.
     fn std_modules(&self) -> impl Iterator<Item = String> + '_ {
-        std::iter::once((&self.program, &self.source))
+        module_dependencies(&self.program, &self.source)
+            .into_iter()
             .chain(
                 self.siblings
                     .values()
-                    .map(|sibling| (&sibling.program, &sibling.source)),
+                    .flat_map(|sibling| sibling.dependencies().iter().cloned()),
             )
-            .flat_map(|(program, source)| module_dependencies(program, source))
     }
 }
 
@@ -1084,14 +1118,7 @@ fn parse_siblings(file: &Path, program: &Program) -> Result<BTreeMap<String, Par
             continue;
         }
         let program = parse(&source)?;
-        parsed.insert(
-            path.clone(),
-            Parsed {
-                path,
-                source,
-                program,
-            },
-        );
+        parsed.insert(path.clone(), Parsed::new(path, source, program));
     }
     let parent = file
         .file_stem()
@@ -1142,14 +1169,7 @@ fn parse_siblings(file: &Path, program: &Program) -> Result<BTreeMap<String, Par
             continue;
         };
         wanted.extend(imports(&program));
-        parsed.insert(
-            path.clone(),
-            Parsed {
-                path,
-                source,
-                program,
-            },
-        );
+        parsed.insert(path.clone(), Parsed::new(path, source, program));
     }
     Ok(parsed)
 }
@@ -1170,6 +1190,7 @@ fn check_siblings(
             path,
             source,
             program,
+            ..
         } = parsed.remove(&path).expect("ordered modules are parsed");
         let symbols =
             ignite_check::check_module(&program, &modules).map_err(|d| diagnostics(&source, d))?;
@@ -2007,7 +2028,7 @@ pub fn build(file: &Path, options: &BuildOptions) -> Result<BuildOutput, Error> 
         .substrate
         .clone()
         .unwrap_or_else(default_substrate_path);
-    let emitted = generate(parsed, &library, substrate)?;
+    let emitted = generate(parsed, &library, substrate.clone())?;
     let project = emitted.program;
     let out = options.out.clone().unwrap_or_else(|| {
         Path::new("target")
@@ -2017,6 +2038,7 @@ pub fn build(file: &Path, options: &BuildOptions) -> Result<BuildOutput, Error> 
     ignite_rustgen::write_project(&project, &out).map_err(io_error(&out))?;
     let std_out = out.join("std");
     ignite_rustgen::write_project(&emitted.std, &std_out).map_err(io_error(&std_out))?;
+    seed_lock(&substrate, &out)?;
     let target_dir = options
         .target_dir
         .clone()
@@ -2050,6 +2072,26 @@ pub fn build(file: &Path, options: &BuildOptions) -> Result<BuildOutput, Error> 
         project_dir: out,
         executables,
     })
+}
+
+/// Give a generated project at `out` that has no `Cargo.lock` the lock of
+/// the workspace its `ignite-io` (`substrate`) lives in,
+/// `<substrate>/../../Cargo.lock`, when there is one (`docs/slice.md` 6.2).
+/// Cargo then takes the locked versions from its local cache instead of
+/// asking the registry's index about every dependency of `ignite-io`,
+/// drops the entries the project does not use and writes the lock back.
+/// Without it every build into a fresh `--out` resolves over the network
+/// (row 6.2 of `docs/quality.md`, story `build-time-back`). A project
+/// that has a lock keeps it.
+pub(crate) fn seed_lock(substrate: &Path, out: &Path) -> Result<(), Error> {
+    let lock = out.join("Cargo.lock");
+    let workspace = substrate.join("../../Cargo.lock");
+    if lock.exists() || !workspace.is_file() {
+        return Ok(());
+    }
+    std::fs::copy(&workspace, &lock)
+        .map(drop)
+        .map_err(io_error(&lock))
 }
 
 /// Where cargo writes the executables of a build into `target_dir`:
@@ -2239,4 +2281,39 @@ pub(crate) fn emit_llvm_with(
     };
     let generated = ignite_llvm::generate_with(&std_inputs, &program, &options);
     Ok((package, generated))
+}
+
+#[cfg(test)]
+mod dependency_scan_tests {
+    use super::*;
+
+    /// Row 6.1 (story `build-time-back`): `ignite check` and `ignite plan`
+    /// of the terminal design scan the dependencies of each module, the
+    /// program, its siblings and every standard-library module they reach,
+    /// once: the loader asks for them when it follows the imports and again
+    /// when it orders the modules, and a scan lexes the module's text.
+    #[test]
+    fn check_and_plan_scan_each_module_once() {
+        let design = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../examples/terminal/terminal.design.ignite");
+        for command in ["check", "plan"] {
+            DEPENDENCY_SCANS.with(|scans| scans.borrow_mut().clear());
+            match command {
+                "check" => check(&design).unwrap_or_else(|error| panic!("{error}")),
+                _ => drop(
+                    plan(&design, &PlanOptions::default())
+                        .unwrap_or_else(|error| panic!("{error}")),
+                ),
+            }
+            let scans = DEPENDENCY_SCANS.with(|scans| scans.borrow().clone());
+            assert!(scans.len() > 10, "{command}: {scans:?}");
+            let repeated: Vec<(&String, &usize)> =
+                scans.iter().filter(|(_, count)| **count != 1).collect();
+            assert!(
+                repeated.is_empty(),
+                "{command}: modules scanned more than once of {}: {repeated:?}",
+                scans.len()
+            );
+        }
+    }
 }

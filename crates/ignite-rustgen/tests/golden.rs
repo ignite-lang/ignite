@@ -142,6 +142,13 @@ fn system_with_server_and_client() {
     let project = check_program("services", &common::golden_std(), false);
     assert_eq!(executable_names(&project), ["greeter", "readerc"]);
     assert!(project.cargo_toml.contains("ignite-std"));
+    assert!(
+        project
+            .cargo_toml
+            .contains("\n[profile.dev.package.\"ignite-std\"]\ndebug = \"line-tables-only\"\n"),
+        "{}",
+        project.cargo_toml
+    );
     let reader = norm(&project.executables[1].source);
     assert!(
         reader.contains("let __endpoint_back = Endpoint { address: String::from(\"0.0.0.0\"), port: __port.unwrap_or(7001) };"),
