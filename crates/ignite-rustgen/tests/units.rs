@@ -1287,13 +1287,19 @@ fn table<'a>(manifest: &'a str, name: &str) -> Vec<&'a str> {
 /// line tables too, by name, which the dev profile's own `debug` (full on
 /// a host without cargo configuration, or `CARGO_PROFILE_DEV_DEBUG`) does
 /// not override. A program without std names no `ignite-std` table, which
-/// cargo would warn about.
+/// cargo would warn about. Build scripts and what they need (`autocfg`)
+/// are built without debug assertions and overflow checks: compiling and
+/// running them is on the way to the program's first build.
 #[test]
 fn dev_profile_builds_dependencies_without_debug_information() {
     let project = try_generate(vec![]).expect("generates");
     assert_eq!(
         table(&project.cargo_toml, "profile.dev.package.\"*\""),
         ["debug = false"]
+    );
+    assert_eq!(
+        table(&project.cargo_toml, "profile.dev.build-override"),
+        ["debug-assertions = false", "overflow-checks = false"]
     );
     assert_eq!(
         table(&project.cargo_toml, "profile.dev.package.ignite-io"),
@@ -1325,6 +1331,7 @@ fn prebuild_manifest_has_the_projects_profiles_and_ignite_io() {
         "profile.release",
         "profile.dev.package.\"*\"",
         "profile.dev.package.ignite-io",
+        "profile.dev.build-override",
     ] {
         assert_eq!(
             table(&manifest, name),

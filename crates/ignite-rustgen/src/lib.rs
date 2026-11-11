@@ -7340,8 +7340,12 @@ const RELEASE_PROFILE: &str =
 /// host without cargo configuration full debug information was a third of
 /// the work of compiling `ignite-io` (row 6.2 of `docs/quality.md`, story
 /// `build-time-back`). The members, the program and `ignite-std`, get line
-/// tables by name ([`dev_member_profile`]).
-const DEV_PROFILE: &str = "\n[profile.dev.package.\"*\"]\ndebug = false\n\n[profile.dev.package.ignite-io]\ndebug = \"line-tables-only\"\n";
+/// tables by name ([`dev_member_profile`]). Build scripts and their
+/// dependencies (`autocfg`, `cfg_aliases`) go without debug assertions and
+/// overflow checks: compiling and running them comes before the crates they
+/// build, and `libc`'s is on the way to the program (80 M instructions of a
+/// fresh build fewer).
+const DEV_PROFILE: &str = "\n[profile.dev.package.\"*\"]\ndebug = false\n\n[profile.dev.package.ignite-io]\ndebug = \"line-tables-only\"\n\n[profile.dev.build-override]\ndebug-assertions = false\noverflow-checks = false\n";
 
 /// The dev profile of a member of the generated project, `package`: line
 /// tables, enough for a backtrace's files and lines, instead of the
