@@ -133,21 +133,21 @@ pub extern "C" fn ignite_rt_init(argc: i32, argv: *const *const c_char) {
 /// A worker's alternate signal stack, given by `ignite-io` to each worker
 /// as it starts: the overflow handler cannot run on the stack that
 /// overflowed, and std gives no thread of a program whose `main` is not
-/// Rust's an alternate stack. A thread that has one already keeps it.
+/// Rust's an alternate stack. A thread that has one already keeps it: the
+/// one `sigaltstack` that gives the new stack also tells the stack before
+/// it, which is put back if there was one (no thread of a program of the
+/// LLVM target has one, so a worker starts with one call, not a call that
+/// asks and a call that gives: `story:readiness-session-cost`).
 fn alternate_signal_stack() {
     use nix::libc;
     const SIZE: usize = 64 * 1024;
     // SAFETY: `sigaltstack` reads and writes the `stack_t` values given;
     // the new stack is a fresh private mapping of `SIZE` bytes that stays
     // mapped for the life of the process (a worker's stack is never given
-    // back, so a signal on it can never land in unmapped memory).
+    // back, so a signal on it can never land in unmapped memory), and is
+    // unmapped here only when the thread does not use it: the call that
+    // would give it failed, or the stack before it is the thread's again.
     unsafe {
-        let mut current: libc::stack_t = std::mem::zeroed();
-        if libc::sigaltstack(std::ptr::null(), &mut current) != 0
-            || current.ss_flags & libc::SS_DISABLE == 0
-        {
-            return;
-        }
         let memory = libc::mmap(
             std::ptr::null_mut(),
             SIZE,
@@ -164,7 +164,15 @@ fn alternate_signal_stack() {
             ss_flags: 0,
             ss_size: SIZE,
         };
-        libc::sigaltstack(&stack, std::ptr::null_mut());
+        let mut before: libc::stack_t = std::mem::zeroed();
+        let given = libc::sigaltstack(&stack, &mut before) == 0;
+        let had_one = given && before.ss_flags & libc::SS_DISABLE == 0;
+        if had_one {
+            libc::sigaltstack(&before, std::ptr::null_mut());
+        }
+        if !given || had_one {
+            libc::munmap(memory, SIZE);
+        }
     }
 }
 

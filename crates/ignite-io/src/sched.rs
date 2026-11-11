@@ -67,7 +67,7 @@ use corosensei::{Coroutine, CoroutineResult, Yielder};
 use nix::sys::eventfd::EventFd;
 
 use crate::reactor::{EpollReactor, Event, Interest, Reactor, Token};
-use crate::wait::{DescriptorWait, WaitList, Waiter, Woken, wake_ready};
+use crate::wait::{DescriptorWait, Limit, WaitList, Waiter, Woken, wake_ready};
 
 /// How the substrate runs tasks (`docs/readiness-io.md` 3.4).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -110,6 +110,22 @@ pub fn worker_limit() -> usize {
                     .unwrap_or(1)
             })
     })
+}
+
+/// What a process whose tasks run on workers does once, however many
+/// tasks it starts, done now: the worker limit (without `IGNITE_WORKERS`,
+/// `std::thread::available_parallelism` reads the process' cgroup files),
+/// the handler of a task's stack overflow and the eventfd that ends the
+/// lone waits ([`escalation`]). Called when the process starts to listen
+/// (`crate::net`), so that its first session does not wait for 30 system
+/// calls no later session makes (`story:readiness-session-cost`). A
+/// process that spawns without listening does each at its first use.
+pub(crate) fn prepare() {
+    if readiness() {
+        worker_limit();
+        crate::signal::install_overflow_handler();
+        escalation();
+    }
 }
 
 /// Stack reserved per task: a thread's default, so recursion depth does not
@@ -161,6 +177,14 @@ pub struct SchedulerCounts {
     /// Notifies that found the worker asleep and woke it (an eventfd write
     /// or an unpark): the system calls of the hand-overs above.
     pub notifies_sent: u64,
+    /// Waits for a connection made around an `accept`: a `poll` off a
+    /// worker, a wait through the reactor on one. Counted in both IO modes.
+    pub accept_waits: u64,
+    /// Clock reads of the scheduler, its reactors and the waits (`sched`,
+    /// `reactor`, `wait`): every one they make, [`read_clock`]. A read of a
+    /// stream that waits alone on its thread makes none for its idle
+    /// timeout (`crate::wait::Limit`). Counted in both IO modes.
+    pub clock_reads: u64,
 }
 
 /// The counts behind [`scheduler_counts`].
@@ -174,6 +198,8 @@ struct Counters {
     workers_started: AtomicU64,
     wakes_across: AtomicU64,
     notifies_sent: AtomicU64,
+    accept_waits: AtomicU64,
+    clock_reads: AtomicU64,
 }
 
 static COUNTERS: Counters = Counters {
@@ -186,6 +212,8 @@ static COUNTERS: Counters = Counters {
     workers_started: AtomicU64::new(0),
     wakes_across: AtomicU64::new(0),
     notifies_sent: AtomicU64::new(0),
+    accept_waits: AtomicU64::new(0),
+    clock_reads: AtomicU64::new(0),
 };
 
 fn count(counter: &AtomicU64) {
@@ -193,8 +221,23 @@ fn count(counter: &AtomicU64) {
     counter.fetch_add(1, Ordering::Relaxed);
 }
 
+/// An `accept` waits for a connection outside its `accept4`
+/// ([`SchedulerCounts::accept_waits`]).
+pub(crate) fn count_accept_wait() {
+    count(&COUNTERS.accept_waits);
+}
+
+/// The instant now: the one way the scheduler, its reactors and the waits
+/// read the clock, counted ([`SchedulerCounts::clock_reads`]).
+#[inline]
+pub(crate) fn read_clock() -> Instant {
+    count(&COUNTERS.clock_reads);
+    Instant::now()
+}
+
 /// The scheduler's counts so far ([`SchedulerCounts`]); all zero in the IO
-/// mode `threads`.
+/// mode `threads`, but for [`SchedulerCounts::accept_waits`] and
+/// [`SchedulerCounts::clock_reads`].
 pub fn scheduler_counts() -> SchedulerCounts {
     let read = |counter: &AtomicU64| counter.load(Ordering::Relaxed);
     let c = &COUNTERS;
@@ -208,6 +251,8 @@ pub fn scheduler_counts() -> SchedulerCounts {
         workers_started: read(&c.workers_started),
         wakes_across: read(&c.wakes_across),
         notifies_sent: read(&c.notifies_sent),
+        accept_waits: read(&c.accept_waits),
+        clock_reads: read(&c.clock_reads),
     }
 }
 
@@ -448,7 +493,7 @@ fn park_from(
             return Woken::Notified;
         }
         if let Some(deadline) = deadline {
-            if now.take().unwrap_or_else(Instant::now) >= deadline {
+            if now.take().unwrap_or_else(read_clock) >= deadline {
                 return Woken::Deadline;
             }
             arm(task.slot, deadline, waiter);
@@ -798,6 +843,9 @@ fn start_worker(
     // Counted before the worker starts, which may end the task and count
     // it out of `LIVE` before `spawn` returns here. Relaxed: as above.
     let live = LIVE.fetch_add(1, Ordering::Relaxed) + 1;
+    // Named, which is a `prctl` per worker started that a thread of
+    // v0.15.0 did not make: by the name the workers are told from a
+    // program's other threads, in `/proc` and by the tests that watch them.
     match std::thread::Builder::new()
         .name(String::from("worker"))
         .spawn(move || work(started))
@@ -1114,7 +1162,7 @@ impl Worker {
         if TIMERS.with(|timers| timers.borrow().is_empty()) {
             return None;
         }
-        let now = Instant::now();
+        let now = read_clock();
         loop {
             let due = TIMERS.with(|timers| {
                 let mut timers = timers.borrow_mut();
@@ -1214,13 +1262,13 @@ fn work(shared: Arc<Shared>) {
             if ran >= BUDGET
                 && let Some(reactor) = worker.shared.reactor.get()
             {
-                let _ = reactor.wait(Some(Instant::now()), &mut events);
+                let _ = reactor.wait(Some(read_clock()), &mut events);
                 dispatch(&mut events);
             }
             continue;
         }
         let deadline = if worker.live == 0 {
-            let now = Instant::now();
+            let now = read_clock();
             let since = *idle_since.get_or_insert(now);
             let end = since + crate::LINGER;
             if now >= end {
@@ -1250,7 +1298,7 @@ fn work(shared: Arc<Shared>) {
             }
             None => match deadline {
                 Some(deadline) => {
-                    std::thread::park_timeout(deadline.saturating_duration_since(Instant::now()));
+                    std::thread::park_timeout(deadline.saturating_duration_since(read_clock()));
                 }
                 None => std::thread::park(),
             },
@@ -1441,22 +1489,24 @@ impl Readiness {
     /// reactor (no descriptor free for its epoll and eventfd) looks at the
     /// descriptor without waiting and parks the task for [`RETRY`], until
     /// it can: a session keeps running while the process is out of
-    /// descriptors. `now`: the instant `deadline` was computed from just
-    /// before, so this wait reads no clock to learn how far it is.
+    /// descriptors. `limit` is the caller's across the waits of one
+    /// operation ([`Limit`]): a wait on the thread itself, off a worker or
+    /// alone on one, gives a duration to its `poll` as the timeout and
+    /// reads no clock; a wait that parks reads it once, for the worker's
+    /// timers.
     pub(crate) fn wait(
         &self,
         descriptor: BorrowedFd<'_>,
         interest: Interest,
         mark: u64,
-        deadline: Option<Instant>,
-        now: Option<Instant>,
+        limit: &mut Limit,
     ) -> io::Result<DescriptorWait> {
         let me = Waiter::current();
         let Some(task) = me.task() else {
-            return crate::wait::wait_descriptor(descriptor, interest, deadline);
+            return crate::wait::wait_within(descriptor, interest, limit);
         };
         let state = self.descriptor();
-        if let Some(waited) = wait_alone(task, state, descriptor, interest, mark, deadline, now)? {
+        if let Some(waited) = wait_alone(task, state, descriptor, interest, mark, limit)? {
             return Ok(waited);
         }
         let here = Arc::as_ptr(&task.worker).cast_mut();
@@ -1480,6 +1530,7 @@ impl Readiness {
             {
                 let Ok(reactor) = task.worker.reactor() else {
                     drop(registered);
+                    let (deadline, _) = limit.deadline();
                     return without_reactor(&me, descriptor, interest, deadline);
                 };
                 let sides = sides(state.write_armed.load(Ordering::Relaxed));
@@ -1497,6 +1548,7 @@ impl Readiness {
             }
             waiting.of(interest).push(me.clone());
         }
+        let (deadline, now) = limit.deadline();
         let woken = park_from(&me, task, deadline, now);
         let still_queued = lock(&state.waiting).of(interest).remove(&me);
         Ok(if still_queued && woken == Woken::Deadline {
@@ -1526,8 +1578,7 @@ fn wait_alone(
     descriptor: BorrowedFd<'_>,
     interest: Interest,
     mark: u64,
-    deadline: Option<Instant>,
-    now: Option<Instant>,
+    limit: &mut Limit,
 ) -> io::Result<Option<DescriptorWait>> {
     let shared = &task.worker;
     // Relaxed: a hint; a spawn that raises it after this also hands over,
@@ -1536,7 +1587,7 @@ fn wait_alone(
         return Ok(None);
     }
     if shared.reactor.get().is_none()
-        && let Some(waited) = wait_blocking(state, descriptor, interest, mark, deadline, now)
+        && let Some(waited) = wait_blocking(state, descriptor, interest, mark, limit)
     {
         return waited.map(Some);
     }
@@ -1561,11 +1612,18 @@ fn wait_alone(
         shared.sleeping.store(false, Ordering::Relaxed);
         return Ok(Some(DescriptorWait::Woken));
     }
-    let ready = reactor.poll_one(descriptor, interest, deadline, now);
+    // Taken right before the `poll` that uses it: a duration is spent on
+    // the one `poll` it is given to (`Limit::poll_timeout`).
+    let Some(timeout) = limit.poll_timeout() else {
+        shared.sleeping.store(false, Ordering::Relaxed);
+        return Ok(Some(DescriptorWait::Deadline));
+    };
+    let polled = reactor.poll_one(descriptor, interest, timeout);
     shared.sleeping.store(false, Ordering::Relaxed);
-    Ok(if ready? {
+    let polled = polled?;
+    Ok(if polled.ready {
         Some(DescriptorWait::Ready(interest))
-    } else if deadline.is_some_and(|end| Instant::now() >= end) {
+    } else if polled.timed_out && limit.passed() {
         Some(DescriptorWait::Deadline)
     } else {
         None
@@ -1591,8 +1649,7 @@ fn wait_blocking(
     descriptor: BorrowedFd<'_>,
     interest: Interest,
     mark: u64,
-    deadline: Option<Instant>,
-    now: Option<Instant>,
+    limit: &mut Limit,
 ) -> Option<io::Result<DescriptorWait>> {
     // Relaxed: a hint that saves a `poll` that would end at once.
     if ESCALATED.load(Ordering::Relaxed) {
@@ -1604,16 +1661,17 @@ fn wait_blocking(
     if state.events(interest).load(Ordering::Acquire) != mark {
         return Some(Ok(DescriptorWait::Woken));
     }
-    let polled =
-        crate::reactor::poll_beside(descriptor, interest, escalation.as_fd(), deadline, now);
+    // Taken right before the `poll` that uses it, as in [`wait_alone`].
+    let Some(timeout) = limit.poll_timeout() else {
+        return Some(Ok(DescriptorWait::Deadline));
+    };
+    let polled = crate::reactor::poll_beside(descriptor, interest, escalation.as_fd(), timeout);
     drop(blocking);
     Some(match polled {
-        Ok((true, _)) => Ok(DescriptorWait::Ready(interest)),
-        Ok((false, true)) => return None,
-        Ok((false, false)) if deadline.is_some_and(|end| Instant::now() >= end) => {
-            Ok(DescriptorWait::Deadline)
-        }
-        Ok((false, false)) => Ok(DescriptorWait::Woken),
+        Ok(polled) if polled.ready => Ok(DescriptorWait::Ready(interest)),
+        Ok(polled) if polled.woken => return None,
+        Ok(polled) if polled.timed_out && limit.passed() => Ok(DescriptorWait::Deadline),
+        Ok(_) => Ok(DescriptorWait::Woken),
         Err(error) => Err(error),
     })
 }
@@ -1734,10 +1792,10 @@ fn without_reactor(
     if fds[0].revents().is_some_and(|ready| !ready.is_empty()) {
         return Ok(DescriptorWait::Ready(interest));
     }
-    let retry = Instant::now() + RETRY;
+    let retry = read_clock() + RETRY;
     crate::wait::park(me, Some(deadline.map_or(retry, |end| end.min(retry))));
     Ok(match deadline {
-        Some(end) if Instant::now() >= end => DescriptorWait::Deadline,
+        Some(end) if read_clock() >= end => DescriptorWait::Deadline,
         _ => DescriptorWait::Woken,
     })
 }

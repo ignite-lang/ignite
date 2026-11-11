@@ -43,7 +43,7 @@ use nix::sys::socket::MsgFlags;
 
 use crate::reactor::Interest;
 use crate::sched::Readiness;
-use crate::wait::{DescriptorWait, Lock, LockGuard, WaitList, Waiter};
+use crate::wait::{DescriptorWait, Limit, Lock, LockGuard, WaitList, Waiter};
 use crate::{Input, IoError, read_input, socket_address};
 
 /// Bytes a send buffer holds before `write_all` sends it at once.
@@ -105,6 +105,11 @@ pub(crate) struct Slot {
     /// in its `accept`, or in a read of a stream it accepted, is idle for
     /// the drain's wait (`crate::task::idle_on_kept`).
     kept: bool,
+    /// The listener was made non-blocking: by the first `accept` of a task
+    /// on a worker, which may not block its worker's thread. Until then an
+    /// `accept` off a worker blocks in its `accept4`
+    /// ([`TcpListener::accept`]).
+    nonblocking: AtomicBool,
     /// Waiters in `accept`, which [`Slot::release`] wakes.
     acceptors: Mutex<WaitList>,
     /// The listener's readiness for tasks on workers (`crate::sched`).
@@ -127,14 +132,19 @@ impl Slot {
         listener: &std::net::TcpListener,
         mark: u64,
     ) -> Result<(), IoError> {
+        crate::sched::count_accept_wait();
         let me = Waiter::current();
         lock(&self.acceptors).push(me.clone());
         let wait = || {
             if !self.kept && crate::drain::draining() {
                 return Ok(DescriptorWait::Woken);
             }
-            self.readiness
-                .wait(listener.as_fd(), Interest::READ, mark, None, None)
+            self.readiness.wait(
+                listener.as_fd(),
+                Interest::READ,
+                mark,
+                &mut Limit::Unbounded,
+            )
         };
         let waited = if self.kept {
             crate::task::idle_on_kept(wait)
@@ -412,8 +422,12 @@ impl Stream {
                 Ok(count) => at += count,
                 Err(error) if error.kind() == ErrorKind::Interrupted => {}
                 Err(error) if error.kind() == ErrorKind::WouldBlock => {
-                    self.readiness
-                        .wait(self.socket.as_fd(), Interest::WRITE, mark, None, None)?;
+                    self.readiness.wait(
+                        self.socket.as_fd(),
+                        Interest::WRITE,
+                        mark,
+                        &mut Limit::Unbounded,
+                    )?;
                 }
                 Err(error) => return Err(error.into()),
             }
@@ -573,9 +587,6 @@ impl TcpListener {
         let target = socket_address("bind", &address, port)?;
         let listener = std::net::TcpListener::bind(&target)
             .map_err(|e| IoError::new(format!("bind {target}: {e}")))?;
-        listener
-            .set_nonblocking(true)
-            .map_err(|e| IoError::new(format!("bind {target}: {e}")))?;
         // A socket Linux accepts has its listener's `TCP_NODELAY` and
         // `SO_OOBINLINE`, so `accept` sets neither: two system calls less
         // per connection, on the one thread every connection passes.
@@ -594,12 +605,16 @@ impl TcpListener {
             address,
             port,
             kept,
+            nonblocking: AtomicBool::new(false),
             acceptors: Mutex::new(WaitList::new()),
             readiness: Readiness::new(),
         });
         if !kept {
             crate::drain::register(&slot);
         }
+        // A process that listens serves sessions on workers: what it does
+        // once for them, it does before its first connection.
+        crate::sched::prepare();
         Ok(TcpListener { slot })
     }
 
@@ -628,21 +643,49 @@ impl TcpListener {
         };
         let kept = self.slot.kept;
         // Off a worker (the main thread's accept loop of a compiled server,
-        // a task of the IO mode `threads`) the wait is a `poll`, which sees
-        // a connection already waiting: it comes first, so no `accept4`
-        // fails before it (`poll` and `accept4` per connection, not a
-        // failed `accept4` as well whenever the next has not arrived yet).
-        if crate::sched::running().is_none() {
+        // a task of the IO mode `threads`) the `accept4` itself waits for
+        // the connection, as a thread of v0.15.0 did: one system call per
+        // connection on the one thread every connection passes
+        // (`story:readiness-session-cost`; a `poll` came first before).
+        // The drain ends that wait: [`Slot::release`] shuts the listener's
+        // read side down, and the call fails. A task on a worker may not
+        // block its worker's thread: its first `accept` makes the listener
+        // non-blocking, for good; from then on a wait off a worker is a
+        // `poll`, which comes first, so that no `accept4` fails before it,
+        // and an `accept4` under way off a worker goes on waiting.
+        let off_worker = crate::sched::running().is_none();
+        // Acquire and Release: a thread that reads `true` finds the
+        // listener non-blocking; one that reads a stale `false` meets
+        // `EAGAIN` below and waits there.
+        let mut blocks = false;
+        if off_worker {
             if !kept && crate::drain::draining() {
                 return Err(IoError::new(crate::drain::DRAINING));
             }
-            self.slot.wait_for_connection(listener, 0)?;
+            if self.slot.nonblocking.load(Ordering::Acquire) {
+                self.slot.wait_for_connection(listener, 0)?;
+            } else {
+                blocks = true;
+            }
+        } else if !self.slot.nonblocking.load(Ordering::Acquire) {
+            listener
+                .set_nonblocking(true)
+                .map_err(|e| IoError::new(format!("accept: {e}")))?;
+            self.slot.nonblocking.store(true, Ordering::Release);
         }
         let mut pause = ACCEPT_BACKOFF_FIRST;
         let mut failing = false;
         loop {
             let mark = self.slot.readiness.mark(Interest::READ);
-            match accept_socket(listener) {
+            // A task of the IO mode `threads` that blocks here on a
+            // listener kept through the drain does not hold up the drain's
+            // wait for live tasks, as in `Slot::wait_for_connection`.
+            let accepted = if blocks && kept {
+                crate::task::idle_on_kept(|| accept_socket(listener))
+            } else {
+                accept_socket(listener)
+            };
+            match accepted {
                 Ok((socket, peer)) => return Ok(TcpStream::over(socket, peer, kept)),
                 // The two codes every accept loop meets compared as numbers,
                 // not through `ErrorKind`'s decoding of every code.
@@ -795,7 +838,8 @@ impl TcpStream {
             });
             received.map_err(std::io::Error::from)
         };
-        let mut deadline: Option<Option<Instant>> = None;
+        // The idle timeout of this read, from its first wait on.
+        let mut limit: Option<Limit> = None;
         // The read before this one emptied the socket: wait for readiness
         // first, against the mark taken before that read, instead of a
         // `recv` that would find nothing (`Stream::emptied`); so does the
@@ -815,25 +859,30 @@ impl TcpStream {
                 mark => (Some(mark), true),
             }
         };
+        // Whether a wait of this read may block its worker in `recv`: only
+        // in rhythm, and only while the read's idle timeout has not begun
+        // (`limit` is unset). A flag of its own, so that a read that never
+        // waits for readiness does not look at the limit: asking the limit
+        // cost the generated Rust six instructions per request.
+        let mut may_block = in_rhythm;
         loop {
             // A wait that this read would make now: either this task may
             // block its worker in the `recv` itself (it is the worker's only
             // task, the stream is in a request-reply rhythm, and the read's
-            // idle deadline has not begun, so the socket's `SO_RCVTIMEO`,
-            // set first, is that deadline), or it waits for readiness.
+            // idle timeout has not begun, so the socket's `SO_RCVTIMEO`,
+            // set first, is that timeout), or it waits for readiness.
             let mut blocking = None;
             if let Some(mark) = wait_first.take() {
-                blocking = (in_rhythm && deadline.is_none())
-                    .then(crate::sched::block_alone)
-                    .flatten();
+                blocking = may_block.then(crate::sched::block_alone).flatten();
                 if blocking.is_some() && self.inner.apply_idle().is_err() {
                     blocking = None;
                 }
-                if blocking.is_none()
-                    && let Some(ended_early) = self.wait_readable(mark, &mut deadline)
-                {
-                    ended(ended_early.is_ok());
-                    return ended_early.map(|()| None);
+                if blocking.is_none() {
+                    may_block = false;
+                    if let Some(ended_early) = self.wait_readable(mark, &mut limit) {
+                        ended(ended_early.is_ok());
+                        return ended_early.map(|()| None);
+                    }
                 }
             }
             block_next.set(self.inner.blocking || blocking.is_some());
@@ -859,7 +908,20 @@ impl TcpStream {
                     ended(false);
                     return Ok(Some(value));
                 }
-                Err(e) if e.raw_os_error() == Some(nix::libc::EINTR) => {}
+                Err(e) if e.raw_os_error() == Some(nix::libc::EINTR) => {
+                    // A signal ended a `recv` that blocked under
+                    // `SO_RCVTIMEO`. The same call again would begin the
+                    // whole idle timeout again, and signals that keep
+                    // coming sooner than it would keep the read waiting
+                    // without end. So the read goes on as one that waits
+                    // for readiness, under a limit that has begun: the
+                    // timeout begins again once, against the clock.
+                    if self.inner.blocking || blocked {
+                        limit.get_or_insert_with(|| self.idle_limit().begun());
+                        may_block = false;
+                        wait_first = Some(mark);
+                    }
+                }
                 Err(e)
                     if (self.inner.blocking || blocked)
                         && matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) =>
@@ -880,24 +942,17 @@ impl TcpStream {
 
     /// The wait of [`TcpStream::read_with`] for the socket to become
     /// readable after `mark`. `None`: attempt the read. `Some(Ok(()))`:
-    /// the idle timeout passed. `Some(Err(_))`: the wait failed. The first
-    /// wait of a read computes its deadline, reading the clock once.
-    fn wait_readable(
-        &self,
-        mark: u64,
-        deadline: &mut Option<Option<Instant>>,
-    ) -> Option<Result<(), IoError>> {
-        let mut now = None;
-        let until = *deadline.get_or_insert_with(|| {
-            let (until, at) = self.idle_deadline();
-            now = at;
-            until
-        });
+    /// the idle timeout passed. `Some(Err(_))`: the wait failed. The idle
+    /// timeout counts from the first wait of a read, which takes it as a
+    /// duration: a read that waits alone on its thread reads no clock for
+    /// it ([`Limit`]).
+    fn wait_readable(&self, mark: u64, limit: &mut Option<Limit>) -> Option<Result<(), IoError>> {
+        let limit = limit.get_or_insert_with(|| self.idle_limit());
         let socket = &self.inner.socket;
-        let wait = || {
+        let mut wait = || {
             self.inner
                 .readiness
-                .wait(socket.as_fd(), Interest::READ, mark, until, now)
+                .wait(socket.as_fd(), Interest::READ, mark, limit)
         };
         let waited = if self.inner.kept {
             crate::task::idle_on_kept(wait)
@@ -911,15 +966,9 @@ impl TcpStream {
         }
     }
 
-    /// When a read that begins to wait now ends for the idle timeout, and
-    /// the instant read for it; neither without an idle timeout.
-    fn idle_deadline(&self) -> (Option<Instant>, Option<Instant>) {
-        let ms = self.inner.idle.load(Ordering::Acquire);
-        let Some(ms) = u64::try_from(ms).ok().filter(|ms| *ms > 0) else {
-            return (None, None);
-        };
-        let now = Instant::now();
-        (now.checked_add(Duration::from_millis(ms)), Some(now))
+    /// The idle timeout as the limit of a read that begins to wait.
+    fn idle_limit(&self) -> Limit {
+        Limit::within_ms(self.inner.idle.load(Ordering::Acquire))
     }
 
     /// The idle timeout in milliseconds, 0 for none, and the socket, whose
