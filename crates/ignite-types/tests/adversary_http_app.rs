@@ -202,3 +202,28 @@ fn main() -> Int = same(Box {{ state = \"a\" }}, boxed())
     );
     assert_eq!(diagnostics_of(&program), None);
 }
+
+/// Adversary pass 1 on unit counts (wave 11): a program the base accepts.
+/// `Outer { stream = 7, inner = Box { state = \"s\" } }` binds both of its
+/// parameters (`stream` gives `T`, the inner literal then `S`), but
+/// `literal_waits` counts the inner literal as binding nothing because it
+/// would wait on its own, so the outer literal waits. The second literal,
+/// whose `touch = None` names `T` and so does not wait, is then typed in
+/// pass 0 with `T` unbound: E042 where the base typed it against the
+/// outer literal's `T`.
+#[test]
+fn a_literal_that_binds_every_parameter_through_a_nested_literal_does_not_wait() {
+    let program = format!(
+        "{BOX}
+type Outer<S, T> {{
+  stream: T
+  inner: Box<S, T>
+}}
+
+fn go<S, T>(outer: Outer<S, T>, other: Box<S, T>) -> Int = 0
+
+fn main() -> Int = go(Outer {{ stream = 7, inner = Box {{ state = \"s\" }} }}, Box {{ state = \"t\", touch = None }})
+"
+    );
+    assert_eq!(diagnostics_of(&program), None);
+}

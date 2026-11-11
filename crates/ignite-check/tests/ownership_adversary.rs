@@ -153,3 +153,30 @@ fn the_in_place_rows_that_store_an_argument_extend_roots() {
         ]
     );
 }
+
+/// Adversary pass 1 on unit counts (wave 11): a user fn named `put`,
+/// called through UFCS on a record that holds a stream, stores nothing in
+/// its receiver (a user fn changes no receiver, `docs/slice.md` 20.3.3),
+/// so the receiver keeps its own roots. The base accepts this program;
+/// `stores` in `Checker::method` matches the `Map.put` row by method name
+/// for every receiver type outside `IN_PLACE`, without asking whether the
+/// callee is the builtin, and reports E016 for `b.read`.
+#[test]
+fn a_user_fn_named_put_gives_its_receiver_no_roots() {
+    let out = check(
+        r#"type Conn { stream: TcpStream }
+
+fn put(c: Conn, other: TcpStream) -> Int = 0
+
+fn f(a: TcpStream, b: TcpStream) -> Result<Input, IoError> requires [a.read] {
+  var c = Conn { stream = a }
+  let n = c.put(b)
+  return c.stream.read(4096)
+}
+"#,
+    );
+    assert_eq!(
+        out, "",
+        "a user fn named `put` extended its receiver's roots:\n{out}"
+    );
+}
