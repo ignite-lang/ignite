@@ -7343,8 +7343,10 @@ const RELEASE_PROFILE: &str = "\n[profile.release]\noverflow-checks = true\ncode
 /// frames' files and lines. A fresh build compiles them all, and on a
 /// host without cargo configuration full debug information was a third of
 /// the work of compiling `ignite-io` (row 6.2 of `docs/quality.md`, story
-/// `build-time-back`). The program gets line tables by name
-/// ([`dev_member_profile`]), `ignite-std` none ([`STD_DEV_PROFILE`]).
+/// `build-time-back`). The program and `ignite-std` get line tables by
+/// name ([`dev_member_profile`]), so a backtrace names the files and lines
+/// of the standard library's frames and of the `ignite-io` instances in
+/// them too.
 /// The line tables are split out of the objects (`split-debuginfo =
 /// "unpacked"`: `.dwo` files beside them in the target directory, which
 /// gdb and the standard library's symbolizer read), so the linker neither
@@ -7365,14 +7367,6 @@ fn dev_member_profile(package: &str) -> String {
         toml_string(package)
     )
 }
-
-/// The dev profile of the generated standard library, for a program that
-/// uses it: no debug information, as the crates from outside the project.
-/// Its line tables were 160 KB of the todo example's dev `todod` (story
-/// `binary-size-back`, rows 3.2 and 6.2); a failure report names the
-/// Ignite source's lines without them, and a backtrace names its frames'
-/// functions.
-const STD_DEV_PROFILE: &str = "\n[profile.dev.package.\"ignite-std\"]\ndebug = false\n";
 
 fn cargo_toml(
     package_name: &str,
@@ -7397,7 +7391,7 @@ fn cargo_toml(
     out.push_str(DEV_PROFILE);
     out.push_str(&dev_member_profile(package_name));
     if uses_std {
-        out.push_str(STD_DEV_PROFILE);
+        out.push_str(&dev_member_profile(STD_PACKAGE));
     }
     out.push_str("\n[lib]\n");
     let lib = crate_name(package_name);

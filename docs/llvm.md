@@ -80,9 +80,9 @@ holds the `.dwo` files
 A driver built in the release profile carries a runtime without debug information, so an
 installed `ignite` is unaffected. A dev build on the Rust target compresses nothing (its
 linker is the toolchain's choice or the user's): the generated dev profile splits the line
-tables of `ignite-io` and of the program the same way and builds `ignite-std` without debug
-information (`docs/slice.md` 6.2): `todod` 8.4 to 7.5 MB, the link's instructions 176 to
-163 M.
+tables of `ignite-io`, of the program and of `ignite-std` the same way (`docs/slice.md` 6.2):
+`todod` 8.4 to 7.7 MB, the link's instructions 176 to 163 M; a backtrace names the files and
+lines of the standard library's frames.
 
 Packed relative relocations (story `binary-size-back`, rows 3.2 and 3.9). Every dynamic
 executable of the LLVM target, dev and release, is linked with `-z pack-relative-relocs`: its

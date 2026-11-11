@@ -145,7 +145,7 @@ fn system_with_server_and_client() {
     assert!(
         project
             .cargo_toml
-            .contains("\n[profile.dev.package.\"ignite-std\"]\ndebug = false\n"),
+            .contains("\n[profile.dev.package.\"ignite-std\"]\ndebug = \"line-tables-only\"\nsplit-debuginfo = \"unpacked\"\n"),
         "{}",
         project.cargo_toml
     );
