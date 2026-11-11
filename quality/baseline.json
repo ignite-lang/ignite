@@ -123,6 +123,9 @@
     "std/protocol/http.ignite::the server answers pipelined requests until one asks to close": "builtin `TcpListenerBind` has no value at compile time",
     "std/protocol/http/connection_tests.ignite::a thousand requests held over TCP are each answered by their message": "builtin `TcpListenerBind` has no value at compile time",
     "std/protocol/http/connection_tests.ignite::the handler sees its connection and an allow list refuses a peer with 403": "builtin `TcpListenerBind` has no value at compile time",
+    "std/protocol/mysql.ignite::a failed handshake closes the stream: the server sees its end, not a timeout": "builtin `TcpListenerBind` has no value at compile time",
+    "std/protocol/mysql.ignite::a payload of 16 MiB - 1 is followed by an empty frame, and its frames are joined when read": "exceeds the evaluator's limit Nodes(1000000)",
+    "std/protocol/mysql.ignite::adversary: a command of two frames is answered at sequence 2, and its reply is read": "exceeds the evaluator's limit Nodes(1000000)",
     "std/protocol/nats.ignite::a connection that answers no keepalive PING is lost": "builtin `ClockNow` has no value at compile time",
     "std/protocol/nats.ignite::a connection that leaves more than the backlog unwritten is lost": "builtin `TcpListenerBind` has no value at compile time",
     "std/protocol/nats.ignite::a held request the new server refuses is answered with the refusal, its inbox not subscribed again": "builtin `ClockNow` has no value at compile time",
@@ -215,13 +218,13 @@
       "area": "Semantics: one meaning across the three consumers",
       "bars": {
         "eval": {
-          "value": 708
+          "value": 769
         },
         "llvm": {
-          "value": 866
+          "value": 930
         },
         "rust": {
-          "value": 866
+          "value": 930
         }
       },
       "direction": "higher",
@@ -293,7 +296,7 @@
       "bars": {
         "eval": {
           "decision": "native parity round 1 integration (2026-11-08): story todo-save-without-races adds the inline test of saves that finish out of order, which needs Directory.temporary (DirectoryTemporary has no compile-time value); listed in eval_cannot_run",
-          "value": 158
+          "value": 161
         }
       },
       "direction": "lower",
@@ -738,13 +741,13 @@
       "area": "Standard library and protocols",
       "bars": {
         "eval": {
-          "value": 365
+          "value": 426
         },
         "llvm": {
-          "value": 452
+          "value": 516
         },
         "rust": {
-          "value": 452
+          "value": 516
         }
       },
       "direction": "higher",
