@@ -11389,10 +11389,14 @@ of each step are in the commits.
   instructions a program runs (callgrind: start, each request kind, a connection, a terminal
   session, both IO modes, both targets) and the syscalls it makes are equal or fewer with it.
   The commits that undid a step give the counts.
-- Scheduler. A worker's timers are a binary heap whose entries no task is armed for are
-  swept when they are half of it (`sched::tests` in `crates/ignite-io/src/sched.rs`). The
-  epoll reactor holds its registrations in a slab whose tokens carry a generation
-  (`reactor::*::a_reused_registration_has_a_token_of_its_own`). `IGNITE_IO=threads` stays.
+- Scheduler. A worker's timers are a binary heap with at most one entry per task, whose
+  position each task slot records: the entry of a task that ends is taken out at once, so the
+  worker never wakes for it, and one armed earlier moves up in place (`sched::tests` in
+  `crates/ignite-io/src/sched.rs`,
+  `timer_adversary::a_worker_does_not_wake_for_the_timer_of_a_session_that_ended`). The epoll
+  reactor holds its registrations in a slab whose tokens carry a generation and whose free
+  slots form a list in the slab (`reactor::*::a_reused_registration_has_a_token_of_its_own`).
+  `IGNITE_IO=threads` stays.
 - Opt-levels. The generated manifest builds `nix` and `corosensei` at `opt-level = "s"`: the
   start about 200 instructions shorter, the stripped executable about 570 bytes larger
   (`units::release_profile_builds_nix_and_corosensei_at_opt_level_s`); `ignite-rt`, `ignite-io`
