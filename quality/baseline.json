@@ -208,16 +208,6 @@
       "intermittent": true,
       "story": "story:llvm-store-update-off-lock",
       "what": "under load the LLVM target fails the 500 ms wait assertion and Rust passes, also when re-run alone (task gate at load 35 to 39, 2026-11-07); passes at lower load (ignite_test::store_values_under_updates_of_one_shard_on_both_targets, ignored for the same story)"
-    },
-    "std/text.ignite::a later bound that changes the bytes leaves the slice before it as it was": {
-      "consumer": "eval",
-      "story": "story:eval-receiver-order",
-      "what": "both targets pass; the evaluator slices the receiver after a bound changed it, `n` is Some(99) not Some(23) (differential::the_evaluator_reads_a_receiver_before_its_arguments)"
-    },
-    "std/text.ignite::a start bound, both bounds or a bound in a loop that change the receiver": {
-      "consumer": "eval",
-      "story": "story:eval-receiver-order",
-      "what": "both targets pass; the evaluator slices the receiver after a bound changed it, `t` is 99 not 23 (differential::the_evaluator_reads_a_receiver_before_its_arguments)"
     }
   },
   "metrics": {

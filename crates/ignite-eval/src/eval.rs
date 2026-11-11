@@ -1270,11 +1270,30 @@ impl<'p> Evaluator<'p> {
                 self.alloc(value.nodes())?;
                 Ok(value)
             }
+            // The receiver before the arguments, as both targets do. A local
+            // the arguments do not change in place reads the same before
+            // and after them, so it is read in place after them, without a
+            // copy; any other receiver is evaluated first.
             _ => {
-                let values = self.exprs(cx, args)?;
-                let (value, nodes) = self.with_receiver(cx, receiver, |ev, recv| {
-                    ev.builtin_value(cx, e, builtin, recv, values)
-                })?;
+                let in_place = match &receiver.kind {
+                    ExprKind::Name(name) if self.is_local(cx, &name.name) => {
+                        !args.iter().any(|arg| {
+                            ignite_types::ownership::changed_in(arg, Some(cx.types()))
+                                .contains(name.name.as_str())
+                        })
+                    }
+                    _ => false,
+                };
+                let (value, nodes) = if in_place {
+                    let values = self.exprs(cx, args)?;
+                    self.with_receiver(cx, receiver, |ev, recv| {
+                        ev.builtin_value(cx, e, builtin, recv, values)
+                    })?
+                } else {
+                    let recv = self.expr(cx, receiver)?;
+                    let values = self.exprs(cx, args)?;
+                    self.builtin_value(cx, e, builtin, &recv, values)?
+                };
                 self.alloc(nodes)?;
                 Ok(value)
             }
