@@ -189,6 +189,58 @@ fn a_release_failure_report_is_the_dev_one_on_both_targets() {
     }
 }
 
+/// The names by which the TLS engine's crates show in a symbol or a
+/// compile unit: `rustls`, `rustls-webpki`, `rustls-pki-types`, `ring`
+/// (its C objects' symbols start `ring_core_`) and `untrusted`.
+const TLS_ENGINE: &[&str] = &["rustls", "webpki", "ring_core_", "/ring-", "untrusted"];
+
+/// The compile units of `file`: the name of each top-level DIE.
+fn compile_units(file: &Path) -> Vec<String> {
+    let listed = text(
+        &run(Command::new("readelf")
+            .args(["--debug-dump=info", "--dwarf-depth=1"])
+            .arg(file))
+        .stdout,
+    );
+    listed
+        .lines()
+        .filter(|line| line.contains("DW_AT_name"))
+        .map(|line| line.rsplit(": ").next().unwrap_or(line).to_string())
+        .collect()
+}
+
+/// A program that names no `Tls` links no object of the TLS engine on the
+/// LLVM target, dev and release (`docs/slice.md` 38.2, story
+/// `binary-size-back`): no symbol and no compile unit of it, C objects
+/// included. `tls::` builds and runs a program that opens a TLS session.
+#[test]
+fn an_llvm_program_without_tls_links_no_tls_engine_in_dev_and_release() {
+    let dir = tmp("size-no-tls");
+    let cargo_target = dir.join("cargo");
+    for release in [false, true] {
+        let profile = if release { "release" } else { "dev" };
+        let executable = build("llvm", release, &dir.join(profile), &cargo_target);
+        let listed = text(&run(Command::new("nm").arg("--defined-only").arg(&executable)).stdout);
+        let symbols: Vec<&str> = listed
+            .lines()
+            .filter(|line| TLS_ENGINE.iter().any(|name| line.contains(name)))
+            .collect();
+        assert!(symbols.is_empty(), "{profile}: {symbols:#?}");
+        let units: Vec<String> = compile_units(&executable)
+            .into_iter()
+            .filter(|unit| TLS_ENGINE.iter().any(|name| unit.contains(name)))
+            .collect();
+        assert!(units.is_empty(), "{profile}: {units:#?}");
+        if !release {
+            assert!(
+                !compile_units(&executable).is_empty(),
+                "{profile}: {} has no compile unit to check",
+                executable.display()
+            );
+        }
+    }
+}
+
 /// Row 3.8: an LLVM executable needs only the shared libraries it calls
 /// (`-Wl,--as-needed` before the runtime's libraries, as rustc links the
 /// Rust target): one that uses no math function does not load `libm`,
