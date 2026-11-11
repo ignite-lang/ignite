@@ -312,6 +312,23 @@ impl HttpProcess {
             .count()
     }
 
+    /// The server's descriptors ([`Self::descriptors`]) at rest, the count
+    /// a test compares with at its end: taken after one connection was
+    /// served and closed. After its `listening` line the server reads how
+    /// many workers it may start, once, from files it has open for that
+    /// moment only (`std::thread::available_parallelism` reads the cgroup's
+    /// CPU quota); a count taken beside that read is one too high, and the
+    /// first accepted connection comes after it.
+    fn at_rest(&self) -> usize {
+        let sockets = self.sockets();
+        self.health();
+        let deadline = Instant::now() + TIMEOUT;
+        while self.sockets() != sockets && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        self.descriptors()
+    }
+
     /// Fails unless the server, still running, comes back to `start`
     /// descriptors ([`Self::descriptors`]) after the `served` connections
     /// of `what`: each task ends on its own time after its client left.
@@ -418,7 +435,7 @@ mod closes {
     /// One request answered, then the client closes.
     pub fn closed_by_the_client(target: common::Target) {
         let mut server = HttpProcess::todod(target);
-        let start = server.descriptors();
+        let start = server.at_rest();
         for _ in 0..CONNECTIONS {
             server.health();
         }
@@ -429,7 +446,7 @@ mod closes {
     /// closes.
     pub fn kept_alive(target: common::Target) {
         let mut server = HttpProcess::todod(target);
-        let start = server.descriptors();
+        let start = server.at_rest();
         for _ in 0..CONNECTIONS {
             let mut stream = server.connect();
             for _ in 0..3 {
@@ -448,7 +465,7 @@ mod closes {
     /// connection after its answer.
     pub fn asked_to_close(target: common::Target) {
         let mut server = HttpProcess::todod(target);
-        let start = server.descriptors();
+        let start = server.at_rest();
         for _ in 0..CONNECTIONS {
             let mut stream = server.connect();
             stream
@@ -466,7 +483,7 @@ mod closes {
     /// connection, inside the announced body on the others.
     pub fn dropped_inside_a_request(target: common::Target) {
         let mut server = HttpProcess::todod(target);
-        let start = server.descriptors();
+        let start = server.at_rest();
         for round in 0..CONNECTIONS {
             let mut stream = server.connect();
             let part: &[u8] = if round % 2 == 0 {
@@ -486,7 +503,7 @@ mod closes {
     /// the release, leave no descriptor.
     pub fn held_by_the_application(target: common::Target) {
         let mut server = HttpProcess::ownerd(target);
-        let start = server.descriptors();
+        let start = server.at_rest();
         let mut served = 0;
         for round in 0..CONNECTIONS {
             let mut held = server.connect();
@@ -526,7 +543,7 @@ mod closes {
     /// takeover's while it runs and is closed when it returns.
     pub fn taken_over_by_the_application(target: common::Target) {
         let mut server = HttpProcess::ownerd(target);
-        let start = server.descriptors();
+        let start = server.at_rest();
         for _ in 0..CONNECTIONS {
             let mut stream = server.connect();
             stream
