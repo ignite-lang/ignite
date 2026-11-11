@@ -385,6 +385,14 @@ pub const DEV_LLD_COMPRESSION: &str = "-Wl,--compress-sections=.debug_str=zlib";
 /// (`--static`) has no dynamic relocations and takes none.
 pub const PACKED_RELOCATIONS: &str = "-Wl,-z,pack-relative-relocs";
 
+/// Link flag before [`RUNTIME_LIBS`] of every dynamic executable: a library
+/// none of whose symbols the executable takes is not loaded (`libm`, unless
+/// a program calls a math function), as rustc links the Rust target; the
+/// loader would otherwise map and relocate it at every start, resident
+/// memory of every process (row 3.8 of `docs/quality.md`, story
+/// `binary-size-back`).
+pub const AS_NEEDED: &str = "-Wl,--as-needed";
+
 /// Link flags of a dev build that finds lld ([`dev_lld`]), before the
 /// inputs. A dev link copies and relocates the debug sections of every
 /// archive member it loads; lld maps the archive and works on all cores
@@ -438,8 +446,8 @@ fn link_flags_before(
 
 /// The arguments of every link of a build after its objects and the
 /// runtime archive: [`LINK_FLAGS`], [`RELEASE_LINK_FLAGS`] with
-/// `--release`, then the musl kit's end files or [`PACKED_RELOCATIONS`]
-/// and [`RUNTIME_LIBS`].
+/// `--release`, then the musl kit's end files or [`PACKED_RELOCATIONS`],
+/// [`AS_NEEDED`] and [`RUNTIME_LIBS`].
 fn link_flags_after(options: &BuildOptions, kit: Option<&crate::musl::Kit>) -> Vec<OsString> {
     let mut args: Vec<OsString> = LINK_FLAGS.iter().map(Into::into).collect();
     if options.release {
@@ -449,6 +457,7 @@ fn link_flags_after(options: &BuildOptions, kit: Option<&crate::musl::Kit>) -> V
         Some(kit) => args.extend(kit.after()),
         None => {
             args.push(PACKED_RELOCATIONS.into());
+            args.push(AS_NEEDED.into());
             args.extend(RUNTIME_LIBS.iter().map(Into::into));
         }
     }

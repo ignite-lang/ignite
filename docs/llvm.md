@@ -28,7 +28,7 @@ std/**/*.ignite, program.ignite --parse--> --check--> --type (ignite-types)--> -
 writes `DIR/llvm/{std.ll, program.ll, main_<exe>.ll}`, runs
 `clang -c -O0 -g -ffunction-sections -fdata-sections -Werror=override-module --target=<triple>`
 (`-O2` with `--release`) on each, links each executable with
-`clang -o DIR/bin/<exe> --target=<triple> [-fuse-ld=lld -Wl,--compress-sections=.debug_str=zlib | -Wl,--compress-debug-sections=zlib] main_<exe>.o program.o std.o <runtime> -Wl,--gc-sections [-Wl,--strip-debug -Wl,--discard-all] -Wl,-z,pack-relative-relocs -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc`
+`clang -o DIR/bin/<exe> --target=<triple> [-fuse-ld=lld -Wl,--compress-sections=.debug_str=zlib | -Wl,--compress-debug-sections=zlib] main_<exe>.o program.o std.o <runtime> -Wl,--gc-sections [-Wl,--strip-debug -Wl,--discard-all] -Wl,-z,pack-relative-relocs -Wl,--as-needed -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc`
 (`-Wl,--strip-debug -Wl,--discard-all` with `--release` only, as cargo's release profile drops debug
 information, and the local symbols with it (internal functions and exception table labels, a tenth
 of `todod`; the global names a profiler shows stay; story `binary-size-back`); the compression
@@ -88,6 +88,12 @@ it by that name instead of running it unrelocated. The toolchain image (Debian t
 glibc 2.41) and the dedicated host (Ubuntu 24.04, glibc 2.39) have it. A `--static` build
 has no dynamic relocations and links without it. The Rust target passes the flag the same
 way as the compression above (`binary_size::` in `crates/ignite/tests/binary_size.rs`).
+
+Libraries as needed (story `binary-size-back`, row 3.8). The LLVM target links its runtime
+libraries after `-Wl,--as-needed`, as rustc links the Rust target: a library none of whose
+symbols the executable takes is not loaded. `libm` was loaded by every executable before,
+mapped and relocated at each start, though only a program calling a math function uses it
+(`binary_size::an_llvm_executable_loads_no_library_it_does_not_call`).
 
 Release runtime without the backtrace symbolizer (story `binary-size-back`, row 3.9). A
 release runtime archive, native and bitcode, is built on the standard library compiled from

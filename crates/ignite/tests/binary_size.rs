@@ -188,3 +188,30 @@ fn a_release_failure_report_is_the_dev_one_on_both_targets() {
         assert_eq!(reports[1], reports[0], "{target}: release against dev");
     }
 }
+
+/// Row 3.8: an LLVM executable needs only the shared libraries it calls
+/// (`-Wl,--as-needed` before the runtime's libraries, as rustc links the
+/// Rust target): one that uses no math function does not load `libm`,
+/// whose mapping is resident memory of every process.
+#[test]
+fn an_llvm_executable_loads_no_library_it_does_not_call() {
+    let dir = tmp("size-as-needed");
+    let cargo_target = dir.join("cargo");
+    for release in [false, true] {
+        let profile = if release { "release" } else { "dev" };
+        let executable = build("llvm", release, &dir.join(profile), &cargo_target);
+        let needed: Vec<String> = readelf("-dW", &executable)
+            .lines()
+            .filter(|line| line.contains("(NEEDED)"))
+            .map(str::to_string)
+            .collect();
+        assert!(
+            needed.iter().any(|line| line.contains("libc.so")),
+            "{profile}: {needed:#?}"
+        );
+        assert!(
+            !needed.iter().any(|line| line.contains("libm.so")),
+            "{profile}: {needed:#?}"
+        );
+    }
+}
