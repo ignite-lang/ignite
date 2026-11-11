@@ -373,6 +373,14 @@ pub const DEV_LINK_FLAGS: &[&str] = &["-Wl,--compress-debug-sections=zlib"];
 /// three times its instructions for 4.7 MB).
 pub const DEV_LLD_COMPRESSION: &str = "-Wl,--compress-sections=.debug_str=zlib";
 
+/// Link flag of every dynamic executable: its relative relocations are
+/// packed into `.relr.dyn` (`DT_RELR`), about 24 bytes each to a bit, and
+/// the executable needs the loader version `GLIBC_ABI_DT_RELR` (glibc 2.36
+/// or newer), which a loader without it refuses by name (rows 3.2 and 3.9
+/// of `docs/quality.md`, story `binary-size-back`). A static link
+/// (`--static`) has no dynamic relocations and takes none.
+pub const PACKED_RELOCATIONS: &str = "-Wl,-z,pack-relative-relocs";
+
 /// Link flags of a dev build that finds lld ([`dev_lld`]), before the
 /// inputs. A dev link copies and relocates the debug sections of every
 /// archive member it loads; lld maps the archive and works on all cores
@@ -426,7 +434,8 @@ fn link_flags_before(
 
 /// The arguments of every link of a build after its objects and the
 /// runtime archive: [`LINK_FLAGS`], [`RELEASE_LINK_FLAGS`] with
-/// `--release`, then the musl kit's end files or [`RUNTIME_LIBS`].
+/// `--release`, then the musl kit's end files or [`PACKED_RELOCATIONS`]
+/// and [`RUNTIME_LIBS`].
 fn link_flags_after(options: &BuildOptions, kit: Option<&crate::musl::Kit>) -> Vec<OsString> {
     let mut args: Vec<OsString> = LINK_FLAGS.iter().map(Into::into).collect();
     if options.release {
@@ -434,7 +443,10 @@ fn link_flags_after(options: &BuildOptions, kit: Option<&crate::musl::Kit>) -> V
     }
     match kit {
         Some(kit) => args.extend(kit.after()),
-        None => args.extend(RUNTIME_LIBS.iter().map(Into::into)),
+        None => {
+            args.push(PACKED_RELOCATIONS.into());
+            args.extend(RUNTIME_LIBS.iter().map(Into::into));
+        }
     }
     args
 }

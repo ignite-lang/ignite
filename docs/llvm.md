@@ -28,7 +28,7 @@ std/**/*.ignite, program.ignite --parse--> --check--> --type (ignite-types)--> -
 writes `DIR/llvm/{std.ll, program.ll, main_<exe>.ll}`, runs
 `clang -c -O0 -g -ffunction-sections -fdata-sections -Werror=override-module --target=<triple>`
 (`-O2` with `--release`) on each, links each executable with
-`clang -o DIR/bin/<exe> --target=<triple> [-fuse-ld=lld -Wl,--compress-sections=.debug_str=zlib | -Wl,--compress-debug-sections=zlib] main_<exe>.o program.o std.o <runtime> -Wl,--gc-sections [-Wl,--strip-debug] -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc`
+`clang -o DIR/bin/<exe> --target=<triple> [-fuse-ld=lld -Wl,--compress-sections=.debug_str=zlib | -Wl,--compress-debug-sections=zlib] main_<exe>.o program.o std.o <runtime> -Wl,--gc-sections [-Wl,--strip-debug] -Wl,-z,pack-relative-relocs -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc`
 (`-Wl,--strip-debug` with `--release` only, as cargo's release profile drops debug
 information; the compression without `--release`, below; the libraries are the list `cargo rustc -p ignite-rt --print native-static-libs`
 prints, fixed in the driver; `-fuse-ld=lld` on a build without `--release`, `--triple` and
@@ -36,6 +36,7 @@ prints, fixed in the driver; `-fuse-ld=lld` on a build without `--release`, `--t
 else clang's default linker links), and prints `built DIR/bin/<exe>`. Exit statuses as for the Rust
 target; 2 also when clang fails (its output passed through). `--static` links against musl
 instead, with the kit of start files, `libc.a` and `libunwind.a` and none of these libraries
+or `-z pack-relative-relocs`
 (`docs/slice.md` 23).
 
 Size. Every function and datum is in its own section (rustc emits the runtime's code that
@@ -73,6 +74,17 @@ compression it reads through). A dev build on the Rust target compresses every d
 section (its linker is the toolchain's choice or the user's), passed with
 `--config target.'cfg(all())'.rustflags`, joined with the rustflags configured for the target;
 `RUSTFLAGS` in the environment replaces it.
+
+Packed relative relocations (story `binary-size-back`, rows 3.2 and 3.9). Every dynamic
+executable, dev and release, on both targets, is linked with `-z pack-relative-relocs`: its
+relative relocations, 24 bytes each in `.rela.dyn`, are packed into a bitmap in `.relr.dyn`
+(`DT_RELR`; stripped `todod` and `terminald` about 37 KB smaller on this target). The
+executable then needs the loader version `GLIBC_ABI_DT_RELR`, so it runs on glibc 2.36 or
+newer (before: 2.34, the newest version any of its symbols names); an older loader refuses
+it by that name instead of running it unrelocated. The toolchain image (Debian trixie,
+glibc 2.41) and the dedicated host (Ubuntu 24.04, glibc 2.39) have it. A `--static` build
+has no dynamic relocations and links without it. The Rust target passes the flag the same
+way as the compression above (`binary_size::` in `crates/ignite/tests/binary_size.rs`).
 
 LTO (story `llvm-lto-runtime`). A `-linux-gnu` driver carries the runtime twice: the native
 archive and the same archive built with `-Clinker-plugin-lto`, whose Rust code is LLVM

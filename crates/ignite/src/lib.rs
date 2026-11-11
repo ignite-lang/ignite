@@ -2113,18 +2113,43 @@ fn cargo_output_dir(target_dir: &Path, release: bool, triple: Option<&str>) -> P
 /// every configured `rustflags`.
 const STATIC_RUSTFLAGS: &str = r#"["-C", "relocation-model=static"]"#;
 
-/// The `rustflags` of a dev Rust build, for every target (`cfg(all())`,
-/// joined with the flags configured for the target): the linker writes
-/// the debug sections compressed with zlib, as on the LLVM target
-/// (`llvm_build::DEV_LINK_FLAGS`, row 3.2). A generated manifest cannot
-/// carry link arguments, and a build script would cost a compilation per
-/// build. `RUSTFLAGS` in the environment replaces them.
-const DEV_RUSTFLAGS: &str =
-    r#"target.'cfg(all())'.rustflags=["-C", "link-arg=-Wl,--compress-debug-sections=zlib"]"#;
+/// The link argument of a dev Rust build: the linker writes the debug
+/// sections compressed with zlib, as on the LLVM target
+/// (`llvm_build::DEV_LINK_FLAGS`, row 3.2).
+const DEV_LINK_ARG: &str = "link-arg=-Wl,--compress-debug-sections=zlib";
+
+/// The link argument of a dynamic Rust build: packed relative relocations,
+/// as on the LLVM target (`llvm_build::PACKED_RELOCATIONS`, rows 3.2 and
+/// 3.9; glibc 2.36 or newer runs the executable).
+const DYNAMIC_LINK_ARG: &str = "link-arg=-Wl,-z,pack-relative-relocs";
+
+/// The `rustflags` for every target (`cfg(all())`, joined with the flags
+/// configured for the target) of a Rust build: [`DEV_LINK_ARG`] without
+/// `release`, [`DYNAMIC_LINK_ARG`] without `--static`; `None` when neither.
+/// A generated manifest cannot carry link arguments, and a build script
+/// would cost a compilation per build. `RUSTFLAGS` in the environment
+/// replaces them.
+fn link_rustflags(release: bool, static_link: bool) -> Option<String> {
+    let mut flags = Vec::new();
+    if !release {
+        flags.push(DEV_LINK_ARG);
+    }
+    if !static_link {
+        flags.push(DYNAMIC_LINK_ARG);
+    }
+    if flags.is_empty() {
+        return None;
+    }
+    let flags: Vec<String> = flags.iter().map(|f| format!(r#""-C", "{f}""#)).collect();
+    Some(format!(
+        "target.'cfg(all())'.rustflags=[{}]",
+        flags.join(", ")
+    ))
+}
 
 /// `cargo build` of the generated project in `out`, `--quiet` when `quiet`,
-/// [`DEV_RUSTFLAGS`] without `--release`, `--target <triple>` with
-/// [`STATIC_RUSTFLAGS`] for a static build (`docs/slice.md` 23.5).
+/// with [`link_rustflags`], `--target <triple>` with [`STATIC_RUSTFLAGS`]
+/// for a static build (`docs/slice.md` 23.5).
 /// Cargo is `$CARGO` when set, else `cargo` from `PATH`.
 fn cargo_build(
     out: &Path,
@@ -2144,8 +2169,9 @@ fn cargo_build(
         .arg(target_dir);
     if release {
         command.arg("--release");
-    } else {
-        command.arg("--config").arg(DEV_RUSTFLAGS);
+    }
+    if let Some(flags) = link_rustflags(release, triple.is_some()) {
+        command.arg("--config").arg(flags);
     }
     if let Some(triple) = triple {
         command
