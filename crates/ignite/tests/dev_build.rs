@@ -432,3 +432,138 @@ fn dev_backtrace_names_ignite_and_substrate_lines_on_both_targets() {
         "the failure report names no backtrace.ignite:{line}:\n{backtrace}"
     );
 }
+
+/// The crates `ignite-io` builds on: the driver builds them ahead, so the
+/// program's build finds them fresh.
+const AHEAD: &[&str] = &[
+    "nix",
+    "libc",
+    "corosensei",
+    "bitflags",
+    "cfg-if",
+    "cfg_aliases",
+    "memoffset",
+    "autocfg",
+    "scopeguard",
+];
+
+/// The packages of the `<verb> <name> v<version>` lines of a verbose
+/// cargo run.
+fn cargo_packages<'a>(stderr: &'a str, verb: &str) -> Vec<&'a str> {
+    stderr
+        .lines()
+        .filter_map(|line| line.trim_start().strip_prefix(verb)?.strip_prefix(' '))
+        .filter_map(|rest| rest.split_whitespace().next())
+        .collect()
+}
+
+/// `ignite build --target rust` of `source` into `out` and `target`, cargo
+/// verbose, so its `Fresh` lines show.
+fn rust_build_verbose(source: &Path, out: &Path, target: &Path) -> String {
+    let built = run(ignite_build(source, "rust", out)
+        .arg("--target-dir")
+        .arg(target)
+        .env("CARGO_TERM_VERBOSE", "true"));
+    text(&built.stderr)
+}
+
+/// Row 6.2 rust (story `build-time-back`): while the driver parses, types
+/// and generates, cargo builds the dependencies of `ignite-io` into the
+/// build's target directory; the program's build then compiles none of
+/// them, with or without TLS (whose crates it compiles itself). A rebuild
+/// builds nothing ahead.
+#[test]
+fn dependencies_built_ahead_are_fresh_in_the_programs_build() {
+    let dir = tmp("ahead");
+    let tls = dir.join("tls.ignite");
+    std::fs::write(
+        &tls,
+        "package ahead_tls\n\nimport std.tls.{TlsOptions}\n\n\
+         fn open(port: Int) -> Result<TlsStream, IoError> {\n  \
+         let stream = TcpStream.connect(\"127.0.0.1\", port)?\n  \
+         Tls.client(stream, \"localhost\", TlsOptions {})\n}\n",
+    )
+    .unwrap();
+    let plain = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/backtrace.ignite");
+    for (name, source) in [("plain", plain.as_path()), ("tls", tls.as_path())] {
+        let out = dir.join(name);
+        let target = dir.join(format!("{name}-cargo"));
+        let stderr = rust_build_verbose(source, &out, &target);
+        let compiled = cargo_packages(&stderr, "Compiling");
+        let fresh = cargo_packages(&stderr, "Fresh");
+        for package in AHEAD {
+            assert!(
+                !compiled.contains(package),
+                "{name}: the program's build compiled {package}:\n{stderr}"
+            );
+        }
+        for package in ["nix", "libc", "corosensei"] {
+            assert!(
+                fresh.contains(&package),
+                "{name}: {package} is not fresh:\n{stderr}"
+            );
+        }
+        assert!(compiled.contains(&"ignite-io"), "{name}:\n{stderr}");
+        if name == "tls" {
+            assert!(compiled.contains(&"rustls"), "{name}:\n{stderr}");
+        }
+        let ahead = target.join("ignite-prebuild");
+        assert!(
+            ahead.join("Cargo.toml").is_file(),
+            "{name}: nothing built ahead"
+        );
+        if name == "plain" {
+            std::fs::remove_dir_all(&ahead).unwrap();
+            let stderr = rust_build_verbose(source, &out, &target);
+            assert!(
+                cargo_packages(&stderr, "Compiling").is_empty(),
+                "the rebuild compiled:\n{stderr}"
+            );
+            assert!(!ahead.exists(), "the rebuild built ahead");
+        }
+    }
+}
+
+/// The processes whose command line names `path`.
+fn processes_naming(path: &Path) -> Vec<String> {
+    let needle = path.to_string_lossy().into_owned();
+    std::fs::read_dir("/proc")
+        .unwrap()
+        .flatten()
+        .filter(|entry| entry.file_name().to_string_lossy().parse::<u32>().is_ok())
+        .filter_map(|entry| std::fs::read(entry.path().join("cmdline")).ok())
+        .map(|cmdline| String::from_utf8_lossy(&cmdline).replace('\0', " "))
+        .filter(|cmdline| cmdline.contains(&needle))
+        .collect()
+}
+
+/// A program that fails its type check reports that error only, and the
+/// dependency build the driver started ahead is gone when it exits.
+#[test]
+fn a_type_error_stops_the_build_ahead() {
+    let dir = tmp("ahead-error");
+    let source = dir.join("wrong.ignite");
+    std::fs::write(
+        &source,
+        "package ahead_wrong\n\nfn wrong() -> Int = \"text\"\n",
+    )
+    .unwrap();
+    let target = dir.join("cargo");
+    let output = ignite_build(&source, "rust", &dir.join("out"))
+        .arg("--target-dir")
+        .arg(&target)
+        .output()
+        .unwrap();
+    let stderr = text(&output.stderr);
+    assert!(!output.status.success(), "{stderr}");
+    assert!(stderr.contains("wrong.ignite"), "{stderr}");
+    for word in ["Compiling", "note: building", "cargo"] {
+        assert!(!stderr.contains(word), "{word} in:\n{stderr}");
+    }
+    assert!(
+        target.join("ignite-prebuild/Cargo.toml").is_file(),
+        "nothing was built ahead"
+    );
+    let left = processes_naming(&target);
+    assert!(left.is_empty(), "left running: {left:#?}");
+}

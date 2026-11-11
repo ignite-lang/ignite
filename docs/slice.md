@@ -11254,6 +11254,18 @@ and for a configured `debug` alike.
   6.2), whatever the profile's own `debug`; a build or a test build into
   a directory without `Cargo.lock` starts from the substrate workspace's lock, so cargo makes no
   index request (`dev_build::fresh_rust_build_makes_no_index_request`).
+- Dependencies ahead (Rust target). Before it parses (after, when `--out` is not given), the
+  driver writes a crate that depends on `ignite-io` with the generated project's profiles into
+  `<target-dir>/ignite-prebuild/`, with the project's lock or else the substrate workspace's,
+  and starts `cargo build --quiet --offline -p corosensei -p nix` from it into the build's
+  target directory, its output discarded: the crates `ignite-io` builds on, which the
+  program's build then finds fresh, with or without `tls`
+  (`dev_build::dependencies_built_ahead_are_fresh_in_the_programs_build`). The program's build
+  starts after that cargo has ended. A target directory that has built `nix` for the profile
+  builds nothing ahead, and neither does a `--static` build. A load, type or generation error
+  stops that cargo and every process under it before the driver reports the error
+  (`dev_build::a_type_error_stops_the_build_ahead`). Row 6.2 rust: the driver's own work then
+  runs beside the longest chain of the dependency build (`libc`, `nix`) instead of before it.
 - Loader. The dependencies of each module (`module_dependencies`) are computed once per load
   and kept with the parsed module (`dependency_scan_tests::check_and_plan_scan_each_module_once`
   in `crates/ignite/src/lib.rs`); `plan.json` of the terminal design is unchanged
@@ -11264,7 +11276,10 @@ and for a configured `debug` alike.
   line (`dev_build::dev_backtrace_names_ignite_and_substrate_lines_on_both_targets`).
 - Not taken: `incremental = false` in the generated dev profile (`ignite-perf` builds with
   `CARGO_INCREMENTAL=0` already, so row 6.2 would not see it, and a user's rebuild would lose
-  it); `nix` without its `socket` feature, which needs four `unsafe` calls (row 3.6).
+  it); `nix` without its `socket` feature: `recv` with `MSG_DONTWAIT` into an initialised
+  buffer has no safe call in `std` or `socket2` (their flagged receives take
+  `[MaybeUninit<u8>]`), and a non-blocking socket would add a `poll` to every read that blocks
+  its worker (row 3.6, and the system calls per request).
 
 ## NN An HTTP reply allocates no more than at v0.15.0, and a server without held requests starts no task for them
 

@@ -1312,6 +1312,53 @@ fn dev_profile_builds_dependencies_without_debug_information() {
     );
 }
 
+/// The manifest the driver builds the dependencies of `ignite-io` from while
+/// it generates the program (story `build-time-back`, row 6.2 rust): the
+/// generated project's profiles, so cargo finds the units fresh in the
+/// program's build, and `ignite-io` without features.
+#[test]
+fn prebuild_manifest_has_the_projects_profiles_and_ignite_io() {
+    let substrate = std::path::Path::new("/sub/ignite-io");
+    let manifest = ignite_rustgen::prebuild_manifest(substrate);
+    let project = try_generate(vec![]).expect("generates");
+    for name in [
+        "profile.release",
+        "profile.dev.package.\"*\"",
+        "profile.dev.package.ignite-io",
+    ] {
+        assert_eq!(
+            table(&manifest, name),
+            table(&project.cargo_toml, name),
+            "{manifest}"
+        );
+    }
+    assert_eq!(
+        table(&manifest, "dependencies"),
+        ["ignite-io = { path = \"/sub/ignite-io\" }"]
+    );
+    assert_eq!(table(&manifest, "lib"), ["path = \"lib.rs\""]);
+}
+
+/// [`ignite_rustgen::SUBSTRATE_DEPENDENCIES`] names every dependency of
+/// `ignite-io` that is not optional: those are the packages the driver
+/// builds ahead.
+#[test]
+fn substrate_dependencies_are_ignite_ios_own() {
+    let manifest = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../ignite-io/Cargo.toml"),
+    )
+    .unwrap();
+    let mut names: Vec<&str> = table(&manifest, "dependencies")
+        .into_iter()
+        .filter(|line| !line.contains("optional = true"))
+        .filter_map(|line| line.split([' ', '=', '.']).next())
+        .collect();
+    names.sort_unstable();
+    let mut listed = ignite_rustgen::SUBSTRATE_DEPENDENCIES.to_vec();
+    listed.sort_unstable();
+    assert_eq!(names, listed);
+}
+
 #[test]
 fn no_system_is_a_library_without_executables() {
     let project = try_generate(vec![]).expect("generates");

@@ -17,6 +17,7 @@ pub mod conformance;
 mod embedded_runtime;
 mod llvm_build;
 mod musl;
+mod prebuild;
 pub mod rfc;
 pub mod run;
 mod test_build;
@@ -2023,26 +2024,46 @@ pub fn build(file: &Path, options: &BuildOptions) -> Result<BuildOutput, Error> 
     if let Some(triple) = &triple {
         musl::require_rust_target(triple)?;
     }
-    let (parsed, library) = load_program_std(file, options.std.as_deref(), &[])?;
     let substrate = options
         .substrate
         .clone()
         .unwrap_or_else(default_substrate_path);
+    let target_dir_of = |out: &Path| {
+        options
+            .target_dir
+            .clone()
+            .unwrap_or_else(|| out.join("target"))
+    };
+    let prebuild_for = |out: &Path| {
+        prebuild::Prebuild::start(
+            &substrate,
+            out,
+            &target_dir_of(out),
+            options.release,
+            triple.as_deref(),
+        )
+    };
+    // Dropped on any error below, which stops it.
+    let mut prebuild = match &options.out {
+        Some(out) => prebuild_for(out),
+        None => prebuild::Prebuild::none(),
+    };
+    let (parsed, library) = load_program_std(file, options.std.as_deref(), &[])?;
+    let out = options.out.clone().unwrap_or_else(|| {
+        let out = Path::new("target")
+            .join("ignite")
+            .join(ignite_rustgen::package_name(&parsed.program));
+        prebuild = prebuild_for(&out);
+        out
+    });
     let emitted = generate(parsed, &library, substrate.clone())?;
     let project = emitted.program;
-    let out = options.out.clone().unwrap_or_else(|| {
-        Path::new("target")
-            .join("ignite")
-            .join(&project.package_name)
-    });
     ignite_rustgen::write_project(&project, &out).map_err(io_error(&out))?;
     let std_out = out.join("std");
     ignite_rustgen::write_project(&emitted.std, &std_out).map_err(io_error(&std_out))?;
     seed_lock(&substrate, &out)?;
-    let target_dir = options
-        .target_dir
-        .clone()
-        .unwrap_or_else(|| out.join("target"));
+    let target_dir = target_dir_of(&out);
+    prebuild.finish();
     eprintln!(
         "note: building the generated Rust project in {}; compiler messages refer to generated code",
         out.display()
