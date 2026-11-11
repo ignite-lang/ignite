@@ -1198,13 +1198,11 @@ fn the_evaluator_reports_a_failed_try_as_the_targets_do() {
     );
 }
 
-/// Known difference (`quality/baseline.json`,
-/// `story:eval-receiver-order`): in `data.slice(a, b)` whose bound changes
-/// `data`, both targets slice the receiver as it was before the bound ran;
-/// the evaluator reads it after, so the two std.text tests that pin the
-/// targets' order fail in it.
+/// `story:eval-receiver-order`: in `data.slice(a, b)` whose bound changes
+/// `data`, both targets slice the receiver as it was before the bound ran,
+/// and so does the evaluator: it reads a builtin's receiver before its
+/// arguments, as the two std.text tests that pin the targets' order need.
 #[test]
-#[ignore = "story:eval-receiver-order: the evaluator reads a builtin's receiver after its arguments, the targets before"]
 fn the_evaluator_reads_a_receiver_before_its_arguments() {
     let library = ignite::load_std(&ignite::default_std_path()).unwrap_or_else(|e| panic!("{e}"));
     let (types, _) = ignite::type_std(&library).unwrap_or_else(|e| panic!("{e}"));

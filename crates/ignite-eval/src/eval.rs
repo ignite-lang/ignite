@@ -25,7 +25,12 @@ use ignite_types::{
     TCP_LISTENER_DEFAULT_BACKLOG, TCP_LISTENER_DEFAULT_EXPOSURE, Ty, TypedProgram, field_default,
 };
 
+use crate::substrate::World;
 use crate::{Module, Modules, Value};
+
+mod world;
+
+use world::{is_model_method, is_model_static};
 
 /// The limits of one property expression's evaluation (`docs/slice.md`
 /// section 15.3, O14): `units` of fuel, one per expression evaluated, per
@@ -206,6 +211,10 @@ pub struct Evaluator<'p> {
     time_limit: Option<std::time::Duration>,
     /// When the current evaluation passes its time limit.
     deadline: Option<std::time::Instant>,
+    /// The model of the substrate while a test runs ([`Evaluator::run_test`],
+    /// `docs/slice.md` 33.5), as this evaluator's task sees it; `None`
+    /// at compile time, where its builtins have no value.
+    world: Option<World>,
 }
 
 impl<'p> Evaluator<'p> {
@@ -228,6 +237,7 @@ impl<'p> Evaluator<'p> {
             on_stack: false,
             time_limit: None,
             deadline: None,
+            world: None,
         }
     }
 
@@ -319,7 +329,7 @@ impl<'p> Evaluator<'p> {
             module: m,
             system: None,
         };
-        self.run(move |ev| ev.block_body(&cx, &test.body).map(|_| Value::Unit))
+        self.run(move |ev| ev.in_world(move |ev| ev.block_body(&cx, &test.body)))
             .map(|_| ())
     }
 
@@ -398,16 +408,20 @@ impl<'p> Evaluator<'p> {
     }
 
     /// `nodes` new nodes were built. Past the node limit the live values are
-    /// counted exactly and compared with it.
+    /// counted exactly and compared with it: the locals and, under a test,
+    /// what the model of the substrate holds (stored and queued values,
+    /// pipe bytes).
     fn alloc(&mut self, nodes: u64) -> Eval<()> {
         self.allocated = self.allocated.saturating_add(nodes);
         if self.allocated > self.fuel.nodes {
-            let live: u64 = self
-                .frames
-                .iter()
-                .flat_map(|frame| &frame.locals)
-                .map(|(_, value)| value.nodes())
-                .sum();
+            let held = self.world.as_ref().map_or(0, World::nodes);
+            let live: u64 = held
+                + self
+                    .frames
+                    .iter()
+                    .flat_map(|frame| &frame.locals)
+                    .map(|(_, value)| value.nodes())
+                    .sum::<u64>();
             if live > self.fuel.nodes {
                 return Err(self.limit(Limit::Nodes(self.fuel.nodes)));
             }
@@ -716,7 +730,10 @@ impl<'p> Evaluator<'p> {
             }
             ExprKind::Try(inner) => self.try_(cx, e, inner),
             ExprKind::Await(inner) => self.expr(cx, inner),
-            ExprKind::Spawn(_) => Err(internal("`spawn` has no value at compile time")),
+            ExprKind::Spawn(operand) => match self.world.clone() {
+                Some(world) => self.spawn(cx, &world, operand),
+                None => Err(internal("`spawn` has no value at compile time")),
+            },
             ExprKind::Unary { op, operand } => self.unary(cx, e, *op, operand),
             ExprKind::Binary { .. } => self.binary_chain(cx, e),
             ExprKind::Match { scrutinee, arms } => self.match_(cx, e, scrutinee, arms),
@@ -803,6 +820,15 @@ impl<'p> Evaluator<'p> {
         }
         if let Some(reference) = types.reference(e) {
             return Ok(Value::Reference(reference.clone()));
+        }
+        // Under a test a last use moves (20.3.1): the handles the value
+        // holds go with it, so they are dropped where the targets drop
+        // them.
+        if self.world.is_some()
+            && types.moves(e)
+            && let Some(slot) = self.lookup_mut(name)
+        {
+            return Ok(std::mem::replace(slot, Value::Unit));
         }
         if let Some(value) = self.lookup(name) {
             return Ok(value.clone());
@@ -1069,6 +1095,10 @@ impl<'p> Evaluator<'p> {
                 let values = self.exprs(cx, args)?;
                 self.apply(f, values)
             }
+            Some(Callee::Role { protocol, role }) if self.world.is_some() => {
+                let values = self.args(cx, e, args)?;
+                self.call_role(&protocol, &role, values)
+            }
             Some(Callee::Role { protocol, role }) => Err(internal(format!(
                 "protocol role `{protocol}.{role}` has no value at compile time"
             ))),
@@ -1118,6 +1148,10 @@ impl<'p> Evaluator<'p> {
                 let values = self.exprs(cx, args)?;
                 self.apply(f, values)
             }
+            Some(Callee::Role { protocol, role }) if self.world.is_some() => {
+                let values = self.args(cx, e, args)?;
+                self.call_role(&protocol, &role, values)
+            }
             Some(Callee::Role { protocol, role }) => Err(internal(format!(
                 "protocol role `{protocol}.{role}` has no value at compile time"
             ))),
@@ -1133,6 +1167,11 @@ impl<'p> Evaluator<'p> {
         builtin: Builtin,
         args: Vec<Value>,
     ) -> Eval<Value> {
+        if let Some(world) = self.world.clone()
+            && is_model_static(builtin)
+        {
+            return self.model_static(&world, builtin, args);
+        }
         let mut args = args.into_iter();
         let mut next = || args.next().ok_or_else(|| internal("missing argument"));
         match builtin {
@@ -1193,6 +1232,14 @@ impl<'p> Evaluator<'p> {
             let values = self.exprs(cx, args)?;
             return self.builtin_static(cx, e, builtin, values);
         }
+        if let Some(world) = self.world.clone()
+            && is_model_method(builtin)
+        {
+            // The receiver first, then the arguments, as both targets do.
+            let receiver = self.expr(cx, receiver)?;
+            let values = self.exprs(cx, args)?;
+            return self.model_method(&world, builtin, receiver, values);
+        }
         match builtin {
             Builtin::ListPush
             | Builtin::ListSet
@@ -1223,11 +1270,30 @@ impl<'p> Evaluator<'p> {
                 self.alloc(value.nodes())?;
                 Ok(value)
             }
+            // The receiver before the arguments, as both targets do. A local
+            // the arguments do not change in place reads the same before
+            // and after them, so it is read in place after them, without a
+            // copy; any other receiver is evaluated first.
             _ => {
-                let values = self.exprs(cx, args)?;
-                let (value, nodes) = self.with_receiver(cx, receiver, |ev, recv| {
-                    ev.builtin_value(cx, e, builtin, recv, values)
-                })?;
+                let in_place = match &receiver.kind {
+                    ExprKind::Name(name) if self.is_local(cx, &name.name) => {
+                        !args.iter().any(|arg| {
+                            ignite_types::ownership::changed_in(arg, Some(cx.types()))
+                                .contains(name.name.as_str())
+                        })
+                    }
+                    _ => false,
+                };
+                let (value, nodes) = if in_place {
+                    let values = self.exprs(cx, args)?;
+                    self.with_receiver(cx, receiver, |ev, recv| {
+                        ev.builtin_value(cx, e, builtin, recv, values)
+                    })?
+                } else {
+                    let recv = self.expr(cx, receiver)?;
+                    let values = self.exprs(cx, args)?;
+                    self.builtin_value(cx, e, builtin, &recv, values)?
+                };
                 self.alloc(nodes)?;
                 Ok(value)
             }
@@ -1464,70 +1530,18 @@ impl<'p> Evaluator<'p> {
             (Builtin::RatioPpm, Value::Quantity(QuantityKind::Ratio, ppm)) => {
                 plain(Value::Int(*ppm))
             }
-            (
-                Builtin::TcpListenerAccept
-                | Builtin::TcpListenerLocalPort
-                | Builtin::TcpStreamRead
-                | Builtin::TcpStreamWriteAll
-                | Builtin::TcpStreamClose
-                | Builtin::TcpStreamSetIdleTimeout
-                | Builtin::PipeStreamRead
-                | Builtin::PipeStreamWriteAll
-                | Builtin::PipeStreamClose
-                | Builtin::PipeStreamSetIdleTimeout
-                | Builtin::PipeStreamReceivedBatches
-                | Builtin::StreamRead
-                | Builtin::StreamWriteAll
-                | Builtin::StreamClose
-                | Builtin::StreamSetIdleTimeout
-                | Builtin::TcpStreamWriteUrgent
-                | Builtin::TcpStreamUrgentPending
-                | Builtin::PipeStreamWriteUrgent
-                | Builtin::PipeStreamUrgentPending
-                | Builtin::StreamWriteUrgent
-                | Builtin::StreamUrgentPending
-                | Builtin::StoreNextId
-                | Builtin::StoreGet
-                | Builtin::StorePut
-                | Builtin::StoreRemove
-                | Builtin::StoreValues
-                | Builtin::StoreUpdate
-                | Builtin::StoreUpsert
-                | Builtin::DirectoryReadFile
-                | Builtin::DirectoryWriteFile
-                | Builtin::DirectoryReadDirectory
-                | Builtin::DirectoryCreateDirectory
-                | Builtin::DirectoryRemove
-                | Builtin::DirectoryRemoveTree
-                | Builtin::DirectoryAbsolutePath
-                | Builtin::LauncherStart
-                | Builtin::LauncherExecute
-                | Builtin::ChildProcessId
-                | Builtin::ChildProcessWait
-                | Builtin::ChildProcessKill
-                | Builtin::EntropyRandomBytes
-                | Builtin::SettingValue
-                | Builtin::CommandLineArguments
-                | Builtin::EnvironmentGet
-                | Builtin::TcpStreamPeer
-                | Builtin::TcpStreamLocal
-                | Builtin::TcpStreamTimedOut
-                | Builtin::SenderSend
-                | Builtin::SenderTrySend
-                | Builtin::SenderClose
-                | Builtin::ReceiverReceive
-                | Builtin::ReceiverReceiveWithin
-                | Builtin::ReceiverClosed
-                | Builtin::ReceiverClose
-                | Builtin::TlsStreamAlpn,
-                _,
-            ) => Err(internal(format!(
-                "builtin `{builtin:?}` has no value at compile time"
-            ))),
-            (builtin, recv) => Err(internal(format!(
-                "builtin `{builtin:?}` on `{}`",
-                recv.debug_text()
-            ))),
+            // Any other: a builtin with no value at compile time, such as a
+            // method of a handle (the receiver a member or a model's
+            // handle); a receiver of another shape is named.
+            _ => {
+                let receiver = match recv {
+                    Value::Member { .. } | Value::Handle(_) => String::new(),
+                    other => format!(" (receiver: `{}`)", other.debug_text()),
+                };
+                Err(internal(format!(
+                    "builtin `{builtin:?}` has no value at compile time{receiver}"
+                )))
+            }
         }
     }
 
@@ -1711,6 +1725,11 @@ impl<'p> Evaluator<'p> {
                 .map(|(_, v)| v)
                 .ok_or_else(|| internal(format!("no field `{name}`"))),
             Value::IoError { message, .. } if name == "message" => Ok(Value::Text(message)),
+            Value::Module { module, fns } => fns
+                .into_iter()
+                .find(|(field, _)| field == name)
+                .map(|(_, q)| Value::Fn(q))
+                .ok_or_else(|| internal(format!("`module(\"{module}\")` has no field `{name}`"))),
             Value::Member { member, .. } => {
                 let info = member_of(cx, &member)
                     .map(|(_, info)| info)

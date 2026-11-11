@@ -148,12 +148,17 @@ fn a_release_is_refused_on_a_ratio_worse_than_the_last_release_in_the_run() {
         row("3.7", "llvm/todo/get-1", 1000, 1300),
     ];
     let refused = remote::refusals(&baseline, &rows).unwrap();
-    assert_eq!(refused.len(), 2, "{refused:?}");
+    assert_eq!(refused.len(), 3, "{refused:?}");
     assert!(
         refused[0].starts_with("3.3 llvm/todo/get-1: 0.900× at the base, 0.700× now"),
         "{refused:?}"
     );
-    assert!(refused[1].starts_with("3.7 llvm/todo/get-1"), "{refused:?}");
+    assert!(
+        refused[1].starts_with("3.3 rust/todo/get-1: 0.900× at the base, 0.850× now")
+            && refused[1].contains("every sample"),
+        "a ratio worse in every pass, within the tolerance, was not refused: {refused:?}"
+    );
+    assert!(refused[2].starts_with("3.7 llvm/todo/get-1"), "{refused:?}");
 }
 
 #[test]
@@ -187,7 +192,7 @@ fn the_host_runs_the_benchmark_after_the_timing_rows() {
     else {
         panic!("quality-remote");
     };
-    assert_eq!((remote_args.passes, remote_args.bench_passes), (3, 5));
+    assert_eq!((remote_args.passes, remote_args.bench_passes), (5, 5));
     let Mode::QualityHost(args) =
         Cli::try_parse_from(["ignite-perf", "quality-host", "--root", "/q", "--no-bench"])
             .unwrap()

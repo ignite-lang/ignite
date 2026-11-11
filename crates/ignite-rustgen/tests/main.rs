@@ -7,6 +7,7 @@ mod allocations;
 mod common;
 mod compiles;
 mod golden;
+mod lent_rebinding;
 mod names;
 mod reachable;
 mod slice10;
