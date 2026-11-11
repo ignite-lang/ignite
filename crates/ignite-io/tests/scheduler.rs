@@ -308,6 +308,111 @@ fn child_overflow() {
     panic!("the overflow did not end the process");
 }
 
+/// The child test `name` started with SIGSEGV and SIGBUS ignored (a shell
+/// `trap ''`, which `exec` keeps), as a program of the Rust target can be
+/// started: std then installs no overflow handler and gives its threads
+/// no alternate signal stack. Killed after [`LIMIT`] if it has not ended.
+fn child_with_faults_ignored(name: &str) -> (Output, bool) {
+    let mut child = Command::new("sh")
+        .args(["-c", "trap '' SEGV BUS; exec \"$0\" \"$@\""])
+        .arg(std::env::current_exe().unwrap())
+        .args([name, "--exact", "--nocapture", "--test-threads=1"])
+        .env(CHILD, "1")
+        .env("IGNITE_WORKERS", "1")
+        .env_remove("IGNITE_IO")
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let start = Instant::now();
+    let mut hung = false;
+    while child.try_wait().unwrap().is_none() {
+        if start.elapsed() > LIMIT {
+            hung = true;
+            let _ = child.kill();
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    (child.wait_with_output().unwrap(), hung)
+}
+
+/// The signals `/proc/self/status` lists as ignored (`SigIgn`), a bit per
+/// signal number less one.
+fn ignored_signals() -> u64 {
+    let status = std::fs::read_to_string("/proc/self/status").unwrap();
+    let line = status
+        .lines()
+        .find_map(|line| line.strip_prefix("SigIgn:"))
+        .expect("SigIgn in /proc/self/status");
+    u64::from_str_radix(line.trim(), 16).unwrap()
+}
+
+/// Started with SIGSEGV and SIGBUS ignored, a task's overflow ends the
+/// process by the fault's signal, as a program of v0.15.0 ended then: the
+/// overflow handler is not kept in front of an ignored action, since a
+/// worker of the Rust target has no alternate stack to run it on
+/// (`crate::signal` of `ignite-io`). No report, and no hang.
+#[test]
+fn started_with_faults_ignored_an_overflow_ends_by_the_signal() {
+    use std::os::unix::process::ExitStatusExt;
+    let (output, hung) = child_with_faults_ignored("scheduler::child_overflow");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !hung,
+        "the child did not end within {LIMIT:?}\nstderr:\n{stderr}"
+    );
+    assert!(
+        matches!(output.status.signal(), Some(11 | 7)),
+        "ended by {:?}, not SIGSEGV or SIGBUS\nstderr:\n{stderr}",
+        output.status
+    );
+    assert!(
+        !stderr.contains("has overflowed its stack"),
+        "a report without an alternate stack:\n{stderr}"
+    );
+}
+
+/// Started with SIGSEGV and SIGBUS ignored, a task's start (which installs
+/// the overflow handler) leaves both ignored, and a SIGSEGV or SIGBUS
+/// raised in a task reaches that action: the process goes on.
+#[test]
+fn started_with_faults_ignored_other_faults_keep_the_ignored_action() {
+    let (output, hung) = child_with_faults_ignored("scheduler::child_faults_ignored_stay_ignored");
+    assert!(!hung, "the child did not end within {LIMIT:?}");
+    passed(&output);
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("both still ignored"),
+        "{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+}
+
+#[test]
+fn child_faults_ignored_stay_ignored() {
+    use nix::sys::signal::{Signal, raise};
+    if !in_child() {
+        return;
+    }
+    let both = (1u64 << (Signal::SIGSEGV as u64 - 1)) | (1u64 << (Signal::SIGBUS as u64 - 1));
+    assert_eq!(
+        ignored_signals() & both,
+        both,
+        "the child did not start with both ignored"
+    );
+    spawn(|| {
+        raise(Signal::SIGSEGV).unwrap();
+        raise(Signal::SIGBUS).unwrap();
+    });
+    wait_for_tasks();
+    assert_eq!(
+        ignored_signals() & both,
+        both,
+        "the overflow handler replaced an ignored SIGSEGV or SIGBUS"
+    );
+    println!("both still ignored");
+}
+
 /// A task spawned by a task runs on its worker, with no hand-over to
 /// another thread, while that worker is not busier than the others by
 /// more than one task; a task that spawns many still spreads them over
