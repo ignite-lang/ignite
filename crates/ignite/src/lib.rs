@@ -18,6 +18,7 @@ mod embedded_runtime;
 mod llvm_build;
 mod musl;
 mod prebuild;
+pub use prebuild::{block_ending_signals, unblock_ending_signals};
 pub mod rfc;
 pub mod run;
 mod test_build;
@@ -2134,6 +2135,58 @@ fn cargo_output_dir(target_dir: &Path, release: bool, triple: Option<&str>) -> P
 /// every configured `rustflags`.
 const STATIC_RUSTFLAGS: &str = r#"["-C", "relocation-model=static"]"#;
 
+/// Give a cargo run of the driver's `CFLAGS=-g0`, as the repository's
+/// `.cargo/config.toml` does for the cargo runs inside it, wherever the
+/// driver stands (story `build-time-back`): the C and assembly that build
+/// scripts compile through the `cc` crate (the TLS engine's) then carry no
+/// debug information into a dev executable, like the Rust crates from
+/// outside the project. A user's own flags win: nothing is set when
+/// `CFLAGS`, `TARGET_CFLAGS`, `HOST_CFLAGS` or a `CFLAGS_<target>` is in
+/// the environment, the variables `cc` reads.
+pub(crate) fn without_c_debug_information(command: &mut Command) {
+    if let Some(flags) = c_flags_given(std::env::vars_os().map(|(name, _)| name)) {
+        command.env("CFLAGS", flags);
+    }
+}
+
+/// The `CFLAGS` of [`without_c_debug_information`] for an environment
+/// with the variables `names`: none when one of them is a flags variable
+/// of `cc`.
+fn c_flags_given(mut names: impl Iterator<Item = std::ffi::OsString>) -> Option<&'static str> {
+    let set = names.any(|name| {
+        let name = name.to_string_lossy();
+        matches!(name.as_ref(), "CFLAGS" | "TARGET_CFLAGS" | "HOST_CFLAGS")
+            || name.starts_with("CFLAGS_")
+    });
+    (!set).then_some("-g0")
+}
+
+#[cfg(test)]
+mod c_flags_tests {
+    use super::c_flags_given;
+
+    fn given(names: &[&str]) -> Option<&'static str> {
+        c_flags_given(names.iter().map(|name| (*name).into()))
+    }
+
+    /// The driver's cargo runs get `-g0` unless the user set flags of
+    /// their own in any variable `cc` reads.
+    #[test]
+    fn the_driver_sets_cflags_only_where_the_user_set_none() {
+        assert_eq!(given(&[]), Some("-g0"));
+        assert_eq!(given(&["PATH", "CXXFLAGS", "RUSTFLAGS"]), Some("-g0"));
+        for user in [
+            "CFLAGS",
+            "TARGET_CFLAGS",
+            "HOST_CFLAGS",
+            "CFLAGS_x86_64-unknown-linux-gnu",
+            "CFLAGS_x86_64_unknown_linux_gnu",
+        ] {
+            assert_eq!(given(&["PATH", user]), None, "{user}");
+        }
+    }
+}
+
 /// `cargo build` of the generated project in `out`, `--quiet` when `quiet`,
 /// `--target <triple>` with [`STATIC_RUSTFLAGS`] for a static build
 /// (`docs/slice.md` 23.5).
@@ -2148,6 +2201,7 @@ fn cargo_build(
 ) -> Result<(), Error> {
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let mut command = Command::new(&cargo);
+    without_c_debug_information(&mut command);
     command
         .arg("build")
         .arg("--manifest-path")

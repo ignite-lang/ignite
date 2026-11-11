@@ -11275,7 +11275,12 @@ and for a configured `debug` alike.
   with `-g3` in every profile, so `.cargo/config.toml` sets `CFLAGS = "-g0"`, which `cc`
   passes last (a `CFLAGS` of the environment wins). A dev executable on the LLVM target holds no compile
   unit of a third-party crate (`dev_build::dev_todod_links_no_third_party_debug_information`,
-  with the archive built as configured and with `CARGO_PROFILE_DEV_DEBUG=2`).
+  with the archive built as configured and with `CARGO_PROFILE_DEV_DEBUG=2`). The driver gives
+  its own cargo runs (the build ahead and the program's build) `CFLAGS=-g0` wherever it stands,
+  unless `CFLAGS`, `TARGET_CFLAGS`, `HOST_CFLAGS` or a `CFLAGS_<target>` is set
+  (`c_flags_tests::the_driver_sets_cflags_only_where_the_user_set_none`), so a TLS program built
+  outside the repository holds no third-party compile unit either
+  (`dev_build_adversary::a_tls_program_built_outside_the_repository_holds_no_third_party_debug_information`).
 - Linker. A dev build on the LLVM target without `--triple` and `--static` links with
   `-fuse-ld=lld` when `ld.lld` lies beside the clang it runs, its symbolic links resolved, and
   with clang's default linker otherwise (`docs/llvm.md` section 1); both carry a build id
@@ -11298,7 +11303,14 @@ and for a configured `debug` alike.
   starts after that cargo has ended. A target directory that has built `nix` for the profile
   builds nothing ahead, and neither does a `--static` build. A load, type or generation error
   stops that cargo and every process under it before the driver reports the error
-  (`dev_build::a_type_error_stops_the_build_ahead`). Row 6.2 rust: the driver's own work then
+  (`dev_build::a_type_error_stops_the_build_ahead`), and so does a panic as it unwinds
+  (`prebuild::tests::a_panic_stops_the_build_ahead_and_what_it_started`). While it runs, SIGTERM,
+  SIGINT and SIGHUP sent to the driver alone are taken by a thread of the driver's, which stops
+  it the same way and ends the driver by that signal; the driver's main thread keeps them
+  blocked, and a signal the driver ignores stays ignored
+  (`dev_build_adversary::a_driver_ended_by_sigterm_leaves_no_build_ahead`, `_sigint_`,
+  `_sighup_`). SIGKILL cannot be taken: the build ahead then runs to its end, and the next build
+  finds what it built fresh (or waits for it on cargo's lock of the target directory). Row 6.2 rust: the driver's own work then
   runs beside the longest chain of the dependency build (`libc`, `nix`) instead of before it.
 - Substrate. `nix` is built without `term`: standard input's raw mode reads and sets the
   terminal attributes through the `termios` crate (`tcgetattr`, `tcsetattr`: one `ioctl` each,

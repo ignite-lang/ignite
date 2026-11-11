@@ -49,10 +49,33 @@ fn signal(id: u32, signal: &str) {
 /// `nix` without a compiler cache here, which takes several times that.
 #[test]
 fn a_driver_ended_by_sigterm_leaves_no_build_ahead() {
-    let dir = tmp("ahead-killed");
+    a_driver_ended_by_leaves_no_build_ahead("TERM", 15);
+}
+
+/// The same with SIGINT, what a terminal sends on Ctrl-C (here to the
+/// driver alone, not to its group).
+#[test]
+fn a_driver_ended_by_sigint_leaves_no_build_ahead() {
+    a_driver_ended_by_leaves_no_build_ahead("INT", 2);
+}
+
+/// The same with SIGHUP, what a closed terminal sends.
+#[test]
+fn a_driver_ended_by_sighup_leaves_no_build_ahead() {
+    a_driver_ended_by_leaves_no_build_ahead("HUP", 1);
+}
+
+/// `kill -<name> <driver>` while the driver still parses and generates,
+/// the driver started with the signal's default action (`env
+/// --default-signal`, whatever this test process ignores): the driver
+/// ends by that signal and nothing of the build ahead runs a second later.
+fn a_driver_ended_by_leaves_no_build_ahead(name: &str, number: i32) {
+    let dir = tmp(&format!("ahead-killed-{name}"));
     let target = dir.join("cargo");
     let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/todo/todo.ignite");
-    let mut driver = Command::new(env!("CARGO_BIN_EXE_ignite"))
+    let mut driver = Command::new("env")
+        .arg("--default-signal")
+        .arg(env!("CARGO_BIN_EXE_ignite"))
         .arg("build")
         .arg(&source)
         .args(["--target", "rust"])
@@ -94,7 +117,7 @@ fn a_driver_ended_by_sigterm_leaves_no_build_ahead() {
         }
         panic!("the driver started no build ahead while it generated");
     }
-    signal(driver.id(), "TERM");
+    signal(driver.id(), name);
     let status = driver.wait().unwrap();
     let mut left = ahead(0);
     for _ in 0..20 {
@@ -117,8 +140,8 @@ fn a_driver_ended_by_sigterm_leaves_no_build_ahead() {
     }
     assert_eq!(
         status.signal(),
-        Some(15),
-        "the driver was to end by SIGTERM: {status:?}"
+        Some(number),
+        "the driver was to end by SIG{name}: {status:?}"
     );
     assert!(
         left.is_empty(),

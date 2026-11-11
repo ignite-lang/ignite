@@ -22,7 +22,7 @@ ignite-llvm.workspace = true
 ignite-eval.workspace = true
 clap.workspace = true
 sha2 = "0.10"
-nix = { workspace = true, features = ["poll", "process", "signal"] }
+nix = { workspace = true, features = ["poll", "process", "pthread", "signal"] }
 
 [dev-dependencies]
 ignite-rt = { workspace = true, features = ["runner"] }
