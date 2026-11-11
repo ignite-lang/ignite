@@ -2541,6 +2541,38 @@ impl<'p> Evaluator<'p> {
                 world.flush().map_err(over)?;
                 Ok(Value::Unit)
             }
+            Builtin::ChannelBounded => {
+                let capacity = match args.into_iter().next() {
+                    Some(Value::Int(n)) if n >= 1 => n,
+                    _ => {
+                        return Err(internal(
+                            "`Channel.bounded` with a capacity below 1 has no value in the model",
+                        ));
+                    }
+                };
+                let capacity = usize::try_from(capacity).unwrap_or(usize::MAX);
+                let (sender, receiver) = world.channel(capacity).map_err(over)?;
+                Ok(Value::Tuple(vec![
+                    Value::Handle(sender),
+                    Value::Handle(receiver),
+                ]))
+            }
+            Builtin::ClockMonotonic => Ok(Value::Quantity(
+                QuantityKind::Duration,
+                world.now().map_err(over)?,
+            )),
+            Builtin::ClockSleep => {
+                let nanoseconds = match args.into_iter().next() {
+                    Some(Value::Quantity(_, n)) => n,
+                    _ => return Err(internal("`Clock.sleep` of a non-Duration")),
+                };
+                world.flush().map_err(over)?;
+                if nanoseconds > 0 {
+                    let deadline = world.now().map_err(over)?.saturating_add(nanoseconds);
+                    self.wait_on(world, Wait::Sleep, Some(deadline))?;
+                }
+                Ok(Value::Unit)
+            }
             other => Err(internal(format!(
                 "builtin `{other:?}` has no value at compile time"
             ))),
@@ -2691,6 +2723,62 @@ impl<'p> Evaluator<'p> {
             ))),
             (Builtin::PipeStreamReceivedBatches, HandleKind::PipeStream) => {
                 Ok(Value::Int(world.received_batches(id).map_err(over)?))
+            }
+            (Builtin::SenderSend, HandleKind::Sender) => {
+                let mut value = next()?;
+                loop {
+                    match world.send(id, value, true).map_err(over)? {
+                        Ok(sent) => return Ok(Value::Bool(sent)),
+                        Err(back) => {
+                            value = back;
+                            self.wait_on(world, Wait::Send(id), None)?;
+                        }
+                    }
+                }
+            }
+            (Builtin::SenderTrySend, HandleKind::Sender) => {
+                match world.send(id, next()?, false).map_err(over)? {
+                    Ok(sent) => Ok(Value::Bool(sent)),
+                    Err(_) => Ok(Value::Bool(false)),
+                }
+            }
+            (Builtin::SenderClose, HandleKind::Sender)
+            | (Builtin::ReceiverClose, HandleKind::Receiver) => {
+                world.close_channel(id).map_err(over)?;
+                Ok(Value::Unit)
+            }
+            (Builtin::ReceiverClosed, HandleKind::Receiver) => {
+                Ok(Value::Bool(world.channel_closed(id).map_err(over)?))
+            }
+            (Builtin::ReceiverReceive | Builtin::ReceiverReceiveWithin, HandleKind::Receiver) => {
+                let deadline = if builtin == Builtin::ReceiverReceiveWithin {
+                    let nanoseconds = match next()? {
+                        Value::Quantity(_, n) => n,
+                        _ => return Err(internal("`receive_within` of a non-Duration")),
+                    };
+                    Some(
+                        world
+                            .now()
+                            .map_err(over)?
+                            .saturating_add(nanoseconds.max(0)),
+                    )
+                } else {
+                    None
+                };
+                let mut first = true;
+                loop {
+                    match world.receive(id, deadline, first).map_err(over)? {
+                        Some(value) => {
+                            let nodes = value.as_ref().map_or(0, Value::nodes);
+                            self.alloc(nodes + 1)?;
+                            return Ok(Value::option(value));
+                        }
+                        None => {
+                            first = false;
+                            self.wait_on(world, Wait::Receive(id), deadline)?;
+                        }
+                    }
+                }
             }
             (builtin, kind) => Err(internal(format!(
                 "builtin `{builtin:?}` on a `{}` has no value in the model",
@@ -2856,6 +2944,9 @@ fn is_model_static(builtin: Builtin) -> bool {
             | Builtin::EnvironmentOf
             | Builtin::PipePair
             | Builtin::ProcessFlush
+            | Builtin::ChannelBounded
+            | Builtin::ClockMonotonic
+            | Builtin::ClockSleep
     )
 }
 
@@ -2886,6 +2977,13 @@ fn is_model_method(builtin: Builtin) -> bool {
             | Builtin::StreamClose
             | Builtin::StreamSetIdleTimeout
             | Builtin::StreamUrgentPending
+            | Builtin::SenderSend
+            | Builtin::SenderTrySend
+            | Builtin::SenderClose
+            | Builtin::ReceiverReceive
+            | Builtin::ReceiverReceiveWithin
+            | Builtin::ReceiverClosed
+            | Builtin::ReceiverClose
     )
 }
 

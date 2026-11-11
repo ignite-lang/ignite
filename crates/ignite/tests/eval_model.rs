@@ -400,7 +400,10 @@ test "a task that never waits ends the test on fuel" {
 fn tasks_run_in_spawn_order_until_they_wait() {
     let loaded = program("tasks", TASKS);
     for _ in 0..3 {
-        assert_eq!(run(&loaded, "tasks run in spawn order, each until it waits"), Ok(()));
+        assert_eq!(
+            run(&loaded, "tasks run in spawn order, each until it waits"),
+            Ok(())
+        );
     }
 }
 
@@ -425,7 +428,10 @@ fn a_failing_task_ends_only_itself() {
 fn a_deadlock_is_reported() {
     let loaded = program("tasks", TASKS);
     assert_eq!(
-        report(run(&loaded, "every task waiting with no deadline is a deadlock")),
+        report(run(
+            &loaded,
+            "every task waiting with no deadline is a deadlock"
+        )),
         "evaluation failed: every task of the model waits and none has a deadline (a deadlock)"
     );
 }
@@ -446,4 +452,79 @@ fn a_spinning_task_ends_on_fuel() {
         }) => {}
         other => panic!("expected the fuel limit, found {other:?}"),
     }
+}
+
+const CHANNELS: &str = r#"package model.channels
+
+import std.io.IoError
+
+test fn ring_after(bell: Sender<Text>, delay: Duration) -> Result<Unit, IoError> {
+  Clock.sleep(delay)
+  bell.send("ring")
+  Ok(())
+}
+
+test "a sleep moves the virtual clock by exactly its duration" {
+  let started = Clock.monotonic()
+  Clock.sleep(3600 seconds)
+  assert Clock.monotonic() - started == 3600 seconds
+}
+
+test "a receive waits for a sender that sleeps first, in virtual time" {
+  let (bell, rings) = Channel.bounded(1)
+  let started = Clock.monotonic()
+  spawn ring_after(bell, 50 ms)
+  assert rings.receive_within(10 ms) == None
+  assert Clock.monotonic() - started == 10 ms
+  assert rings.receive_within(1 seconds) == Some("ring")
+  assert Clock.monotonic() - started == 50 ms
+  assert rings.receive() == None
+  assert rings.closed()
+}
+
+test "a closed channel gives what was queued, then None" {
+  let (tx, rx) = Channel.bounded(2)
+  assert tx.send(1)
+  assert tx.try_send(2)
+  assert !tx.try_send(3)
+  tx.close()
+  assert !tx.send(4)
+  assert rx.closed()
+  assert rx.receive() == Some(1)
+  assert rx.receive() == Some(2)
+  assert rx.receive() == None
+}
+"#;
+
+/// The clock of a test is virtual (33.5): a sleep or a timeout costs no
+/// wall time, and the time moves only when every task waits, to the
+/// earliest deadline.
+#[test]
+fn time_is_virtual() {
+    let loaded = program("channels", CHANNELS);
+    assert_eq!(
+        run(
+            &loaded,
+            "a sleep moves the virtual clock by exactly its duration"
+        ),
+        Ok(())
+    );
+    assert_eq!(
+        run(
+            &loaded,
+            "a receive waits for a sender that sleeps first, in virtual time"
+        ),
+        Ok(())
+    );
+}
+
+/// `Channel.bounded` under a test as `crates/ignite-io/src/channel.rs`:
+/// a closed channel takes nothing more and gives what was queued.
+#[test]
+fn a_channel_gives_what_was_queued() {
+    let loaded = program("channels", CHANNELS);
+    assert_eq!(
+        run(&loaded, "a closed channel gives what was queued, then None"),
+        Ok(())
+    );
 }
