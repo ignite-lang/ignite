@@ -490,6 +490,25 @@ Standing rule (Timo, 2026-11-04): finished work goes to `main` without waiting f
 Standing rule (Timo, 2026-11-07): a release is cut after every third wave a coordinator closes,
 without waiting for a person.
 
+Pace (Timo, 2026-11-11: "its not accreptable to work in that pace", "fix your process"). v0.16.0
+was open for three days; a coordinator does this instead of what cost them:
+
+- The dedicated-host run (`task quality-remote BASE=<last release tag> HEAD=<integration head>`,
+  with a `RUN` label that is not `v*`) is started as soon as the units of a wave that move a time
+  row are merged into the integration branch. It is not left for after the last merge: waves 9
+  and 10 merged without one, and 14 cells were refused together at the cut.
+- Work that does not touch the same files runs at once, an accepted story of the next wave
+  included. A release in recovery does not hold back unrelated accepted work.
+- One adversary pass per unit. Its introduced findings go back to the implementor once, and the
+  coordinator reruns the red cases itself. A second pass is for new code nobody attacked, and the
+  coordinator says which code.
+- A count that moves by less than its run-to-run spread, or that the reviewer ties to code layout
+  and not to code on the path, does not send a unit back. The time rows of the dedicated host
+  judge it.
+- The value of `IGNITE_PERF_AWS_PROFILE` is copied into the coordinating session's own scratch at
+  a handoff. Another session's scratch is deleted when that session ends, and the name is in no
+  file of the repository and in no transcript.
+
 - Count: waves closed on `main` since the last release tag; the wave pages under
   `.engineering/waves/` name them. At the third, the next minor version is released.
 - Steps, as `v0.12.0` (`29f656f2`): one `chore(release): version X.Y.Z` commit bumping the
