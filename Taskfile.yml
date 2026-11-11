@@ -59,7 +59,7 @@ tasks:
       - task: ux
 
   quality:
-    desc: Measure every instrumented metric of docs/quality.md once and append the run to quality/history.jsonl (RUN=vX.Y.Z for a release: rows worse than the last are printed as tracked)
+    desc: Measure every instrumented metric of docs/quality.md once and append the run to quality/history.jsonl (RUN=vX.Y.Z for a release, whose rows worse than the last are printed as tracked)
     vars:
       WORK:
         sh: echo "${IGNITE_QUALITY_WORK:-${XDG_CACHE_HOME:-$HOME/.cache}/ignite/quality}"
@@ -76,7 +76,7 @@ tasks:
       - cargo test -q -p ignite --test main -- --ignored --exact quality::record
 
   quality-remote:
-    desc: Measure the timing rows of docs/quality.md (5.3, 6.1, 6.2) and the native benchmark against plain Rust and Go (3.3, 3.7, 3.8, 3.9, bench/native, absolute values in quality/bench.jsonl) for BASE and HEAD interleaved on a single-tenant EC2 host (INSTANCE_TYPE, default c7i.metal-24xl, spot, on-demand only without spot capacity) made for the run and terminated after it, and append HEAD's records to quality/history.jsonl (RUN=vX.Y.Z for a release: rows worse than BASE are printed as tracked); AWS profile IGNITE_PERF_AWS_PROFILE (required), region IGNITE_PERF_AWS_REGION; MAX_HOURS (default 3) after which the instance terminates itself; DRY_RUN=1 prints the aws calls and makes the creating ones with --dry-run
+    desc: Measure the timing rows of docs/quality.md (5.3, 6.1, 6.2) and the native benchmark against plain Rust and Go (3.3, 3.7, 3.8, 3.9, bench/native, absolute values in quality/bench.jsonl) for BASE and HEAD interleaved on a single-tenant EC2 host (INSTANCE_TYPE, default c7i.metal-24xl, spot, on-demand only without spot capacity) made for the run and terminated after it, and append HEAD's records to quality/history.jsonl (RUN=vX.Y.Z for a release, whose rows worse than BASE are printed as tracked); AWS profile IGNITE_PERF_AWS_PROFILE (required), region IGNITE_PERF_AWS_REGION; MAX_HOURS (default 3) after which the instance terminates itself; DRY_RUN=1 prints the aws calls and makes the creating ones with --dry-run
     requires:
       vars: [BASE, HEAD]
     vars:
