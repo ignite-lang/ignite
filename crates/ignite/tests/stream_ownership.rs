@@ -193,3 +193,117 @@ fn inline_sessions_keep_the_descriptor_count() {
     );
     assert!(server.child.try_wait().expect("try_wait").is_none());
 }
+
+/// A running `todod` of `examples/todo` built for the LLVM target, in a
+/// working directory of its own, killed on drop.
+struct Todod {
+    child: Child,
+    port: u16,
+    /// Kept open, so that a line the server logs later has a reader.
+    _stderr: BufReader<std::process::ChildStderr>,
+}
+
+impl Todod {
+    fn start() -> Todod {
+        let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
+            .join("stream-ownership")
+            .join(format!("todod-work-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut child = Command::new(crate::todo::todod(common::Target::Llvm))
+            .args(["--port", "0"])
+            .current_dir(&dir)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn todod");
+        let mut stderr = BufReader::new(child.stderr.take().unwrap());
+        let mut first = String::new();
+        stderr.read_line(&mut first).unwrap();
+        let port = first
+            .trim()
+            .strip_prefix("listening on 127.0.0.1:")
+            .unwrap_or_else(|| panic!("first line {first:?}"))
+            .parse()
+            .unwrap();
+        Todod {
+            child,
+            port,
+            _stderr: stderr,
+        }
+    }
+
+    /// One connection: `GET /health`, the head of the answer read, then
+    /// closed by the client.
+    fn health(&self) {
+        let mut stream = TcpStream::connect(("127.0.0.1", self.port)).unwrap();
+        stream.set_read_timeout(Some(TIMEOUT)).unwrap();
+        stream
+            .write_all(b"GET /health HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+            .unwrap();
+        let mut reply = Vec::new();
+        let mut chunk = [0u8; 4096];
+        while !reply.windows(4).any(|w| w == b"\r\n\r\n") {
+            let n = stream.read(&mut chunk).expect("read from todod");
+            assert!(n > 0, "todod closed before a whole head: {reply:?}");
+            reply.extend_from_slice(&chunk[..n]);
+        }
+        assert!(
+            reply.starts_with(b"HTTP/1.1 200"),
+            "{}",
+            String::from_utf8_lossy(&reply)
+        );
+    }
+
+    /// The sockets among the server's open descriptors: its listener and
+    /// the connections it has not closed. (A worker's epoll descriptor is
+    /// not one, so a worker that starts later does not count.)
+    fn sockets(&self) -> usize {
+        std::fs::read_dir(format!("/proc/{}/fd", self.child.id()))
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                std::fs::read_link(entry.path())
+                    .is_ok_and(|target| target.to_string_lossy().starts_with("socket:"))
+            })
+            .count()
+    }
+}
+
+impl Drop for Todod {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+/// A connection the HTTP server of `std.protocol.http` accepted and served
+/// in a task of its own is closed when the client has closed it and the
+/// task has ended: 40 connections, each one request answered and then
+/// closed by the client, leave the server with the sockets it had before.
+/// `serve_listener` binds the accepted stream in a `match` arm
+/// (`Ok(stream) => { ...; spawn serve_connection(stream, ...) }`), and the
+/// LLVM target gives the task an owner of the handle without releasing the
+/// one `accept` made: the task's release leaves one owner, and the socket
+/// stays open until the process ends. The Rust target closes it; so did the
+/// LLVM target at v0.15.0, whose loop bound the stream with `let`.
+#[test]
+fn connections_served_in_a_task_of_the_http_server_are_closed() {
+    const CONNECTIONS: usize = 40;
+    let mut server = Todod::start();
+    let start = server.sockets();
+    for _ in 0..CONNECTIONS {
+        server.health();
+    }
+    let deadline = Instant::now() + TIMEOUT;
+    while server.sockets() > start && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let open = server.sockets();
+    assert_eq!(
+        open, start,
+        "{open} sockets open after {CONNECTIONS} connections served and closed, {start} before"
+    );
+    assert!(server.child.try_wait().expect("try_wait").is_none());
+}
