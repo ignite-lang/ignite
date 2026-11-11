@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-11T13:33:12Z",
+  "actor": "human:timo",
+  "artifact": "story:size-rows-grow-with-a-decision",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "coordinator run on the unit merged with the integration branch (tree 550ab3ef, unit head 8ea61be6): cargo fmt --check exit 0, clippy exit 0, quality:: and site:: 74 passed 1 failed (static_metrics_hold_the_bar, improved lines only), ignite-perf 70 passed, ignite-check 10 + 34 passed"
+  }
+}
