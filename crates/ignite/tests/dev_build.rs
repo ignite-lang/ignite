@@ -364,12 +364,24 @@ fn frame_in(backtrace: &str, file: &str) -> bool {
         .any(|(_, path, _)| path.contains(file))
 }
 
+/// Whether the innermost frame, the breakpoint's `failure_report`, which
+/// `ignite-io` compiles itself, names its file (`src/report.rs`, relative
+/// where cargo compiled the crate as a path dependency) and line.
+fn breakpoint_frame_has_its_line(backtrace: &str) -> bool {
+    backtrace
+        .lines()
+        .find(|line| line.starts_with("#0 "))
+        .is_some_and(|line| frame_in(line, "src/report.rs"))
+}
+
 /// `docs/llvm.md` section 9: a dev backtrace of a failing program names
 /// file and line of the substrate's frames and of the Ignite source: on
 /// the LLVM target the Ignite fn's frame itself (its debug metadata), and
 /// `ignite-rt`'s and `ignite-io`'s frames; on the Rust target
 /// `ignite-io`'s frames and the generated program's, whose failure report
-/// names the Ignite source.
+/// names the Ignite source. The substrate frames checked are of code its
+/// crates compile themselves (`failure_report`, `ignite_rt_fail_arith`),
+/// not generic instances a member compiles with its own line tables.
 #[test]
 fn dev_backtrace_names_ignite_and_substrate_lines_on_both_targets() {
     let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/backtrace.ignite");
@@ -388,7 +400,11 @@ fn dev_backtrace_names_ignite_and_substrate_lines_on_both_targets() {
                 && *at == line),
         "no frame of `add` at backtrace.ignite:{line}:\n{backtrace}"
     );
-    for file in ["ignite-rt/src/", "ignite-io/src/"] {
+    assert!(
+        breakpoint_frame_has_its_line(&backtrace),
+        "ignite-io's failure_report has no file and line:\n{backtrace}"
+    );
+    for file in ["ignite-rt/src/fail.rs"] {
         assert!(
             frame_in(&backtrace, file),
             "no frame with file and line in {file}:\n{backtrace}"
@@ -402,8 +418,8 @@ fn dev_backtrace_names_ignite_and_substrate_lines_on_both_targets() {
         .arg(&target));
     let backtrace = gdb_backtrace(&target.join("debug/overflow"));
     assert!(
-        frame_in(&backtrace, "ignite-io/src/"),
-        "no frame with file and line in ignite-io:\n{backtrace}"
+        breakpoint_frame_has_its_line(&backtrace),
+        "no frame of ignite-io's own code with file and line:\n{backtrace}"
     );
     assert!(
         frames(&backtrace)
