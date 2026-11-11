@@ -121,7 +121,9 @@ fn descriptors(pid: u32) -> usize {
 
 /// 1,000 tasks wait on one channel and one sender wakes them all; the
 /// process holds as many descriptors while they wait as before they were
-/// spawned (a bell costs two per waiter).
+/// spawned (a bell costs two per waiter), but for the one eventfd of the
+/// process that ends a worker's blocking `poll` once the live tasks are as
+/// many as workers may start (`ESCALATION` in `ignite-io`'s `sched.rs`).
 fn a_thousand_waiters_hold_no_extra_descriptor(target: Target) {
     let path = executable("waiters", target);
     let mut child = Command::new(&path)
@@ -150,8 +152,8 @@ fn a_thousand_waiters_hold_no_extra_descriptor(target: Target) {
     assert_eq!(next(), "woken 1000 sum 500500");
     let status = child.wait().expect("wait");
     assert_eq!(status.code(), Some(0));
-    assert_eq!(
-        waiting, before,
+    assert!(
+        (before..=before + 1).contains(&waiting),
         "descriptors before {before}, while waiting {waiting}"
     );
 }
