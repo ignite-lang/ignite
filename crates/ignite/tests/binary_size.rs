@@ -33,9 +33,64 @@ fn fixture() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/backtrace.ignite")
 }
 
+#[path = "../../ignite-rt/release_std.rs"]
+mod release_std;
+
+/// The release runtime archive of the LLVM target, built into this test
+/// directory as `task dist` and `ignite-perf runtime` build it: on the
+/// standard library from source without its backtrace symbolizer
+/// (`crates/ignite-rt/release_std.rs`), or on the prebuilt one when the
+/// toolchain has no `rust-src`, which it says.
+fn release_runtime_archive() -> PathBuf {
+    let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let target_dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("release-runtime");
+    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let mut command = Command::new(cargo);
+    command
+        .args(["build", "-q", "--release", "--locked", "-p", "ignite-rt"])
+        .arg("--target-dir")
+        .arg(&target_dir)
+        .current_dir(&workspace)
+        .env("CARGO_INCREMENTAL", "0")
+        .env_remove("CARGO_TARGET_DIR")
+        .env_remove("CARGO_BUILD_TARGET");
+    let source = release_std::sysroot("rustc".as_ref())
+        .and_then(|sysroot| release_std::library(&sysroot))
+        .is_some();
+    let dir = if source {
+        let version = text(&run(Command::new("rustc").arg("-vV")).stdout);
+        let host = version
+            .lines()
+            .find_map(|line| line.strip_prefix("host: "))
+            .expect("a host in rustc -vV")
+            .trim()
+            .to_string();
+        command.arg("--target").arg(&host);
+        release_std::apply(&mut command);
+        target_dir.join(host).join("release")
+    } else {
+        eprintln!("{}", release_std::MISSING);
+        target_dir.join("release")
+    };
+    run(&mut command);
+    dir.join("libignite_rt.a")
+}
+
 /// `ignite build <fixture>` on `target` into `out`, dev or release; the
 /// path of its executable `overflow`.
 fn build(target: &str, release: bool, out: &Path, cargo_target: &Path) -> PathBuf {
+    build_on(target, release, out, cargo_target, None)
+}
+
+/// [`build`], an LLVM build linking `runtime` when given, else the dev
+/// runtime archive beside this test binary.
+fn build_on(
+    target: &str,
+    release: bool,
+    out: &Path,
+    cargo_target: &Path,
+    runtime: Option<&Path>,
+) -> PathBuf {
     let mut command = Command::new(env!("CARGO_BIN_EXE_ignite"));
     command
         .arg("build")
@@ -44,7 +99,8 @@ fn build(target: &str, release: bool, out: &Path, cargo_target: &Path) -> PathBu
         .arg("--out")
         .arg(out);
     if target == "llvm" {
-        command.arg("--runtime").arg(common::runtime_archive());
+        let archive = runtime.map_or_else(common::runtime_archive, Path::to_path_buf);
+        command.arg("--runtime").arg(archive);
     } else {
         command.arg("--target-dir").arg(cargo_target);
     }
@@ -165,18 +221,21 @@ fn an_llvm_release_executable_drops_the_local_symbols_of_its_objects() {
 /// targets: the same message, naming the Ignite source's file, line and
 /// column, and the same exit status. The release links and the release
 /// runtime of story `binary-size-back` change what an executable carries,
-/// not what it reports.
+/// not what it reports: the LLVM release executable links the release
+/// runtime archive, without the standard library's symbolizer.
 #[test]
 fn a_release_failure_report_is_the_dev_one_on_both_targets() {
     let dir = tmp("size-report");
     let cargo_target = dir.join("cargo");
+    let release_runtime = release_runtime_archive();
     for target in ["llvm", "rust"] {
         let reports: Vec<(Option<i32>, String)> = [false, true]
             .into_iter()
             .map(|release| {
                 let profile = if release { "release" } else { "dev" };
                 let out = dir.join(format!("{target}-{profile}"));
-                let executable = build(target, release, &out, &cargo_target);
+                let runtime = release.then_some(release_runtime.as_path());
+                let executable = build_on(target, release, &out, &cargo_target, runtime);
                 let output = Command::new(&executable)
                     .env_remove("RUST_BACKTRACE")
                     .env_remove("RUST_LIB_BACKTRACE")
