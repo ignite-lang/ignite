@@ -30,6 +30,7 @@
 //! ahead makes none of these calls.
 
 use std::ffi::{CString, OsString};
+use std::os::fd::AsRawFd;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -38,11 +39,9 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
 
 use nix::errno::Errno;
-use nix::fcntl::OFlag;
 use nix::spawn::{PosixSpawnAttr, PosixSpawnFileActions, PosixSpawnFlags, posix_spawnp};
 use nix::sys::pthread::{Pthread, pthread_kill, pthread_self};
 use nix::sys::signal::{SigSet, SigmaskHow, Signal, kill, raise};
-use nix::sys::stat::Mode;
 use nix::sys::wait::{Id, WaitPidFlag, WaitStatus, waitid, waitpid};
 use nix::unistd::Pid;
 
@@ -208,15 +207,17 @@ fn spawn(args: &[OsString], environment: &[OsString], mask: &SigSet) -> Option<P
     attributes
         .set_flags(PosixSpawnFlags::POSIX_SPAWN_SETSIGMASK | PosixSpawnFlags::POSIX_SPAWN_SETSIGDEF)
         .ok()?;
+    // Opened here (close-on-exec) and duplicated onto the child's streams,
+    // which keep it: `add_open` needs `nix`'s `term`, which the driver
+    // builds without.
+    let null = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open("/dev/null")
+        .ok()?;
     let mut actions = PosixSpawnFileActions::init().ok()?;
-    for (fd, flag) in [
-        (0, OFlag::O_RDONLY),
-        (1, OFlag::O_WRONLY),
-        (2, OFlag::O_WRONLY),
-    ] {
-        actions
-            .add_open(fd, "/dev/null", flag, Mode::empty())
-            .ok()?;
+    for fd in 0..3 {
+        actions.add_dup2(null.as_raw_fd(), fd).ok()?;
     }
     posix_spawnp(args.first()?, &actions, &attributes, &args, &environment).ok()
 }
