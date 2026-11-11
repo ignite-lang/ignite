@@ -1281,6 +1281,32 @@ fn release_profile_builds_the_substrate_for_size() {
     );
 }
 
+/// A program with the standard library builds it for size too (story
+/// `binary-size-back`, row 3.9 rust): `ignite-std` at `opt-level = "s"`.
+/// A program without it names no such table, which cargo would warn about.
+#[test]
+fn release_profile_builds_the_standard_library_for_size() {
+    let mut with_std = program(user_decls());
+    with_std.imports = vec![import(&["std", "console", "execute"], &[])];
+    let symbols = symbols_for(&with_std);
+    let project = generate(&with_std, &symbols, &options()).unwrap();
+    assert_eq!(
+        table(
+            &project.cargo_toml,
+            "profile.release.package.\"ignite-std\""
+        ),
+        ["opt-level = \"s\""]
+    );
+    let project = try_generate(vec![]).expect("generates");
+    assert!(
+        !project
+            .cargo_toml
+            .contains("[profile.release.package.\"ignite-std\"]"),
+        "{}",
+        project.cargo_toml
+    );
+}
+
 /// The lines of the table `[<name>]` of a manifest, up to the next table.
 fn table<'a>(manifest: &'a str, name: &str) -> Vec<&'a str> {
     manifest
