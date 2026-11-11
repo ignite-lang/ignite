@@ -11248,13 +11248,14 @@ Story `http-reply-cost-back` (rows 3.3 `rust/todo/get-1` and 3.8 `todo/get-1` of
   copied), and `ignite_io::flush` gives the emptied list of streams to send back to the task
   instead of dropping it, so the task's next write does not allocate it again (the one
   allocation per reply of the LLVM target).
-- The counting allocator of a generated program has no `realloc` of its own since its `unsafe`
-  one was removed (story `unsafe-sites-back`): a buffer that grows is a new allocation, a copy
-  and a free, and the three growths of rendering a reply made the Rust count 40. An inline reply
-  is now rendered into one buffer made with room for its head (`HEAD_ROOM`, 128 bytes, and each
-  header field) and its body (`text_with_room`): the head is written into it, the body is
-  appended to it from the response instead of being copied first, and the buffer becomes the
-  bytes sent. Rust target 36 now, LLVM target 0.
+- Story `unsafe-sites-back` removed the counting allocator's own `realloc`: every growth of a
+  buffer became a new allocation, a copy and a free, and the three growths of rendering a reply
+  made the Rust count 40. The allocator reallocates through the system allocator again
+  (`census::tests::a_growing_buffer_is_reallocated_not_allocated_again` counts the calls that
+  reach `alloc` and `realloc`), and an inline reply is rendered into one buffer made with room
+  for its head (`HEAD_ROOM`, 128 bytes, and each header field) and its body (`text_with_room`):
+  the head is written into it, the body is appended to it from the response instead of being
+  copied first, and the buffer becomes the bytes sent. Rust target 36 now, LLVM target 0.
 - `serve_listener` starts the register of held requests (`Holds.start()`, the task
   `keep_holds`) only when the application has a `reply`, the only way to hold a request:
   `reply_cost::a_server_without_reply_starts_no_task_for_held_requests` builds
