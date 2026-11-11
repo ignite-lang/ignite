@@ -476,8 +476,8 @@ struct Timers {
     slots: Vec<SlotTimer>,
     /// The sequence number of the latest entry.
     sequence: u64,
-    /// The clock when the worker armed its first timer: the keys count
-    /// from it.
+    /// The deadline of the worker's first timer: the keys count from it,
+    /// so arming reads no clock.
     origin: Option<Instant>,
 }
 
@@ -485,20 +485,19 @@ struct Timers {
 /// [`SlotTimer`].
 #[derive(Clone, Copy)]
 struct Timer {
-    /// The nanoseconds from [`Timers::origin`] to the deadline in the upper
-    /// half, the sequence number in the lower: one comparison of two
-    /// integers orders two entries by deadline, then by arming. A deadline
-    /// before the origin, already past, counts as the origin: it comes due
-    /// at the next round as any past one.
-    key: u128,
+    /// The deadline in nanoseconds, 2^63 at [`Timers::origin`], and the
+    /// sequence number: integers order two entries by deadline, then by
+    /// arming, for deadlines within 292 years of the origin.
+    key: (u64, u64),
     /// The deadline.
     at: Instant,
     slot: usize,
 }
 
 /// The timer of the task in one slot of this worker. A task has at most one
-/// entry in [`Timers`]; a park with a deadline arms it only when none is
-/// armed at or before that deadline, and a wake leaves it in place.
+/// entry in [`Timers`], whose deadline is the one armed; a park with a
+/// deadline arms it only when none is armed at or before that deadline, and
+/// a wake leaves it in place.
 /// When it fires, a task that wants a later deadline by then is armed again
 /// for it ([`Worker::fire_timers`]). A read with an idle timeout therefore
 /// costs no timer operation per wait, only one per timeout period.
@@ -506,8 +505,6 @@ struct Timer {
 struct SlotTimer {
     /// The deadline of the task's current park, if it has one.
     wanted: Option<Instant>,
-    /// The deadline of the task's entry.
-    armed: Option<Instant>,
     /// The index plus one of the task's entry in the heap, 0 for none.
     position: u32,
     /// The waiter of the task's entry, while it has one.
@@ -525,11 +522,15 @@ impl Timers {
     }
 
     /// The key of a new entry for `at` ([`Timer::key`]).
-    fn key(&mut self, at: Instant) -> u128 {
+    fn key(&mut self, at: Instant) -> (u64, u64) {
+        const ORIGIN: u64 = 1 << 63;
         self.sequence += 1;
-        let origin = *self.origin.get_or_insert_with(Instant::now);
-        let nanos = at.saturating_duration_since(origin).as_nanos() as u64;
-        (u128::from(nanos) << 64) | u128::from(self.sequence)
+        let origin = *self.origin.get_or_insert(at);
+        let ticks = match at.checked_duration_since(origin) {
+            Some(after) => ORIGIN.saturating_add(after.as_nanos() as u64),
+            None => ORIGIN.saturating_sub(origin.duration_since(at).as_nanos() as u64),
+        };
+        (ticks, self.sequence)
     }
 
     fn is_empty(&self) -> bool {
@@ -618,14 +619,11 @@ impl Timers {
             Some(index) => {
                 let index = index as usize;
                 if key < self.heap[index].key {
-                    self.slots[slot].armed = Some(at);
                     self.sift_up(index, Timer { key, at, slot });
                 }
             }
             None => {
-                let entry = &mut self.slots[slot];
-                entry.armed = Some(at);
-                entry.waiter = Some(waiter.clone());
+                self.slots[slot].waiter = Some(waiter.clone());
                 let timer = Timer { key, at, slot };
                 self.heap.push(timer);
                 self.sift_up(self.heap.len() - 1, timer);
@@ -671,7 +669,8 @@ fn arm(slot: usize, deadline: Instant, waiter: &Waiter) {
         let mut timers = timers.borrow_mut();
         let timer = timers.slot(slot);
         timer.wanted = Some(deadline);
-        if timer.armed.is_none_or(|at| at > deadline) {
+        let position = timer.position;
+        if position == 0 || timers.heap[position as usize - 1].at > deadline {
             timers.arm(slot, deadline, waiter);
         }
     });
@@ -681,12 +680,8 @@ fn arm(slot: usize, deadline: Instant, waiter: &Waiter) {
 fn forget_timer(slot: usize) {
     TIMERS.with(|timers| {
         let mut timers = timers.borrow_mut();
-        let timer = timers.slot(slot);
-        let armed = timer.armed.take().is_some();
-        timer.wanted = None;
-        if armed {
-            timers.remove(slot);
-        }
+        timers.slot(slot).wanted = None;
+        timers.remove(slot);
     });
 }
 
@@ -1130,10 +1125,7 @@ impl Worker {
                         timers.arm(slot, later, &waiter);
                         Ok(None)
                     }
-                    wanted => {
-                        timer.armed = None;
-                        Ok(wanted.map(|_| waiter))
-                    }
+                    wanted => Ok(wanted.map(|_| waiter)),
                 }
             });
             match due {
