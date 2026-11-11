@@ -14,11 +14,12 @@
 
 use std::ffi::{CStr, CString};
 use std::io::Read;
-use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd};
+use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
 use std::os::unix::fs::PermissionsExt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
+use nix::dir::{Dir, Type};
 use nix::errno::Errno;
 use nix::fcntl::{AtFlags, OFlag, OpenHow, ResolveFlag, openat, openat2, renameat};
 use nix::sys::stat::{FileStat, Mode, SFlag, fstat, fstatat, mkdirat};
@@ -180,80 +181,49 @@ fn reopen(parent: BorrowedFd<'_>, path: &Checked<'_>) -> Result<OwnedFd, IoError
 
 /// The names in `directory` without `.` and `..`, as the raw bytes the OS
 /// gave, each with whether it is a directory (never following a link), in
-/// byte order; at most `limit` when one is given. Read from the
-/// descriptor's current offset with `getdents64` itself: `fdopendir` would
-/// add an `fstat` and two `fcntl` to every listing, and its iterator a
-/// `lseek` back.
+/// byte order; at most `limit` when one is given. Read with `readdir`
+/// through [`Dir`], the directory wrapper of `nix`: `fdopendir` adds an
+/// `fstat` and an `fcntl` to a listing, and the end of its iteration a
+/// `lseek` back to the start, beside the `getdents64` calls a listing
+/// makes anyway.
 fn entries(
-    directory: BorrowedFd<'_>,
+    directory: &mut Dir,
     path: &Checked<'_>,
     limit: Option<usize>,
 ) -> Result<Vec<(CString, bool)>, IoError> {
-    // `struct linux_dirent64`: `d_ino` (8 bytes), `d_off` (8), `d_reclen`
-    // (2), `d_type` (1), then the name and its NUL. Every field is read
-    // from the bytes at its offset, never through a pointer to the
-    // record, so the buffer is one of bytes and needs no alignment.
-    const RECORD_LENGTH: usize = 16;
-    const TYPE: usize = 18;
-    const NAME: usize = 19;
-    let mut buffer = vec![0u8; 16384];
-    let mut read: Vec<(CString, u8)> = Vec::new();
-    loop {
-        // SAFETY: the kernel writes at most the buffer's length in bytes
-        // into it, and the buffer outlives the call.
-        let filled = unsafe {
-            nix::libc::syscall(
-                nix::libc::SYS_getdents64,
-                directory.as_raw_fd(),
-                buffer.as_mut_ptr(),
-                buffer.len(),
-            )
-        };
-        let filled = Errno::result(filled).map_err(|e| path.os(e))? as usize;
-        if filled == 0 {
-            break;
+    let mut read: Vec<(CString, Option<Type>)> = Vec::new();
+    for entry in directory.iter() {
+        let entry = entry.map_err(|e| path.os(e))?;
+        let name = entry.file_name();
+        if name.to_bytes() == b"." || name.to_bytes() == b".." {
+            continue;
         }
-        // A count beyond the buffer is refused, not trusted.
-        let bytes = buffer
-            .get(..filled)
-            .ok_or_else(|| path.error("malformed directory entry"))?;
-        let mut offset = 0;
-        while offset < filled {
-            let malformed = || path.error("malformed directory entry");
-            let record = bytes
-                .get(offset + RECORD_LENGTH..offset + TYPE)
-                .map(|b| usize::from(u16::from_ne_bytes([b[0], b[1]])))
-                .filter(|&length| length > NAME && offset + length <= filled)
-                .ok_or_else(malformed)?;
-            let name = CStr::from_bytes_until_nul(&bytes[offset + NAME..offset + record])
-                .map_err(|_| malformed())?;
-            let kind = bytes[offset + TYPE];
-            offset += record;
-            if name.to_bytes() == b"." || name.to_bytes() == b".." {
-                continue;
-            }
-            if limit == Some(read.len()) {
-                return Err(path.error(format_args!("more than {ENTRY_LIMIT} entries")));
-            }
-            read.push((name.to_owned(), kind));
+        if limit == Some(read.len()) {
+            return Err(path.error(format_args!("more than {ENTRY_LIMIT} entries")));
         }
+        read.push((name.to_owned(), entry.file_type()));
     }
+    let descriptor = directory.as_fd();
     let mut found: Vec<(CString, bool)> = read
         .into_iter()
         .map(|(name, kind)| {
             let directory = match kind {
-                nix::libc::DT_DIR => true,
-                nix::libc::DT_UNKNOWN => {
-                    fstatat(directory, name.as_c_str(), AtFlags::AT_SYMLINK_NOFOLLOW)
-                        .is_ok_and(|stat| is_directory(&stat))
-                }
-                _ => false,
+                Some(Type::Directory) => true,
+                None => fstatat(descriptor, name.as_c_str(), AtFlags::AT_SYMLINK_NOFOLLOW)
+                    .is_ok_and(|stat| is_directory(&stat)),
+                Some(_) => false,
             };
             (name, directory)
         })
         .collect();
     found.sort();
     Ok(found)
+}
+
+/// `descriptor`, a directory opened for reading, as a [`Dir`] that lists
+/// it ([`entries`]) and closes it when dropped.
+fn listed(descriptor: OwnedFd, path: &Checked<'_>) -> Result<Dir, IoError> {
+    Dir::from_fd(descriptor).map_err(|e| path.os(e))
 }
 
 /// The OS reason of a `std::io::Error`, in the words of [`Errno::desc`].
@@ -518,8 +488,8 @@ impl Directory {
     /// (`path <p>: entry <name> is not UTF-8`).
     pub fn read_directory(&self, path: impl AsRef<str>) -> Result<Vec<String>, IoError> {
         let path = check(path.as_ref())?;
-        let directory = self.directory(&path, path.components.len())?;
-        entries(directory.as_fd(), &path, Some(ENTRY_LIMIT))?
+        let mut directory = listed(self.directory(&path, path.components.len())?, &path)?;
+        entries(&mut directory, &path, Some(ENTRY_LIMIT))?
             .into_iter()
             .map(|(name, directory)| {
                 let text = name.into_string().map_err(|e| {
@@ -604,13 +574,14 @@ impl Directory {
 /// to visit (for [`measure`]) or the entries still to remove (for
 /// [`empty`]).
 struct Level {
-    descriptor: OwnedFd,
+    descriptor: Dir,
     pending: Vec<(CString, bool)>,
 }
 
 impl Level {
     fn open(descriptor: OwnedFd, path: &Checked<'_>) -> Result<Level, IoError> {
-        let pending = entries(descriptor.as_fd(), path, None)?;
+        let mut descriptor = listed(descriptor, path)?;
+        let pending = entries(&mut descriptor, path, None)?;
         Ok(Level {
             descriptor,
             pending,
