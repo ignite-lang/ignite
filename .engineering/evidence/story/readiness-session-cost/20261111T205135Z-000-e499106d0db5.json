@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-11T20:51:35Z",
+  "actor": "human:timo",
+  "artifact": "story:readiness-session-cost",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "coordinator rerun at 7b305139 (2026-11-11): cargo test -p ignite --test main -- terminal::the_count_of_the_first_session: 1 passed; cargo test -p ignite-io --test main -- five scheduler:: cases of the round: 5 passed; unit's suites at head: ignite-io 125 + 251 passed in both IO modes, test-ignite 452 per target; dedicated host run w11-s2 (ec2:c7i.metal-24xl, 5 passes): 3.8 rust/terminal/rr-1 1.007 of v0.15.0, 3.7 terminal/connect-8 1.151 (LLVM) and 1.141 (Rust) of v0.15.0"
+  }
+}
