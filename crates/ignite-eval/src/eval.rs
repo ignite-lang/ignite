@@ -865,7 +865,10 @@ impl<'p> Evaluator<'p> {
             }
             ExprKind::Try(inner) => self.try_(cx, e, inner),
             ExprKind::Await(inner) => self.expr(cx, inner),
-            ExprKind::Spawn(_) => Err(internal("`spawn` has no value at compile time")),
+            ExprKind::Spawn(operand) => match self.world.clone() {
+                Some(world) => self.spawn(cx, &world, operand),
+                None => Err(internal("`spawn` has no value at compile time")),
+            },
             ExprKind::Unary { op, operand } => self.unary(cx, e, *op, operand),
             ExprKind::Binary { .. } => self.binary_chain(cx, e),
             ExprKind::Match { scrutinee, arms } => self.match_(cx, e, scrutinee, arms),
@@ -952,6 +955,15 @@ impl<'p> Evaluator<'p> {
         }
         if let Some(reference) = types.reference(e) {
             return Ok(Value::Reference(reference.clone()));
+        }
+        // Under a test a last use moves (20.3.1): the handles the value
+        // holds go with it, so they are dropped where the targets drop
+        // them.
+        if self.world.is_some()
+            && types.moves(e)
+            && let Some(slot) = self.lookup_mut(name)
+        {
+            return Ok(std::mem::replace(slot, Value::Unit));
         }
         if let Some(value) = self.lookup(name) {
             return Ok(value.clone());
@@ -1218,6 +1230,10 @@ impl<'p> Evaluator<'p> {
                 let values = self.exprs(cx, args)?;
                 self.apply(f, values)
             }
+            Some(Callee::Role { protocol, role }) if self.world.is_some() => {
+                let values = self.args(cx, e, args)?;
+                self.call_role(&protocol, &role, values)
+            }
             Some(Callee::Role { protocol, role }) => Err(internal(format!(
                 "protocol role `{protocol}.{role}` has no value at compile time"
             ))),
@@ -1266,6 +1282,10 @@ impl<'p> Evaluator<'p> {
                 let f = self.constant(&q)?;
                 let values = self.exprs(cx, args)?;
                 self.apply(f, values)
+            }
+            Some(Callee::Role { protocol, role }) if self.world.is_some() => {
+                let values = self.args(cx, e, args)?;
+                self.call_role(&protocol, &role, values)
             }
             Some(Callee::Role { protocol, role }) => Err(internal(format!(
                 "protocol role `{protocol}.{role}` has no value at compile time"
@@ -2676,6 +2696,61 @@ impl<'p> Evaluator<'p> {
                 "builtin `{builtin:?}` on a `{}` has no value in the model",
                 kind.name()
             ))),
+        }
+    }
+
+    /// `spawn operand` under a test: the callee and the arguments are
+    /// evaluated by the spawning task, as the Rust target does for a named
+    /// fn or role, and the task is registered with the model; it runs once
+    /// it holds the turn. The target evaluates a fn value's call inside
+    /// the task, so that form is taken only when every argument is a name.
+    fn spawn(&mut self, cx: &Cx<'p>, world: &World, operand: &Expr) -> Eval<Value> {
+        let refused = || internal("`spawn` of this operand has no value in the model");
+        let names = |args: &[Expr]| args.iter().all(|arg| matches!(arg.kind, ExprKind::Name(_)));
+        let callee = cx.types().callee(operand).cloned();
+        let (call, args) = match (&operand.kind, callee) {
+            (ExprKind::Call { args, .. }, Some(Callee::Fn(q))) => {
+                (Call::Fn(q), self.args(cx, operand, args)?)
+            }
+            (ExprKind::Method { args, .. }, Some(Callee::Fn(q))) if q.name.contains('.') => {
+                (Call::Fn(q), self.args(cx, operand, args)?)
+            }
+            (ExprKind::Method { receiver, args, .. }, Some(Callee::Fn(q))) => {
+                let mut values = vec![self.expr(cx, receiver)?];
+                values.extend(self.args(cx, operand, args)?);
+                (Call::Fn(q), values)
+            }
+            (
+                ExprKind::Call { args, .. } | ExprKind::Method { args, .. },
+                Some(Callee::Role { protocol, role }),
+            ) => (Call::Role { protocol, role }, self.args(cx, operand, args)?),
+            (ExprKind::Call { callee, args }, Some(Callee::Local)) if names(args) => {
+                let f = self.expr(cx, callee)?;
+                (Call::Value(f), self.exprs(cx, args)?)
+            }
+            (ExprKind::Method { receiver, args, .. }, Some(Callee::Local)) if names(args) => {
+                let f = self.expr(cx, receiver)?;
+                (Call::Value(f), self.exprs(cx, args)?)
+            }
+            (
+                ExprKind::Call { args, .. } | ExprKind::Method { args, .. },
+                Some(Callee::Const(q)),
+            ) if names(args) => {
+                let f = self.constant(&q)?;
+                (Call::Value(f), self.exprs(cx, args)?)
+            }
+            (ExprKind::Method { receiver, args, .. }, Some(Callee::FieldFn { field, .. }))
+                if names(args) && matches!(receiver.kind, ExprKind::Name(_)) =>
+            {
+                let record = self.expr(cx, receiver)?;
+                let f = self.field_of(cx, record, &field)?;
+                (Call::Value(f), self.exprs(cx, args)?)
+            }
+            _ => return Err(refused()),
+        };
+        match world.spawn(Job { call, args }).map_err(over)? {
+            Ok(()) => Ok(Value::Unit),
+            Err(reason) => Err(internal(reason)),
         }
     }
 

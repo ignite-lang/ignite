@@ -305,3 +305,145 @@ fn a_pipe_delivers_at_flush_points() {
         assert_eq!(run(&loaded, test), Ok(()), "{test}");
     }
 }
+
+const TASKS: &str = r#"package model.tasks
+
+import std.net.{Pipe, PipeStream}
+import std.io.IoError
+
+type IoResult<T> = Result<T, IoError>
+
+test fn say(out: PipeStream, text: Bytes) -> IoResult<Unit> {
+  out.write_all(text)?
+  Ok(())
+}
+
+test fn exactly(client: PipeStream, count: Int) -> IoResult<Bytes> {
+  var out = Bytes.empty()
+  while out.len() < count {
+    match client.read(count - out.len())? {
+      Eof => return Ok(out)
+      Data(bytes) => out.append(bytes)
+    }
+  }
+  Ok(out)
+}
+
+test fn rest(client: PipeStream) -> IoResult<Bytes> {
+  var out = Bytes.empty()
+  loop {
+    match client.read(4096)? {
+      Eof => return Ok(out)
+      Data(bytes) => out.append(bytes)
+    }
+  }
+}
+
+test fn echo_twice(input: PipeStream, out: PipeStream) -> IoResult<Unit> {
+  let first = exactly(input, 1)?
+  out.write_all(first)?
+  out.write_all(first)?
+  Ok(())
+}
+
+test fn fails(stream: PipeStream) -> IoResult<Unit> {
+  let values = [1, 2]
+  assert values.len() == 3
+  stream.write_all(b"never")?
+  Ok(())
+}
+
+test fn spins(out: PipeStream) -> IoResult<Unit> {
+  var i = 0
+  while i >= 0 {
+    i = i + 1
+  }
+  out.write_all(b"x")?
+  Ok(())
+}
+
+test "tasks run in spawn order, each until it waits" {
+  let (a, b) = Pipe.pair()
+  let (c, d) = Pipe.pair()
+  spawn echo_twice(c, a)
+  spawn say(a, b"1")
+  spawn say(a, b"2")
+  spawn say(d, b"x")
+  assert exactly(b, 4)? == b"12xx"
+}
+
+test "a task that fails ends only itself, and the ends it took go with it" {
+  let (client, server) = Pipe.pair()
+  spawn fails(server)
+  assert rest(client)? == b""
+}
+
+test "every task waiting with no deadline is a deadlock" {
+  let (a, b) = Pipe.pair()
+  let (c, d) = Pipe.pair()
+  spawn echo_twice(c, a)
+  assert exactly(b, 1)? == b"x"
+  d.close()?
+}
+
+test "a task that never waits ends the test on fuel" {
+  let (a, b) = Pipe.pair()
+  spawn spins(a)
+  assert exactly(b, 1)? == b"x"
+}
+"#;
+
+/// Tasks under a test (`docs/slice.md` 33.5): cooperative, the first task
+/// in spawn order that can run holds the turn until it waits or ends, so
+/// the order is the model's own and the same on every run.
+#[test]
+fn tasks_run_in_spawn_order_until_they_wait() {
+    let loaded = program("tasks", TASKS);
+    for _ in 0..3 {
+        assert_eq!(run(&loaded, "tasks run in spawn order, each until it waits"), Ok(()));
+    }
+}
+
+/// A failing task ends only itself (14.8); the pipe end moved into it at
+/// its last use (20.3.1) is dropped with it, so its peer reads the end of
+/// the stream.
+#[test]
+fn a_failing_task_ends_only_itself() {
+    let loaded = program("tasks", TASKS);
+    assert_eq!(
+        run(
+            &loaded,
+            "a task that fails ends only itself, and the ends it took go with it"
+        ),
+        Ok(())
+    );
+}
+
+/// Every task waits and none has a deadline: the model reports a deadlock
+/// and the unit stays one the evaluator cannot run.
+#[test]
+fn a_deadlock_is_reported() {
+    let loaded = program("tasks", TASKS);
+    assert_eq!(
+        report(run(&loaded, "every task waiting with no deadline is a deadlock")),
+        "evaluation failed: every task of the model waits and none has a deadline (a deadlock)"
+    );
+}
+
+/// A task that never waits keeps the turn and ends on the fuel the test
+/// was given, which the tasks share.
+#[test]
+fn a_spinning_task_ends_on_fuel() {
+    let loaded = program("tasks", TASKS);
+    match run_with(
+        &loaded,
+        "a task that never waits ends the test on fuel",
+        Fuel::with_units(100_000),
+    ) {
+        Err(EvalError::Limit {
+            limit: Limit::Fuel(100_000),
+            ..
+        }) => {}
+        other => panic!("expected the fuel limit, found {other:?}"),
+    }
+}
