@@ -580,16 +580,21 @@ impl Directory {
 
 /// A directory being visited: its descriptor and the subdirectories still
 /// to visit (for [`measure`]) or the entries still to remove (for
-/// [`empty`]).
+/// [`empty`]). A level holds its descriptor only: it is listed through a
+/// duplicate whose [`Dir`] (and the C library's buffer of 32 KiB) is
+/// closed before the walk descends, so a walk 256 levels deep holds 256
+/// descriptors and one listing at a time, as with its own `getdents64`.
 struct Level {
-    descriptor: Dir,
+    descriptor: OwnedFd,
     pending: Vec<(CString, bool)>,
 }
 
 impl Level {
     fn open(descriptor: OwnedFd, path: &Checked<'_>) -> Result<Level, IoError> {
-        let mut descriptor = listed(descriptor, path)?;
-        let pending = entries(&mut descriptor, path, None)?;
+        let duplicate = descriptor
+            .try_clone()
+            .map_err(|e| path.os(Errno::from_raw(e.raw_os_error().unwrap_or(0))))?;
+        let pending = entries(&mut listed(duplicate, path)?, path, None)?;
         Ok(Level {
             descriptor,
             pending,
