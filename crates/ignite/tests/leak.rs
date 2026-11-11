@@ -368,14 +368,16 @@ fn stored_ends_read_into_temporaries_are_released_once() {
 /// stays open for the task whether the callee rebinds it through a fn, a
 /// method, a role, a generic fn, a fn value, a field, an `if` or a `match`
 /// of calls, and whether the caller passes it as a temporary or a binding
-/// (`own::moves_fresh`).
+/// (`own::moves_fresh`); a call in a loop that passes the same end to a
+/// task on every round gives each task an owner of its own
+/// (`own::sole_mentions`).
 #[test]
 fn temporaries_used_after_the_store_let_go_are_released_once() {
     on_both_targets(|target| {
         let run = ignite_test_at(target, &soak_program("temporaries_attack.ignite"), "", None);
         assert_eq!(run.status, 0, "{target}:\n{}", run.output);
         assert!(
-            run.output.contains("18 passed; 0 failed"),
+            run.output.contains("19 passed; 0 failed"),
             "{target}:\n{}",
             run.output
         );

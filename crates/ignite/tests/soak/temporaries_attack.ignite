@@ -401,6 +401,42 @@ test "a fresh end bound by the caller and moved to a task by a callee stays open
   let runs = soak(20, |run| moved_from_binding())
 }
 
+// A binding whose one mention is in a loop body (`own::sole_mentions`):
+// every round's call returns the same end, so no round's task may take the
+// end's only owner; the second task still sends after the first has ended.
+test fn take(r: Option<Receiver<Int>>) -> Option<Int> = match r {
+  Some(rx) => {
+    let x: Receiver<Int> = rx
+    x.receive_within(0 ms)
+  }
+  None => None
+}
+
+test fn moved_in_a_loop() -> Unit {
+  let tasks = Runtime.census().tasks
+  let (btx, brx) = Channel.bounded(1)
+  let (gtx, grx) = Channel.bounded(2)
+  let (dtx, drx) = Channel.bounded(2)
+  let t = made(btx)
+  for round in [1, 2] {
+    let u = same(t)
+    spawn ring_end(u, grx, dtx)
+  }
+  let r = brx.receive_within(1 seconds)
+  let g1 = gtx.send(1)
+  assert is(drx.receive_within(5 seconds), 1)
+  assert Runtime.settle(tasks + 1, 5 seconds)
+  assert is(take(r), 3)
+  let g2 = gtx.send(1)
+  assert is(drx.receive_within(5 seconds), 1)
+  assert Runtime.settle(tasks, 5 seconds)
+  assert is(take(r), 3)
+}
+
+test "a fresh end a call in a loop passes to a task on every round stays open for each task" {
+  let runs = soak(20, |run| moved_in_a_loop())
+}
+
 // Both branches of an `if`, `break` and `continue` inside an argument, and
 // a short circuit whose right side does not run: one release per copy on
 // every path.
