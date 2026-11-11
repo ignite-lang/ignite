@@ -466,13 +466,17 @@ fn park_from(
 /// A worker's timers: a heap of entries keyed by deadline and sequence
 /// number, the earliest on top. An entry no task is armed for any more (its
 /// task ended, or armed an earlier one) stays until it comes to the top,
-/// where [`Worker::fire_timers`] skips it, or until such entries are half the
-/// heap, when [`Timers::forget`] drops them. The `BTreeMap` this replaces
+/// where [`Timers::pop_due`] drops it before its deadline counts as the next
+/// one or [`Worker::fire_timers`] skips it, or until such entries are half
+/// the heap, when [`Timers::forget`] drops them. The `BTreeMap` this replaces
 /// was 13 KB of code in every executable (story `binary-size-back`).
 struct Timers {
     heap: BinaryHeap<Timer>,
     /// Entries counted as no longer armed since the last sweep.
     stale: usize,
+    /// The key of the earliest entry when [`Timers::pop_due`] last found it
+    /// armed; cleared by [`Timers::forget`].
+    checked: Option<(Instant, u64)>,
 }
 
 /// An entry of [`Timers`], ordered by its key reversed so that the heap's
@@ -507,6 +511,7 @@ impl Timers {
         Timers {
             heap: BinaryHeap::new(),
             stale: 0,
+            checked: None,
         }
     }
 
@@ -519,15 +524,33 @@ impl Timers {
     }
 
     /// The earliest entry when it is due at `now`, taken out; else the next
-    /// deadline, if any.
-    fn pop_due(&mut self, now: Instant) -> Result<((Instant, u64), Waiter), Option<Instant>> {
-        match self.heap.peek() {
-            Some(timer) if timer.key.0 > now => Err(Some(timer.key.0)),
-            Some(_) => {
+    /// deadline, if any. While entries counted by [`Timers::forget`] are in
+    /// the heap, an earliest entry not yet due that `armed` says is not
+    /// armed is dropped first, so that the worker does not wake for the
+    /// timer of a task that ended; a top found armed is not asked again.
+    fn pop_due(
+        &mut self,
+        now: Instant,
+        armed: impl Fn(&(Instant, u64), &Waiter) -> bool,
+    ) -> Result<((Instant, u64), Waiter), Option<Instant>> {
+        loop {
+            let Some(timer) = self.heap.peek() else {
+                self.stale = 0;
+                return Err(None);
+            };
+            if timer.key.0 <= now {
                 let timer = self.heap.pop().expect("the first timer");
-                Ok((timer.key, timer.waiter))
+                return Ok((timer.key, timer.waiter));
             }
-            None => Err(None),
+            if self.stale == 0
+                || self.checked == Some(timer.key)
+                || armed(&timer.key, &timer.waiter)
+            {
+                self.checked = Some(timer.key);
+                return Err(Some(timer.key.0));
+            }
+            self.heap.pop();
+            self.stale -= 1;
         }
     }
 
@@ -535,6 +558,7 @@ impl Timers {
     /// keep only those `armed` says are.
     fn forget(&mut self, armed: impl Fn(&(Instant, u64), &Waiter) -> bool) {
         self.stale += 1;
+        self.checked = None;
         if self.stale * 2 > self.heap.len() {
             self.heap.retain(|timer| armed(&timer.key, &timer.waiter));
             self.stale = 0;
@@ -1040,7 +1064,7 @@ impl Worker {
         }
         let now = Instant::now();
         loop {
-            let first = TIMERS.with(|timers| timers.borrow_mut().pop_due(now));
+            let first = TIMERS.with(|timers| timers.borrow_mut().pop_due(now, armed));
             let (key, waiter) = match first {
                 Ok(entry) => entry,
                 Err(next) => return next,
@@ -1731,12 +1755,13 @@ mod tests {
         let waiter = Waiter::current();
         let start = Instant::now();
         let at = |n: u64| start + Duration::from_secs(n);
+        let all = |_: &(Instant, u64), _: &Waiter| true;
         let mut timers = Timers::new();
         for n in [3, 1, 4, 2, 5] {
             timers.insert((at(n), n), waiter.clone());
         }
-        assert_eq!(timers.pop_due(at(0)).err(), Some(Some(at(1))));
-        let due: Vec<u64> = std::iter::from_fn(|| timers.pop_due(at(2)).ok())
+        assert_eq!(timers.pop_due(at(0), all).err(), Some(Some(at(1))));
+        let due: Vec<u64> = std::iter::from_fn(|| timers.pop_due(at(2), all).ok())
             .map(|(key, _)| key.1)
             .collect();
         assert_eq!(due, [1, 2]);
@@ -1745,8 +1770,36 @@ mod tests {
         assert_eq!(timers.heap.len(), 3, "one of three is not half");
         timers.forget(armed);
         assert_eq!(timers.heap.len(), 1, "two of three are");
-        assert_eq!(timers.pop_due(at(9)).ok().map(|(key, _)| key.1), Some(5));
-        assert_eq!(timers.pop_due(at(9)).err(), Some(None));
+        assert_eq!(
+            timers.pop_due(at(9), armed).ok().map(|(key, _)| key.1),
+            Some(5)
+        );
+        assert_eq!(timers.pop_due(at(9), armed).err(), Some(None));
         assert!(timers.is_empty());
+    }
+
+    /// The next deadline is never that of an entry counted as no longer
+    /// armed: while such entries are in the heap, an earliest one not yet
+    /// due is dropped first; without them the earliest is not looked at.
+    #[test]
+    fn the_next_deadline_skips_entries_no_longer_armed() {
+        let waiter = Waiter::current();
+        let start = Instant::now();
+        let at = |n: u64| start + Duration::from_secs(n);
+        let mut timers = Timers::new();
+        for n in [1, 2, 3, 60, 61, 62, 63] {
+            timers.insert((at(n), n), waiter.clone());
+        }
+        let armed = |key: &(Instant, u64), _: &Waiter| key.1 >= 60;
+        let none = |_: &(Instant, u64), _: &Waiter| -> bool { panic!("asked with nothing stale") };
+        assert_eq!(timers.pop_due(at(0), none).err(), Some(Some(at(1))));
+        for _ in 0..3 {
+            timers.forget(armed);
+        }
+        assert_eq!(timers.heap.len(), 7, "three of seven are not half");
+        assert_eq!(timers.pop_due(at(0), armed).err(), Some(Some(at(60))));
+        assert_eq!(timers.heap.len(), 4);
+        assert_eq!(timers.stale, 0);
+        assert_eq!(timers.pop_due(at(0), none).err(), Some(Some(at(60))));
     }
 }
