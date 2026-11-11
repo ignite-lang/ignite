@@ -28,7 +28,7 @@ std/**/*.ignite, program.ignite --parse--> --check--> --type (ignite-types)--> -
 writes `DIR/llvm/{std.ll, program.ll, main_<exe>.ll}`, runs
 `clang -c -O0 -g -ffunction-sections -fdata-sections -Werror=override-module --target=<triple>`
 (`-O2` with `--release`) on each, links each executable with
-`clang -o DIR/bin/<exe> --target=<triple> [-fuse-ld=lld -Wl,--compress-sections=.debug_str=zlib | -Wl,--compress-debug-sections=zlib] main_<exe>.o program.o std.o <runtime> -Wl,--gc-sections [-Wl,--strip-debug -Wl,--discard-all] -Wl,-z,pack-relative-relocs -Wl,--as-needed -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc`
+`clang -o DIR/bin/<exe> --target=<triple> [-fuse-ld=lld -Wl,--compress-sections=.debug_aranges=zlib -Wl,--compress-sections=.debug_addr=zlib | -Wl,--compress-debug-sections=zlib] main_<exe>.o program.o std.o <runtime> -Wl,--gc-sections [-Wl,--strip-debug -Wl,--discard-all] -Wl,-z,pack-relative-relocs -Wl,--as-needed -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc`
 (`-Wl,--strip-debug -Wl,--discard-all` with `--release` only, as cargo's release profile drops debug
 information, and the local symbols with it (internal functions and exception table labels, a tenth
 of `todod`; the global names a profiler shows stay; story `binary-size-back`); the compression
@@ -64,19 +64,26 @@ still names the files and lines of the Ignite source and of both crates' frames
 on all cores and maps the archive instead of reading it section by section; an executable
 it links carries a build id as one GNU ld links does.
 
-Compressed debug sections (story `binary-size-back`, row 3.2). A dev link writes debug
-sections compressed with zlib at its fastest level; the linker reads the same input and
-compresses what it writes. With lld it compresses the debug strings only
-(`-Wl,--compress-sections=.debug_str=zlib`: `todod` 10.4 to 8.2 MB, the link's instructions
-270 to 428 M), with another linker every debug section
-(`-Wl,--compress-debug-sections=zlib`, which GNU ld knows: 4.7 MB, 746 M with lld). gdb,
-lldb, binutils and the standard library's symbolizer read zlib sections (zstd the last does
-not), so a backtrace keeps its files and lines
-(`dev_build::dev_backtrace_names_ignite_and_substrate_lines_on_both_targets` asserts the
-compression it reads through). A dev build on the Rust target compresses every debug
-section (its linker is the toolchain's choice or the user's), passed with
-`--config target.'cfg(all())'.rustflags`, joined with the rustflags configured for the target;
-`RUSTFLAGS` in the environment replaces it.
+Split line tables (story `binary-size-back`, rows 3.2 and 6.2). The dev profile builds
+`ignite-rt` and `ignite-io` with `split-debuginfo = "unpacked"`: their line tables are in
+`.dwo` files beside the objects in the target directory, and each object keeps a skeleton
+unit naming its file, so the linker neither copies nor relocates them. With lld a dev link
+then compresses the two address tables only, zlib at its fastest level
+(`-Wl,--compress-sections=.debug_aranges=zlib -Wl,--compress-sections=.debug_addr=zlib`):
+`todod` 10.2 to 8.0 MB, the link's instructions 270 to 255 M (compressing the debug strings
+too, the standard library's, would cost 351 M; the archive's line tables in the executable,
+270 M uncompressed and 428 M with its strings compressed). Another linker compresses every
+debug section (`-Wl,--compress-debug-sections=zlib`, which GNU ld knows). gdb, lldb,
+binutils and the standard library's symbolizer read `.dwo` files and zlib sections (zstd the
+last does not), so a backtrace keeps its files and lines as long as the target directory
+holds the `.dwo` files
+(`dev_build::dev_backtrace_names_ignite_and_substrate_lines_on_both_targets` asserts both).
+A driver built in the release profile carries a runtime without debug information, so an
+installed `ignite` is unaffected. A dev build on the Rust target compresses nothing (its
+linker is the toolchain's choice or the user's): the generated dev profile splits the line
+tables of `ignite-io` and of the program the same way and builds `ignite-std` without debug
+information (`docs/slice.md` 6.2): `todod` 8.4 to 7.5 MB, the link's instructions 176 to
+163 M.
 
 Packed relative relocations (story `binary-size-back`, rows 3.2 and 3.9). Every dynamic
 executable, dev and release, on both targets, is linked with `-z pack-relative-relocs`: its

@@ -7343,22 +7343,36 @@ const RELEASE_PROFILE: &str = "\n[profile.release]\noverflow-checks = true\ncode
 /// frames' files and lines. A fresh build compiles them all, and on a
 /// host without cargo configuration full debug information was a third of
 /// the work of compiling `ignite-io` (row 6.2 of `docs/quality.md`, story
-/// `build-time-back`). The members, the program and `ignite-std`, get line
-/// tables by name ([`dev_member_profile`]).
-const DEV_PROFILE: &str = "\n[profile.dev.package.\"*\"]\ndebug = false\n\n[profile.dev.package.ignite-io]\ndebug = \"line-tables-only\"\n";
+/// `build-time-back`). The program gets line tables by name
+/// ([`dev_member_profile`]), `ignite-std` none ([`STD_DEV_PROFILE`]).
+/// The line tables are split out of the objects (`split-debuginfo =
+/// "unpacked"`: `.dwo` files beside them in the target directory, which
+/// gdb and the standard library's symbolizer read), so the linker neither
+/// copies nor relocates them and a dev link compresses nothing (rows 3.2
+/// and 6.2, story `binary-size-back`).
+const DEV_PROFILE: &str = "\n[profile.dev.package.\"*\"]\ndebug = false\n\n[profile.dev.package.ignite-io]\ndebug = \"line-tables-only\"\nsplit-debuginfo = \"unpacked\"\n";
 
 /// The dev profile of a member of the generated project, `package`: line
 /// tables, enough for a backtrace's files and lines, instead of the
 /// profile's own `debug` (full on a host without cargo configuration),
 /// which cost a fifth of compiling the program and `ignite-std` (row 6.2).
 /// A package table, unlike `[profile.dev] debug`, is not overridden by
-/// `CARGO_PROFILE_DEV_DEBUG`.
+/// `CARGO_PROFILE_DEV_DEBUG`. The line tables are split out of the
+/// objects, as `ignite-io`'s ([`DEV_PROFILE`]).
 fn dev_member_profile(package: &str) -> String {
     format!(
-        "\n[profile.dev.package.{}]\ndebug = \"line-tables-only\"\n",
+        "\n[profile.dev.package.{}]\ndebug = \"line-tables-only\"\nsplit-debuginfo = \"unpacked\"\n",
         toml_string(package)
     )
 }
+
+/// The dev profile of the generated standard library, for a program that
+/// uses it: no debug information, as the crates from outside the project.
+/// Its line tables were 160 KB of the todo example's dev `todod` (story
+/// `binary-size-back`, rows 3.2 and 6.2); a failure report names the
+/// Ignite source's lines without them, and a backtrace names its frames'
+/// functions.
+const STD_DEV_PROFILE: &str = "\n[profile.dev.package.\"ignite-std\"]\ndebug = false\n";
 
 /// The release profile of the generated standard library, for a program
 /// that uses it: optimised for size (`opt-level = "s"`; story
@@ -7389,7 +7403,7 @@ fn cargo_toml(
     out.push_str(DEV_PROFILE);
     out.push_str(&dev_member_profile(package_name));
     if uses_std {
-        out.push_str(&dev_member_profile(STD_PACKAGE));
+        out.push_str(STD_DEV_PROFILE);
         out.push_str(STD_RELEASE_PROFILE);
     }
     out.push_str("\n[lib]\n");

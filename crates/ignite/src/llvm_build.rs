@@ -371,11 +371,18 @@ pub const RELEASE_LINK_FLAGS: &[&str] = &["-Wl,--strip-debug", "-Wl,--discard-al
 pub const DEV_LINK_FLAGS: &[&str] = &["-Wl,--compress-debug-sections=zlib"];
 
 /// What a dev link with lld compresses instead of [`DEV_LINK_FLAGS`]: the
-/// debug strings only, the most bytes per instruction of the link (the
-/// mangled names of every function; `todod` 10.4 to 8.2 MB for a third of
-/// the link's instructions, where every debug section would cost the link
-/// three times its instructions for 4.7 MB).
-pub const DEV_LLD_COMPRESSION: &str = "-Wl,--compress-sections=.debug_str=zlib";
+/// address tables only, `.debug_aranges` and `.debug_addr`, which shrink
+/// to about a fifth. The runtime's own line tables are split out of its
+/// objects (`split-debuginfo = "unpacked"` in the workspace's dev profile),
+/// so the link copies and relocates less than it did uncompressed, and
+/// compressing the two tables keeps it there (`todod` 10.2 to 8.0 MB, the
+/// link's instructions 270 to 255 M); the debug strings, the standard
+/// library's, would cost the link half its instructions again (row 6.2 of
+/// `docs/quality.md`, story `binary-size-back`).
+pub const DEV_LLD_COMPRESSION: &[&str] = &[
+    "-Wl,--compress-sections=.debug_aranges=zlib",
+    "-Wl,--compress-sections=.debug_addr=zlib",
+];
 
 /// Link flag of every dynamic executable: its relative relocations are
 /// packed into `.relr.dyn` (`DT_RELR`), about 24 bytes each to a bit, and
@@ -437,7 +444,7 @@ fn link_flags_before(
         args.push(format!("-Wl,--thinlto-cache-dir={}", cache.display()).into());
     } else if kit.is_none() && dev_lld(options, clang) {
         args.extend(DEV_LLD_FLAGS.iter().map(Into::into));
-        args.push(DEV_LLD_COMPRESSION.into());
+        args.extend(DEV_LLD_COMPRESSION.iter().map(Into::into));
     } else if !options.release {
         args.extend(DEV_LINK_FLAGS.iter().map(Into::into));
     }

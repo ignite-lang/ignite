@@ -48,10 +48,12 @@ debug = false
 
 [profile.dev.package.ignite-rt]
 debug = "line-tables-only"
+split-debuginfo = "unpacked"
 
 [profile.dev.package.ignite-io]
 opt-level = 1
 debug = "line-tables-only"
+split-debuginfo = "unpacked"
 
 [profile.dev.package.rustls]
 opt-level = 2

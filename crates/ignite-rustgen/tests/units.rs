@@ -1333,7 +1333,8 @@ fn table<'a>(manifest: &'a str, name: &str) -> Vec<&'a str> {
 /// line tables too, by name, which the dev profile's own `debug` (full on
 /// a host without cargo configuration, or `CARGO_PROFILE_DEV_DEBUG`) does
 /// not override. A program without std names no `ignite-std` table, which
-/// cargo would warn about.
+/// cargo would warn about. The line tables of both are split out of the
+/// objects (rows 3.2 and 6.2, story `binary-size-back`).
 #[test]
 fn dev_profile_builds_dependencies_without_debug_information() {
     let project = try_generate(vec![]).expect("generates");
@@ -1343,11 +1344,17 @@ fn dev_profile_builds_dependencies_without_debug_information() {
     );
     assert_eq!(
         table(&project.cargo_toml, "profile.dev.package.ignite-io"),
-        ["debug = \"line-tables-only\""]
+        [
+            "debug = \"line-tables-only\"",
+            "split-debuginfo = \"unpacked\""
+        ]
     );
     assert_eq!(
         table(&project.cargo_toml, "profile.dev.package.\"demo\""),
-        ["debug = \"line-tables-only\""]
+        [
+            "debug = \"line-tables-only\"",
+            "split-debuginfo = \"unpacked\""
+        ]
     );
     assert!(
         !project

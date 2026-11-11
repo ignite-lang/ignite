@@ -775,7 +775,7 @@ For `ignite build terminal.ignite --target rust --out DIR` (the default target u
 ```
 DIR/Cargo.toml          [package] name = <package last segment>, edition 2024, [workspace] empty,
                         [profile.release] overflow-checks = true, codegen-units = 1, lto = true, [profile.release.package.ignite-io], [profile.release.package.nix] and [profile.release.package.corosensei] opt-level = "s" and, with std, [profile.release.package."ignite-std"] opt-level = "s" (release size, `docs/quality.md` rows 3.2 and 3.9)
-                        [profile.dev.package."*"] debug = false, [profile.dev.package.ignite-io] debug = "line-tables-only", [profile.dev.package."<package>"] and, with std, [profile.dev.package."ignite-std"] debug = "line-tables-only" (the crates from outside the project without debug information, `ignite-io` and the members with line tables for backtraces; build time, row 6.2)
+                        [profile.dev.package."*"] debug = false, [profile.dev.package.ignite-io] and [profile.dev.package."<package>"] debug = "line-tables-only", split-debuginfo = "unpacked", with std [profile.dev.package."ignite-std"] debug = false (the crates from outside the project and the standard library without debug information, `ignite-io` and the program with line tables for backtraces, in `.dwo` files beside the objects; build time and dev size, rows 6.2 and 3.2)
                         [dependencies] ignite-io = { path = <substrate> }, ignite-std = { path = "std" } when the program imports a std module
                         one [[bin]] per component: name = executable, path = src/bin/<executable>.rs
 DIR/src/lib.rs          the program's imports as `use`, every type, enum, protocol and fn
@@ -11338,15 +11338,17 @@ Story `binary-size-back`: rows 3.9 and 3.2 of `docs/quality.md` at v0.15.0's byt
 and row 3.8 at one connection with them. Each rule names the test that holds it; the bytes
 of each step are in the commits.
 
-- Dev links. The linker writes the debug sections compressed with zlib at its fastest level:
-  with lld on the LLVM target `.debug_str` only (`-Wl,--compress-sections=.debug_str=zlib`),
-  otherwise and on the Rust target every debug section
-  (`-Wl,--compress-debug-sections=zlib`, the Rust target through `--config
-  target.'cfg(all())'.rustflags`). gdb, lldb, binutils and the standard library's
-  symbolizer read them, so a backtrace keeps its files and lines
-  (`dev_build::dev_backtrace_names_ignite_and_substrate_lines_on_both_targets`). The link
-  reads what it read before and writes less; it spends more instructions doing so
-  (`docs/llvm.md` section 1).
+- Dev links. The line tables of `ignite-rt`, `ignite-io` and the generated program are split
+  out of their objects into `.dwo` files beside them (`split-debuginfo = "unpacked"` in the
+  workspace's and the generated dev profile; the generated one builds `ignite-std` without
+  debug information), so the linker neither copies nor relocates them. With lld the LLVM
+  target's dev link compresses the two address tables only
+  (`-Wl,--compress-sections=.debug_aranges=zlib`, the same for `.debug_addr`), with another
+  linker every debug section; the Rust target compresses nothing. gdb, lldb,
+  binutils and the standard library's symbolizer read both, so a backtrace keeps its files
+  and lines while the target directory holds the `.dwo` files
+  (`dev_build::dev_backtrace_names_ignite_and_substrate_lines_on_both_targets`). A dev link
+  takes fewer instructions than without either (`docs/llvm.md` section 1).
 - Packed relative relocations. Every dynamic executable of both targets links with
   `-z pack-relative-relocs` and needs glibc 2.36 or newer (`GLIBC_ABI_DT_RELR`; before, 2.34);
   a `--static` build takes none
@@ -11387,7 +11389,10 @@ of each step are in the commits.
 - Libraries as needed. The LLVM target links its runtime libraries after `-Wl,--as-needed`,
   as rustc links the Rust target, so an executable loads no `libm` it calls nothing of
   (`binary_size::an_llvm_executable_loads_no_library_it_does_not_call`).
-- Not taken: DWARF 5 (larger archive and executable, a longer link); zstd debug sections
-  (the standard library's symbolizer does not read them); zlib on every debug section with
-  lld (a third of the link's instructions again for 3.5 MB more); dropping
-  `IGNITE_IO=threads` (decided to stay).
+- Not taken: DWARF 5, split or not (larger archive and executable, a longer link); zstd
+  debug sections (the standard library's symbolizer does not read them); compressing the
+  debug strings or every debug section (the link's instructions above their uncompressed
+  count); `ignite-io` at `opt-level = 1` in the generated dev profile (a dev `todod` 0.5 MB
+  smaller, compiling `ignite-io` four times the instructions); one codegen unit per crate
+  in it (a few tens of KB, compiled on one core); dropping `IGNITE_IO=threads` (decided to
+  stay).
