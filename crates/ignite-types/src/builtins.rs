@@ -12,6 +12,21 @@ pub(crate) struct Sig {
     pub ret: Ty,
 }
 
+impl Builtin {
+    /// The `to_text` method of a scalar (`Int`, `Byte`, `U32`, `Bool`):
+    /// the decimal digits, or `true` and `false`, as Rust's `Display`
+    /// writes them.
+    pub fn is_scalar_to_text(self) -> bool {
+        matches!(
+            self,
+            Builtin::IntToTextMethod
+                | Builtin::ByteToText
+                | Builtin::U32ToText
+                | Builtin::BoolToText
+        )
+    }
+}
+
 pub(crate) fn bytes() -> Ty {
     Ty::List(Box::new(Ty::Byte))
 }

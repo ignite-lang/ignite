@@ -3343,15 +3343,11 @@ impl<'a> Generator<'a> {
             ExprKind::Binary { op, .. } => self.is_text_add(expr, *op),
             _ => matches!(
                 self.callee(expr),
-                Some(Callee::Builtin(
-                    Builtin::IntToText
-                        | Builtin::IntToTextMethod
-                        | Builtin::ByteToText
-                        | Builtin::U32ToText
-                        | Builtin::BoolToText
-                        | Builtin::TextConcat
-                        | Builtin::TextTrim
-                ))
+                Some(Callee::Builtin(builtin)) if builtin.is_scalar_to_text()
+                    || matches!(
+                        builtin,
+                        Builtin::IntToText | Builtin::TextConcat | Builtin::TextTrim
+                    )
             ),
         }
     }
@@ -4037,13 +4033,8 @@ impl<'a> Generator<'a> {
                 && none.is_empty()
                 && matches!(
                     self.callee(part),
-                    Some(Callee::Builtin(
-                        Builtin::TextToText
-                            | Builtin::IntToTextMethod
-                            | Builtin::ByteToText
-                            | Builtin::U32ToText
-                            | Builtin::BoolToText
-                    ))
+                    Some(Callee::Builtin(builtin))
+                        if *builtin == Builtin::TextToText || builtin.is_scalar_to_text()
                 )
                 && !self.place_in(receiver, modified)
             {
@@ -5050,12 +5041,7 @@ impl<'a> Generator<'a> {
                 let a = self.args(args);
                 return format!("({r}.{})({})", ident(field), a.join(", "));
             }
-            Some(Callee::Builtin(
-                Builtin::IntToTextMethod
-                | Builtin::ByteToText
-                | Builtin::U32ToText
-                | Builtin::BoolToText,
-            )) => {
+            Some(Callee::Builtin(builtin)) if builtin.is_scalar_to_text() => {
                 let r = self.receiver(receiver);
                 return format!("{r}.to_string()");
             }
