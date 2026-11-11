@@ -150,6 +150,29 @@ fn only_a_program_with_processes_or_pipes_turns_on_the_substrate_feature() {
         program.cargo_toml
     );
 
+    // A program that names only a child process it was given.
+    let file = dir.join("child.ignite");
+    std::fs::write(&file, "fn pid(child: ChildProcess) -> Int = child.id()\n").unwrap();
+    let (program, _) =
+        common::lower_typed(&file, &common::repository_std(), Path::new("../ignite-io"));
+    assert!(
+        program.lib_rs.contains("::ignite_io::ChildProcess"),
+        "{}",
+        program.lib_rs
+    );
+    for other in ["Launcher", "ChildExit", "Invocation", "Pipe"] {
+        assert!(
+            !program.lib_rs.contains(&format!("::ignite_io::{other}")),
+            "{other}: {}",
+            program.lib_rs
+        );
+    }
+    assert!(
+        program.cargo_toml.contains(process),
+        "{}",
+        program.cargo_toml
+    );
+
     for example in ["todo/todo", "terminal/terminal"] {
         let source = common::workspace().join(format!("examples/{example}.ignite"));
         let (program, std) = common::lower_typed(

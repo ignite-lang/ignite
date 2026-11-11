@@ -7470,7 +7470,6 @@ const PROCESS_ITEMS: &[&str] = &[
     "::ignite_io::ChildExit",
     "::ignite_io::Invocation",
     "::ignite_io::Pipe",
-    "::ignite_io::child::",
 ];
 
 /// The optional `ignite-io` features a crate of Rust `sources` needs:
