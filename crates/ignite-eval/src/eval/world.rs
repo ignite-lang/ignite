@@ -41,7 +41,8 @@ impl<'p> Evaluator<'p> {
                                 ev.time_limit = time_limit;
                                 ev.deadline = deadline;
                                 ev.on_stack = true;
-                                ev.run_task(task, job);
+                                let world = task.clone();
+                                guarded(&world, move || ev.run_task(task, job));
                             });
                         if let Err(error) = started {
                             supervisor.end_with(EvalError::Failed {
@@ -52,7 +53,16 @@ impl<'p> Evaluator<'p> {
                 }
             });
             self.world = Some(world.clone());
-            let result = body(self);
+            // A panic of the body ends the model first, so the task threads
+            // unwind and the scope can join them; then it goes on as before.
+            let result = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| body(self)))
+            {
+                Ok(result) => result,
+                Err(panic) => {
+                    world.end_with(panicked(panic.as_ref()));
+                    std::panic::resume_unwind(panic)
+                }
+            };
             self.world = None;
             let ended = match result {
                 Ok(_) | Err(Flow::Return(_)) => Ok(()),
@@ -602,4 +612,54 @@ pub(super) fn is_model_method(builtin: Builtin) -> bool {
             | Builtin::ReceiverClosed
             | Builtin::ReceiverClose
     )
+}
+
+/// Run `task`, the body of a task's thread. A panic in it ends the test
+/// with a failure (`evaluation failed: ...`), so the other tasks unwind
+/// instead of waiting for a turn that never passes.
+fn guarded(world: &World, task: impl FnOnce()) {
+    if let Err(panic) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(task)) {
+        world.end_with(panicked(panic.as_ref()));
+    }
+}
+
+/// The failure of a panic with the payload `panic`.
+fn panicked(panic: &(dyn std::any::Any + Send)) -> EvalError {
+    let message = panic
+        .downcast_ref::<&str>()
+        .map(|text| text.to_string())
+        .or_else(|| panic.downcast_ref::<String>().cloned())
+        .unwrap_or_else(|| "a panic without a message".to_string());
+    EvalError::Failed {
+        report: format!("evaluation failed: a task of the model panicked: {message}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A task thread that panics while it holds the turn ends the test
+    /// with a failure; a task waiting for the turn then unwinds.
+    #[test]
+    fn a_panicking_task_thread_ends_the_test_with_a_failure() {
+        let world = World::new(1_000);
+        let job = Job {
+            call: Call::Value(Value::Unit),
+            args: Vec::new(),
+        };
+        assert!(matches!(world.spawn(job), Ok(Ok(()))));
+        let task = world.task(1);
+        let thread = std::thread::spawn(move || guarded(&task, || panic!("boom")));
+        let _ = thread.join();
+        match world.outcome().0 {
+            Some(Err(EvalError::Failed { report })) => assert_eq!(
+                report,
+                "evaluation failed: a task of the model panicked: boom"
+            ),
+            other => panic!("expected the failure of the panic, found {other:?}"),
+        }
+        let mut units = 1_000;
+        assert!(world.block(Wait::Sleep, None, &mut units).is_err());
+    }
 }

@@ -1235,8 +1235,9 @@ impl<'p> Evaluator<'p> {
         if let Some(world) = self.world.clone()
             && is_model_method(builtin)
         {
-            let values = self.exprs(cx, args)?;
+            // The receiver first, then the arguments, as both targets do.
             let receiver = self.expr(cx, receiver)?;
+            let values = self.exprs(cx, args)?;
             return self.model_method(&world, builtin, receiver, values);
         }
         match builtin {
