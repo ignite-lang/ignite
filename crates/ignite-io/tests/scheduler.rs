@@ -7,6 +7,7 @@
 //! test of the case as the only one, `IGNITE_IO` and `IGNITE_WORKERS`
 //! set as the case needs. A child test does nothing outside a child.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::{Command, Output};
 use std::sync::mpsc;
@@ -952,4 +953,269 @@ fn child_writer_with_a_reader_it_spawned() {
         )
     });
     assert_eq!(outcome, format!("{} bytes, end Ok(())", TOTAL + 1));
+}
+
+/// Sessions opened before any of them is sent a request (a load
+/// generator's start, idle keep-alive connections) are spread evenly over
+/// the workers (`story:readiness-syscalls-per-connection`, row 3.3
+/// `llvm/terminal/rr-64`): the first read of a session waits for readiness
+/// and does not block its worker in `recv`, so no worker is passed while
+/// the rest of the burst is placed. Each session greets first, as a Telnet
+/// server does, then reads; the next session is placed only once every
+/// worker sleeps. Before, the first three sessions each blocked their
+/// worker and the fourth worker took the other thirteen ([1, 1, 1, 13]).
+#[test]
+fn a_burst_of_silent_sessions_is_spread_over_the_workers() {
+    passed(&child(
+        "scheduler::child_silent_burst",
+        &[("IGNITE_WORKERS", "4")],
+    ));
+}
+
+/// Whether every worker thread of this process sleeps (state `S` in
+/// `/proc`): its tasks wait, or it has none.
+fn workers_sleep() -> bool {
+    let tasks = std::fs::read_dir("/proc/self/task").unwrap();
+    tasks.filter_map(Result::ok).all(|task| {
+        let path = task.path();
+        let comm = std::fs::read_to_string(path.join("comm")).unwrap_or_default();
+        let stat = std::fs::read_to_string(path.join("stat")).unwrap_or_default();
+        comm.trim_end() != "worker"
+            || stat
+                .rsplit_once(") ")
+                .is_some_and(|(_, rest)| rest.starts_with('S'))
+    })
+}
+
+#[test]
+fn child_silent_burst() {
+    use std::io::Read;
+    if !in_child() {
+        return;
+    }
+    const BURST: usize = 16;
+    let (report, reports) = mpsc::channel();
+    let mut peers = Vec::new();
+    for _ in 0..BURST {
+        let (stream, mut peer) = pair();
+        let report = report.clone();
+        spawn(move || {
+            report
+                .send(format!("{:?}", std::thread::current().id()))
+                .unwrap();
+            if stream.write_all(b"> ".to_vec()).is_ok() {
+                while let Ok(Input::Data(_)) = stream.read(16) {}
+            }
+        });
+        let mut greeting = [0u8; 2];
+        peer.read_exact(&mut greeting).unwrap();
+        assert!(until(workers_sleep), "a worker never slept");
+        peers.push(peer);
+    }
+    let mut sessions_on: BTreeMap<String, usize> = BTreeMap::new();
+    for _ in 0..BURST {
+        let worker = reports.recv_timeout(LIMIT).expect("a session started");
+        *sessions_on.entry(worker).or_default() += 1;
+    }
+    let counts: Vec<usize> = sessions_on.values().copied().collect();
+    assert_eq!(
+        counts,
+        vec![BURST / 4; 4],
+        "sessions per worker: {sessions_on:?}"
+    );
+    drop(peers);
+    wait_for_tasks();
+}
+
+/// The serving side of the connect workload (row 3.7 and 3.3
+/// `terminal/connect-8`, `story:readiness-syscalls-per-connection`) in
+/// system calls per connection, counted by `strace -f -c` over the whole
+/// server process, less a run of the same server that serves none. A
+/// session does what `Telnet.serve` does for the workload's client: set
+/// the idle timeout, send the prompt, read the line, look for urgent
+/// data, send `bye`, close. The client connects, waits for the prompt,
+/// pauses (`COUNTED_PAUSE`, so the traced server waits in its read as an
+/// untraced one does), sends `quit`, reads to the end and closes, again.
+/// The bounds are v0.15.0's `terminald` on the Rust target under the same
+/// count: 13.62 per connection with 8 clients of 25 connections each and
+/// 14.52 with 50 connections in sequence (the head before this story:
+/// 19.43 and 16.36).
+#[test]
+fn a_connection_costs_no_more_system_calls_than_at_v0_15_0() {
+    let mut failures = Vec::new();
+    for (clients, each, bound) in [(8, 25, 13.62), (1, 50, 14.52)] {
+        let none = served_calls(0, 0);
+        let served = served_calls(clients, each);
+        let connections = (clients * each) as f64;
+        let per = |calls: &BTreeMap<String, (u64, u64)>, name: &str| {
+            calls.get(name).map_or(0.0, |(count, _)| *count as f64)
+        };
+        let mut names: Vec<&String> = none.keys().chain(served.keys()).collect();
+        names.sort();
+        names.dedup();
+        let mut table = String::new();
+        let mut total = 0.0;
+        for name in names {
+            let calls = (per(&served, name) - per(&none, name)) / connections;
+            let failed = (served.get(name).map_or(0, |c| c.1) as f64
+                - none.get(name).map_or(0, |c| c.1) as f64)
+                / connections;
+            total += calls;
+            if calls.abs() >= 0.005 {
+                table.push_str(&format!("{name:>14} {calls:6.2} ({failed:.2} failed)\n"));
+            }
+        }
+        let shape = format!("{clients} clients x {each}: {total:.2} per connection");
+        println!("{shape}, v0.15.0 {bound}\n{table}");
+        if total > bound {
+            failures.push(format!("{shape}, more than v0.15.0's {bound}\n{table}"));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// The client's pause between the prompt and its request.
+const COUNTED_PAUSE: Duration = Duration::from_millis(20);
+/// The connections the counted server serves before it exits.
+const COUNTED_CONNECTIONS: &str = "SCHEDULER_COUNTED_CONNECTIONS";
+/// The counted server's prompt: `terminald`'s, with IAC GA.
+const COUNTED_PROMPT: &[u8] = b"terminal> \xff\xf9";
+
+/// Run the counted server under `strace -f -c` for `clients` clients of
+/// `each` connections; its system calls by name, with their failures.
+fn served_calls(clients: usize, each: usize) -> BTreeMap<String, (u64, u64)> {
+    use std::io::{BufRead, BufReader, Read};
+    let summary = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "scheduler-calls-{}-{clients}x{each}.txt",
+        std::process::id()
+    ));
+    let mut server = Command::new("strace")
+        .args(["-f", "-c", "-o"])
+        .arg(&summary)
+        .arg(std::env::current_exe().unwrap())
+        .args([
+            "scheduler::child_counted_server",
+            "--exact",
+            "--nocapture",
+            "--test-threads=1",
+        ])
+        .env(CHILD, "1")
+        .env_remove("IGNITE_IO")
+        .env("IGNITE_WORKERS", "4")
+        .env(COUNTED_CONNECTIONS, (clients * each).to_string())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .expect("strace runs (the count needs it installed)");
+    let mut out = BufReader::new(server.stdout.take().unwrap());
+    let mut line = String::new();
+    let port: u16 = loop {
+        line.clear();
+        assert!(
+            out.read_line(&mut line).unwrap() > 0,
+            "the server ended before it told its port"
+        );
+        // After the harness' `test <name> ... ` on the same line.
+        if let Some((_, port)) = line.trim().rsplit_once("port ") {
+            break port.parse().unwrap();
+        }
+    };
+    let workers: Vec<_> = (0..clients)
+        .map(|_| {
+            std::thread::spawn(move || {
+                for _ in 0..each {
+                    counted_session(port);
+                }
+            })
+        })
+        .collect();
+    for worker in workers {
+        worker.join().unwrap();
+    }
+    let mut rest = String::new();
+    out.read_to_string(&mut rest).unwrap();
+    let status = server.wait().unwrap();
+    assert!(status.success(), "the server failed: {status:?}\n{rest}");
+    let text = std::fs::read_to_string(&summary).unwrap();
+    let _ = std::fs::remove_file(&summary);
+    let mut calls = BTreeMap::new();
+    for row in text.lines() {
+        let parts: Vec<&str> = row.split_whitespace().collect();
+        if parts.len() < 5 || !parts[0].starts_with(|c: char| c.is_ascii_digit()) {
+            continue;
+        }
+        let name = parts[parts.len() - 1];
+        // A debug build's `OwnedFd` drop asks `fcntl(F_GETFD)` before each
+        // `close` (std's `debug_assert_fd_is_open`); a release server, as
+        // the bounds counted, makes no `fcntl`, and the substrate calls none
+        // on this path.
+        if name == "total" || (cfg!(debug_assertions) && name == "fcntl") {
+            continue;
+        }
+        let count: u64 = parts[3].parse().unwrap();
+        let failed: u64 = if parts.len() == 6 {
+            parts[4].parse().unwrap()
+        } else {
+            0
+        };
+        calls.insert(name.to_string(), (count, failed));
+    }
+    assert!(!calls.is_empty(), "no strace summary:\n{text}");
+    calls
+}
+
+/// One connection of the counted workload's client (see
+/// [`a_connection_costs_no_more_system_calls_than_at_v0_15_0`]).
+fn counted_session(port: u16) {
+    use std::io::{Read, Write};
+    let mut peer = std::net::TcpStream::connect((LOCALHOST, port)).unwrap();
+    peer.set_nodelay(true).unwrap();
+    peer.set_read_timeout(Some(LIMIT)).unwrap();
+    let mut seen = Vec::new();
+    let mut buffer = [0u8; 4096];
+    let mut until_seen = |peer: &mut std::net::TcpStream, want: &[u8]| {
+        seen.clear();
+        while !seen.windows(want.len()).any(|w| w == want) {
+            let n = peer.read(&mut buffer).unwrap();
+            assert!(n > 0, "closed before {want:?}: {seen:?}");
+            seen.extend_from_slice(&buffer[..n]);
+        }
+    };
+    until_seen(&mut peer, COUNTED_PROMPT);
+    std::thread::sleep(COUNTED_PAUSE);
+    peer.write_all(b"quit\r\n").unwrap();
+    until_seen(&mut peer, b"bye\r\n");
+    while peer.read(&mut buffer).unwrap() > 0 {}
+}
+
+/// The server counted by [`served_calls`]: an accept loop on the main
+/// thread, as a compiled server runs it, that spawns one session per
+/// connection, `Telnet.serve`'s calls for the workload's client.
+#[test]
+fn child_counted_server() {
+    use std::io::Write;
+    if !in_child() {
+        return;
+    }
+    let connections: usize = std::env::var(COUNTED_CONNECTIONS).unwrap().parse().unwrap();
+    let listener = TcpListener::bind(LOCALHOST.to_string(), 0).unwrap();
+    println!("port {}", listener.local_port());
+    std::io::stdout().flush().unwrap();
+    for _ in 0..connections {
+        let stream = listener.accept().unwrap();
+        spawn(move || {
+            let _ = stream.set_idle_timeout(600_000);
+            let _ = stream.write_all(COUNTED_PROMPT.to_vec());
+            let mut line = Vec::new();
+            while let Ok(Input::Data(bytes)) = stream.read(4096) {
+                let _ = stream.urgent_pending();
+                line.extend_from_slice(&bytes);
+                if line.ends_with(b"\r\n") {
+                    let _ = stream.write_all(b"bye\r\n".to_vec());
+                    break;
+                }
+            }
+            let _ = stream.close();
+        });
+    }
+    wait_for_tasks();
 }

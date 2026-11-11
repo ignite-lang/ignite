@@ -43,9 +43,11 @@
 //!
 //! A descriptor a task waits for (a socket, a listener, standard input)
 //! is registered once per worker, edge-triggered, through a
-//! [`Readiness`]: an event wakes the tasks waiting to read or to write it,
-//! and a sequence number per direction, taken before each attempt, keeps a
-//! readiness edge between the attempt and the park from being lost
+//! [`Readiness`], by the first wait there that parks its task (the only
+//! task of a worker waits on the thread instead, `wait_alone`): an event
+//! wakes the tasks waiting to read or to write it, and a sequence number
+//! per direction, taken before each attempt, keeps a readiness edge
+//! between the attempt and the park from being lost
 //! (`docs/readiness-io.md` K4).
 
 use std::cell::{Cell, RefCell};
@@ -1196,8 +1198,9 @@ extern "C" fn on_fault(signal: i32, info: *mut nix::libc::siginfo_t, context: *m
 
 /// The readiness of one descriptor for tasks on workers (module docs): a
 /// socket's or a listener's. Off a worker [`Readiness::wait`] is
-/// [`crate::wait::wait_descriptor`]. Deregistered from every worker when
-/// dropped, so it must be dropped before the descriptor closes.
+/// [`crate::wait::wait_descriptor`]. Forgotten by every worker when
+/// dropped, as its descriptor closes ([`Readiness::deregister`] takes it
+/// out of their epoll instances while it stays open).
 pub(crate) struct Readiness {
     waiter: Waiter,
 }
@@ -1214,6 +1217,12 @@ pub(crate) struct Descriptor {
     waiting: Mutex<Waiting>,
     /// The workers the descriptor is registered with, and its token there.
     registered: Mutex<Vec<(Arc<Shared>, Token)>>,
+    /// The registrations report room to write ([`sides`]): set, and every
+    /// registration changed, by the first wait for room that registers.
+    /// Until then a registration leaves room out, so registering a
+    /// socket, which has room, does not end its worker's next wait for
+    /// nothing. Changed only under `registered`.
+    write_armed: AtomicBool,
     /// The worker it was registered with first, compared only, never
     /// dereferenced: a wait there skips `registered`. The `Arc` in
     /// `registered` keeps that worker's address from being reused until
@@ -1238,6 +1247,13 @@ impl Waiting {
 }
 
 const READ_SIDE: Interest = Interest::READ;
+
+/// What a descriptor is registered for: input, urgent data and hang-up,
+/// and room to write once a task waited for it ([`Descriptor::write_armed`]).
+fn sides(write: bool) -> Interest {
+    let read = Interest::READ | Interest::URGENT | Interest::HANGUP;
+    if write { read | Interest::WRITE } else { read }
+}
 
 fn reads(ready: Interest) -> bool {
     ready.intersects(Interest::READ | Interest::URGENT | Interest::HANGUP | Interest::ERROR)
@@ -1291,6 +1307,7 @@ impl Readiness {
                 lasting: AtomicU8::new(0),
                 waiting: Mutex::new(Waiting::default()),
                 registered: Mutex::new(Vec::new()),
+                write_armed: AtomicBool::new(false),
                 home: AtomicPtr::new(std::ptr::null_mut()),
             }),
         }
@@ -1320,14 +1337,19 @@ impl Readiness {
 
     /// Wait until `descriptor` may be ready for `interest`, after an
     /// attempt begun at `mark` found it not ready, or until `deadline`.
-    /// `Woken` and `Ready` both mean: attempt again. The first wait of a
-    /// task on a worker registers the descriptor there and returns at once.
-    /// A worker that cannot create its reactor (no descriptor free for its
-    /// epoll and eventfd) looks at the descriptor without waiting and parks
-    /// the task for [`RETRY`], until it can: a session keeps running while
-    /// the process is out of descriptors. `now`: the instant `deadline`
-    /// was computed from just before, so this wait reads no clock to learn
-    /// how far it is.
+    /// `Woken` and `Ready` both mean: attempt again. The only task of a
+    /// worker waits on the worker's thread ([`wait_alone`]), registered or
+    /// not, so a session that stays alone on its worker registers nothing.
+    /// Any other wait registers the descriptor with the worker first, if it
+    /// is not, and parks: the registration reports what the descriptor is
+    /// ready for already as its first event. A wait for room to write
+    /// makes every registration report room from then on
+    /// ([`Descriptor::write_armed`]). A worker that cannot create its
+    /// reactor (no descriptor free for its epoll and eventfd) looks at the
+    /// descriptor without waiting and parks the task for [`RETRY`], until
+    /// it can: a session keeps running while the process is out of
+    /// descriptors. `now`: the instant `deadline` was computed from just
+    /// before, so this wait reads no clock to learn how far it is.
     pub(crate) fn wait(
         &self,
         descriptor: BorrowedFd<'_>,
@@ -1341,9 +1363,24 @@ impl Readiness {
             return crate::wait::wait_descriptor(descriptor.as_raw_fd(), interest, deadline);
         };
         let state = self.descriptor();
+        if let Some(waited) = wait_alone(task, state, descriptor, interest, mark, deadline, now)? {
+            return Ok(waited);
+        }
         let here = Arc::as_ptr(&task.worker).cast_mut();
-        if state.home.load(Ordering::Acquire) != here {
+        // Relaxed: a first look; it is read again under `registered`.
+        let arm =
+            interest.intersects(Interest::WRITE) && !state.write_armed.load(Ordering::Relaxed);
+        if arm || state.home.load(Ordering::Acquire) != here {
             let mut registered = lock(&state.registered);
+            // Relaxed (here and below): stored only under `registered`.
+            if arm && !state.write_armed.load(Ordering::Relaxed) {
+                for (shared, token) in registered.iter() {
+                    if let Some(reactor) = shared.reactor.get() {
+                        reactor.rearm(*token, descriptor, sides(true))?;
+                    }
+                }
+                state.write_armed.store(true, Ordering::Relaxed);
+            }
             if !registered
                 .iter()
                 .any(|(shared, _)| Arc::ptr_eq(shared, &task.worker))
@@ -1352,20 +1389,13 @@ impl Readiness {
                     drop(registered);
                     return without_reactor(&me, descriptor, interest, deadline);
                 };
-                let token = reactor.register(
-                    descriptor.as_raw_fd(),
-                    Interest::READ | Interest::WRITE | Interest::URGENT | Interest::HANGUP,
-                    self.waiter.clone(),
-                )?;
+                let sides = sides(state.write_armed.load(Ordering::Relaxed));
+                let token = reactor.register(descriptor.as_raw_fd(), sides, self.waiter.clone())?;
                 registered.push((Arc::clone(&task.worker), token));
                 if registered.len() == 1 {
                     state.home.store(here, Ordering::Release);
                 }
-                return Ok(DescriptorWait::Woken);
             }
-        }
-        if let Some(waited) = wait_alone(task, state, descriptor, interest, mark, deadline, now)? {
-            return Ok(waited);
         }
         {
             let mut waiting = lock(&state.waiting);
@@ -1389,9 +1419,13 @@ impl Readiness {
 /// worker's thread with [`EpollReactor::poll_one`], as a blocked thread
 /// would, instead of switching to the worker's loop. One `poll` of the
 /// descriptor and the worker's eventfd measured cheaper per reply than the
-/// worker's `epoll_wait` called from the task. The worker counts as
-/// sleeping meanwhile, so a hand-over ([`Shared::notify`]) ends the wait
-/// and the task then parks as usual. `None` when the worker has other work.
+/// worker's `epoll_wait` called from the task, and it needs no
+/// registration. The worker counts as sleeping, not busy, meanwhile, so a
+/// spawn may place a task here, and its hand-over ([`Shared::notify`])
+/// ends the wait. `None` when the worker has other work, or the
+/// hand-over ended the wait before the descriptor was ready: the task
+/// then parks as usual, so the worker runs what came instead of an
+/// attempt that finds nothing.
 fn wait_alone(
     task: &Task,
     state: &Descriptor,
@@ -1407,9 +1441,15 @@ fn wait_alone(
     if shared.tasks.load(Ordering::Relaxed) != 1 || runnable() {
         return Ok(None);
     }
-    let Some(reactor) = shared.reactor.get() else {
+    // Created here by the worker's first wait: a task runs, and `sleeping`
+    // is not set yet ([`Shared::notify`]).
+    let Ok(reactor) = shared.reactor() else {
         return Ok(None);
     };
+    // Before `sleeping`: every wake written until then is one the worker
+    // took (it was awake since), and the hand-over check below sees what
+    // came with it.
+    reactor.forget_wakes();
     // SeqCst: the store-load pair with a hand-over (`Shared::hand_over`).
     shared.sleeping.store(true, Ordering::SeqCst);
     if shared.has_pending() {
@@ -1424,13 +1464,13 @@ fn wait_alone(
     }
     let ready = reactor.poll_one(descriptor, interest, deadline, now);
     shared.sleeping.store(false, Ordering::Relaxed);
-    Ok(Some(if ready? {
-        DescriptorWait::Ready(interest)
+    Ok(if ready? {
+        Some(DescriptorWait::Ready(interest))
     } else if deadline.is_some_and(|end| Instant::now() >= end) {
-        DescriptorWait::Deadline
+        Some(DescriptorWait::Deadline)
     } else {
-        DescriptorWait::Woken
-    }))
+        None
+    })
 }
 
 /// Workers whose only task is in a blocking read ([`block_alone`]).
@@ -1531,6 +1571,14 @@ impl Readiness {
     /// Deregister the descriptor from every worker and wake its waiters;
     /// before the descriptor closes. A later wait registers it again.
     pub(crate) fn deregister(&self) {
+        self.release(true);
+    }
+
+    /// [`Readiness::deregister`]; without `delete` the workers' reactors
+    /// only forget the descriptor ([`EpollReactor::forget`]): its owner
+    /// closes it right after, and the close takes it out of their epoll
+    /// instances without an `epoll_ctl` each.
+    fn release(&self, delete: bool) {
         let registered = {
             let mut registered = lock(&self.descriptor().registered);
             self.descriptor()
@@ -1540,7 +1588,11 @@ impl Readiness {
         };
         for (shared, token) in registered {
             if let Some(reactor) = shared.reactor.get() {
-                let _ = reactor.deregister(token);
+                if delete {
+                    let _ = reactor.deregister(token);
+                } else {
+                    reactor.forget(token);
+                }
             }
         }
         // A new mark under the lock a waiter compares its mark under: a
@@ -1554,9 +1606,13 @@ impl Readiness {
     }
 }
 
+/// Its owner (a stream, a listener's slot) closes the descriptor right
+/// after, and no other descriptor refers to that socket (none is ever
+/// duplicated; a child process's copy closes at its `exec`), so the close
+/// deregisters it.
 impl Drop for Readiness {
     fn drop(&mut self) {
-        self.deregister();
+        self.release(false);
     }
 }
 

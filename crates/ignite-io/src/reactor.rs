@@ -32,7 +32,7 @@ use std::fmt;
 use std::io;
 use std::ops::BitOr;
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, RawFd};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -278,6 +278,11 @@ const BATCH: usize = 64;
 pub struct EpollReactor {
     epoll: Epoll,
     wakes: EventFd,
+    /// A wake wrote to `wakes` since it was last read. `wait` never reads
+    /// it back, so its counter stays up, and a `poll` of it
+    /// ([`EpollReactor::poll_one`]) would end at once for a wake already
+    /// taken ([`EpollReactor::forget_wakes`]).
+    unread: AtomicBool,
     entries: Mutex<HashMap<u64, Entry>>,
     next: AtomicU64,
 }
@@ -297,6 +302,7 @@ impl EpollReactor {
         Ok(EpollReactor {
             epoll,
             wakes,
+            unread: AtomicBool::new(false),
             entries: Mutex::new(HashMap::new()),
             next: AtomicU64::new(WAKE + 1),
         })
@@ -333,9 +339,54 @@ impl EpollReactor {
             Err(error) => return Err(error.into()),
         }
         if fds[1].revents().is_some_and(|ready| !ready.is_empty()) {
+            // Relaxed (here and in `forget_wakes`, `wake`): a hint that
+            // saves a `read`; a wake is never lost to it, because a worker
+            // looks for what was handed over before it sleeps.
+            self.unread.store(false, Ordering::Relaxed);
             drain(&self.wakes);
         }
         Ok(fds[0].revents().is_some_and(|ready| !ready.is_empty()))
+    }
+
+    /// Read back the wakes written since the eventfd was last read, before
+    /// a [`EpollReactor::poll_one`]: only by the worker, while it does not
+    /// sleep, so they are wakes it has taken. Without, the `poll` after a
+    /// worker's wake ends at once, and its task registers and parks for
+    /// nothing.
+    pub(crate) fn forget_wakes(&self) {
+        if self.unread.swap(false, Ordering::Relaxed) {
+            drain(&self.wakes);
+        }
+    }
+
+    /// Drop the entry of `token` without a system call, for a descriptor
+    /// that closes right after: the close takes it out of the epoll
+    /// instance. An event the kernel reports for it until then names a
+    /// token without an entry, which [`Reactor::wait`] skips; tokens are
+    /// never reused.
+    pub(crate) fn forget(&self, token: Token) {
+        lock(&self.entries).remove(&token.0);
+    }
+
+    /// Register `descriptor`, the one `token` was registered for, for
+    /// `interest` instead. What it is ready for at the change is reported
+    /// as an event (`EPOLL_CTL_MOD` looks at the descriptor). A token that
+    /// is gone is not an error.
+    pub(crate) fn rearm(
+        &self,
+        token: Token,
+        descriptor: BorrowedFd<'_>,
+        interest: Interest,
+    ) -> io::Result<()> {
+        let mut entries = lock(&self.entries);
+        let Some(entry) = entries.get_mut(&token.0) else {
+            return Ok(());
+        };
+        let flags = interest.epoll() | EpollFlags::EPOLLET;
+        self.epoll
+            .modify(descriptor, &mut EpollEvent::new(flags, token.0))?;
+        entry.interest = interest;
+        Ok(())
     }
 }
 
@@ -404,6 +455,7 @@ impl Reactor for EpollReactor {
     }
 
     fn wake(&self) -> io::Result<()> {
+        self.unread.store(true, Ordering::Relaxed);
         self.wakes.write(1)?;
         Ok(())
     }
