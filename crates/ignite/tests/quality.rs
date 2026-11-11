@@ -2719,6 +2719,52 @@ fn a_release_refuses_every_row_worse_than_the_last_release() {
     }
 }
 
+/// `AGENTS.md` § Releases: "A bar a `decision` made worse since the last
+/// release tag blocks the release until the value is back and the decision
+/// is withdrawn." A size back at the last release's value, inside its 5 %
+/// of the decided bar (so the merge check asks for no bless), with the
+/// decision still in the baseline, is refused, and the refusal names the
+/// decision to withdraw.
+#[test]
+fn a_release_waits_until_a_decision_that_moved_a_bar_worse_is_withdrawn() {
+    let decision = "story:x (2026-11-08): dev-size bars moved";
+    let target = "llvm/todod/release";
+    let mut size = metric(Direction::Lower, Tolerance::Percent(5), &[(target, 1040)]);
+    size.source = Some("perf".to_string());
+    size.unit = "B".to_string();
+    size.bars.get_mut(target).unwrap().decision = Some(decision.to_string());
+    let decided = baseline_of(&[("3.2", size)]);
+    let merge = check(&decided, "perf", &one("3.2", target, 1000), None);
+    assert!(merge.is_empty(), "the merge check refused: {merge:?}");
+    let history = vec![Record {
+        commit: "c".to_string(),
+        date: "2026-11-07".to_string(),
+        run: "v0.15.0".to_string(),
+        metric: "3.2".to_string(),
+        target: target.to_string(),
+        value: 1000,
+        host: "local".to_string(),
+        load: None,
+        base: None,
+        base_value: None,
+        machine: None,
+    }];
+    let refused = release_refusals(
+        &decided,
+        &history,
+        &[Value {
+            metric: "3.2".to_string(),
+            target: target.to_string(),
+            value: 1000,
+            load: None,
+        }],
+    );
+    assert!(
+        refused.len() == 1 && refused[0].contains(decision),
+        "a decision that moved a bar worse than the last release is still in the baseline, and the release was not refused: {refused:?}"
+    );
+}
+
 /// Runs on the dedicated timing host (`host: ec2:<type>`, written by
 /// `ignite-perf quality-remote`) get a timing table of their own in the
 /// trend and give the page its timing values; the local runs keep the main

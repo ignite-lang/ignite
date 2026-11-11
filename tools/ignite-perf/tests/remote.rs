@@ -453,6 +453,32 @@ fn a_row_worse_in_every_sample_is_refused_within_the_tolerance() {
     assert!(refused(row("3.3", "llvm/todo/get-1", &[900], &[901])).is_empty());
 }
 
+/// Samples that touch (HEAD's best equal to BASE's worst) overlap: not every HEAD sample is worse
+/// than every BASE sample, so within the tolerance the row is left to it and not refused. Both
+/// directions. Holds `>` and `<` of the disjoint-samples rule against `>=` and `<=`.
+#[test]
+fn a_row_whose_samples_touch_the_base_is_left_to_the_tolerance() {
+    let baseline = Json::parse(
+        r#"{"metrics": {"6.2": {"direction": "lower", "tolerance": "10%"}, "3.3": {"direction": "higher", "tolerance": "10%", "unit": "permille"}}}"#,
+    )
+    .unwrap();
+    let refused = |row: Row| remote::refusals(&baseline, &[row]).unwrap();
+    let lower = refused(row(
+        "6.2",
+        "rust",
+        &[1000, 1004, 1008, 1002, 1006],
+        &[1008, 1034, 1038, 1032, 1036],
+    ));
+    assert!(lower.is_empty(), "touching samples refused: {lower:?}");
+    let higher = refused(row(
+        "3.3",
+        "llvm/todo/get-1",
+        &[1000, 996, 992, 998, 994],
+        &[992, 966, 962, 968, 964],
+    ));
+    assert!(higher.is_empty(), "touching samples refused: {higher:?}");
+}
+
 /// The dedicated host takes five samples (passes) of each tree by default, so two equal builds
 /// have disjoint samples by chance in 1 of 252 runs (C(10, 5)), not 1 of 20 (C(6, 3)).
 #[test]
