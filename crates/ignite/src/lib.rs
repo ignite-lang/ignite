@@ -2113,27 +2113,14 @@ fn cargo_output_dir(target_dir: &Path, release: bool, triple: Option<&str>) -> P
 /// every configured `rustflags`.
 const STATIC_RUSTFLAGS: &str = r#"["-C", "relocation-model=static"]"#;
 
-/// The link argument of a dynamic Rust build: packed relative relocations,
-/// as on the LLVM target (`llvm_build::PACKED_RELOCATIONS`, rows 3.2 and
-/// 3.9; glibc 2.36 or newer runs the executable).
-const DYNAMIC_LINK_ARG: &str = "link-arg=-Wl,-z,pack-relative-relocs";
-
-/// The `rustflags` for every target (`cfg(all())`, joined with the flags
-/// configured for the target) of a Rust build: [`DYNAMIC_LINK_ARG`]
-/// without `--static`, else `None`. A generated manifest cannot carry link
-/// arguments, and a build script would cost a compilation per build.
-/// `RUSTFLAGS` in the environment replaces them. A dev build compresses no
-/// debug section: its line tables are split out of the objects (the
-/// generated dev profile), which keeps a dev executable to its v0.15.0
-/// size with a link cheaper than before (rows 3.2 and 6.2).
-fn link_rustflags(static_link: bool) -> Option<String> {
-    let flags = format!(r#"target.'cfg(all())'.rustflags=["-C", "{DYNAMIC_LINK_ARG}"]"#);
-    (!static_link).then_some(flags)
-}
-
 /// `cargo build` of the generated project in `out`, `--quiet` when `quiet`,
-/// with [`link_rustflags`], `--target <triple>` with [`STATIC_RUSTFLAGS`]
-/// for a static build (`docs/slice.md` 23.5).
+/// `--target <triple>` with [`STATIC_RUSTFLAGS`] for a static build
+/// (`docs/slice.md` 23.5). A dynamic build passes no `rustflags`, so the
+/// `build.rustflags` of the user's cargo configuration apply: packed
+/// relative relocations, which the LLVM target links with, raised the
+/// start of a Rust executable (story `binary-size-back`), and a dev build
+/// compresses no debug section, its line tables split out of the objects
+/// by the generated dev profile (rows 3.2 and 6.2).
 /// Cargo is `$CARGO` when set, else `cargo` from `PATH`.
 fn cargo_build(
     out: &Path,
@@ -2153,9 +2140,6 @@ fn cargo_build(
         .arg(target_dir);
     if release {
         command.arg("--release");
-    }
-    if let Some(flags) = link_rustflags(triple.is_some()) {
-        command.arg("--config").arg(flags);
     }
     if let Some(triple) = triple {
         command

@@ -85,15 +85,19 @@ information (`docs/slice.md` 6.2): `todod` 8.4 to 7.5 MB, the link's instruction
 163 M.
 
 Packed relative relocations (story `binary-size-back`, rows 3.2 and 3.9). Every dynamic
-executable, dev and release, on both targets, is linked with `-z pack-relative-relocs`: its
+executable of the LLVM target, dev and release, is linked with `-z pack-relative-relocs`: its
 relative relocations, 24 bytes each in `.rela.dyn`, are packed into a bitmap in `.relr.dyn`
 (`DT_RELR`; stripped `todod` and `terminald` about 37 KB smaller on this target). The
 executable then needs the loader version `GLIBC_ABI_DT_RELR`, so it runs on glibc 2.36 or
 newer (before: 2.34, the newest version any of its symbols names); an older loader refuses
 it by that name instead of running it unrelocated. The toolchain image (Debian trixie,
 glibc 2.41) and the dedicated host (Ubuntu 24.04, glibc 2.39) have it. A `--static` build
-has no dynamic relocations and links without it. The Rust target passes the flag the same
-way as the compression above (`binary_size::` in `crates/ignite/tests/binary_size.rs`).
+has no dynamic relocations and links without it. The Rust target links without it and
+runs on glibc 2.34 as before: there the packed relocations made the start of `todod` 614
+instructions longer and that of `terminald` 151, and the `target.'cfg(all())'.rustflags`
+that carried the flag took the place of the user's `build.rustflags`; on the LLVM target they
+make the start about 2,900 instructions shorter (`binary_size::` in
+`crates/ignite/tests/binary_size.rs`).
 
 Libraries as needed (story `binary-size-back`, row 3.8). The LLVM target links its runtime
 libraries after `-Wl,--as-needed`, as rustc links the Rust target: a library none of whose

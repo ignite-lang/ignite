@@ -64,30 +64,35 @@ fn readelf(flag: &str, file: &Path) -> String {
     text(&run(Command::new("readelf").arg(flag).arg(file)).stdout)
 }
 
-/// Row 3.9 and 3.2: an executable of either target, dev and release,
-/// keeps its relative relocations packed (`DT_RELR`, the linker's
+/// Row 3.9 and 3.2: an LLVM executable, dev and release, keeps its
+/// relative relocations packed (`DT_RELR`, the linker's
 /// `-z pack-relative-relocs`) and names the loader version that reads
 /// them (`GLIBC_ABI_DT_RELR`, glibc 2.36), so a loader without it refuses
-/// the executable instead of running it unrelocated.
+/// the executable instead of running it unrelocated. A Rust executable
+/// does neither: there the packed relocations made the start longer, so it
+/// runs on the glibc it ran on before.
 #[test]
-fn executables_pack_their_relative_relocations_on_both_targets() {
+fn llvm_executables_pack_their_relative_relocations_and_rust_ones_do_not() {
     let dir = tmp("size-relr");
     let cargo_target = dir.join("cargo");
     for target in ["llvm", "rust"] {
+        let packed = target == "llvm";
         for release in [false, true] {
             let profile = if release { "release" } else { "dev" };
             let out = dir.join(format!("{target}-{profile}"));
             let executable = build(target, release, &out, &cargo_target);
             let dynamic = readelf("-dW", &executable);
-            assert!(
+            assert_eq!(
                 dynamic.contains("(RELR)"),
-                "{target} {profile}: {} has no DT_RELR:\n{dynamic}",
+                packed,
+                "{target} {profile}: {} DT_RELR:\n{dynamic}",
                 executable.display()
             );
             let versions = readelf("-VW", &executable);
-            assert!(
+            assert_eq!(
                 versions.contains("GLIBC_ABI_DT_RELR"),
-                "{target} {profile}: {} needs no GLIBC_ABI_DT_RELR:\n{versions}",
+                packed,
+                "{target} {profile}: {} GLIBC_ABI_DT_RELR:\n{versions}",
                 executable.display()
             );
         }
