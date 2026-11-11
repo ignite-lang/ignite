@@ -475,12 +475,10 @@ fn parse_port(arg: &str) -> Result<(String, u16), String> {
 const STACK: usize = 256 << 20;
 
 fn main() {
-    let compiler = std::thread::Builder::new()
-        .name("ignite".into())
-        .stack_size(STACK)
-        .spawn(run)
-        .expect("spawn the compiling thread");
-    if compiler.join().is_err() {
+    // This thread waits, and blocks SIGTERM, SIGINT and SIGHUP while a
+    // build ahead takes them in a thread of its own (story
+    // `build-time-back`).
+    if ignite::compile_on_thread(STACK, run).is_err() {
         std::process::exit(101);
     }
 }

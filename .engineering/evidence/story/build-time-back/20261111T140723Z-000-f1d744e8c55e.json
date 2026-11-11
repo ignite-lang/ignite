@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-11T14:07:23Z",
+  "actor": "human:timo",
+  "artifact": "story:build-time-back",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "coordinator run on the unit merged with the integration branch (tree a1565848, unit head 36f338a3): fmt and clippy exit 0; main dev_build:: dev_build_adversary:: units:: streams:: scheduler:: terminal:: reply_cost:: 143 passed; ignite --lib 100; run:: drain:: release:: todo:: leak:: stack_overflow:: quality:: site:: 170 passed 1 failed (static_metrics_hold_the_bar, improved lines only); ignite-rustgen 159; ignite-io 116 + 227 in both modes; ignite-rt 29 + 44; ignite-check 10 + 34; ignite-perf 71; task test-ignite 452 per target"
+  }
+}

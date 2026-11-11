@@ -7345,16 +7345,20 @@ const RELEASE_PROFILE: &str = "\n[profile.release]\noverflow-checks = true\ncode
 /// frames' files and lines. A fresh build compiles them all, and on a
 /// host without cargo configuration full debug information was a third of
 /// the work of compiling `ignite-io` (row 6.2 of `docs/quality.md`, story
-/// `build-time-back`). The program and `ignite-std` get line tables by
-/// name ([`dev_member_profile`]), so a backtrace names the files and lines
-/// of the standard library's frames and of the `ignite-io` instances in
-/// them too.
-/// The line tables are split out of the objects (`split-debuginfo =
-/// "unpacked"`: `.dwo` files beside them in the target directory, which
-/// gdb and the standard library's symbolizer read), so the linker neither
-/// copies nor relocates them and a dev link compresses nothing (rows 3.2
-/// and 6.2, story `binary-size-back`).
-const DEV_PROFILE: &str = "\n[profile.dev.package.\"*\"]\ndebug = false\n\n[profile.dev.package.ignite-io]\ndebug = \"line-tables-only\"\nsplit-debuginfo = \"unpacked\"\n";
+/// `build-time-back`). The members, the program and `ignite-std`, get line
+/// tables by name ([`dev_member_profile`]). Build scripts and their
+/// dependencies (`autocfg`, `cfg_aliases`) go without debug assertions and
+/// overflow checks: compiling and running them comes before the crates they
+/// build, and `libc`'s is on the way to the program (80 M instructions of a
+/// fresh build fewer). With `ignite-std`'s line tables a backtrace names
+/// the files and lines of the standard library's frames and of the
+/// `ignite-io` instances in them too. The line tables are split out of
+/// the objects (`split-debuginfo = "unpacked"`: `.dwo` files beside them
+/// in the target directory, which gdb and the standard library's
+/// symbolizer read), so the linker neither copies nor relocates them and
+/// a dev link compresses nothing (rows 3.2 and 6.2, story
+/// `binary-size-back`).
+const DEV_PROFILE: &str = "\n[profile.dev.package.\"*\"]\ndebug = false\n\n[profile.dev.package.ignite-io]\ndebug = \"line-tables-only\"\nsplit-debuginfo = \"unpacked\"\n\n[profile.dev.build-override]\ndebug-assertions = false\noverflow-checks = false\n";
 
 /// The dev profile of a member of the generated project, `package`: line
 /// tables, enough for a backtrace's files and lines, instead of the
@@ -7368,6 +7372,30 @@ fn dev_member_profile(package: &str) -> String {
         "\n[profile.dev.package.{}]\ndebug = \"line-tables-only\"\nsplit-debuginfo = \"unpacked\"\n",
         toml_string(package)
     )
+}
+
+/// The packages `ignite-io` depends on, its optional ones aside: what
+/// [`prebuild_manifest`] lets the driver build while it generates.
+pub const SUBSTRATE_DEPENDENCIES: &[&str] = &["corosensei", "nix", "termios"];
+
+/// The manifest of a crate that depends on `ignite-io` at `substrate` with
+/// the generated project's profiles. A `cargo build -p` of
+/// [`SUBSTRATE_DEPENDENCIES`] from it, into the target directory of the
+/// program's build, builds the units that build then finds fresh: the
+/// driver starts it before it parses, types and generates, so on a fresh
+/// output those crates are compiled while it works (row 6.2 of
+/// `docs/quality.md`, story `build-time-back`). `ignite-io`'s optional
+/// features change none of those units.
+pub fn prebuild_manifest(substrate: &Path) -> String {
+    let substrate = substrate.to_string_lossy().replace('\\', "/");
+    let mut out = String::new();
+    out.push_str("[package]\nname = \"ignite-prebuild\"\nversion = \"0.0.0\"\n");
+    out.push_str("edition = \"2024\"\n\n[workspace]\n");
+    out.push_str(RELEASE_PROFILE);
+    out.push_str(DEV_PROFILE);
+    out.push_str("\n[lib]\npath = \"lib.rs\"\n\n[dependencies]\n");
+    out.push_str(&ignite_io_dependency(&substrate, &[]));
+    out
 }
 
 fn cargo_toml(
@@ -7452,17 +7480,39 @@ fn std_cargo_toml(substrate: &Path, lib_rs: &str) -> String {
     out
 }
 
+/// The items of `ignite-io`'s feature `process` (its `child` and `pipe`
+/// modules) as generated code names them.
+const PROCESS_ITEMS: &[&str] = &[
+    "::ignite_io::Launcher",
+    "::ignite_io::ChildProcess",
+    "::ignite_io::ChildExit",
+    "::ignite_io::Invocation",
+    "::ignite_io::Pipe",
+];
+
 /// The optional `ignite-io` features a crate of Rust `sources` needs:
-/// `tls` when one names a TLS item of the substrate (`::ignite_io::Tls..`),
-/// so a program without TLS builds without rustls and ring. Cargo unifies
-/// features, so the crate (program or `ignite-std`) that names one turns it
-/// on for the build.
+/// `process` when one names a child process or pipe item
+/// ([`PROCESS_ITEMS`]), so a program without either builds `ignite-io`
+/// without those modules (story `build-time-back`); `tls` when one names
+/// a TLS item of the substrate (`::ignite_io::Tls..`), so a program
+/// without TLS builds without rustls and ring. Cargo unifies features, so
+/// the crate (program or `ignite-std`) that names one turns it on for the
+/// build. Neither feature changes a dependency of `ignite-io` but rustls,
+/// so the packages built ahead ([`prebuild_manifest`]) are the same.
 fn substrate_features(sources: &[&str]) -> Vec<&'static str> {
-    if sources.iter().any(|s| s.contains("::ignite_io::Tls")) {
-        vec!["tls"]
-    } else {
-        Vec::new()
+    let names = |items: &[&str]| {
+        sources
+            .iter()
+            .any(|source| items.iter().any(|item| source.contains(item)))
+    };
+    let mut features = Vec::new();
+    if names(PROCESS_ITEMS) {
+        features.push("process");
     }
+    if names(&["::ignite_io::Tls"]) {
+        features.push("tls");
+    }
+    features
 }
 
 /// The `ignite-io` dependency line, with `features` enabled.

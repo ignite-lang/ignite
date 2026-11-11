@@ -49,7 +49,9 @@ fn dispose(signal: Signal, disposition: Disposition) -> nix::Result<SigAction> {
     unsafe { sigaction(signal, &action) }
 }
 
-/// Set `signal` back to its default action.
+/// Set `signal` back to its default action: SIGCHLD before a child starts
+/// (`crate::child`).
+#[cfg(feature = "process")]
 pub(crate) fn restore_default(signal: Signal) {
     let _ = dispose(signal, Disposition::Default);
 }

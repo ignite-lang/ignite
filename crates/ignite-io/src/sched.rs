@@ -1233,6 +1233,15 @@ fn work(shared: Arc<Shared>) {
     }
 }
 
+/// The page size: 4096 on x86_64, whose base page has no other size, so
+/// that `nix` builds without its `feature` feature there (row 6.2 of
+/// `docs/quality.md`, story `build-time-back`); `sysconf` elsewhere.
+#[cfg(target_arch = "x86_64")]
+fn page_size() -> usize {
+    4096
+}
+
+#[cfg(not(target_arch = "x86_64"))]
 fn page_size() -> usize {
     static PAGE: OnceLock<usize> = OnceLock::new();
     *PAGE.get_or_init(|| {

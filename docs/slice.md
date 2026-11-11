@@ -776,6 +776,7 @@ For `ignite build terminal.ignite --target rust --out DIR` (the default target u
 DIR/Cargo.toml          [package] name = <package last segment>, edition 2024, [workspace] empty,
                         [profile.release] overflow-checks = true, codegen-units = 1, lto = true, [profile.release.package.nix] and [profile.release.package.corosensei] opt-level = "s" (a shorter start, story `binary-size-back`)
                         [profile.dev.package."*"] debug = false, [profile.dev.package.ignite-io], [profile.dev.package."<package>"] and, with std, [profile.dev.package."ignite-std"] debug = "line-tables-only", split-debuginfo = "unpacked" (the crates from outside the project without debug information, `ignite-io`, the program and the standard library with line tables for backtraces, in `.dwo` files beside the objects; build time and dev size, rows 6.2 and 3.2)
+                        [profile.dev.build-override] debug-assertions = false, overflow-checks = false (build scripts and their dependencies; build time, row 6.2)
                         [dependencies] ignite-io = { path = <substrate> }, ignite-std = { path = "std" } when the program imports a std module
                         one [[bin]] per component: name = executable, path = src/bin/<executable>.rs
 DIR/src/lib.rs          the program's imports as `use`, every type, enum, protocol and fn
@@ -11261,6 +11262,105 @@ us (`rustls-native-certs` was not taken): the substrate reads the PEM bundle its
   TLS, an invalid server name, authorities without a certificate.
 - No network: every certificate is generated in the test.
 
+## NN A dev build, a check and a plan take no longer than at v0.15.0
+
+Story `build-time-back`: rows 6.2 (`llvm`, `rust`), 6.1 (`all/check`, `all/plan`) and the dev
+cells of 3.2 of `docs/quality.md` at v0.15.0 or better. The dedicated host has no cargo
+configuration, so its dev profile has full debug information; every rule below holds for it
+and for a configured `debug` alike.
+
+- Runtime archive. The workspace's dev profile builds every crate from outside the workspace
+  without debug information (`[profile.dev.package."*"] debug = false`) and `ignite-rt` and
+  `ignite-io` with line tables (`debug = "line-tables-only"`); it replaces the five `debug =
+  false` lines of the TLS engine's crates. `ring`'s build script compiles its C and assembly
+  with `-g3` in every profile, so `.cargo/config.toml` sets `CFLAGS = "-g0"`, which `cc`
+  passes last (a `CFLAGS` of the environment wins). A dev executable on the LLVM target holds no compile
+  unit of a third-party crate (`dev_build::dev_todod_links_no_third_party_debug_information`,
+  with the archive built as configured and with `CARGO_PROFILE_DEV_DEBUG=2`). The driver gives
+  its own cargo runs (the build ahead and the program's build) `HOST_CFLAGS=-g0` and
+  `TARGET_CFLAGS=-g0` wherever it stands, unless `CFLAGS`, `TARGET_CFLAGS`, `HOST_CFLAGS` or a
+  `CFLAGS_<target>` is set (`c_flags_tests::the_driver_sets_cflags_only_where_the_user_set_none`),
+  so a TLS program built outside the repository holds no third-party compile unit either
+  (`dev_build_adversary::a_tls_program_built_outside_the_repository_holds_no_third_party_debug_information`).
+  `cc` passes them after `CFLAGS`, and the driver leaves `CFLAGS` alone: a user's `[env]
+  CFLAGS` of a cargo configuration, which cargo does not apply over a `CFLAGS` of its
+  environment, reaches the C compiler
+  (`dev_build_adversary::c_flags_of_the_users_cargo_configuration_reach_the_c_compiler`). A
+  profile without debug information for the crates that compile C would not do: `ring` asks
+  for `-g3` whatever cargo's `DEBUG`.
+- Linker. A dev build on the LLVM target without `--triple` and `--static` links with
+  `-fuse-ld=lld` when `ld.lld` lies beside the clang it runs, its symbolic links resolved, and
+  with clang's default linker otherwise (`docs/llvm.md` section 1); both carry a build id
+  (`dev_build::dev_link_uses_lld_beside_clang_else_the_default_linker`). The dedicated host
+  installs `lld-<major>` of the LLVM it installs (`tools/ignite-perf/src/remote-user-data.sh`,
+  `remote::the_host_installs_lld_beside_its_clang`).
+- Rust target. The generated `Cargo.toml` builds the crates from outside the project without
+  debug information and `ignite-io`, the program and `ignite-std` with line tables, split out
+  into `.dwo` files (section 6.2), whatever the profile's own `debug`; a build or a test build
+  into a directory without `Cargo.lock` starts from the substrate workspace's lock, so cargo
+  makes no index request (`dev_build::fresh_rust_build_makes_no_index_request`).
+- Dependencies ahead (Rust target). Before it parses (after, when `--out` is not given), the
+  driver writes a crate that depends on `ignite-io` with the generated project's profiles into
+  `<target-dir>/ignite-prebuild/`, with the project's lock or else the substrate workspace's,
+  and starts `cargo build --quiet --offline -p corosensei -p nix -p termios` from it into the
+  build's target directory, its output discarded: the crates `ignite-io` builds on, which the
+  program's build then finds fresh whatever features of `ignite-io` it turns on (`process` and
+  `tls` change none of them; `units::only_tls_changes_a_dependency_of_ignite_io`,
+  `dev_build::dependencies_built_ahead_are_fresh_in_the_programs_build`). The program's build
+  starts after that cargo has ended. A target directory that has built `nix` for the profile
+  builds nothing ahead, and neither does a `--static` build. A load, type or generation error
+  stops that cargo and every process under it before the driver reports the error
+  (`dev_build::a_type_error_stops_the_build_ahead`), and so does a panic as it unwinds
+  (`prebuild::tests::a_panic_stops_the_build_ahead_and_what_it_started`). While it runs, SIGTERM,
+  SIGINT and SIGHUP sent to the driver alone are taken by a thread of the driver's, which stops
+  it the same way and ends the driver by that signal, also one it takes while it is being
+  stopped (`prebuild::tests::a_signal_the_watcher_takes_while_it_stops_ends_the_driver`); for
+  that time every other thread blocks them, the main thread too, which waits for the compiling
+  thread and blocks them when asked. A signal the driver ignores stays ignored, one it was
+  started with blocked stays blocked
+  (`dev_build_adversary::a_driver_ended_by_sigterm_leaves_no_build_ahead`, `_sigint_`,
+  `_sighup_`, `a_driver_started_with_an_ending_signal_blocked_keeps_it_blocked`). The cargo
+  starts (`posix_spawn`) with the signal mask the driver was started with, so it and what it
+  starts block none of the three
+  (`dev_build_adversary::the_build_ahead_blocks_no_signal_and_ends_on_sigterm`). A command that
+  builds nothing ahead makes no signal call for it and reads no `/proc/self/status`
+  (`dev_build_adversary::a_command_without_a_build_ahead_makes_no_system_call_for_its_signals`).
+  SIGKILL cannot be taken: the build ahead then runs to its end, and the next build
+  finds what it built fresh (or waits for it on cargo's lock of the target directory). Row 6.2 rust: the driver's own work then
+  runs beside the longest chain of the dependency build (`libc`, `nix`) instead of before it.
+- Substrate. `nix` is built without `term`: standard input's raw mode reads and sets the
+  terminal attributes through the `termios` crate (`tcgetattr`, `tcsetattr`: one `ioctl` each,
+  as through `nix`), and only the tests that open a pty turn `term` on
+  (`units::ignite_io_builds_nix_without_term`); `term` cost 938 M of `nix`'s 6,038 M
+  instructions before its metadata. `ignite-io`'s `child` and `pipe` modules are behind its
+  feature `process`, which the generated manifest turns on when the program or its
+  `ignite-std` names a launcher, a child process or a pipe, and `runner` and the runtime archive
+  turn on (`streams::only_a_program_with_processes_or_pipes_turns_on_the_substrate_feature`);
+  without it `ignite-io` takes 383 M fewer before its metadata. A program without it does not
+  reset SIGCHLD at start: it starts no child.
+- Loader. The dependencies of each module (`module_dependencies`) are computed once per load
+  and kept with the parsed module (`dependency_scan_tests::check_and_plan_scan_each_module_once`
+  in `crates/ignite/src/lib.rs`); `plan.json` of the terminal design is unchanged
+  (`plan::design_model_is_byte_identical_across_processes_and_directories`).
+- Backtraces. Under `gdb`, a dev executable that fails names file and line of the Ignite fn
+  and of `ignite-rt`'s and `ignite-io`'s frames on the LLVM target, and of `ignite-io`'s and
+  the generated program's frames on the Rust target, whose failure report names the Ignite
+  line (`dev_build::dev_backtrace_names_ignite_and_substrate_lines_on_both_targets`).
+- Not taken: `incremental = false` in the generated dev profile (`ignite-perf` builds with
+  `CARGO_INCREMENTAL=0` already, so row 6.2 would not see it, and a user's rebuild would lose
+  it); `nix` without its `socket` feature: `recv` with `MSG_DONTWAIT` into an initialised
+  buffer has no safe call in `std` or `socket2` (their flagged receives take
+  `[MaybeUninit<u8>]`), and a socket made non-blocking at creation cannot block: the read of a
+  worker's only task in a request-reply rhythm (`sched::block_alone`), one blocking `recv` per
+  request now, would wait in `poll` first (`todod` 2 to 3 calls per keep-alive request), and
+  `connect` would return `EINPROGRESS` and wait in `poll` (one call more per outgoing
+  connection); whether a read may block is decided per read, so no socket can be given the
+  right mode at creation. Building `ignite-io` ahead as well: the program's build would wait for
+  its code generation instead of `nix`'s (worse in the model); one cargo for the dependencies and
+  the program: cargo fixes its units when it starts, before the driver has generated the
+  program. `nix` without `dir` (48 M) or `resource` (71 M, and `std` has no `setrlimit`), and
+  `entropy` and `environment` behind features (70 M together).
+
 ## NN An HTTP reply allocates no more than at v0.15.0, and a server without held requests starts no task for them
 
 Story `http-reply-cost-back` (rows 3.3 `rust/todo/get-1` and 3.8 `todo/get-1` of
@@ -11319,45 +11419,6 @@ Story `http-reply-cost-back` (rows 3.3 `rust/todo/get-1` and 3.8 `todo/get-1` of
   each of its servers answers its only connection: 1 without `reply` (2 before), 2 with one (as
   before).
 - `valgrind` is a prerequisite of `reply_cost::`, as `strace` is of `scheduler::`.
-
-## NN A dev build, a check and a plan take no longer than at v0.15.0
-
-Story `build-time-back`: rows 6.2 (`llvm`, `rust`), 6.1 (`all/check`, `all/plan`) and the dev
-cells of 3.2 of `docs/quality.md` at v0.15.0 or better. The dedicated host has no cargo
-configuration, so its dev profile has full debug information; every rule below holds for it
-and for a configured `debug` alike.
-
-- Runtime archive. The workspace's dev profile builds every crate from outside the workspace
-  without debug information (`[profile.dev.package."*"] debug = false`) and `ignite-rt` and
-  `ignite-io` with line tables (`debug = "line-tables-only"`); it replaces the five `debug =
-  false` lines of the TLS engine's crates. `ring`'s build script compiles its C and assembly
-  with `-g3` in every profile, so `.cargo/config.toml` sets `CFLAGS = "-g0"`, which `cc`
-  passes last (a `CFLAGS` of the environment wins). A dev executable on the LLVM target holds no compile
-  unit of a third-party crate (`dev_build::dev_todod_links_no_third_party_debug_information`,
-  with the archive built as configured and with `CARGO_PROFILE_DEV_DEBUG=2`).
-- Linker. A dev build on the LLVM target without `--triple` and `--static` links with
-  `-fuse-ld=lld` when `ld.lld` lies beside the clang it runs, its symbolic links resolved, and
-  with clang's default linker otherwise (`docs/llvm.md` section 1); both carry a build id
-  (`dev_build::dev_link_uses_lld_beside_clang_else_the_default_linker`). The dedicated host
-  installs `lld-<major>` of the LLVM it installs (`tools/ignite-perf/src/remote-user-data.sh`,
-  `remote::the_host_installs_lld_beside_its_clang`).
-- Rust target. The generated `Cargo.toml` builds the crates from outside the project without
-  debug information and `ignite-io`, the program and `ignite-std` with line tables, split out
-  into `.dwo` files (section 6.2), whatever the profile's own `debug`; a build or a test build into
-  a directory without `Cargo.lock` starts from the substrate workspace's lock, so cargo makes no
-  index request (`dev_build::fresh_rust_build_makes_no_index_request`).
-- Loader. The dependencies of each module (`module_dependencies`) are computed once per load
-  and kept with the parsed module (`dependency_scan_tests::check_and_plan_scan_each_module_once`
-  in `crates/ignite/src/lib.rs`); `plan.json` of the terminal design is unchanged
-  (`plan::design_model_is_byte_identical_across_processes_and_directories`).
-- Backtraces. Under `gdb`, a dev executable that fails names file and line of the Ignite fn
-  and of `ignite-rt`'s and `ignite-io`'s frames on the LLVM target, and of `ignite-io`'s and
-  the generated program's frames on the Rust target, whose failure report names the Ignite
-  line (`dev_build::dev_backtrace_names_ignite_and_substrate_lines_on_both_targets`).
-- Not taken: `incremental = false` in the generated dev profile (`ignite-perf` builds with
-  `CARGO_INCREMENTAL=0` already, so row 6.2 would not see it, and a user's rebuild would lose
-  it); `nix` without its `socket` feature, which needs four `unsafe` calls (row 3.6).
-
 
 ## NN Every binary is at or below its v0.15.0 size, and peak memory at one connection with it
 

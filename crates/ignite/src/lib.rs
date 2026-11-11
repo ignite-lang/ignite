@@ -17,6 +17,8 @@ pub mod conformance;
 mod embedded_runtime;
 mod llvm_build;
 mod musl;
+mod prebuild;
+pub use prebuild::compile_on_thread;
 pub mod rfc;
 pub mod run;
 mod test_build;
@@ -2023,26 +2025,46 @@ pub fn build(file: &Path, options: &BuildOptions) -> Result<BuildOutput, Error> 
     if let Some(triple) = &triple {
         musl::require_rust_target(triple)?;
     }
-    let (parsed, library) = load_program_std(file, options.std.as_deref(), &[])?;
     let substrate = options
         .substrate
         .clone()
         .unwrap_or_else(default_substrate_path);
+    let target_dir_of = |out: &Path| {
+        options
+            .target_dir
+            .clone()
+            .unwrap_or_else(|| out.join("target"))
+    };
+    let prebuild_for = |out: &Path| {
+        prebuild::Prebuild::start(
+            &substrate,
+            out,
+            &target_dir_of(out),
+            options.release,
+            triple.as_deref(),
+        )
+    };
+    // Dropped on any error below, which stops it.
+    let mut prebuild = match &options.out {
+        Some(out) => prebuild_for(out),
+        None => prebuild::Prebuild::none(),
+    };
+    let (parsed, library) = load_program_std(file, options.std.as_deref(), &[])?;
+    let out = options.out.clone().unwrap_or_else(|| {
+        let out = Path::new("target")
+            .join("ignite")
+            .join(ignite_rustgen::package_name(&parsed.program));
+        prebuild = prebuild_for(&out);
+        out
+    });
     let emitted = generate(parsed, &library, substrate.clone())?;
     let project = emitted.program;
-    let out = options.out.clone().unwrap_or_else(|| {
-        Path::new("target")
-            .join("ignite")
-            .join(&project.package_name)
-    });
     ignite_rustgen::write_project(&project, &out).map_err(io_error(&out))?;
     let std_out = out.join("std");
     ignite_rustgen::write_project(&emitted.std, &std_out).map_err(io_error(&std_out))?;
     seed_lock(&substrate, &out)?;
-    let target_dir = options
-        .target_dir
-        .clone()
-        .unwrap_or_else(|| out.join("target"));
+    let target_dir = target_dir_of(&out);
+    prebuild.finish();
     eprintln!(
         "note: building the generated Rust project in {}; compiler messages refer to generated code",
         out.display()
@@ -2113,6 +2135,74 @@ fn cargo_output_dir(target_dir: &Path, release: bool, triple: Option<&str>) -> P
 /// every configured `rustflags`.
 const STATIC_RUSTFLAGS: &str = r#"["-C", "relocation-model=static"]"#;
 
+/// Give a cargo run of the driver `-g0` for the C compiler, as the
+/// repository's `.cargo/config.toml` does with `CFLAGS` for the cargo runs
+/// inside it, wherever the driver stands (story `build-time-back`): the C
+/// and assembly that build scripts compile through the `cc` crate (the TLS
+/// engine's, which asks for `-g3` itself) then carry no debug information
+/// into a dev executable, like the Rust crates from outside the project.
+pub(crate) fn without_c_debug_information(command: &mut Command) {
+    command.envs(c_debug_flags().iter().copied());
+}
+
+/// The variables of [`without_c_debug_information`]: `HOST_CFLAGS` and
+/// `TARGET_CFLAGS`, which `cc` passes after `CFLAGS` (the one of its kind,
+/// whether the build compiles for the host or another target), so a
+/// user's `CFLAGS`, also one of `[env]` in a cargo configuration (which
+/// cargo would not apply over a `CFLAGS` of its environment), still
+/// reaches the compiler. A user's own flags win: none is set when
+/// `CFLAGS`, `TARGET_CFLAGS`, `HOST_CFLAGS` or a `CFLAGS_<target>` is in
+/// the environment, the variables `cc` reads.
+pub(crate) fn c_debug_flags() -> &'static [(&'static str, &'static str)] {
+    c_debug_flags_for(std::env::vars_os().map(|(name, _)| name))
+}
+
+/// [`c_debug_flags`] for an environment with the variables `names`.
+fn c_debug_flags_for(
+    mut names: impl Iterator<Item = std::ffi::OsString>,
+) -> &'static [(&'static str, &'static str)] {
+    let set = names.any(|name| {
+        let name = name.to_string_lossy();
+        matches!(name.as_ref(), "CFLAGS" | "TARGET_CFLAGS" | "HOST_CFLAGS")
+            || name.starts_with("CFLAGS_")
+    });
+    if set {
+        &[]
+    } else {
+        &[("HOST_CFLAGS", "-g0"), ("TARGET_CFLAGS", "-g0")]
+    }
+}
+
+#[cfg(test)]
+mod c_flags_tests {
+    use super::c_debug_flags_for;
+
+    fn given(names: &[&str]) -> Option<&'static [(&'static str, &'static str)]> {
+        let flags = c_debug_flags_for(names.iter().map(|name| (*name).into()));
+        (!flags.is_empty()).then_some(flags)
+    }
+
+    const G0: Option<&[(&str, &str)]> = Some(&[("HOST_CFLAGS", "-g0"), ("TARGET_CFLAGS", "-g0")]);
+
+    /// The driver's cargo runs get `-g0` unless the user set flags of
+    /// their own in any variable `cc` reads, and never in `CFLAGS`, which
+    /// a cargo configuration's `[env]` may set.
+    #[test]
+    fn the_driver_sets_cflags_only_where_the_user_set_none() {
+        assert_eq!(given(&[]), G0);
+        assert_eq!(given(&["PATH", "CXXFLAGS", "RUSTFLAGS"]), G0);
+        for user in [
+            "CFLAGS",
+            "TARGET_CFLAGS",
+            "HOST_CFLAGS",
+            "CFLAGS_x86_64-unknown-linux-gnu",
+            "CFLAGS_x86_64_unknown_linux_gnu",
+        ] {
+            assert_eq!(given(&["PATH", user]), None, "{user}");
+        }
+    }
+}
+
 /// `cargo build` of the generated project in `out`, `--quiet` when `quiet`,
 /// `--target <triple>` with [`STATIC_RUSTFLAGS`] for a static build
 /// (`docs/slice.md` 23.5). A dynamic build passes no `rustflags`, so the
@@ -2132,6 +2222,7 @@ fn cargo_build(
 ) -> Result<(), Error> {
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let mut command = Command::new(&cargo);
+    without_c_debug_information(&mut command);
     command
         .arg("build")
         .arg("--manifest-path")
