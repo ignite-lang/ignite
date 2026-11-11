@@ -13,6 +13,7 @@ mod scheduler_adversary;
 mod stdio;
 mod tcp;
 mod terminal;
+mod timer_adversary;
 mod tls;
 mod tls_adversary;
 mod unsafe_adversary;
