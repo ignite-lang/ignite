@@ -434,3 +434,24 @@ fn five_temporary_forms_are_not_released_on_llvm_yet() {
         }
     });
 }
+
+/// Adversary cases, pass 2 (`soak/moves_attack.ignite`): an end a `spawn`
+/// moves to its task (`own::moves_fresh`, `region::moved_to_task`) stays
+/// open for every other holder the caller kept: an alias, a record or a
+/// closure made before the call, a list the callee reads with `at`, an
+/// owned binding with an alias, a parameter bound by an arm's own `let`,
+/// a later mention and a match binding of a parameter; and the owners a
+/// task gets are released once per round (the `over_pipe` shape of the
+/// golden `bounds.program.ll`, an end of an outer block).
+#[test]
+fn ends_moved_to_a_task_stay_open_for_every_other_holder() {
+    on_both_targets(|target| {
+        let run = ignite_test_at(target, &soak_program("moves_attack.ignite"), "", None);
+        assert_eq!(run.status, 0, "{target}:\n{}", run.output);
+        assert!(
+            run.output.contains("10 passed; 0 failed"),
+            "{target}:\n{}",
+            run.output
+        );
+    });
+}
