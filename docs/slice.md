@@ -774,8 +774,8 @@ For `ignite build terminal.ignite --target rust --out DIR` (the default target u
 
 ```
 DIR/Cargo.toml          [package] name = <package last segment>, edition 2024, [workspace] empty,
-                        [profile.release] overflow-checks = true, codegen-units = 1, lto = true, [profile.release.package.nix] and [profile.release.package.corosensei] opt-level = "s" (release size, `docs/quality.md` rows 3.2 and 3.9)
-                        [profile.dev.package."*"] debug = false, [profile.dev.package.ignite-io] and [profile.dev.package."<package>"] debug = "line-tables-only", split-debuginfo = "unpacked", with std [profile.dev.package."ignite-std"] debug = false (the crates from outside the project and the standard library without debug information, `ignite-io` and the program with line tables for backtraces, in `.dwo` files beside the objects; build time and dev size, rows 6.2 and 3.2)
+                        [profile.release] overflow-checks = true, codegen-units = 1, lto = true, [profile.release.package.nix] and [profile.release.package.corosensei] opt-level = "s" (a shorter start, story `binary-size-back`)
+                        [profile.dev.package."*"] debug = false, [profile.dev.package.ignite-io], [profile.dev.package."<package>"] and, with std, [profile.dev.package."ignite-std"] debug = "line-tables-only", split-debuginfo = "unpacked" (the crates from outside the project without debug information, `ignite-io`, the program and the standard library with line tables for backtraces, in `.dwo` files beside the objects; build time and dev size, rows 6.2 and 3.2)
                         [dependencies] ignite-io = { path = <substrate> }, ignite-std = { path = "std" } when the program imports a std module
                         one [[bin]] per component: name = executable, path = src/bin/<executable>.rs
 DIR/src/lib.rs          the program's imports as `use`, every type, enum, protocol and fn
@@ -11342,8 +11342,8 @@ and for a configured `debug` alike.
   installs `lld-<major>` of the LLVM it installs (`tools/ignite-perf/src/remote-user-data.sh`,
   `remote::the_host_installs_lld_beside_its_clang`).
 - Rust target. The generated `Cargo.toml` builds the crates from outside the project without
-  debug information and `ignite-io`, the program and `ignite-std` with line tables (section
-  6.2), whatever the profile's own `debug`; a build or a test build into
+  debug information and `ignite-io`, the program and `ignite-std` with line tables, split out
+  into `.dwo` files (section 6.2), whatever the profile's own `debug`; a build or a test build into
   a directory without `Cargo.lock` starts from the substrate workspace's lock, so cargo makes no
   index request (`dev_build::fresh_rust_build_makes_no_index_request`).
 - Loader. The dependencies of each module (`module_dependencies`) are computed once per load
@@ -11365,21 +11365,26 @@ Story `binary-size-back`: rows 3.9 and 3.2 of `docs/quality.md` towards v0.15.0'
 without a program running slower, and row 3.8 at one connection with them. Each rule names the test that holds it; the bytes
 of each step are in the commits.
 
-- Dev links. The line tables of `ignite-rt`, `ignite-io` and the generated program are split
-  out of their objects into `.dwo` files beside them (`split-debuginfo = "unpacked"` in the
-  workspace's and the generated dev profile; the generated one builds `ignite-std` without
-  debug information), so the linker neither copies nor relocates them. With lld the LLVM
-  target's dev link compresses the two address tables only
+- Dev links. The line tables of `ignite-rt`, `ignite-io`, the generated program and the
+  generated `ignite-std` are split out of their objects into `.dwo` files beside them
+  (`split-debuginfo = "unpacked"` in the workspace's and the generated dev profile), so the
+  linker neither copies nor relocates them. With lld the LLVM target's dev link compresses
+  the two address tables only
   (`-Wl,--compress-sections=.debug_aranges=zlib`, the same for `.debug_addr`), with another
   linker every debug section; the Rust target compresses nothing. gdb, lldb,
   binutils and the standard library's symbolizer read both, so a backtrace keeps its files
-  and lines while the target directory holds the `.dwo` files
-  (`dev_build::dev_backtrace_names_ignite_and_substrate_lines_on_both_targets`). A dev link
+  and lines while the target directory holds the `.dwo` files, on the Rust target in the
+  standard library's frames too
+  (`dev_build::dev_backtrace_names_ignite_and_substrate_lines_on_both_targets`,
+  `binary_size_adversary::a_rust_dev_backtrace_names_file_and_line_of_a_standard_library_frame`). A dev link
   takes fewer instructions than without either (`docs/llvm.md` section 1).
-- Packed relative relocations. Every dynamic executable of both targets links with
+- Packed relative relocations. Every dynamic executable of the LLVM target links with
   `-z pack-relative-relocs` and needs glibc 2.36 or newer (`GLIBC_ABI_DT_RELR`; before, 2.34);
-  a `--static` build takes none
-  (`binary_size::executables_pack_their_relative_relocations_on_both_targets`).
+  a `--static` build takes none. The Rust target links without it and needs 2.34 as before:
+  there it made the start longer, and the `rustflags` table that carried it replaced the
+  user's `build.rustflags`
+  (`binary_size::llvm_executables_pack_their_relative_relocations_and_rust_ones_do_not`,
+  `binary_size_adversary::a_rust_build_keeps_the_build_rustflags_of_the_cargo_configuration`).
 - Run time first. A binary may stay above its v0.15.0 bytes; a step stays only if the
   instructions a program runs (callgrind: start, each request kind, a connection, a terminal
   session, both IO modes, both targets) and the syscalls it makes are equal or fewer with it.
@@ -11388,9 +11393,10 @@ of each step are in the commits.
   swept when they are half of it (`sched::tests` in `crates/ignite-io/src/sched.rs`). The
   epoll reactor holds its registrations in a slab whose tokens carry a generation
   (`reactor::*::a_reused_registration_has_a_token_of_its_own`). `IGNITE_IO=threads` stays.
-- Size profiles. The generated manifest builds `nix` and `corosensei` at `opt-level = "s"`
-  (`units::release_profile_builds_the_substrate_for_size`); `ignite-rt`, `ignite-io` and
-  `ignite-std` keep the default level.
+- Opt-levels. The generated manifest builds `nix` and `corosensei` at `opt-level = "s"`: the
+  start about 200 instructions shorter, the stripped executable about 570 bytes larger
+  (`units::release_profile_builds_nix_and_corosensei_at_opt_level_s`); `ignite-rt`, `ignite-io`
+  and `ignite-std` keep the default level.
 - Release LLVM link. `-Wl,--discard-all` drops the symbols local to the linked objects;
   global names stay
   (`binary_size::an_llvm_release_executable_drops_the_local_symbols_of_its_objects`).
