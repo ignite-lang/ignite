@@ -92,7 +92,9 @@ then records the run as `run`, not as the release. The last release is the one t
 published: the newest `v*` tag reachable from HEAD other than the candidate, and its values are
 the history's last local run under that label; records under any other `v*` label (a candidate
 the gate refused, the candidate itself) are never the reference, a tag without a record in the
-history refuses the release, and before the first tag the reference is the `bar` run. Every
+history refuses the release, and so does a history with a `v*` run whose tag cannot be read
+(no tags fetched, a shallow clone, git failing: the refusal says so and names
+`git fetch --tags`); the `bar` run is the reference only when the history holds no `v*` run. Every
 row it judges is a deterministic value (a count, or a size such as 3.2), so its tolerance there
 is 0, whatever the metric's tolerance for a merge; a hill-climb row is judged like any other.
 No `decision` holds a row for a release (no release is worse than the release before it on any

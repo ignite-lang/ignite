@@ -492,8 +492,8 @@ fn main_baseline() -> Option<Baseline> {
 /// HEAD other than `run` (the candidate itself); `None` before the first
 /// tag. A label in the history without a tag (a candidate the release gate
 /// refused) is never the last release.
-fn last_release_tag(run: &str) -> Option<String> {
-    let output = Command::new("git")
+fn last_release_tag(run: &str) -> LastRelease {
+    let output = match Command::new("git")
         .args([
             "describe",
             "--tags",
@@ -506,9 +506,35 @@ fn last_release_tag(run: &str) -> Option<String> {
         ])
         .current_dir(workspace())
         .output()
-        .ok()?;
-    let tag = String::from_utf8(output.stdout).ok()?.trim().to_string();
-    (output.status.success() && !tag.is_empty()).then_some(tag)
+    {
+        Ok(output) => output,
+        Err(e) => return LastRelease::Unreadable(format!("git: {e}")),
+    };
+    let tag = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    if output.status.success() && !tag.is_empty() {
+        LastRelease::Tag(tag)
+    } else if stderr.contains("No names found") || stderr.contains("No tags can describe") {
+        LastRelease::NoTag
+    } else {
+        LastRelease::Unreadable(format!("git describe: {stderr}"))
+    }
+}
+
+/// What the tag lookup of the last release found: its tag, no `v*` tag at
+/// all (git says so), or a lookup that failed (git missing, not a
+/// repository), with git's reason.
+#[derive(Clone, Debug, PartialEq)]
+pub enum LastRelease {
+    Tag(String),
+    NoTag,
+    Unreadable(String),
+}
+
+impl From<Option<&str>> for LastRelease {
+    fn from(tag: Option<&str>) -> LastRelease {
+        tag.map_or(LastRelease::NoTag, |tag| LastRelease::Tag(tag.to_string()))
+    }
 }
 
 /// The text of `quality/baseline.json` at the revision `rev`, when it has one.
@@ -2117,8 +2143,10 @@ fn civil_date(secs: u64) -> String {
 
 /// The release check against the last release that was published:
 /// `last_release` is its tag (the newest `v*` tag, [`last_release_tag`]),
-/// and its reference is the history's last local run carrying that label;
-/// `None`, before the first tag, takes the `bar` run. A record under any
+/// and its reference is the history's last local run carrying that label.
+/// Without a readable tag the `bar` run is the reference only when the
+/// history holds no `v*` run; otherwise the release is refused with the
+/// lookup's reason and `git fetch --tags`. A record under any
 /// other `v*` label (a candidate the gate refused, the candidate itself) is
 /// never the reference, and a tag without a record in the history is a
 /// refusal naming the tag, not a pass.
@@ -2136,22 +2164,34 @@ pub fn release_refusals(
     baseline: &Baseline,
     history: &[Record],
     values: &[Value],
-    last_release: Option<&str>,
+    last_release: impl Into<LastRelease>,
 ) -> Vec<String> {
-    let label = last_release.unwrap_or("bar");
+    let last_release = last_release.into();
+    let released = history.iter().any(|r| r.run.starts_with('v'));
+    let label = match &last_release {
+        LastRelease::Tag(tag) => tag.as_str(),
+        LastRelease::NoTag | LastRelease::Unreadable(_) if released => {
+            let why = match &last_release {
+                LastRelease::Unreadable(why) => why.as_str(),
+                _ => "no `v*` tag is reachable from HEAD",
+            };
+            return vec![format!(
+                "the last release's tag could not be read ({why}), and quality/history.jsonl holds a release run: run `git fetch --tags` and the release check again"
+            )];
+        }
+        LastRelease::NoTag | LastRelease::Unreadable(_) => "bar",
+    };
     let Some((_, last)) = runs(history)
         .into_iter()
         .rev()
         .find(|((run, _, _), _)| run == label)
     else {
-        return last_release
-            .map(|tag| {
-                format!(
-                    "the last release {tag} has no record in quality/history.jsonl, so the release has no reference"
-                )
-            })
-            .into_iter()
-            .collect();
+        return match &last_release {
+            LastRelease::Tag(tag) => vec![format!(
+                "the last release {tag} has no record in quality/history.jsonl, so the release has no reference"
+            )],
+            _ => Vec::new(),
+        };
     };
     let mut refused = Vec::new();
     for v in values {
@@ -2241,12 +2281,7 @@ fn record() {
     let run = std::env::var("IGNITE_QUALITY_RUN").unwrap_or_else(|_| "run".to_string());
     let history = read_history();
     let refused = if run.starts_with('v') {
-        release_refusals(
-            &baseline,
-            &history,
-            &values,
-            last_release_tag(&run).as_deref(),
-        )
+        release_refusals(&baseline, &history, &values, last_release_tag(&run))
     } else {
         Vec::new()
     };
@@ -2891,10 +2926,7 @@ fn a_release_is_judged_against_the_last_tagged_release_only() {
         refused.len() == 1 && refused[0].contains("1 at the last release, 3 now"),
         "a refused candidate's records were taken as the last release: {refused:?}"
     );
-    let first = vec![
-        release_record("bar", "a", 1),
-        release_record("v0.1.0", "c", 3),
-    ];
+    let first = vec![release_record("bar", "a", 1), release_record("run", "c", 3)];
     let refused = release_refusals(&baseline, &first, &[gaps(3)], None);
     assert!(
         refused.len() == 1 && refused[0].contains("1 at the last release, 3 now"),
@@ -2919,6 +2951,45 @@ fn a_release_tag_without_a_record_is_an_error() {
         refused.len() == 1 && refused[0].contains("v0.15.0") && refused[0].contains("no record"),
         "a tag without records let the release pass: {refused:?}"
     );
+}
+
+/// The `bar` run is the reference only when the history holds no `v*` run
+/// at all. A history with a release and no readable tag (none fetched, a
+/// shallow clone, git missing or failing) refuses the release, says the tag
+/// could not be read and names `git fetch --tags`, git's reason included
+/// where the lookup failed.
+#[test]
+fn a_release_without_a_readable_tag_is_refused_once_the_history_holds_a_release() {
+    let baseline = baseline_of(&[(
+        "4.2",
+        metric(Direction::Lower, Tolerance::Count(0), &[("rust", 1)]),
+    )]);
+    let released = vec![
+        release_record("bar", "a", 1),
+        release_record("v0.15.0", "b", 1),
+    ];
+    for lookup in [
+        LastRelease::NoTag,
+        LastRelease::Unreadable("git: No such file or directory".to_string()),
+    ] {
+        let refused = release_refusals(&baseline, &released, &[gaps(1)], lookup.clone());
+        assert!(
+            refused.len() == 1
+                && refused[0].contains("tag could not be read")
+                && refused[0].contains("git fetch --tags"),
+            "{lookup:?} with a release in the history let the release pass: {refused:?}"
+        );
+        if let LastRelease::Unreadable(why) = &lookup {
+            assert!(refused[0].contains(why), "{refused:?}");
+        }
+    }
+    let unreleased = vec![release_record("bar", "a", 1)];
+    let refused = release_refusals(&baseline, &unreleased, &[gaps(2)], LastRelease::NoTag);
+    assert!(
+        refused.len() == 1 && refused[0].contains("1 at the last release, 2 now"),
+        "{refused:?}"
+    );
+    assert!(release_refusals(&baseline, &unreleased, &[gaps(1)], LastRelease::NoTag).is_empty());
 }
 
 /// A hill-climb row is recorded, not refused, by a merge; a release judges
