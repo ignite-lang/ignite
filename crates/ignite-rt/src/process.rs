@@ -10,7 +10,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::sync::{Once, PoisonError, RwLock};
 
 use ignite_io::IoError;
-use nix::sys::signal::{SigHandler, Signal, signal};
+use nix::sys::signal::Signal;
 
 use crate::{IgniteEndpoint, IgniteIoError, IgniteList, bytes, get, put, status};
 
@@ -23,8 +23,11 @@ static ARGS: RwLock<Option<Vec<OsString>>> = RwLock::new(None);
 
 static HOOKS: Once = Once::new();
 
+// SAFETY: glibc's `atexit` has this signature; it takes a plain function
+// to call at exit, which an `extern "C" fn` of Rust always is, and no
+// pointer to data, so every call of it is safe.
 unsafe extern "C" {
-    fn atexit(callback: extern "C" fn()) -> c_int;
+    safe fn atexit(callback: extern "C" fn()) -> c_int;
 }
 
 extern "C" fn restore_at_exit() {
@@ -96,8 +99,7 @@ pub extern "C" fn ignite_rt_init(argc: i32, argv: *const *const c_char) {
     ignite_io::raise_open_files_limit();
     ignite_io::drain();
     HOOKS.call_once(|| {
-        // SAFETY: ignoring a signal installs no handler code.
-        let _ = unsafe { signal(Signal::SIGPIPE, SigHandler::SigIgn) };
+        let _ = ignite_io::signal::ignore(Signal::SIGPIPE);
         std::panic::set_hook(Box::new(|info| {
             let message = info
                 .payload()
@@ -120,8 +122,8 @@ pub extern "C" fn ignite_rt_init(argc: i32, argv: *const *const c_char) {
         // `ignite-io`'s hook wraps the one above; installed here, at
         // start, rather than by the first guarded entry.
         ignite_io::install_hook();
-        // SAFETY: `restore_at_exit` is a plain function that never unwinds.
-        unsafe { atexit(restore_at_exit) };
+        // `restore_at_exit` is a plain function that never unwinds.
+        atexit(restore_at_exit);
     });
 }
 
@@ -413,8 +415,7 @@ pub extern "C" fn ignite_rt_exit(code: i32) -> ! {
 pub extern "C" fn ignite_rt_fail(error: *const IgniteIoError) -> ! {
     crate::entry_never(move || {
         let (message, code) = match get(error) {
-            // SAFETY: the argument is valid for the call (crate docs).
-            Some(error) => (unsafe { error.message.as_bytes() }, error.exit_code),
+            Some(error) => (bytes(&error.message), error.exit_code),
             None => (&b""[..], 1),
         };
         ignite_io::flush();

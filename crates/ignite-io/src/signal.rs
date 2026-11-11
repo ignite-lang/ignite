@@ -1,7 +1,8 @@
 //! The one place the substrate changes what a signal does, and the one
 //! handler it installs. A disposition is one of [`Disposition`]: the
-//! default action, or [`on_fault`], the handler of a task's stack overflow
-//! (`crate::sched`'s module docs). No caller can install other handler
+//! default action, ignoring the signal, or [`on_fault`], the handler of a
+//! task's stack overflow (`crate::sched`'s module docs). The LLVM runtime
+//! ignores `SIGPIPE` through [`ignore`]. No caller can install other handler
 //! code, and no other module can reach [`on_fault`] to call it with a
 //! pointer of its own, so the conditions `sigaction` puts on a handler
 //! (that it is async-signal-safe, that the kernel gives it its arguments)
@@ -18,6 +19,8 @@ use nix::sys::signal::{SaFlags, SigAction, SigHandler, SigSet, Signal, sigaction
 enum Disposition {
     /// The default action.
     Default,
+    /// Ignored.
+    Ignore,
     /// [`on_fault`], on the alternate signal stack.
     Overflow,
 }
@@ -30,14 +33,18 @@ fn dispose(signal: Signal, disposition: Disposition) -> nix::Result<SigAction> {
         Disposition::Default => {
             SigAction::new(SigHandler::SigDfl, SaFlags::empty(), SigSet::empty())
         }
+        Disposition::Ignore => {
+            SigAction::new(SigHandler::SigIgn, SaFlags::empty(), SigSet::empty())
+        }
         Disposition::Overflow => SigAction::new(
             SigHandler::SigAction(on_fault),
             SaFlags::SA_ONSTACK | SaFlags::SA_SIGINFO,
             SigSet::empty(),
         ),
     };
-    // SAFETY: `action` is one of two: the default action installs no
-    // handler code, and `on_fault` is async-signal-safe (its docs).
+    // SAFETY: `action` is one of three: the default action and ignoring
+    // install no handler code, and `on_fault` is async-signal-safe (its
+    // docs).
     // `sigaction` reads `action` for the call only.
     unsafe { sigaction(signal, &action) }
 }
@@ -45,6 +52,12 @@ fn dispose(signal: Signal, disposition: Disposition) -> nix::Result<SigAction> {
 /// Set `signal` back to its default action.
 pub(crate) fn restore_default(signal: Signal) {
     let _ = dispose(signal, Disposition::Default);
+}
+
+/// Ignore `signal`: the LLVM runtime's `SIGPIPE`, so that a write to a
+/// closed peer is an error of the write, not the end of the process.
+pub fn ignore(signal: Signal) -> nix::Result<()> {
+    dispose(signal, Disposition::Ignore).map(|_| ())
 }
 
 /// The handlers of `SIGSEGV` and `SIGBUS` before [`on_fault`].
