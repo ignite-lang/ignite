@@ -510,6 +510,11 @@ was open for three days; a coordinator does this instead of what cost them:
 - The value of `IGNITE_PERF_AWS_PROFILE` is copied into the coordinating session's own scratch at
   a handoff. Another session's scratch is deleted when that session ends, and the name is in no
   file of the repository and in no transcript.
+- A merge that touches `site/` or `ux/` is followed by `task ux` (2 minutes) before the full
+  gate. At v0.16.0 a row added to the book's standard-library index made six UI values one step
+  worse, and the gate reported it in its last step after 71 minutes.
+- A unit that edits `Taskfile.yml` runs `task --list`. At v0.16.0 a colon in an unquoted `desc`
+  passed the unit's cargo tests and stopped `task quality` at the cut.
 
 - Count: waves closed on `main` since the last release tag; the wave pages under
   `.engineering/waves/` name them. At the third, the next minor version is released.
