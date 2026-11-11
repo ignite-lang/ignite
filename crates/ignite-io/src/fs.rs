@@ -190,12 +190,13 @@ fn entries(
     limit: Option<usize>,
 ) -> Result<Vec<(CString, bool)>, IoError> {
     // `struct linux_dirent64`: `d_ino` (8 bytes), `d_off` (8), `d_reclen`
-    // (2), `d_type` (1), then the name and its NUL; records are 8-aligned,
-    // so the buffer is made of `u64`.
+    // (2), `d_type` (1), then the name and its NUL. Every field is read
+    // from the bytes at its offset, never through a pointer to the
+    // record, so the buffer is one of bytes and needs no alignment.
     const RECORD_LENGTH: usize = 16;
     const TYPE: usize = 18;
     const NAME: usize = 19;
-    let mut buffer = vec![0u64; 2048];
+    let mut buffer = vec![0u8; 16384];
     let mut read: Vec<(CString, u8)> = Vec::new();
     loop {
         // SAFETY: the kernel writes at most the buffer's length in bytes
@@ -205,16 +206,17 @@ fn entries(
                 nix::libc::SYS_getdents64,
                 directory.as_raw_fd(),
                 buffer.as_mut_ptr(),
-                buffer.len() * size_of::<u64>(),
+                buffer.len(),
             )
         };
         let filled = Errno::result(filled).map_err(|e| path.os(e))? as usize;
         if filled == 0 {
             break;
         }
-        // SAFETY: the first `filled` bytes of the buffer were written by
-        // the call above, and `u8` has no alignment.
-        let bytes = unsafe { std::slice::from_raw_parts(buffer.as_ptr().cast::<u8>(), filled) };
+        // A count beyond the buffer is refused, not trusted.
+        let bytes = buffer
+            .get(..filled)
+            .ok_or_else(|| path.error("malformed directory entry"))?;
         let mut offset = 0;
         while offset < filled {
             let malformed = || path.error("malformed directory entry");
