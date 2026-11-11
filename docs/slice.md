@@ -11233,7 +11233,7 @@ Story `http-reply-cost-back` (rows 3.3 `rust/todo/get-1` and 3.8 `todo/get-1` of
   --trace-malloc=yes` over 200 replies after 50 on one connection
   (`reply_cost::a_get_reply_allocates_no_more_than_at_v0_15_0`, the bounds measured by
   `reply_cost::count_a_given_todod` over the v0.15.0 binaries): Rust target 37 at v0.15.0, 53
-  at wave 10, 37 now; LLVM target 1, 1, 0.
+  at wave 10, 37 at the unit's merge, 40 after `unsafe-sites-back`, 36 now; LLVM target 1, 1, 0.
 - The 16 came with `Request.connection` (section 37): `session` copied the connection into the
   request it kept for the answer (its two addresses, 2 allocations), `asked` copied it again (2),
   the request asked was copied once more for `handle` or `reply` (8) and `Respond`'s response was
@@ -11248,6 +11248,13 @@ Story `http-reply-cost-back` (rows 3.3 `rust/todo/get-1` and 3.8 `todo/get-1` of
   copied), and `ignite_io::flush` gives the emptied list of streams to send back to the task
   instead of dropping it, so the task's next write does not allocate it again (the one
   allocation per reply of the LLVM target).
+- The counting allocator of a generated program has no `realloc` of its own since its `unsafe`
+  one was removed (story `unsafe-sites-back`): a buffer that grows is a new allocation, a copy
+  and a free, and the three growths of rendering a reply made the Rust count 40. An inline reply
+  is now rendered into one buffer made with room for its head (`HEAD_ROOM`, 128 bytes, and each
+  header field) and its body (`text_with_room`): the head is written into it, the body is
+  appended to it from the response instead of being copied first, and the buffer becomes the
+  bytes sent. Rust target 36 now, LLVM target 0.
 - `serve_listener` starts the register of held requests (`Holds.start()`, the task
   `keep_holds`) only when the application has a `reply`, the only way to hold a request:
   `reply_cost::a_server_without_reply_starts_no_task_for_held_requests` builds
