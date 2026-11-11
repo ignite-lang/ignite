@@ -53,7 +53,7 @@
 //! (`docs/readiness-io.md` K4).
 
 use std::cell::{Cell, RefCell};
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BinaryHeap, VecDeque};
 use std::io;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::path::{Path, PathBuf};
@@ -493,7 +493,7 @@ thread_local! {
     static RUN: RefCell<VecDeque<Waiter>> = const { RefCell::new(VecDeque::new()) };
     /// Deadlines of parked tasks, with a sequence number that keeps the
     /// keys apart.
-    static TIMERS: RefCell<BTreeMap<(Instant, u64), Waiter>> = const { RefCell::new(BTreeMap::new()) };
+    static TIMERS: RefCell<Timers> = const { RefCell::new(Timers::new()) };
     static TIMER_SEQUENCE: Cell<u64> = const { Cell::new(0) };
     /// The timer of each task slot of this worker ([`SlotTimer`]).
     static SLOT_TIMERS: RefCell<Vec<SlotTimer>> = const { RefCell::new(Vec::new()) };
@@ -564,6 +564,90 @@ fn park_from(
     }
 }
 
+/// A worker's timers: a heap of entries keyed by deadline and sequence
+/// number, the earliest on top. An entry no task is armed for any more (its
+/// task ended, or armed an earlier one) stays until it comes to the top,
+/// where [`Worker::fire_timers`] skips it, or until such entries are half the
+/// heap, when [`Timers::forget`] drops them. The `BTreeMap` this replaces
+/// was 13 KB of code in every executable (story `binary-size-back`).
+struct Timers {
+    heap: BinaryHeap<Timer>,
+    /// Entries counted as no longer armed since the last sweep.
+    stale: usize,
+}
+
+/// An entry of [`Timers`], ordered by its key reversed so that the heap's
+/// top is the earliest.
+struct Timer {
+    key: (Instant, u64),
+    waiter: Waiter,
+}
+
+impl PartialEq for Timer {
+    fn eq(&self, other: &Timer) -> bool {
+        self.key == other.key
+    }
+}
+
+impl Eq for Timer {}
+
+impl PartialOrd for Timer {
+    fn partial_cmp(&self, other: &Timer) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Timer {
+    fn cmp(&self, other: &Timer) -> std::cmp::Ordering {
+        other.key.cmp(&self.key)
+    }
+}
+
+impl Timers {
+    const fn new() -> Timers {
+        Timers {
+            heap: BinaryHeap::new(),
+            stale: 0,
+        }
+    }
+
+    fn insert(&mut self, key: (Instant, u64), waiter: Waiter) {
+        self.heap.push(Timer { key, waiter });
+    }
+
+    fn is_empty(&self) -> bool {
+        self.heap.is_empty()
+    }
+
+    /// The earliest entry when it is due at `now`, taken out; else the next
+    /// deadline, if any.
+    fn pop_due(&mut self, now: Instant) -> Result<((Instant, u64), Waiter), Option<Instant>> {
+        match self.heap.peek() {
+            Some(timer) if timer.key.0 > now => Err(Some(timer.key.0)),
+            Some(_) => {
+                let timer = self.heap.pop().expect("the first timer");
+                Ok((timer.key, timer.waiter))
+            }
+            None => Err(None),
+        }
+    }
+
+    /// One entry is no longer armed; when such entries are half the heap,
+    /// keep only those `armed` says are.
+    fn forget(&mut self, armed: impl Fn(&(Instant, u64), &Waiter) -> bool) {
+        self.stale += 1;
+        if self.stale * 2 > self.heap.len() {
+            self.heap.retain(|timer| armed(&timer.key, &timer.waiter));
+            self.stale = 0;
+        }
+    }
+
+    /// A skipped entry was one counted by [`Timers::forget`].
+    fn skipped(&mut self) {
+        self.stale = self.stale.saturating_sub(1);
+    }
+}
+
 /// The timer of the task in one slot of this worker. A task has at most one
 /// entry in `TIMERS` armed for it; a park with a deadline arms one only when
 /// none is armed at or before that deadline, and a wake leaves it in place.
@@ -613,9 +697,17 @@ fn arm(slot: usize, deadline: Instant, waiter: &Waiter) {
 
 /// The task in `slot` ended: remove its armed entry.
 fn forget_timer(slot: usize) {
-    if let Some(key) = with_timer(slot, std::mem::take).armed {
-        TIMERS.with(|timers| timers.borrow_mut().remove(&key));
+    if with_timer(slot, std::mem::take).armed.is_some() {
+        TIMERS.with(|timers| timers.borrow_mut().forget(armed));
     }
+}
+
+/// Whether the entry `key` of `TIMERS` is the one armed for the task of
+/// `waiter`.
+fn armed(key: &(Instant, u64), waiter: &Waiter) -> bool {
+    waiter
+        .task()
+        .is_some_and(|task| with_timer(task.slot, |timer| timer.armed == Some(*key)))
 }
 
 /// Switch from the running task to its worker's loop.
@@ -1049,14 +1141,7 @@ impl Worker {
         }
         let now = Instant::now();
         loop {
-            let first = TIMERS.with(|timers| {
-                let mut timers = timers.borrow_mut();
-                match timers.first_key_value() {
-                    Some((&(at, _), _)) if at > now => Err(Some(at)),
-                    Some(_) => Ok(timers.pop_first().expect("the first timer")),
-                    None => Err(None),
-                }
-            });
+            let first = TIMERS.with(|timers| timers.borrow_mut().pop_due(now));
             let (key, waiter) = match first {
                 Ok(entry) => entry,
                 Err(next) => return next,
@@ -1072,7 +1157,8 @@ impl Worker {
                 Some(timer.wanted)
             });
             match wanted {
-                None | Some(None) => {}
+                None => TIMERS.with(|timers| timers.borrow_mut().skipped()),
+                Some(None) => {}
                 Some(Some(later)) if later > now => {
                     let key = insert_timer(later, &waiter);
                     with_timer(task.slot, |timer| timer.armed = Some(key));
@@ -1769,5 +1855,37 @@ impl Drop for Readiness {
 impl std::fmt::Debug for Readiness {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Readiness").finish_non_exhaustive()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// [`Timers`] hands out due entries earliest first and reports the next
+    /// deadline; entries no longer armed stay until they are half the heap,
+    /// then the sweep keeps only the armed ones.
+    #[test]
+    fn timers_pop_earliest_first_and_sweep_what_is_no_longer_armed() {
+        let waiter = Waiter::current();
+        let start = Instant::now();
+        let at = |n: u64| start + Duration::from_secs(n);
+        let mut timers = Timers::new();
+        for n in [3, 1, 4, 2, 5] {
+            timers.insert((at(n), n), waiter.clone());
+        }
+        assert_eq!(timers.pop_due(at(0)).err(), Some(Some(at(1))));
+        let due: Vec<u64> = std::iter::from_fn(|| timers.pop_due(at(2)).ok())
+            .map(|(key, _)| key.1)
+            .collect();
+        assert_eq!(due, [1, 2]);
+        let armed = |key: &(Instant, u64), _: &Waiter| key.1 == 5;
+        timers.forget(armed);
+        assert_eq!(timers.heap.len(), 3, "one of three is not half");
+        timers.forget(armed);
+        assert_eq!(timers.heap.len(), 1, "two of three are");
+        assert_eq!(timers.pop_due(at(9)).ok().map(|(key, _)| key.1), Some(5));
+        assert_eq!(timers.pop_due(at(9)).err(), Some(None));
+        assert!(timers.is_empty());
     }
 }
