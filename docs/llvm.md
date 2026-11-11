@@ -28,9 +28,11 @@ std/**/*.ignite, program.ignite --parse--> --check--> --type (ignite-types)--> -
 writes `DIR/llvm/{std.ll, program.ll, main_<exe>.ll}`, runs
 `clang -c -O0 -g -ffunction-sections -fdata-sections -Werror=override-module --target=<triple>`
 (`-O2` with `--release`) on each, links each executable with
-`clang -o DIR/bin/<exe> --target=<triple> [-fuse-ld=lld -Wl,--compress-sections=.debug_str=zlib | -Wl,--compress-debug-sections=zlib] main_<exe>.o program.o std.o <runtime> -Wl,--gc-sections [-Wl,--strip-debug] -Wl,-z,pack-relative-relocs -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc`
-(`-Wl,--strip-debug` with `--release` only, as cargo's release profile drops debug
-information; the compression without `--release`, below; the libraries are the list `cargo rustc -p ignite-rt --print native-static-libs`
+`clang -o DIR/bin/<exe> --target=<triple> [-fuse-ld=lld -Wl,--compress-sections=.debug_str=zlib | -Wl,--compress-debug-sections=zlib] main_<exe>.o program.o std.o <runtime> -Wl,--gc-sections [-Wl,--strip-debug -Wl,--discard-all] -Wl,-z,pack-relative-relocs -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc`
+(`-Wl,--strip-debug -Wl,--discard-all` with `--release` only, as cargo's release profile drops debug
+information, and the local symbols with it (internal functions and exception table labels, a tenth
+of `todod`; the global names a profiler shows stay; story `binary-size-back`); the compression
+without `--release`, below; the libraries are the list `cargo rustc -p ignite-rt --print native-static-libs`
 prints, fixed in the driver; `-fuse-ld=lld` on a build without `--release`, `--triple` and
 `--static` when `ld.lld` lies beside the clang the driver runs, its symbolic links resolved,
 else clang's default linker links), and prints `built DIR/bin/<exe>`. Exit statuses as for the Rust

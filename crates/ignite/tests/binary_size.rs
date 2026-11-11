@@ -93,3 +93,98 @@ fn executables_pack_their_relative_relocations_on_both_targets() {
         }
     }
 }
+
+/// The symbol table `.symtab` of `file`: its entries as (type, binding,
+/// name).
+fn symtab(file: &Path) -> Vec<(String, String, String)> {
+    let listed = readelf("-sW", file);
+    let Some((_, table)) = listed.split_once("Symbol table '.symtab'") else {
+        return Vec::new();
+    };
+    table
+        .lines()
+        .filter_map(|line| {
+            let fields: Vec<&str> = line.split_whitespace().collect();
+            let number = fields.first()?.strip_suffix(':')?;
+            number.parse::<usize>().ok()?;
+            let name = fields.get(7).copied().unwrap_or_default();
+            Some((fields[3].into(), fields[4].into(), name.into()))
+        })
+        .collect()
+}
+
+/// Row 3.2: an LLVM release executable keeps its global symbols, the
+/// names a profiler or a debugger shows for the runtime's functions, and
+/// drops what is local in the objects it links (`-Wl,--discard-all`): the
+/// source file symbols and the exception table labels among them, which a
+/// dev executable keeps; about a tenth of `todod`.
+#[test]
+fn an_llvm_release_executable_drops_the_local_symbols_of_its_objects() {
+    let dir = tmp("size-locals");
+    let cargo_target = dir.join("cargo");
+    let count = |symbols: &[(String, String, String)]| {
+        let files = symbols.iter().filter(|(kind, _, _)| kind == "FILE").count();
+        let labels = symbols
+            .iter()
+            .filter(|(_, _, name)| name.starts_with("GCC_except_table"))
+            .count();
+        let globals = symbols
+            .iter()
+            .filter(|(kind, bind, _)| kind == "FUNC" && bind == "GLOBAL")
+            .count();
+        (files, labels, globals)
+    };
+    let release = build("llvm", true, &dir.join("release"), &cargo_target);
+    let (files, labels, globals) = count(&symtab(&release));
+    assert_eq!(
+        (files, labels),
+        (0, 0),
+        "{} keeps local symbols of its objects",
+        release.display()
+    );
+    assert!(
+        globals > 0,
+        "{} keeps no global function",
+        release.display()
+    );
+    let dev = build("llvm", false, &dir.join("dev"), &cargo_target);
+    let (files, labels, _) = count(&symtab(&dev));
+    assert!(
+        files > 0 && labels > 0,
+        "{} lost its local symbols",
+        dev.display()
+    );
+}
+
+/// A release executable reports a failure as the dev one does, on both
+/// targets: the same message, naming the Ignite source's file, line and
+/// column, and the same exit status. The release links and the release
+/// runtime of story `binary-size-back` change what an executable carries,
+/// not what it reports.
+#[test]
+fn a_release_failure_report_is_the_dev_one_on_both_targets() {
+    let dir = tmp("size-report");
+    let cargo_target = dir.join("cargo");
+    for target in ["llvm", "rust"] {
+        let reports: Vec<(Option<i32>, String)> = [false, true]
+            .into_iter()
+            .map(|release| {
+                let profile = if release { "release" } else { "dev" };
+                let out = dir.join(format!("{target}-{profile}"));
+                let executable = build(target, release, &out, &cargo_target);
+                let output = Command::new(&executable)
+                    .env_remove("RUST_BACKTRACE")
+                    .env_remove("RUST_LIB_BACKTRACE")
+                    .output()
+                    .expect("run the executable");
+                (output.status.code(), text(&output.stderr))
+            })
+            .collect();
+        assert!(
+            reports[0].1.contains("backtrace.ignite:12:10"),
+            "{target} dev: {:?}",
+            reports[0]
+        );
+        assert_eq!(reports[1], reports[0], "{target}: release against dev");
+    }
+}

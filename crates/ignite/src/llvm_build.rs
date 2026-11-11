@@ -355,8 +355,12 @@ fn check_runtime_target(runtime: &Path, triple: &str) -> Result<(), Error> {
 pub const LINK_FLAGS: &[&str] = &["-Wl,--gc-sections"];
 
 /// Debug information is dropped from release executables, as cargo's
-/// release profile does (`strip = "debuginfo"`).
-pub const RELEASE_LINK_FLAGS: &[&str] = &["-Wl,--strip-debug"];
+/// release profile does (`strip = "debuginfo"`), and so are local symbols
+/// (`--discard-all`): the runtime's internal functions and its exception
+/// table labels, about a tenth of the executable (row 3.2 of
+/// `docs/quality.md`, story `binary-size-back`). Global symbols stay, the
+/// names a profiler or a debugger shows for the runtime's functions.
+pub const RELEASE_LINK_FLAGS: &[&str] = &["-Wl,--strip-debug", "-Wl,--discard-all"];
 
 /// A dev executable linked without lld has its debug sections written
 /// compressed with zlib, which gdb, lldb, binutils and the standard
