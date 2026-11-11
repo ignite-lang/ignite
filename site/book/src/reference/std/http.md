@@ -336,6 +336,16 @@ request keeps it, the answer does not say `Connection: close`, and the body has 
 body over the limit is answered and the connection closed, since its remaining chunks are
 not decoded.
 
+## The lexical grammar
+
+The pure checks the server parses and renders with live in `std.protocol.http.syntax`
+([`std/protocol/http/syntax.ignite`](https://github.com/ignite-lang/ignite/blob/main/std/protocol/http/syntax.ignite)),
+over `std.text` alone: `is_token`, `trim_ows`, `is_target`, `absolute_form`, `is_host`,
+`list_elements`, `is_imf_fixdate`, `request_line`, `hex`, `chunk` and the others. Importing
+`std.protocol.http` does not import them, since imports are not re-exported; name the module:
+`import std.protocol.http.syntax.{is_token, trim_ows}`. The checks that carry an RFC clause
+(`is_field_value`, `parse_head`, …) stay in `std.protocol.http`, whose protocol they count for.
+
 ## A server in a system
 
 From the [todo example](https://github.com/ignite-lang/ignite/blob/main/examples/todo/todo.ignite),

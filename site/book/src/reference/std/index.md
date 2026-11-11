@@ -36,6 +36,7 @@ and the runtime know sockets and byte streams, not application protocols.
 | [`std.console`](console.md) | general | `import std.console.{Console, Reply}` | a line-oriented console application, independent of the protocol that carries it |
 | [`std.protocol.telnet`](telnet.md) | protocol | `import std.protocol.telnet.{Telnet, TelnetServer}` | `protocol Telnet`, the kinds `TelnetServer`, `TelnetClient` and the probe `TelnetPrompt` |
 | [`std.protocol.http`](http.md) | protocol | `import std.protocol.http.{Http, HttpServer}` | `protocol Http`, an HTTP/1.1 server: `Request`, `Response`, `HttpLimits`, the kind `HttpServer` |
+| [`std.protocol.http.syntax`](http.md#the-lexical-grammar) | protocol | `import std.protocol.http.syntax.{is_token, trim_ows}` | the lexical grammar `std.protocol.http` reads and writes: tokens, OWS, field values, request-targets, hosts, IMF-fixdate, chunk framing |
 | [`std.protocol.jsonrpc`](jsonrpc.md) | protocol | `import std.protocol.jsonrpc.{JsonRpc, JsonRpcApp}` | `protocol JsonRpc`: JSON-RPC 2.0 with Content-Length framing |
 | [`std.rfc`](rfc.md) | leaf | `import std.rfc.{Level, Party}` | the vocabulary of requirements, and one catalogue module `std.rfc.*` per specification |
 | [`std.sli`](sli.md) | leaf | `import std.sli.{ProbeAttempt, meets}` | the prompt probe's outcome and its predicates, samples and verdicts, windows, missing data and the target check |
