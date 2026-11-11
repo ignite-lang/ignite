@@ -404,12 +404,10 @@ fn dev_backtrace_names_ignite_and_substrate_lines_on_both_targets() {
         breakpoint_frame_has_its_line(&backtrace),
         "ignite-io's failure_report has no file and line:\n{backtrace}"
     );
-    for file in ["ignite-rt/src/fail.rs"] {
-        assert!(
-            frame_in(&backtrace, file),
-            "no frame with file and line in {file}:\n{backtrace}"
-        );
-    }
+    assert!(
+        frame_in(&backtrace, "ignite-rt/src/fail.rs"),
+        "no frame with file and line in ignite-rt/src/fail.rs:\n{backtrace}"
+    );
 
     let rust = dir.join("rust");
     let target = Path::new(env!("CARGO_TARGET_TMPDIR")).join("dev-backtrace-cargo");
