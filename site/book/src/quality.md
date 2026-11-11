@@ -25,6 +25,13 @@ server (3.3, 3.7 to 3.9) are ratios against a plain-Rust implementation of the s
 measured on that host in the same run (`bench/native/`); a Go implementation is shown as a
 reference without a bar.
 
+The binary-size rows (3.2, 3.9) are the one exception for a release, marked `release_growth` in
+`quality/baseline.json`: a release that adds code may leave a cell of them above the release before
+it when the cell's bar carries a new decision naming the code that added the bytes, and the release
+run lists every such cell. Without that decision, or with one the release before it already held,
+the release is refused. A merge holds these rows to their bars like any other, and bytes are never
+bought with time.
+
 Current values: run `v0.16.0` on 2026-11-10, commit `e009426f`.
 
 ## 1 Semantics: one meaning across the three consumers
