@@ -38,11 +38,11 @@ Current values: run `v0.16.0` on 2026-11-10, commit `e009426f`.
 
 | # | metric | kind | target | bar | current | trend |
 |---|---|---|---|---|---|---|
-| 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | eval | 4 | 4 | = |
+| 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | eval | 2 | 4 | = |
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | llvm | 0 | 4 | = |
-| 1.2 | differential corpus size | ratchet | eval | 494 | 494 | +19 better |
-| 1.2 | differential corpus size | ratchet | llvm | 856 | 856 | +94 better |
-| 1.2 | differential corpus size | ratchet | rust | 856 | 856 | +94 better |
+| 1.2 | differential corpus size | ratchet | eval | 708 | 494 | +19 better |
+| 1.2 | differential corpus size | ratchet | llvm | 866 | 856 | +94 better |
+| 1.2 | differential corpus size | ratchet | rust | 866 | 856 | +94 better |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/builtins | 112 | 149 | +3 worse |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/patterns | 13 | 13 | = |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | llvm/builtins | 12 | 13 | = |
@@ -51,7 +51,7 @@ Current values: run `v0.16.0` on 2026-11-10, commit `e009426f`.
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | rust/patterns | 71 | 83 | = |
 | 1.4 | generated-code goldens changed without a `CODEGEN_REVISION` bump | gate | all | 0 | 0 | = |
 | 1.5 | random programs on which the consumers disagree | gate | | unmeasured: no program generator yet (out of scope of story:quality-ratchet) | | |
-| 1.6 | corpus units the evaluator cannot run | ratchet | eval | 362 | 362 | +75 worse |
+| 1.6 | corpus units the evaluator cannot run | ratchet | eval | 158 | 362 | +75 worse |
 | 1.7 | known differences marked intermittent | gate | all | 1 | 1 | = |
 
 ## 2 Front end: the checker refuses exactly the wrong programs
@@ -64,7 +64,7 @@ Current values: run `v0.16.0` on 2026-11-10, commit `e009426f`.
 | 2.3 | soundness holes open (effects, ownership, exhaustiveness) | ratchet | | unmeasured: the planning store tags no story as a soundness hole; known open: story:map-put-handle-roots, story:immutable-binding-e006 | | |
 | 2.4 | compiler panics on any input | gate | | unmeasured: no fuzzer yet (out of scope of story:quality-ratchet) | | |
 | 2.5 | diagnostic fixtures (one diagnostic per error site, its span) | ratchet | all | 336 | 336 | = |
-| 2.6 | checking time stays linear (limit tests) | gate | all | 5 | 5 | = |
+| 2.6 | checking time stays linear (limit tests) | gate | all | 6 | 5 | = |
 
 ## 3 Generated code and runtime behaviour
 
@@ -82,7 +82,7 @@ Current values: run `v0.16.0` on 2026-11-10, commit `e009426f`.
 | 3.2 | binary size | ratchet | rust/todod/release | 1038712 B | 1079336 B | −140000 better |
 | 3.3 | throughput against plain Rust | ratchet | llvm/terminal/connect-8 | 0.929× | 0.874× | ec2:c7i.metal-24xl, −2 |
 | 3.3 | throughput against plain Rust | ratchet | llvm/terminal/rr-1 | 0.987× | 0.981× | ec2:c7i.metal-24xl, −6 |
-| 3.3 | throughput against plain Rust | ratchet | llvm/terminal/rr-64 | 0.871× | 0.871× | ec2:c7i.metal-24xl, +12 better |
+| 3.3 | throughput against plain Rust | ratchet | llvm/terminal/rr-64 | 0.971× | 0.871× | ec2:c7i.metal-24xl, +12 better |
 | 3.3 | throughput against plain Rust | ratchet | llvm/todo/get-1 | 1.033× | 1.011× | ec2:c7i.metal-24xl, −22 |
 | 3.3 | throughput against plain Rust | ratchet | llvm/todo/get-64 | 1.210× | 1.127× | ec2:c7i.metal-24xl, −83 |
 | 3.3 | throughput against plain Rust | ratchet | llvm/todo/patch-16 | 1.193× | 1.167× | ec2:c7i.metal-24xl, −26 |
@@ -100,15 +100,15 @@ Current values: run `v0.16.0` on 2026-11-10, commit `e009426f`.
 | 3.3 | throughput against plain Rust | ratchet | go/todo/patch-16 | reference, no bar | 0.899× | ec2:c7i.metal-24xl |
 | 3.4 | peak RSS, leaked handles and threads after a load run | gate | | unmeasured: no number: the named tests gate it in task gate | | |
 | 3.5 | runtime entries that can unwind a panic across `extern "C"` | gate | llvm | 0 | 0 | = |
-| 3.6 | `unsafe` sites in the substrate a target links | ratchet | llvm | 95 | 95 | = |
-| 3.6 | `unsafe` sites in the substrate a target links | ratchet | rust | 25 | 25 | = |
-| 3.7 | p99 latency against plain Rust | ratchet | llvm/terminal/connect-8 | 1.467× | 1.467× | ec2:c7i.metal-24xl, −3 better |
+| 3.6 | `unsafe` sites in the substrate a target links | ratchet | llvm | 79 | 95 | = |
+| 3.6 | `unsafe` sites in the substrate a target links | ratchet | rust | 12 | 25 | = |
+| 3.7 | p99 latency against plain Rust | ratchet | llvm/terminal/connect-8 | 1.105× | 1.467× | ec2:c7i.metal-24xl, −3 better |
 | 3.7 | p99 latency against plain Rust | ratchet | llvm/terminal/rr-1 | 0.992× | 0.992× | ec2:c7i.metal-24xl, −8 better |
 | 3.7 | p99 latency against plain Rust | ratchet | llvm/terminal/rr-64 | 0.700× | 0.700× | ec2:c7i.metal-24xl, −19 better |
 | 3.7 | p99 latency against plain Rust | ratchet | llvm/todo/get-1 | 0.984× | 0.992× | ec2:c7i.metal-24xl, +8 |
 | 3.7 | p99 latency against plain Rust | ratchet | llvm/todo/get-64 | 0.650× | 0.650× | ec2:c7i.metal-24xl, −850 better |
 | 3.7 | p99 latency against plain Rust | ratchet | llvm/todo/patch-16 | 0.688× | 0.688× | ec2:c7i.metal-24xl, −215 better |
-| 3.7 | p99 latency against plain Rust | ratchet | rust/terminal/connect-8 | 1.387× | 1.387× | ec2:c7i.metal-24xl, −28 better |
+| 3.7 | p99 latency against plain Rust | ratchet | rust/terminal/connect-8 | 1.055× | 1.387× | ec2:c7i.metal-24xl, −28 better |
 | 3.7 | p99 latency against plain Rust | ratchet | rust/terminal/rr-1 | 0.980× | 0.996× | ec2:c7i.metal-24xl, +16 |
 | 3.7 | p99 latency against plain Rust | ratchet | rust/terminal/rr-64 | 0.510× | 0.510× | ec2:c7i.metal-24xl, −16 better |
 | 3.7 | p99 latency against plain Rust | ratchet | rust/todo/get-1 | 1.044× | 1.048× | ec2:c7i.metal-24xl, −1 better |
@@ -161,7 +161,7 @@ Current values: run `v0.16.0` on 2026-11-10, commit `e009426f`.
 | 4.2 | gaps per claimed spec | ratchet | rust/rfc855 | 0 | 0 | = |
 | 4.2 | gaps per claimed spec | ratchet | rust/rfc9110 | 2 | 2 | = |
 | 4.2 | gaps per claimed spec | ratchet | rust/rfc9112 | 1 | 1 | = |
-| 4.3 | inline tests per target | ratchet | eval | 234 | 234 | +17 better |
+| 4.3 | inline tests per target | ratchet | eval | 365 | 234 | +17 better |
 | 4.3 | inline tests per target | ratchet | llvm | 452 | 452 | +77 better |
 | 4.3 | inline tests per target | ratchet | rust | 452 | 452 | +77 better |
 | 4.4 | std functions with no inline test | ratchet | | unmeasured: no instrument yet: needs the call graph of the test bodies | | |
@@ -190,8 +190,8 @@ Current values: run `v0.16.0` on 2026-11-10, commit `e009426f`.
 | # | metric | kind | target | bar | current | trend |
 |---|---|---|---|---|---|---|
 | 7.1 | flaky tests per gate | ratchet | | unmeasured: no instrument reads the gate logs; known: apply_transition::a_failed_start_first_replacement, slice10::executable_component_main | | |
-| 7.2 | ignored tests | ratchet | all | 27 | 27 | +3 worse |
-| 7.3 | source files over 3,000 lines | ratchet | all | 5 | 5 | +1 worse |
+| 7.2 | ignored tests | ratchet | all | 23 | 27 | +3 worse |
+| 7.3 | source files over 3,000 lines | ratchet | all | 4 | 5 | +1 worse |
 | 7.4 | language friction rows open | ratchet | all | 38 | 38 | = |
 | 7.5 | mutants that survive the suite on the compiler crates | ratchet | | unmeasured: no mutation testing yet (out of scope of story:quality-ratchet) | | |
 

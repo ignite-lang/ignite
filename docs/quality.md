@@ -315,12 +315,12 @@ release.
 
 | # | metric | kind | better | instrument | bar | target |
 |---|---|---|---|---|---|---|
-| 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | lower | `differential::corpus_agrees_across_rust_llvm_and_the_evaluator` (every merge): units of the corpus whose exit, stdout or failure text differs from the Rust target's | eval 4, llvm 0 |  |
-| 1.2 | differential corpus size | ratchet | higher | the differential runner: units (inline tests and executables) each consumer ran | eval 494, llvm 856, rust 856 |  |
+| 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | lower | `differential::corpus_agrees_across_rust_llvm_and_the_evaluator` (every merge): units of the corpus whose exit, stdout or failure text differs from the Rust target's | eval 2, llvm 0 |  |
+| 1.2 | differential corpus size | ratchet | higher | the differential runner: units (inline tests and executables) each consumer ran | eval 708, llvm 866, rust 866 |  |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | lower | `quality::static_metrics_hold_the_bar`: per consumer crate, `PatternKind::` mentions (patterns) and distinct `Builtin::` variants named (builtins) | eval/builtins 112, eval/patterns 13, llvm/builtins 12, llvm/patterns 30, rust/builtins 43, rust/patterns 71 | one implementation per rule: after story:mid-level-ir the backends name no `PatternKind` and no `Builtin` the IR lowers |
 | 1.4 | generated-code goldens changed without a `CODEGEN_REVISION` bump | gate | lower | `quality::static_metrics_hold_the_bar`: golden `.rs` and `.ll` outputs changed against the merge base with main while `CODEGEN_REVISION` is unchanged | all 0 |  |
 | 1.5 | random programs on which the consumers disagree | gate | lower | a typed program generator, N seeds per gate | unmeasured: no program generator yet (out of scope of story:quality-ratchet) |  |
-| 1.6 | corpus units the evaluator cannot run | ratchet | lower | the differential runner: units the evaluator has no rule for (IO, tasks, fuel), each listed with its reason in `quality/baseline.json` `eval_cannot_run` | eval 362 |  |
+| 1.6 | corpus units the evaluator cannot run | ratchet | lower | the differential runner: units the evaluator has no rule for (IO, tasks, fuel), each listed with its reason in `quality/baseline.json` `eval_cannot_run` | eval 158 |  |
 | 1.7 | known differences marked intermittent | gate | lower | `quality::check_differential` (every merge): entries of `known_differences` marked `intermittent`, each naming a story of the planning store; a difference so marked may show or not in a run | all 1 |  |
 
 ### 2 Front end: the checker refuses exactly the wrong programs
@@ -332,7 +332,7 @@ release.
 | 2.3 | soundness holes open (effects, ownership, exhaustiveness) | ratchet | lower | count of open stories that are soundness holes | unmeasured: the planning store tags no story as a soundness hole; known open: story:map-put-handle-roots, story:immutable-binding-e006 |  |
 | 2.4 | compiler panics on any input | gate | lower | fuzz the parser and checker on a mutated corpus | unmeasured: no fuzzer yet (out of scope of story:quality-ratchet) |  |
 | 2.5 | diagnostic fixtures (one diagnostic per error site, its span) | ratchet | higher | `quality::static_metrics_hold_the_bar`: `.expected` diagnostic fixtures; each is compared by its crate's fixture test every merge | all 336 |  |
-| 2.6 | checking time stays linear (limit tests) | gate | higher | `quality::static_metrics_hold_the_bar`: the `limits::` tests of `ignite-check` and `ignite-types`, each a linearity bound run every merge | all 5 |  |
+| 2.6 | checking time stays linear (limit tests) | gate | higher | `quality::static_metrics_hold_the_bar`: the `limits::` tests of `ignite-check` and `ignite-types`, each a linearity bound run every merge | all 6 |  |
 
 ### 3 Generated code and runtime behaviour
 
@@ -340,11 +340,11 @@ release.
 |---|---|---|---|---|---|---|
 | 3.1 | copies in the generated code of the golden corpus | ratchet | lower | `quality::static_metrics_hold_the_bar`: `.clone()` in the Rust generator's goldens, calls of `copy.*` in the LLVM goldens | llvm 90, rust 166 |  |
 | 3.2 | binary size | ratchet | lower | `ignite-perf quality` (task quality): size of `todod` and `terminald` per target and profile | llvm/terminald/dev 15560616 B, llvm/terminald/release 1627008 B, llvm/todod/dev 16272232 B, llvm/todod/release 2140192 B, rust/terminald/dev 7617776 B, rust/terminald/release 763184 B, rust/todod/dev 8920888 B, rust/todod/release 1038712 B |  |
-| 3.3 | throughput against plain Rust | ratchet | higher | `ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): replies per second of todod and terminald over the plain-Rust implementation's, per cell | llvm/terminal/connect-8 0.929×, llvm/terminal/rr-1 0.987×, llvm/terminal/rr-64 0.871×, llvm/todo/get-1 1.033×, llvm/todo/get-64 1.210×, llvm/todo/patch-16 1.193×, rust/terminal/connect-8 0.956×, rust/terminal/rr-1 0.971×, rust/terminal/rr-64 1.045×, rust/todo/get-1 0.975×, rust/todo/get-64 1.057×, rust/todo/patch-16 1.185× |  |
+| 3.3 | throughput against plain Rust | ratchet | higher | `ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): replies per second of todod and terminald over the plain-Rust implementation's, per cell | llvm/terminal/connect-8 0.929×, llvm/terminal/rr-1 0.987×, llvm/terminal/rr-64 0.971×, llvm/todo/get-1 1.033×, llvm/todo/get-64 1.210×, llvm/todo/patch-16 1.193×, rust/terminal/connect-8 0.956×, rust/terminal/rr-1 0.971×, rust/terminal/rr-64 1.045×, rust/todo/get-1 0.975×, rust/todo/get-64 1.057×, rust/todo/patch-16 1.185× |  |
 | 3.4 | peak RSS, leaked handles and threads after a load run | gate | lower | `llvm_memory::` and `terminal::idle_terminald_runs_one_thread` (every merge) | unmeasured: no number: the named tests gate it in task gate |  |
 | 3.5 | runtime entries that can unwind a panic across `extern "C"` | gate | lower | `quality::static_metrics_hold_the_bar`, the rule of `contain::tests::every_entry_is_guarded`: `extern "C"` entries of `ignite-rt` not run through `crate::entry` | llvm 0 |  |
-| 3.6 | `unsafe` sites in the substrate a target links | ratchet | lower | `quality::static_metrics_hold_the_bar`: `unsafe` blocks, fns, impls and extern blocks; rust counts `ignite-io`, llvm `ignite-io` and `ignite-rt` | llvm 95, rust 25 |  |
-| 3.7 | p99 latency against plain Rust | ratchet | lower | `ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): p99 reply latency over the plain-Rust implementation's, per cell | llvm/terminal/connect-8 1.467×, llvm/terminal/rr-1 0.992×, llvm/terminal/rr-64 0.700×, llvm/todo/get-1 0.984×, llvm/todo/get-64 0.650×, llvm/todo/patch-16 0.688×, rust/terminal/connect-8 1.387×, rust/terminal/rr-1 0.980×, rust/terminal/rr-64 0.510×, rust/todo/get-1 1.044×, rust/todo/get-64 0.856×, rust/todo/patch-16 0.984× |  |
+| 3.6 | `unsafe` sites in the substrate a target links | ratchet | lower | `quality::static_metrics_hold_the_bar`: `unsafe` blocks, fns, impls and extern blocks; rust counts `ignite-io`, llvm `ignite-io` and `ignite-rt` | llvm 79, rust 12 |  |
+| 3.7 | p99 latency against plain Rust | ratchet | lower | `ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): p99 reply latency over the plain-Rust implementation's, per cell | llvm/terminal/connect-8 1.105×, llvm/terminal/rr-1 0.992×, llvm/terminal/rr-64 0.700×, llvm/todo/get-1 0.984×, llvm/todo/get-64 0.650×, llvm/todo/patch-16 0.688×, rust/terminal/connect-8 1.055×, rust/terminal/rr-1 0.980×, rust/terminal/rr-64 0.510×, rust/todo/get-1 1.044×, rust/todo/get-64 0.856×, rust/todo/patch-16 0.984× |  |
 | 3.8 | peak RSS under load against plain Rust | ratchet | lower | `ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): the server's peak RSS over the plain-Rust implementation's, per cell | llvm/terminal/connect-8 1.136×, llvm/terminal/rr-1 1.203×, llvm/terminal/rr-64 1.313×, llvm/todo/get-1 0.819×, llvm/todo/get-64 1.152×, llvm/todo/patch-16 0.913×, rust/terminal/connect-8 0.967×, rust/terminal/rr-1 1.063×, rust/terminal/rr-64 0.841×, rust/todo/get-1 0.765×, rust/todo/get-64 0.837×, rust/todo/patch-16 0.877× |  |
 | 3.9 | stripped binary size against plain Rust | ratchet | lower | `ignite-perf quality-remote` (`bench/native/`): the stripped release binary over the plain-Rust implementation's, per program | llvm/terminal 1.820×, llvm/todo 0.869×, rust/terminal 1.547×, rust/todo 0.850× |  |
 
@@ -354,7 +354,7 @@ release.
 |---|---|---|---|---|---|---|
 | 4.1 | conformance claims that hold | ratchet | higher | `quality::conformance_claims_hold_the_bar` (every merge): claim lines `yes` of `ignite conformance` over std/protocol/telnet, http and jsonrpc | llvm 3, rust 3 |  |
 | 4.2 | gaps per claimed spec | ratchet | lower | same: the gap count of each claim line, per claimed spec | llvm/jsonrpc-2.0 0, llvm/rfc854 0, llvm/rfc855 0, llvm/rfc9110 2, llvm/rfc9112 1, rust/jsonrpc-2.0 0, rust/rfc854 0, rust/rfc855 0, rust/rfc9110 2, rust/rfc9112 1 |  |
-| 4.3 | inline tests per target | ratchet | higher | the differential runner: inline tests of std/ and examples/ each consumer ran | eval 234, llvm 452, rust 452 |  |
+| 4.3 | inline tests per target | ratchet | higher | the differential runner: inline tests of std/ and examples/ each consumer ran | eval 365, llvm 452, rust 452 |  |
 | 4.4 | std functions with no inline test | ratchet | lower | typed program against the test bodies | unmeasured: no instrument yet: needs the call graph of the test bodies |  |
 
 ### 5 Operations: run, apply, host
@@ -379,8 +379,8 @@ release.
 | # | metric | kind | better | instrument | bar | target |
 |---|---|---|---|---|---|---|
 | 7.1 | flaky tests per gate | ratchet | lower | gate logs | unmeasured: no instrument reads the gate logs; known: apply_transition::a_failed_start_first_replacement, slice10::executable_component_main |  |
-| 7.2 | ignored tests | ratchet | lower | `quality::static_metrics_hold_the_bar`: `#[ignore` attributes under crates/ and tools/ | all 27 |  |
-| 7.3 | source files over 3,000 lines | ratchet | lower | `quality::static_metrics_hold_the_bar`: Rust files under crates/*/src and tools/*/src and std modules over 3,000 lines | all 5 |  |
+| 7.2 | ignored tests | ratchet | lower | `quality::static_metrics_hold_the_bar`: `#[ignore` attributes under crates/ and tools/ | all 23 |  |
+| 7.3 | source files over 3,000 lines | ratchet | lower | `quality::static_metrics_hold_the_bar`: Rust files under crates/*/src and tools/*/src and std modules over 3,000 lines | all 4 |  |
 | 7.4 | language friction rows open | ratchet | lower | `quality::static_metrics_hold_the_bar`: rows of the Open table of docs/friction.md | all 38 |  |
 | 7.5 | mutants that survive the suite on the compiler crates | ratchet | lower | `cargo mutants` sample | unmeasured: no mutation testing yet (out of scope of story:quality-ratchet) |  |
 

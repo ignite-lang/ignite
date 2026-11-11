@@ -11,6 +11,8 @@
     "Documentation and users"
   ],
   "eval_cannot_run": {
+    "crates/ignite/tests/fixtures/backtrace.ignite::main overflow": "a main does IO; the evaluator has none",
+    "crates/ignite/tests/fixtures/backtrace_std.ignite::main civil": "a main does IO; the evaluator has none",
     "crates/ignite/tests/fixtures/bitwise/codecs.ignite::main codecs": "a main does IO; the evaluator has none",
     "crates/ignite/tests/fixtures/bitwise/codecs.ignite::sha1 of RFC 3174 test 3": "exceeds the evaluator's limit Nodes(1000000)",
     "crates/ignite/tests/fixtures/channels/g3.ignite::main longpoll": "a main does IO; the evaluator has none",
@@ -69,6 +71,9 @@
     "crates/ignite/tests/fixtures/process_builtins/case_gaps.ignite::main g8": "a main does IO; the evaluator has none",
     "crates/ignite/tests/fixtures/slice17/command_line.ignite::main todo": "a main does IO; the evaluator has none",
     "crates/ignite/tests/fixtures/streams/handed_on.ignite::an accepted stream handed on to a second task outlives the first task": "builtin `TcpListenerBind` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/match_arm_owner.ignite::a stream bound in a match arm and dropped is closed when the match is left": "builtin `TcpListenerBind` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/match_arm_owner.ignite::a stream bound in a match arm and returned reaches the caller open": "builtin `TcpListenerBind` has no value at compile time",
+    "crates/ignite/tests/fixtures/streams/match_arm_owner.ignite::a stream bound in a match arm and spawned is closed when its task ends": "builtin `TcpListenerBind` has no value at compile time",
     "crates/ignite/tests/fixtures/tests/basics.ignite::exit code 3": "builtin `ProcessExit` has no value at compile time",
     "crates/ignite/tests/fixtures/tests/basics.ignite::output hidden on success": "builtin `StdoutWriteAll` has no value at compile time",
     "crates/ignite/tests/fixtures/tests/basics.ignite::output shown on failure": "builtin `StdoutWriteAll` has no value at compile time",
@@ -192,10 +197,9 @@
       "area": "Semantics: one meaning across the three consumers",
       "bars": {
         "eval": {
-          "value": 4
+          "value": 2
         },
         "llvm": {
-          "decision": "wave 8 (2026-11-09), accepted by the coordinator: the adversary's pass 2 on story channel-release-on-close found four pre-existing LLVM leaks of stored ends read through temporaries (crates/ignite/tests/fixtures/leak/attack2.ignite, red on the wave base 91fa0a25 too); listed in known_differences, asserted red in leak::, fixed by story:llvm-release-handle-temporaries",
           "value": 0
         }
       },
@@ -211,13 +215,13 @@
       "area": "Semantics: one meaning across the three consumers",
       "bars": {
         "eval": {
-          "value": 494
+          "value": 708
         },
         "llvm": {
-          "value": 856
+          "value": 866
         },
         "rust": {
-          "value": 856
+          "value": 866
         }
       },
       "direction": "higher",
@@ -288,8 +292,8 @@
       "area": "Semantics: one meaning across the three consumers",
       "bars": {
         "eval": {
-          "decision": "story channel-release-on-close (2026-11-08), wave 8 unit leaks: the four G30 soaks now in std/sync.ignite read Runtime.census() or make a store, and the main of the case study's reproducer (crates/ignite/tests/fixtures/leak/repro.ignite) does IO, none with a value at compile time (docs/slice.md 33.4); the two soaks of the removed fixtures/leak/g30.ignite left the list; the six adversary cases of crates/ignite/tests/fixtures/leak/attack.ignite (25d418ae) start tasks, read Runtime.census() or make stores and channels, so 266; listed in eval_cannot_run; wave 8 integration (2026-11-09): the 16 adversary cases of crates/ignite/tests/fixtures/leak/attack2.ignite and the two store-end tests of std/sync.ignite (story infer-channel-ends) make stores, channels or read Runtime.census(), std/net.ignite's bind_kept test binds a listener (story drain-keeps-bound-listeners), and std/digest.ignite's two million-byte vectors exceed the evaluator's node limit (story std-digest), so 287; listed in eval_cannot_run; wave 10 (2026-11-10): the 15 stream tests of std/protocol/resp.ignite (story std-resp-client) talk to a scripted server over Pipe.pair() or TcpListener.bind, and its adversary pass 1 case of crates/ignite/tests/fixtures/tests/resp_adversary.ignite (TYPE refused by the server) talks to one over Pipe.pair(), so 303; listed in eval_cannot_run; wave 10 (2026-11-10): 29 tests of std/protocol/nats.ignite (story std-nats-client): 27 talk to a scripted server over Pipe.pair() or TcpListener.bind, one reads Runtime.census() and one makes a channel, so 332; listed in eval_cannot_run; wave 10 integration (2026-11-10): 30 tests of story http-app-connection and story tls-client: the 10 new tests of std/protocol/http.ignite (held requests, upgrades, on_oversized, the connection an allow list reads) and the 14 adversary cases of crates/ignite/tests/fixtures/http_app_adversary.ignite talk to a server over Pipe.pair() or TcpListener.bind or make a store, a channel or read Runtime.census(), std/net.ignite's local-end test binds a listener, and 5 of the 6 tests of std/tls.ignite bind a listener for the TcpStream Tls.client takes, so 362; listed in eval_cannot_run",
-          "value": 362
+          "decision": "native parity round 1 integration (2026-11-08): story todo-save-without-races adds the inline test of saves that finish out of order, which needs Directory.temporary (DirectoryTemporary has no compile-time value); listed in eval_cannot_run",
+          "value": 158
         }
       },
       "direction": "lower",
@@ -387,7 +391,7 @@
       "area": "Front end: the checker refuses exactly the wrong programs",
       "bars": {
         "all": {
-          "value": 5
+          "value": 6
         }
       },
       "direction": "higher",
@@ -420,35 +424,27 @@
       "area": "Generated code and runtime behaviour",
       "bars": {
         "llvm/terminald/dev": {
-          "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): every todod and terminald binary grew 16 to 48 % over v0.15.0 (LLVM release todod 2,107,792 to 2,837,352 B, terminald 1,512,792 to 2,242,824 B; Rust target release todod 1,011,216 to 1,219,336 B). Measured by building at each merge of PR 131: the readiness scheduler (1a8aba78) is 96 % of the LLVM and 97 % of the Rust-target growth, U32 nothing, the leak census 3 to 4 %, wave 8 under 1 %. Which part of the scheduler takes the space is not measured; story readiness-binary-size cuts it.; accepted for v0.16.0 (Timo, 2026-11-10): the dev binaries on the LLVM target grew with TLS client sessions (story tls-client): terminald 9,144,568 to 15,560,616 B, todod 9,849,080 to 16,272,232 B; the release binaries are within their bars. The linker keeps the debug info of every runtime object it pulls in, and the TLS engine (rustls, ring, webpki) shares objects with code every program calls: the dev terminald holds 193 rustls, 163 ring and 51 webpki compile units. No debug info for the engine crates gave 10,732,272 B, that without ring's C and assembly debug info 9,760,088 B, both over the limit; story tls-engine-own-crates moves the engine into crates of its own and withdraws this decision",
           "value": 15560616
         },
         "llvm/terminald/release": {
-          "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): every todod and terminald binary grew 16 to 48 % over v0.15.0 (LLVM release todod 2,107,792 to 2,837,352 B, terminald 1,512,792 to 2,242,824 B; Rust target release todod 1,011,216 to 1,219,336 B). Measured by building at each merge of PR 131: the readiness scheduler (1a8aba78) is 96 % of the LLVM and 97 % of the Rust-target growth, U32 nothing, the leak census 3 to 4 %, wave 8 under 1 %. Which part of the scheduler takes the space is not measured; story readiness-binary-size cuts it.",
           "value": 1627008
         },
         "llvm/todod/dev": {
-          "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): every todod and terminald binary grew 16 to 48 % over v0.15.0 (LLVM release todod 2,107,792 to 2,837,352 B, terminald 1,512,792 to 2,242,824 B; Rust target release todod 1,011,216 to 1,219,336 B). Measured by building at each merge of PR 131: the readiness scheduler (1a8aba78) is 96 % of the LLVM and 97 % of the Rust-target growth, U32 nothing, the leak census 3 to 4 %, wave 8 under 1 %. Which part of the scheduler takes the space is not measured; story readiness-binary-size cuts it.; accepted for v0.16.0 (Timo, 2026-11-10): the dev binaries on the LLVM target grew with TLS client sessions (story tls-client): terminald 9,144,568 to 15,560,616 B, todod 9,849,080 to 16,272,232 B; the release binaries are within their bars. The linker keeps the debug info of every runtime object it pulls in, and the TLS engine (rustls, ring, webpki) shares objects with code every program calls: the dev terminald holds 193 rustls, 163 ring and 51 webpki compile units. No debug info for the engine crates gave 10,732,272 B, that without ring's C and assembly debug info 9,760,088 B, both over the limit; story tls-engine-own-crates moves the engine into crates of its own and withdraws this decision",
           "value": 16272232
         },
         "llvm/todod/release": {
-          "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): every todod and terminald binary grew 16 to 48 % over v0.15.0 (LLVM release todod 2,107,792 to 2,837,352 B, terminald 1,512,792 to 2,242,824 B; Rust target release todod 1,011,216 to 1,219,336 B). Measured by building at each merge of PR 131: the readiness scheduler (1a8aba78) is 96 % of the LLVM and 97 % of the Rust-target growth, U32 nothing, the leak census 3 to 4 %, wave 8 under 1 %. Which part of the scheduler takes the space is not measured; story readiness-binary-size cuts it.",
           "value": 2140192
         },
         "rust/terminald/dev": {
-          "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): every todod and terminald binary grew 16 to 48 % over v0.15.0 (LLVM release todod 2,107,792 to 2,837,352 B, terminald 1,512,792 to 2,242,824 B; Rust target release todod 1,011,216 to 1,219,336 B). Measured by building at each merge of PR 131: the readiness scheduler (1a8aba78) is 96 % of the LLVM and 97 % of the Rust-target growth, U32 nothing, the leak census 3 to 4 %, wave 8 under 1 %. Which part of the scheduler takes the space is not measured; story readiness-binary-size cuts it.",
           "value": 7617776
         },
         "rust/terminald/release": {
-          "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): every todod and terminald binary grew 16 to 48 % over v0.15.0 (LLVM release todod 2,107,792 to 2,837,352 B, terminald 1,512,792 to 2,242,824 B; Rust target release todod 1,011,216 to 1,219,336 B). Measured by building at each merge of PR 131: the readiness scheduler (1a8aba78) is 96 % of the LLVM and 97 % of the Rust-target growth, U32 nothing, the leak census 3 to 4 %, wave 8 under 1 %. Which part of the scheduler takes the space is not measured; story readiness-binary-size cuts it.",
           "value": 763184
         },
         "rust/todod/dev": {
-          "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): every todod and terminald binary grew 16 to 48 % over v0.15.0 (LLVM release todod 2,107,792 to 2,837,352 B, terminald 1,512,792 to 2,242,824 B; Rust target release todod 1,011,216 to 1,219,336 B). Measured by building at each merge of PR 131: the readiness scheduler (1a8aba78) is 96 % of the LLVM and 97 % of the Rust-target growth, U32 nothing, the leak census 3 to 4 %, wave 8 under 1 %. Which part of the scheduler takes the space is not measured; story readiness-binary-size cuts it.",
           "value": 8920888
         },
         "rust/todod/release": {
-          "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): every todod and terminald binary grew 16 to 48 % over v0.15.0 (LLVM release todod 2,107,792 to 2,837,352 B, terminald 1,512,792 to 2,242,824 B; Rust target release todod 1,011,216 to 1,219,336 B). Measured by building at each merge of PR 131: the readiness scheduler (1a8aba78) is 96 % of the LLVM and 97 % of the Rust-target growth, U32 nothing, the leak census 3 to 4 %, wave 8 under 1 %. Which part of the scheduler takes the space is not measured; story readiness-binary-size cuts it.",
           "value": 1038712
         }
       },
@@ -471,8 +467,7 @@
           "value": 987
         },
         "llvm/terminal/rr-64": {
-          "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): the dedicated-host run iq-20261109t005132z-6d93 (BASE v0.15.0, HEAD 66a3d5b9, spot c7i.metal-24xl, 0.64 USD) refused this row. The release carries the readiness scheduler (stackful tasks on epoll workers, PR 131), which in the same run cut peak RSS (LLVM terminal connect-8 3.08x to 1.14x of plain Rust, Rust-target todo get-64 2.62x to 0.84x) and raised write throughput (todo patch-16 1.02x to 1.19x on both targets). Replies per second 0.975x to 0.859x; the five passes spread 0.674 to 1.086, so noise is likely, not shown.",
-          "value": 871
+          "value": 971
         },
         "llvm/todo/get-1": {
           "value": 1033
@@ -496,7 +491,6 @@
           "value": 975
         },
         "rust/todo/get-64": {
-          "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): the dedicated-host run iq-20261109t005132z-6d93 (BASE v0.15.0, HEAD 66a3d5b9, spot c7i.metal-24xl, 0.64 USD) refused this row. The release carries the readiness scheduler (stackful tasks on epoll workers, PR 131), which in the same run cut peak RSS (LLVM terminal connect-8 3.08x to 1.14x of plain Rust, Rust-target todo get-64 2.62x to 0.84x) and raised write throughput (todo patch-16 1.02x to 1.19x on both targets). Replies per second 0.983x to 0.826x; the five passes spread 0.643 to 1.040, so noise is likely, not shown.",
           "value": 1057
         },
         "rust/todo/patch-16": {
@@ -540,12 +534,12 @@
       "area": "Generated code and runtime behaviour",
       "bars": {
         "llvm": {
-          "decision": "readiness IO (2026-11-08): story readiness-waiters adds three unsafe sites in ignite-io reactor.rs (BorrowedFd::borrow_raw of a registered descriptor in epoll and poll), story readiness-scheduler five in ignite-io sched.rs (the coroutine yielder of the running task, installing and restoring the SIGSEGV and SIGBUS handlers that report a task stack overflow, the alternate signal stack, si_addr in that handler); story leak-census (2026-11-08): the counting global allocator `ignite_io::census::Counting` adds seven sites (the `unsafe impl GlobalAlloc`, its `alloc`, `dealloc` and `realloc` and the three calls of `System` inside them), required by the trait; integration of readiness IO, U32 and the leak census (2026-11-08): bar set once from the measured value of the merged tree",
-          "value": 95
+          "decision": "native parity round 1 integration (2026-11-08): story text-fast-search adds two unsafe blocks (memchr/memmem in ignite_io::text, the pieces list in ignite-rt), accepted by the coordinator; story fs-resolve-beneath adds two in ignite-io fs.rs (the getdents64 syscall that lists a directory and the slice over the bytes it filled); story rt-hot-path removes one in ignite-rt",
+          "value": 79
         },
         "rust": {
-          "decision": "readiness IO (2026-11-08): story readiness-waiters adds three unsafe sites in ignite-io reactor.rs (BorrowedFd::borrow_raw of a registered descriptor in epoll and poll), story readiness-scheduler five in ignite-io sched.rs (the coroutine yielder of the running task, installing and restoring the SIGSEGV and SIGBUS handlers that report a task stack overflow, the alternate signal stack, si_addr in that handler); story leak-census (2026-11-08): the counting global allocator `ignite_io::census::Counting` adds seven sites (the `unsafe impl GlobalAlloc`, its `alloc`, `dealloc` and `realloc` and the three calls of `System` inside them), required by the trait; integration of readiness IO, U32 and the leak census (2026-11-08): bar set once from the measured value of the merged tree",
-          "value": 25
+          "decision": "native parity round 1 integration (2026-11-08): story text-fast-search adds one unsafe block (memchr/memmem in ignite_io::text), accepted by the coordinator; story fs-resolve-beneath adds two in ignite-io fs.rs (the getdents64 syscall that lists a directory and the slice over the bytes it filled)",
+          "value": 12
         }
       },
       "direction": "lower",
@@ -560,8 +554,7 @@
       "area": "Generated code and runtime behaviour",
       "bars": {
         "llvm/terminal/connect-8": {
-          "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): the dedicated-host run iq-20261109t005132z-6d93 (BASE v0.15.0, HEAD 66a3d5b9, spot c7i.metal-24xl, 0.64 USD) refused this row. The release carries the readiness scheduler (stackful tasks on epoll workers, PR 131), which in the same run cut peak RSS (LLVM terminal connect-8 3.08x to 1.14x of plain Rust, Rust-target todo get-64 2.62x to 0.84x) and raised write throughput (todo patch-16 1.02x to 1.19x on both targets). p99 1.106x to 1.470x, the same in all five passes: connection setup through the scheduler is slower; story readiness-connect-latency.",
-          "value": 1467
+          "value": 1105
         },
         "llvm/terminal/rr-1": {
           "value": 992
@@ -573,15 +566,13 @@
           "value": 984
         },
         "llvm/todo/get-64": {
-          "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): the dedicated-host run iq-20261109t005132z-6d93 (BASE v0.15.0, HEAD 66a3d5b9, spot c7i.metal-24xl, 0.64 USD) refused this row. The release carries the readiness scheduler (stackful tasks on epoll workers, PR 131), which in the same run cut peak RSS (LLVM terminal connect-8 3.08x to 1.14x of plain Rust, Rust-target todo get-64 2.62x to 0.84x) and raised write throughput (todo patch-16 1.02x to 1.19x on both targets). p99 1.137x to 1.500x; the passes spread 0.849 to 1.836; story readiness-connect-latency.",
           "value": 650
         },
         "llvm/todo/patch-16": {
           "value": 688
         },
         "rust/terminal/connect-8": {
-          "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): the dedicated-host run iq-20261109t005132z-6d93 (BASE v0.15.0, HEAD 66a3d5b9, spot c7i.metal-24xl, 0.64 USD) refused this row. The release carries the readiness scheduler (stackful tasks on epoll workers, PR 131), which in the same run cut peak RSS (LLVM terminal connect-8 3.08x to 1.14x of plain Rust, Rust-target todo get-64 2.62x to 0.84x) and raised write throughput (todo patch-16 1.02x to 1.19x on both targets). p99 1.061x to 1.415x, the same in all five passes; story readiness-connect-latency.",
-          "value": 1387
+          "value": 1055
         },
         "rust/terminal/rr-1": {
           "value": 980
@@ -660,19 +651,15 @@
       "area": "Generated code and runtime behaviour",
       "bars": {
         "llvm/terminal": {
-          "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): the dedicated-host run iq-20261109t005132z-6d93 (BASE v0.15.0, HEAD 66a3d5b9, spot c7i.metal-24xl, 0.64 USD) refused this row. The release carries the readiness scheduler (stackful tasks on epoll workers, PR 131), which in the same run cut peak RSS (LLVM terminal connect-8 3.08x to 1.14x of plain Rust, Rust-target todo get-64 2.62x to 0.84x) and raised write throughput (todo patch-16 1.02x to 1.19x on both targets). Stripped binary 1.406x to 1.820x of plain Rust, the size growth accepted on 3.2; story readiness-binary-size.",
           "value": 1820
         },
         "llvm/todo": {
-          "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): the dedicated-host run iq-20261109t005132z-6d93 (BASE v0.15.0, HEAD 66a3d5b9, spot c7i.metal-24xl, 0.64 USD) refused this row. The release carries the readiness scheduler (stackful tasks on epoll workers, PR 131), which in the same run cut peak RSS (LLVM terminal connect-8 3.08x to 1.14x of plain Rust, Rust-target todo get-64 2.62x to 0.84x) and raised write throughput (todo patch-16 1.02x to 1.19x on both targets). Stripped binary 0.720x to 0.869x; story readiness-binary-size.",
           "value": 869
         },
         "rust/terminal": {
-          "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): the dedicated-host run iq-20261109t005132z-6d93 (BASE v0.15.0, HEAD 66a3d5b9, spot c7i.metal-24xl, 0.64 USD) refused this row. The release carries the readiness scheduler (stackful tasks on epoll workers, PR 131), which in the same run cut peak RSS (LLVM terminal connect-8 3.08x to 1.14x of plain Rust, Rust-target todo get-64 2.62x to 0.84x) and raised write throughput (todo patch-16 1.02x to 1.19x on both targets). Stripped binary 1.304x to 1.669x; story readiness-binary-size.",
           "value": 1547
         },
         "rust/todo": {
-          "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): the dedicated-host run iq-20261109t005132z-6d93 (BASE v0.15.0, HEAD 66a3d5b9, spot c7i.metal-24xl, 0.64 USD) refused this row. The release carries the readiness scheduler (stackful tasks on epoll workers, PR 131), which in the same run cut peak RSS (LLVM terminal connect-8 3.08x to 1.14x of plain Rust, Rust-target todo get-64 2.62x to 0.84x) and raised write throughput (todo patch-16 1.02x to 1.19x on both targets). Stripped binary 0.723x to 0.864x; story readiness-binary-size.",
           "value": 850
         }
       },
@@ -751,7 +738,7 @@
       "area": "Standard library and protocols",
       "bars": {
         "eval": {
-          "value": 234
+          "value": 365
         },
         "llvm": {
           "value": 452
@@ -845,11 +832,9 @@
       "area": "Compiler speed",
       "bars": {
         "llvm": {
-          "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): the dedicated-host run iq-20261109t005132z-6d93 (BASE v0.15.0, HEAD 66a3d5b9, spot c7i.metal-24xl, 0.64 USD) refused this row. The release carries the readiness scheduler (stackful tasks on epoll workers, PR 131), which in the same run cut peak RSS (LLVM terminal connect-8 3.08x to 1.14x of plain Rust, Rust-target todo get-64 2.62x to 0.84x) and raised write throughput (todo patch-16 1.02x to 1.19x on both targets). Dev build of the todo example 1296 to 1430 ms on the dedicated host (+10.3 %); the value stays the local reference; story readiness-build-time.",
           "value": 993
         },
         "rust": {
-          "decision": "Accepted for v0.16.0 (Timo, 2026-11-09): the dedicated-host run iq-20261109t005132z-6d93 (BASE v0.15.0, HEAD 66a3d5b9, spot c7i.metal-24xl, 0.64 USD) refused this row. The release carries the readiness scheduler (stackful tasks on epoll workers, PR 131), which in the same run cut peak RSS (LLVM terminal connect-8 3.08x to 1.14x of plain Rust, Rust-target todo get-64 2.62x to 0.84x) and raised write throughput (todo patch-16 1.02x to 1.19x on both targets). Dev build of the todo example 4105 to 4879 ms on the dedicated host (+18.9 %); the value stays the local reference; story readiness-build-time.",
           "value": 3081
         }
       },
@@ -886,8 +871,8 @@
       "area": "Engineering health",
       "bars": {
         "all": {
-          "decision": "wave 7 integration (2026-11-08): story bitwise-operators adds the ignored timing test bitwise::codecs_within_3x_of_hand_written_rust, a timing bound kept out of the loaded gate; wave 10 (2026-11-10): story std-resp-client adds resp::a_real_server_and_sentinel_on_both_targets, which needs redis-server and redis-sentinel and is ignored like image::; story std-nats-client adds nats::a_real_server_on_both_targets, which needs nats-server and is ignored like image::; wave 10 integration (2026-11-10): story http-app-connection's adversary pass adds adversary_http_app::a_record_literal_before_the_argument_that_binds_its_parameter, a typer gap (a record literal before the argument that binds its type parameter) asserted red and ignored until it is fixed",
-          "value": 27
+          "decision": "wave 7 integration (2026-11-08): story bitwise-operators adds the ignored timing test bitwise::codecs_within_3x_of_hand_written_rust, a timing bound kept out of the loaded gate",
+          "value": 23
         }
       },
       "direction": "lower",
@@ -902,8 +887,7 @@
       "area": "Engineering health",
       "bars": {
         "all": {
-          "decision": "wave 10 integration (2026-11-10): story http-app-connection grows std/protocol/http.ignite from 2,518 to 3,125 lines (HttpApp.reply with Hold and Upgrade, on_oversized, Connection, and their inline tests); splitting the module is left to a later story",
-          "value": 5
+          "value": 4
         }
       },
       "direction": "lower",
