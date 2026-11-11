@@ -7328,9 +7328,15 @@ fn toml_string(text: &str) -> String {
 /// `ignite-io` and the Rust standard library are optimised as one unit
 /// (fat LTO, one codegen unit), which keeps a release executable within
 /// 10 % of its v0.15.0 size with the readiness scheduler linked (row 3.2
-/// of `docs/quality.md`, story `readiness-binary-size`).
-const RELEASE_PROFILE: &str =
-    "\n[profile.release]\noverflow-checks = true\ncodegen-units = 1\nlto = true\n";
+/// of `docs/quality.md`, story `readiness-binary-size`). The crates
+/// `ignite-io` calls the system and switches stacks through, `nix` and
+/// `corosensei`, are built at `opt-level = "s"` (story `binary-size-back`):
+/// it makes an executable's start about 200 instructions shorter, and its
+/// counts per request and session stay within noise; it does not make the
+/// executable smaller (about 570 bytes larger stripped). `ignite-io`
+/// itself keeps the default level, which costs fewer instructions per
+/// request.
+const RELEASE_PROFILE: &str = "\n[profile.release]\noverflow-checks = true\ncodegen-units = 1\nlto = true\n\n[profile.release.package.nix]\nopt-level = \"s\"\n\n[profile.release.package.corosensei]\nopt-level = \"s\"\n";
 
 /// The generated crate's dev profile: the crates from outside the project
 /// (`ignite-io` and what it needs: `nix`, `libc`, the scheduler's
@@ -7344,18 +7350,26 @@ const RELEASE_PROFILE: &str =
 /// dependencies (`autocfg`, `cfg_aliases`) go without debug assertions and
 /// overflow checks: compiling and running them comes before the crates they
 /// build, and `libc`'s is on the way to the program (80 M instructions of a
-/// fresh build fewer).
-const DEV_PROFILE: &str = "\n[profile.dev.package.\"*\"]\ndebug = false\n\n[profile.dev.package.ignite-io]\ndebug = \"line-tables-only\"\n\n[profile.dev.build-override]\ndebug-assertions = false\noverflow-checks = false\n";
+/// fresh build fewer). With `ignite-std`'s line tables a backtrace names
+/// the files and lines of the standard library's frames and of the
+/// `ignite-io` instances in them too. The line tables are split out of
+/// the objects (`split-debuginfo = "unpacked"`: `.dwo` files beside them
+/// in the target directory, which gdb and the standard library's
+/// symbolizer read), so the linker neither copies nor relocates them and
+/// a dev link compresses nothing (rows 3.2 and 6.2, story
+/// `binary-size-back`).
+const DEV_PROFILE: &str = "\n[profile.dev.package.\"*\"]\ndebug = false\n\n[profile.dev.package.ignite-io]\ndebug = \"line-tables-only\"\nsplit-debuginfo = \"unpacked\"\n\n[profile.dev.build-override]\ndebug-assertions = false\noverflow-checks = false\n";
 
 /// The dev profile of a member of the generated project, `package`: line
 /// tables, enough for a backtrace's files and lines, instead of the
 /// profile's own `debug` (full on a host without cargo configuration),
 /// which cost a fifth of compiling the program and `ignite-std` (row 6.2).
 /// A package table, unlike `[profile.dev] debug`, is not overridden by
-/// `CARGO_PROFILE_DEV_DEBUG`.
+/// `CARGO_PROFILE_DEV_DEBUG`. The line tables are split out of the
+/// objects, as `ignite-io`'s ([`DEV_PROFILE`]).
 fn dev_member_profile(package: &str) -> String {
     format!(
-        "\n[profile.dev.package.{}]\ndebug = \"line-tables-only\"\n",
+        "\n[profile.dev.package.{}]\ndebug = \"line-tables-only\"\nsplit-debuginfo = \"unpacked\"\n",
         toml_string(package)
     )
 }

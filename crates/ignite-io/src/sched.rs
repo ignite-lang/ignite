@@ -55,7 +55,7 @@
 //! (`docs/readiness-io.md` K4).
 
 use std::cell::{Cell, RefCell};
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::VecDeque;
 use std::io;
 use std::os::fd::{AsFd, BorrowedFd};
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU8, AtomicU64, AtomicUsize, Ordering};
@@ -391,11 +391,8 @@ thread_local! {
     /// Tasks runnable on this worker.
     static RUN: RefCell<VecDeque<Waiter>> = const { RefCell::new(VecDeque::new()) };
     /// Deadlines of parked tasks, with a sequence number that keeps the
-    /// keys apart.
-    static TIMERS: RefCell<BTreeMap<(Instant, u64), Waiter>> = const { RefCell::new(BTreeMap::new()) };
-    static TIMER_SEQUENCE: Cell<u64> = const { Cell::new(0) };
-    /// The timer of each task slot of this worker ([`SlotTimer`]).
-    static SLOT_TIMERS: RefCell<Vec<SlotTimer>> = const { RefCell::new(Vec::new()) };
+    /// keys apart, and the timer of each task slot ([`SlotTimer`]).
+    static TIMERS: RefCell<Timers> = const { RefCell::new(Timers::new()) };
     /// The guard page of the running task's stack, `start..end`; read by
     /// the `SIGSEGV` handler, so a `const` cell without destructor.
     static GUARD: Cell<(usize, usize)> = const { Cell::new((0, 0)) };
@@ -463,58 +460,229 @@ fn park_from(
     }
 }
 
+/// A worker's timers: a binary heap of entries keyed by deadline and
+/// sequence number, the earliest on top, at most one per task slot, with
+/// the position of each slot's entry in its [`SlotTimer`], so that the
+/// entry of a task that ends is taken out at once and one armed earlier
+/// moves up in place. No entry is ever left for a task that no longer
+/// waits on it, so the worker never wakes for one. The `BTreeMap` this
+/// replaces was 13 KB of code in every executable and took more
+/// instructions per timer that fired (story `binary-size-back`).
+struct Timers {
+    heap: Vec<Timer>,
+    /// The timer of each task slot of this worker, by slot: kept here, not
+    /// in a vector of its own, as each allocation of a new worker costs the
+    /// first connection it serves.
+    slots: Vec<SlotTimer>,
+    /// The sequence number of the latest entry.
+    sequence: u64,
+    /// The deadline of the worker's first timer: the keys count from it,
+    /// so arming reads no clock.
+    origin: Option<Instant>,
+}
+
+/// An entry of [`Timers`]: a copy moves it, its waiter is in its slot's
+/// [`SlotTimer`].
+#[derive(Clone, Copy)]
+struct Timer {
+    /// The deadline in nanoseconds, 2^63 at [`Timers::origin`], and the
+    /// sequence number: integers order two entries by deadline, then by
+    /// arming, for deadlines within 292 years of the origin.
+    key: (u64, u64),
+    /// The deadline.
+    at: Instant,
+    slot: usize,
+}
+
 /// The timer of the task in one slot of this worker. A task has at most one
-/// entry in `TIMERS` armed for it; a park with a deadline arms one only when
-/// none is armed at or before that deadline, and a wake leaves it in place.
+/// entry in [`Timers`], whose deadline is the one armed; a park with a
+/// deadline arms it only when none is armed at or before that deadline, and
+/// a wake leaves it in place.
 /// When it fires, a task that wants a later deadline by then is armed again
 /// for it ([`Worker::fire_timers`]). A read with an idle timeout therefore
 /// costs no timer operation per wait, only one per timeout period.
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Default)]
 struct SlotTimer {
     /// The deadline of the task's current park, if it has one.
     wanted: Option<Instant>,
-    /// The key of the task's entry in `TIMERS`.
-    armed: Option<(Instant, u64)>,
+    /// The index plus one of the task's entry in the heap, 0 for none.
+    position: u32,
+    /// The waiter of the task's entry, while it has one.
+    waiter: Option<Waiter>,
+}
+
+impl Timers {
+    const fn new() -> Timers {
+        Timers {
+            heap: Vec::new(),
+            slots: Vec::new(),
+            sequence: 0,
+            origin: None,
+        }
+    }
+
+    /// The key of a new entry for `at` ([`Timer::key`]).
+    fn key(&mut self, at: Instant) -> (u64, u64) {
+        const ORIGIN: u64 = 1 << 63;
+        self.sequence += 1;
+        let origin = *self.origin.get_or_insert(at);
+        let ticks = match at.checked_duration_since(origin) {
+            Some(after) => ORIGIN.saturating_add(after.as_nanos() as u64),
+            None => ORIGIN.saturating_sub(origin.duration_since(at).as_nanos() as u64),
+        };
+        (ticks, self.sequence)
+    }
+
+    fn is_empty(&self) -> bool {
+        self.heap.is_empty()
+    }
+
+    /// The timer of `slot`.
+    #[inline]
+    fn slot(&mut self, slot: usize) -> &mut SlotTimer {
+        if self.slots.len() <= slot {
+            self.grow(slot);
+        }
+        &mut self.slots[slot]
+    }
+
+    /// Make room for the timer of `slot`.
+    #[cold]
+    #[inline(never)]
+    fn grow(&mut self, slot: usize) {
+        self.slots.resize(slot + 1, SlotTimer::default());
+    }
+
+    /// Move `timer` up from `index` while it is earlier than its parent,
+    /// and put it where it stops, its position recorded.
+    #[inline]
+    fn sift_up(&mut self, mut index: usize, timer: Timer) {
+        let heap = &mut self.heap[..];
+        let slots = &mut self.slots[..];
+        while index > 0 {
+            let parent = (index - 1) / 2;
+            let above = heap[parent];
+            if timer.key >= above.key {
+                break;
+            }
+            heap[index] = above;
+            slots[above.slot].position = (index + 1) as u32;
+            index = parent;
+        }
+        heap[index] = timer;
+        slots[timer.slot].position = (index + 1) as u32;
+    }
+
+    /// Take out the entry at `index`. The earliest child of each entry on
+    /// the way down moves up into the gap, and the last entry fills the
+    /// leaf left over and moves up from there: as deadlines are mostly
+    /// armed in their order, the last entry is mostly the latest and stays,
+    /// so a task that ends among many costs no comparison against it on
+    /// each level.
+    fn take(&mut self, index: usize) -> Timer {
+        let last = self.heap.pop().expect("an entry to take");
+        let heap = &mut self.heap[..];
+        let slots = &mut self.slots[..];
+        let len = heap.len();
+        if index == len {
+            slots[last.slot].position = 0;
+            return last;
+        }
+        let taken = heap[index];
+        slots[taken.slot].position = 0;
+        let mut gap = index;
+        loop {
+            let first = 2 * gap + 1;
+            if first >= len {
+                break;
+            }
+            let second = first + 1;
+            let child = if second < len && heap[second].key < heap[first].key {
+                second
+            } else {
+                first
+            };
+            let moved = heap[child];
+            heap[gap] = moved;
+            slots[moved.slot].position = (gap + 1) as u32;
+            gap = child;
+        }
+        self.sift_up(gap, last);
+        taken
+    }
+
+    /// The task in `slot` waits until `at`: its entry, with the next
+    /// sequence number, made earlier if it has a later one.
+    fn arm(&mut self, slot: usize, at: Instant, waiter: &Waiter) {
+        let key = self.key(at);
+        match self.slot(slot).position.checked_sub(1) {
+            Some(index) => {
+                let index = index as usize;
+                if key < self.heap[index].key {
+                    self.sift_up(index, Timer { key, at, slot });
+                }
+            }
+            None => {
+                self.slots[slot].waiter = Some(waiter.clone());
+                let timer = Timer { key, at, slot };
+                self.heap.push(timer);
+                self.sift_up(self.heap.len() - 1, timer);
+            }
+        }
+    }
+
+    /// Take out the entry of `slot`, if it has one.
+    fn remove(&mut self, slot: usize) {
+        let Some(index) = self
+            .slots
+            .get(slot)
+            .and_then(|timer| timer.position.checked_sub(1))
+        else {
+            return;
+        };
+        self.take(index as usize);
+        self.slots[slot].waiter = None;
+    }
+
+    /// The earliest entry when it is due at `now`, taken out: its slot and
+    /// waiter; else the next deadline, if any.
+    fn pop_due(&mut self, now: Instant) -> Result<(usize, Waiter), Option<Instant>> {
+        let Some(root) = self.heap.first() else {
+            return Err(None);
+        };
+        if root.at > now {
+            return Err(Some(root.at));
+        }
+        let slot = self.take(0).slot;
+        let waiter = self.slots[slot].waiter.take().expect("an entry's waiter");
+        Ok((slot, waiter))
+    }
 }
 
 fn with_timer<T>(slot: usize, f: impl FnOnce(&mut SlotTimer) -> T) -> T {
-    SLOT_TIMERS.with(|timers| {
-        let mut timers = timers.borrow_mut();
-        if timers.len() <= slot {
-            timers.resize(slot + 1, SlotTimer::default());
-        }
-        f(&mut timers[slot])
-    })
-}
-
-/// Insert a timer entry for `waiter` at `at`; its key.
-fn insert_timer(at: Instant, waiter: &Waiter) -> (Instant, u64) {
-    let sequence = TIMER_SEQUENCE.with(|n| {
-        n.set(n.get() + 1);
-        n.get()
-    });
-    let key = (at, sequence);
-    TIMERS.with(|timers| timers.borrow_mut().insert(key, waiter.clone()));
-    key
+    TIMERS.with(|timers| f(timers.borrow_mut().slot(slot)))
 }
 
 /// The task in `slot` parks until `deadline` at the latest.
 fn arm(slot: usize, deadline: Instant, waiter: &Waiter) {
-    let insert = with_timer(slot, |timer| {
+    TIMERS.with(|timers| {
+        let mut timers = timers.borrow_mut();
+        let timer = timers.slot(slot);
         timer.wanted = Some(deadline);
-        timer.armed.is_none_or(|(at, _)| at > deadline)
+        let position = timer.position;
+        if position == 0 || timers.heap[position as usize - 1].at > deadline {
+            timers.arm(slot, deadline, waiter);
+        }
     });
-    if insert {
-        let key = insert_timer(deadline, waiter);
-        with_timer(slot, |timer| timer.armed = Some(key));
-    }
 }
 
-/// The task in `slot` ended: remove its armed entry.
+/// The task in `slot` ended: remove its entry.
 fn forget_timer(slot: usize) {
-    if let Some(key) = with_timer(slot, std::mem::take).armed {
-        TIMERS.with(|timers| timers.borrow_mut().remove(&key));
-    }
+    TIMERS.with(|timers| {
+        let mut timers = timers.borrow_mut();
+        timers.slot(slot).wanted = None;
+        timers.remove(slot);
+    });
 }
 
 /// Switch from the running task to its worker's loop.
@@ -948,39 +1116,28 @@ impl Worker {
         }
         let now = Instant::now();
         loop {
-            let first = TIMERS.with(|timers| {
+            let due = TIMERS.with(|timers| {
                 let mut timers = timers.borrow_mut();
-                match timers.first_key_value() {
-                    Some((&(at, _), _)) if at > now => Err(Some(at)),
-                    Some(_) => Ok(timers.pop_first().expect("the first timer")),
-                    None => Err(None),
+                let (slot, waiter) = timers.pop_due(now)?;
+                let timer = timers.slot(slot);
+                match timer.wanted {
+                    Some(later) if later > now => {
+                        timers.arm(slot, later, &waiter);
+                        Ok(None)
+                    }
+                    wanted => Ok(wanted.map(|_| waiter)),
                 }
             });
-            let (key, waiter) = match first {
-                Ok(entry) => entry,
-                Err(next) => return next,
-            };
-            let Some(task) = waiter.task() else {
-                continue;
-            };
-            let wanted = with_timer(task.slot, |timer| {
-                if timer.armed != Some(key) {
-                    return None;
-                }
-                timer.armed = None;
-                Some(timer.wanted)
-            });
-            match wanted {
-                None | Some(None) => {}
-                Some(Some(later)) if later > now => {
-                    let key = insert_timer(later, &waiter);
-                    with_timer(task.slot, |timer| timer.armed = Some(key));
-                }
-                Some(Some(_)) => {
-                    if task.queue() {
-                        RUN.with(|run| run.borrow_mut().push_back(waiter.clone()));
+            match due {
+                Ok(Some(waiter)) => {
+                    if let Some(task) = waiter.task()
+                        && task.queue()
+                    {
+                        RUN.with(|run| run.borrow_mut().push_back(waiter));
                     }
                 }
+                Ok(None) => {}
+                Err(next) => return next,
             }
         }
     }
@@ -1639,5 +1796,78 @@ impl Drop for Readiness {
 impl std::fmt::Debug for Readiness {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Readiness").finish_non_exhaustive()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The slots of the entries of `timers` in the order they come due at
+    /// `now`, taken out.
+    fn drain(timers: &mut Timers, now: Instant) -> Vec<usize> {
+        std::iter::from_fn(|| timers.pop_due(now).ok())
+            .map(|(slot, _)| slot)
+            .collect()
+    }
+
+    /// Every entry's recorded position is where it is, no slot without an
+    /// entry has one, and no parent is later than its children.
+    fn check(timers: &Timers) {
+        for (index, timer) in timers.heap.iter().enumerate() {
+            assert_eq!(timers.slots[timer.slot].position as usize, index + 1);
+            if index > 0 {
+                assert!(timers.heap[(index - 1) / 2].key <= timer.key);
+            }
+        }
+        let placed = timers.slots.iter().filter(|s| s.position != 0).count();
+        assert_eq!(placed, timers.heap.len());
+    }
+
+    /// [`Timers`] hands out due entries earliest first, in the order they
+    /// were armed on the same deadline, and reports the next deadline.
+    #[test]
+    fn timers_pop_earliest_first() {
+        let waiter = Waiter::current();
+        let start = Instant::now();
+        let at = |n: u64| start + Duration::from_secs(n);
+        let mut timers = Timers::new();
+        for (slot, n) in [(3, 3), (1, 1), (4, 4), (0, 2), (5, 5), (2, 2)] {
+            timers.arm(slot, at(n), &waiter);
+            check(&timers);
+        }
+        assert_eq!(timers.pop_due(at(0)).err(), Some(Some(at(1))));
+        assert_eq!(drain(&mut timers, at(2)), [1, 0, 2]);
+        check(&timers);
+        assert_eq!(drain(&mut timers, at(9)), [3, 4, 5]);
+        assert_eq!(timers.pop_due(at(9)).err(), Some(None));
+        assert!(timers.is_empty());
+    }
+
+    /// The entry of a task that ends is taken out at once, wherever it is,
+    /// so its deadline is never the next one; an entry armed earlier moves
+    /// up in place, a later arming leaves it.
+    #[test]
+    fn timers_remove_at_once_and_move_an_earlier_arming_up() {
+        let waiter = Waiter::current();
+        let start = Instant::now();
+        let at = |n: u64| start + Duration::from_secs(n);
+        let mut timers = Timers::new();
+        for slot in 0..10 {
+            timers.arm(slot, at(slot as u64 + 1), &waiter);
+        }
+        for slot in [0, 9, 4, 1] {
+            timers.remove(slot);
+            check(&timers);
+        }
+        timers.remove(4);
+        assert_eq!(timers.heap.len(), 6);
+        assert_eq!(timers.pop_due(at(0)).err(), Some(Some(at(3))));
+        timers.arm(8, at(1), &waiter);
+        check(&timers);
+        timers.arm(7, at(50), &waiter);
+        check(&timers);
+        assert_eq!(drain(&mut timers, at(9)), [8, 2, 3, 5, 6, 7]);
+        assert!(timers.is_empty());
     }
 }

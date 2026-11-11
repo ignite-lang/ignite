@@ -67,12 +67,14 @@ fn ignite_build(source: &Path, target: &str, out: &Path) -> Command {
 }
 
 /// One compile unit of an executable's DWARF: its name, its compilation
-/// directory and the tags of its direct children.
+/// directory, the tags of its direct children and, for a skeleton unit
+/// whose debug information is split out of its object, the `.dwo` file.
 #[derive(Debug)]
 struct Unit {
     name: String,
     dir: String,
     children: Vec<String>,
+    dwo: String,
 }
 
 impl Unit {
@@ -84,9 +86,10 @@ impl Unit {
             .any(|path| path.contains("/registry/src/") || path.contains("/git/checkouts/"))
     }
 
-    /// A unit of the Rust crate `krate`: rustc names it `<root>/@/<krate>.<hash>-cgu.<n>`.
+    /// A unit of the Rust crate `krate`: rustc names it `<root>/@/<krate>.<hash>-cgu.<n>`,
+    /// and a skeleton unit's `.dwo` file `<krate>-<hash>.<krate>.<hash>-cgu.<n>.rcgu.dwo`.
     fn of_crate(&self, krate: &str) -> bool {
-        self.name.contains(&format!("/@/{krate}."))
+        self.name.contains(&format!("/@/{krate}.")) || self.dwo.contains(&format!("/{krate}-"))
     }
 
     /// Whether the unit describes types or variables, which line tables
@@ -132,6 +135,7 @@ fn compile_units(file: &Path) -> Vec<Unit> {
                     name: String::new(),
                     dir: String::new(),
                     children: Vec::new(),
+                    dwo: String::new(),
                 });
             }
         } else if trimmed.starts_with("<1>") {
@@ -148,6 +152,8 @@ fn compile_units(file: &Path) -> Vec<Unit> {
                 unit.name = attribute(trimmed);
             } else if trimmed.contains("DW_AT_comp_dir") {
                 unit.dir = attribute(trimmed);
+            } else if trimmed.contains("dwo_name") {
+                unit.dwo = attribute(trimmed);
             }
         }
     }
@@ -190,7 +196,9 @@ fn dev_runtime(target_dir: &Path, debug: Option<&str>) -> PathBuf {
 /// (the dedicated host's default), holds no compile unit of a
 /// third-party crate, and the units of `ignite-rt` and `ignite-io` are
 /// there, as line tables: the linker copies and relocates every debug
-/// section it loads, and these were 80 % of the link's input.
+/// section it loads, and these were 80 % of the link's input. Their units
+/// are skeletons whose line tables are in `.dwo` files beside the objects
+/// (story `binary-size-back`), read here as well.
 #[test]
 fn dev_todod_links_no_third_party_debug_information() {
     let runtimes = Path::new(env!("CARGO_TARGET_TMPDIR")).join("dev-runtime");
@@ -224,8 +232,15 @@ fn dev_todod_links_no_third_party_debug_information() {
                 "{variant}: no compile unit of {krate} in {}",
                 todod.display()
             );
+            let split: Vec<Unit> = own
+                .iter()
+                .filter(|unit| unit.dwo.ends_with(".dwo"))
+                .flat_map(|unit| compile_units(Path::new(&unit.dwo)))
+                .collect();
             let typed: Vec<&str> = own
                 .iter()
+                .copied()
+                .chain(&split)
                 .filter(|unit| unit.has_types())
                 .map(|unit| unit.name.as_str())
                 .collect();
@@ -374,6 +389,85 @@ fn breakpoint_frame_has_its_line(backtrace: &str) -> bool {
         .is_some_and(|line| frame_in(line, "src/report.rs"))
 }
 
+/// The `.debug_*` sections of `file`: name, bytes and whether it is
+/// compressed (`readelf -SW`: a compressed section has the flag `C`).
+fn debug_sections(file: &Path) -> Vec<(String, u64, bool)> {
+    let sections = text(&run(Command::new("readelf").arg("-SW").arg(file)).stdout);
+    let mut debug = Vec::new();
+    for line in sections.lines() {
+        let Some(at) = line.find("] ") else {
+            continue;
+        };
+        let fields: Vec<&str> = line[at + 2..].split_whitespace().collect();
+        let Some(name) = fields.first().filter(|name| name.starts_with(".debug_")) else {
+            continue;
+        };
+        // Name, type, address, offset, size, entry size, then the flags
+        // (absent for a section without any).
+        let flags = fields.get(6).copied().unwrap_or("");
+        let size = fields
+            .get(4)
+            .and_then(|size| u64::from_str_radix(size, 16).ok())
+            .unwrap_or(u64::MAX);
+        let compressed = flags.contains('C') && !flags.chars().any(|c| c.is_ascii_digit());
+        debug.push(((*name).to_string(), size, compressed));
+    }
+    debug
+}
+
+/// Story `binary-size-back`, rows 3.2 and 6.2: a dev executable holds the
+/// line tables of the crates named in `split` as skeleton units, whose
+/// `.dwo` files (`split-debuginfo = "unpacked"`, beside the objects in the
+/// target directory) exist, and the linker writes compressed (zlib, which
+/// gdb and the standard library's symbolizer read) exactly the debug
+/// sections named in `compressed`: on the LLVM target with lld the address
+/// tables (`DEV_LLD_COMPRESSION` in `src/llvm_build.rs`), on the Rust
+/// target none.
+fn assert_dev_debug(file: &Path, split: &[&str], compressed: &[&str]) {
+    let sections = debug_sections(file);
+    let wrong: Vec<&(String, u64, bool)> = sections
+        .iter()
+        .filter(|(name, _, packed)| *packed != compressed.contains(&name.as_str()))
+        .collect();
+    assert!(
+        wrong.is_empty()
+            && compressed
+                .iter()
+                .all(|name| sections.iter().any(|s| s.0 == *name)),
+        "{}: compressed should be exactly {compressed:?}: {sections:?}",
+        file.display()
+    );
+    let units = text(
+        &run(Command::new("readelf")
+            .args(["--debug-dump=info", "--dwarf-depth=1"])
+            .arg(file))
+        .stdout,
+    );
+    let dwo: Vec<&str> = units
+        .lines()
+        .filter(|line| line.contains("dwo_name"))
+        .filter_map(|line| line.rsplit(": ").next())
+        .filter(|name| name.ends_with(".dwo"))
+        .collect();
+    for crate_name in split {
+        assert!(
+            dwo.iter()
+                .any(|name| name.contains(&format!("/{crate_name}-"))),
+            "{}: no skeleton unit of {crate_name}: {dwo:?}",
+            file.display()
+        );
+    }
+    let missing: Vec<&&str> = dwo
+        .iter()
+        .filter(|name| !Path::new(name).is_file())
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "{}: .dwo files missing: {missing:?}",
+        file.display()
+    );
+}
+
 /// `docs/llvm.md` section 9: a dev backtrace of a failing program names
 /// file and line of the substrate's frames and of the Ignite source: on
 /// the LLVM target the Ignite fn's frame itself (its debug metadata), and
@@ -382,6 +476,8 @@ fn breakpoint_frame_has_its_line(backtrace: &str) -> bool {
 /// names the Ignite source. The substrate frames checked are of code its
 /// crates compile themselves (`failure_report`, `ignite_rt_fail_arith`),
 /// not generic instances a member compiles with its own line tables.
+/// Both executables hold the substrate's line tables as skeleton units
+/// whose `.dwo` files the backtrace is read from ([`assert_dev_debug`]).
 #[test]
 fn dev_backtrace_names_ignite_and_substrate_lines_on_both_targets() {
     let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/backtrace.ignite");
@@ -391,6 +487,11 @@ fn dev_backtrace_names_ignite_and_substrate_lines_on_both_targets() {
     run(ignite_build(&source, "llvm", &llvm)
         .arg("--runtime")
         .arg(common::runtime_archive()));
+    assert_dev_debug(
+        &llvm.join("bin/overflow"),
+        &["ignite_io", "ignite_rt"],
+        &[".debug_aranges", ".debug_addr"],
+    );
     let backtrace = gdb_backtrace(&llvm.join("bin/overflow"));
     assert!(
         frames(&backtrace)
@@ -414,6 +515,7 @@ fn dev_backtrace_names_ignite_and_substrate_lines_on_both_targets() {
     run(ignite_build(&source, "rust", &rust)
         .arg("--target-dir")
         .arg(&target));
+    assert_dev_debug(&target.join("debug/overflow"), &["ignite_io"], &[]);
     let backtrace = gdb_backtrace(&target.join("debug/overflow"));
     assert!(
         breakpoint_frame_has_its_line(&backtrace),

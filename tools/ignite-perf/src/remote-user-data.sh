@@ -23,7 +23,7 @@ test -n "$installed"
 apt-get install -y -q --no-install-recommends "lld-$installed"
 test -x "/usr/lib/llvm-$installed/bin/ld.lld"
 ln -sf "/usr/bin/clang-$installed" /usr/local/bin/clang
-sudo -u ubuntu -H sh -c 'curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable'
+sudo -u ubuntu -H sh -c 'curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable --component rust-src'
 echo off > /sys/devices/system/cpu/smt/control || true
 if [ -e /sys/devices/system/cpu/intel_pstate/no_turbo ]; then echo 1 > /sys/devices/system/cpu/intel_pstate/no_turbo || true; fi
 if [ -e /sys/devices/system/cpu/cpufreq/boost ]; then echo 0 > /sys/devices/system/cpu/cpufreq/boost || true; fi

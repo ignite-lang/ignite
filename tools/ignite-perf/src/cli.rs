@@ -51,6 +51,18 @@ pub enum Mode {
     QualityRemote(crate::remote::RemoteArgs),
     /// The part of quality-remote that runs on the EC2 host
     QualityHost(crate::remote::HostArgs),
+    /// Build the LLVM target's release runtime archive as every release build of it is built; print its path
+    Runtime(RuntimeArgs),
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct RuntimeArgs {
+    /// The tree whose runtime is built
+    #[arg(long, default_value_os_t = default_repo())]
+    pub repo: PathBuf,
+    /// The cargo target directory
+    #[arg(long, default_value = "target/bench-rt")]
+    pub target_dir: PathBuf,
 }
 
 /// The checkout that built this binary, as `Path(__file__).resolve().parents[1]` was.

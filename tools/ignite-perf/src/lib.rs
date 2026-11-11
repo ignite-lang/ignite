@@ -30,6 +30,10 @@ pub const HARNESS_SOURCE: &[(&str, &str)] = &[
         include_str!("remote-user-data.sh"),
     ),
     ("src/remote.rs", include_str!("remote.rs")),
+    (
+        "../../crates/ignite-rt/release_std.rs",
+        include_str!("../../../crates/ignite-rt/release_std.rs"),
+    ),
 ];
 
 /// The crate's sources as one text: each file after a `// ==> path <==` line.

@@ -23,6 +23,75 @@ use crate::json::{Json, obj};
 use crate::perf::{R, ensure, io_err, path_str};
 use crate::remote::Row;
 
+#[path = "../../../crates/ignite-rt/release_std.rs"]
+mod release_std;
+
+/// A release runtime archive [`release_runtime`] built.
+#[derive(Debug)]
+pub struct ReleaseRuntime {
+    pub archive: PathBuf,
+    /// Whether it was built on the standard library from source.
+    pub from_source: bool,
+}
+
+/// The release runtime archive of the LLVM target of the tree `repo`, built
+/// into `target_dir` as every release build of it is built: on the
+/// standard library from source without its backtrace symbolizer
+/// (`crates/ignite-rt/release_std.rs`) when the tree has that recipe and
+/// the toolchain's sysroot (`sysroot`, else `rustc --print sysroot`) has
+/// the source; else on the prebuilt one, as a tree before the
+/// recipe was built, with a warning when the source is what is missing.
+pub fn release_runtime(
+    repo: &Path,
+    target_dir: &Path,
+    sysroot: Option<&Path>,
+) -> R<ReleaseRuntime> {
+    let recipe = repo.join("crates/ignite-rt/release_std.rs").is_file();
+    let source = recipe
+        && match sysroot {
+            Some(sysroot) => release_std::library(sysroot).is_some(),
+            None => release_std::sysroot("rustc".as_ref())
+                .and_then(|sysroot| release_std::library(&sysroot))
+                .is_some(),
+        };
+    if recipe && !source {
+        eprintln!("warning: {}", release_std::MISSING);
+    }
+    let mut command = Command::new("cargo");
+    command
+        .args(["build", "-q", "--release", "--locked", "-p", "ignite-rt"])
+        .arg("--target-dir")
+        .arg(target_dir)
+        .current_dir(repo)
+        .env("CARGO_INCREMENTAL", "0");
+    let dir = if source {
+        let version = run(repo, &["rustc", "-vV"])?;
+        let host = version
+            .lines()
+            .find_map(|line| line.strip_prefix("host: "))
+            .ok_or_else(|| format!("no host in rustc -vV: {version}"))?
+            .trim()
+            .to_string();
+        command.arg("--target").arg(&host);
+        release_std::apply(&mut command);
+        target_dir.join(host).join("release")
+    } else {
+        target_dir.join("release")
+    };
+    let output = command.output().map_err(io_err("cargo"))?;
+    ensure(
+        output.status.success(),
+        format!(
+            "{command:?} failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ),
+    )?;
+    Ok(ReleaseRuntime {
+        archive: dir.join("libignite_rt.a"),
+        from_source: source,
+    })
+}
+
 /// The workload matrix: program, `ignite-load` workload, connections.
 pub const CELLS: [(&str, &str, usize); 6] = [
     ("terminal", "rr", 1),
@@ -360,21 +429,8 @@ pub fn host(root: &Path, out: &Path, args: &BenchArgs) -> R<()> {
     let mut binaries: Vec<(String, &str, PathBuf)> = Vec::new();
     for tree in ["base", "head"] {
         let dir = root.join(tree);
-        run(
-            &dir,
-            &[
-                "cargo",
-                "build",
-                "-q",
-                "--release",
-                "--locked",
-                "-p",
-                "ignite-rt",
-                "--target-dir",
-                "target/bench-rt",
-            ],
-        )?;
-        let runtime = path_str(&dir.join("target/bench-rt/release/libignite_rt.a"));
+        let runtime = release_runtime(&dir, &dir.join("target/bench-rt"), None)?;
+        let runtime = path_str(&runtime.archive);
         let cli = path_str(&dir.join("target/debug/ignite"));
         for (program, source, executable) in [
             ("todo", "examples/todo/todo.ignite", "todod"),

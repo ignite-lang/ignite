@@ -1,0 +1,21 @@
+package dev_backtrace_std
+
+import std.time.days_from_civil
+
+// Built in dev for the Rust target by tests/binary_size_adversary.rs, which
+// runs it under gdb: the executable `civil` fails inside the standard
+// library's `days_from_civil`, whose year is past the range of `Int` once
+// multiplied. The year comes from the process, so no compiler folds it.
+
+type Civil {
+  executable: Text
+}
+
+fn Civil.main(self: Civil) -> Result<Unit, IoError> {
+  log("days {days_from_civil(9223372036854775807 - Process.open_files_limit(), 6, 1)}")
+  return Ok(Unit)
+}
+
+system BacktraceStd {
+  component civil: Civil { executable = "civil" }
+}

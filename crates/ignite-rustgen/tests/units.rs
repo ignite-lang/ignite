@@ -1269,6 +1269,33 @@ fn release_profile_checks_overflow_and_links_as_one_unit() {
     );
 }
 
+/// The release profile builds the crates `ignite-io` calls the system and
+/// switches stacks through, `nix` and `corosensei`, at `opt-level = "s"`,
+/// which makes the start shorter (story `binary-size-back`); `ignite-io`
+/// itself keeps the default level, which runs fewer instructions per
+/// request.
+#[test]
+fn release_profile_builds_nix_and_corosensei_at_opt_level_s() {
+    let project = try_generate(vec![]).expect("generates");
+    for package in ["nix", "corosensei"] {
+        assert_eq!(
+            table(
+                &project.cargo_toml,
+                &format!("profile.release.package.{package}")
+            ),
+            ["opt-level = \"s\""],
+            "{package}"
+        );
+    }
+    assert!(
+        !project
+            .cargo_toml
+            .contains("[profile.release.package.ignite-io]"),
+        "{}",
+        project.cargo_toml
+    );
+}
+
 /// The lines of the table `[<name>]` of a manifest, up to the next table.
 fn table<'a>(manifest: &'a str, name: &str) -> Vec<&'a str> {
     manifest
@@ -1289,7 +1316,9 @@ fn table<'a>(manifest: &'a str, name: &str) -> Vec<&'a str> {
 /// not override. A program without std names no `ignite-std` table, which
 /// cargo would warn about. Build scripts and what they need (`autocfg`)
 /// are built without debug assertions and overflow checks: compiling and
-/// running them is on the way to the program's first build.
+/// running them is on the way to the program's first build. The line
+/// tables are split out of the objects (rows 3.2 and 6.2, story
+/// `binary-size-back`).
 #[test]
 fn dev_profile_builds_dependencies_without_debug_information() {
     let project = try_generate(vec![]).expect("generates");
@@ -1303,11 +1332,17 @@ fn dev_profile_builds_dependencies_without_debug_information() {
     );
     assert_eq!(
         table(&project.cargo_toml, "profile.dev.package.ignite-io"),
-        ["debug = \"line-tables-only\""]
+        [
+            "debug = \"line-tables-only\"",
+            "split-debuginfo = \"unpacked\""
+        ]
     );
     assert_eq!(
         table(&project.cargo_toml, "profile.dev.package.\"demo\""),
-        ["debug = \"line-tables-only\""]
+        [
+            "debug = \"line-tables-only\"",
+            "split-debuginfo = \"unpacked\""
+        ]
     );
     assert!(
         !project

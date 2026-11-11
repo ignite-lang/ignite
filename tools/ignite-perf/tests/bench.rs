@@ -203,6 +203,7 @@ fn the_host_runs_the_benchmark_after_the_timing_rows() {
     assert!(args.no_bench);
     let user_data = remote::user_data(180);
     assert!(user_data.contains("golang-go"), "{user_data}");
+    assert!(user_data.contains("--component rust-src"), "{user_data}");
     assert_eq!(
         bench::CELLS,
         [

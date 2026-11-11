@@ -355,8 +355,50 @@ fn check_runtime_target(runtime: &Path, triple: &str) -> Result<(), Error> {
 pub const LINK_FLAGS: &[&str] = &["-Wl,--gc-sections"];
 
 /// Debug information is dropped from release executables, as cargo's
-/// release profile does (`strip = "debuginfo"`).
-pub const RELEASE_LINK_FLAGS: &[&str] = &["-Wl,--strip-debug"];
+/// release profile does (`strip = "debuginfo"`), and so are local symbols
+/// (`--discard-all`): the runtime's internal functions and its exception
+/// table labels, about a tenth of the executable (row 3.2 of
+/// `docs/quality.md`, story `binary-size-back`). Global symbols stay, the
+/// names a profiler or a debugger shows for the runtime's functions.
+pub const RELEASE_LINK_FLAGS: &[&str] = &["-Wl,--strip-debug", "-Wl,--discard-all"];
+
+/// A dev executable linked without lld has its debug sections written
+/// compressed with zlib, which gdb, lldb, binutils and the standard
+/// library's symbolizer read (zstd the last does not): about half of the
+/// executable's bytes (row 3.2 of `docs/quality.md`, story
+/// `binary-size-back`). The linker reads the same input and compresses what
+/// it writes, at zlib's fastest level.
+pub const DEV_LINK_FLAGS: &[&str] = &["-Wl,--compress-debug-sections=zlib"];
+
+/// What a dev link with lld compresses instead of [`DEV_LINK_FLAGS`]: the
+/// address tables only, `.debug_aranges` and `.debug_addr`, which shrink
+/// to about a fifth. The runtime's own line tables are split out of its
+/// objects (`split-debuginfo = "unpacked"` in the workspace's dev profile),
+/// so the link copies and relocates less than it did uncompressed, and
+/// compressing the two tables keeps it there (`todod` 10.2 to 8.0 MB, the
+/// link's instructions 270 to 255 M); the debug strings, the standard
+/// library's, would cost the link half its instructions again (row 6.2 of
+/// `docs/quality.md`, story `binary-size-back`).
+pub const DEV_LLD_COMPRESSION: &[&str] = &[
+    "-Wl,--compress-sections=.debug_aranges=zlib",
+    "-Wl,--compress-sections=.debug_addr=zlib",
+];
+
+/// Link flag of every dynamic executable: its relative relocations are
+/// packed into `.relr.dyn` (`DT_RELR`), about 24 bytes each to a bit, and
+/// the executable needs the loader version `GLIBC_ABI_DT_RELR` (glibc 2.36
+/// or newer), which a loader without it refuses by name (rows 3.2 and 3.9
+/// of `docs/quality.md`, story `binary-size-back`). A static link
+/// (`--static`) has no dynamic relocations and takes none.
+pub const PACKED_RELOCATIONS: &str = "-Wl,-z,pack-relative-relocs";
+
+/// Link flag before [`RUNTIME_LIBS`] of every dynamic executable: a library
+/// none of whose symbols the executable takes is not loaded (`libm`, unless
+/// a program calls a math function), as rustc links the Rust target; the
+/// loader would otherwise map and relocate it at every start, resident
+/// memory of every process (row 3.8 of `docs/quality.md`, story
+/// `binary-size-back`).
+pub const AS_NEEDED: &str = "-Wl,--as-needed";
 
 /// Link flags of a dev build that finds lld ([`dev_lld`]), before the
 /// inputs. A dev link copies and relocates the debug sections of every
@@ -383,7 +425,8 @@ fn dev_lld(options: &BuildOptions, clang: &Path) -> bool {
 /// The arguments of every link of a build before its objects: the musl
 /// kit's start files with `--static`, ThinLTO with the bitcode runtime
 /// ([`LTO_LINK_FLAGS`]), else lld on a dev build that finds it
-/// ([`DEV_LLD_FLAGS`]).
+/// ([`DEV_LLD_FLAGS`]) with [`DEV_LLD_COMPRESSION`], else on a dev build
+/// [`DEV_LINK_FLAGS`].
 fn link_flags_before(
     options: &BuildOptions,
     kit: Option<&crate::musl::Kit>,
@@ -401,13 +444,17 @@ fn link_flags_before(
         args.push(format!("-Wl,--thinlto-cache-dir={}", cache.display()).into());
     } else if kit.is_none() && dev_lld(options, clang) {
         args.extend(DEV_LLD_FLAGS.iter().map(Into::into));
+        args.extend(DEV_LLD_COMPRESSION.iter().map(Into::into));
+    } else if !options.release {
+        args.extend(DEV_LINK_FLAGS.iter().map(Into::into));
     }
     args
 }
 
 /// The arguments of every link of a build after its objects and the
 /// runtime archive: [`LINK_FLAGS`], [`RELEASE_LINK_FLAGS`] with
-/// `--release`, then the musl kit's end files or [`RUNTIME_LIBS`].
+/// `--release`, then the musl kit's end files or [`PACKED_RELOCATIONS`],
+/// [`AS_NEEDED`] and [`RUNTIME_LIBS`].
 fn link_flags_after(options: &BuildOptions, kit: Option<&crate::musl::Kit>) -> Vec<OsString> {
     let mut args: Vec<OsString> = LINK_FLAGS.iter().map(Into::into).collect();
     if options.release {
@@ -415,7 +462,11 @@ fn link_flags_after(options: &BuildOptions, kit: Option<&crate::musl::Kit>) -> V
     }
     match kit {
         Some(kit) => args.extend(kit.after()),
-        None => args.extend(RUNTIME_LIBS.iter().map(Into::into)),
+        None => {
+            args.push(PACKED_RELOCATIONS.into());
+            args.push(AS_NEEDED.into());
+            args.extend(RUNTIME_LIBS.iter().map(Into::into));
+        }
     }
     args
 }

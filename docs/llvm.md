@@ -28,14 +28,17 @@ std/**/*.ignite, program.ignite --parse--> --check--> --type (ignite-types)--> -
 writes `DIR/llvm/{std.ll, program.ll, main_<exe>.ll}`, runs
 `clang -c -O0 -g -ffunction-sections -fdata-sections -Werror=override-module --target=<triple>`
 (`-O2` with `--release`) on each, links each executable with
-`clang -o DIR/bin/<exe> --target=<triple> [-fuse-ld=lld] main_<exe>.o program.o std.o <runtime> -Wl,--gc-sections [-Wl,--strip-debug] -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc`
-(`-Wl,--strip-debug` with `--release` only, as cargo's release profile drops debug
-information; the libraries are the list `cargo rustc -p ignite-rt --print native-static-libs`
+`clang -o DIR/bin/<exe> --target=<triple> [-fuse-ld=lld -Wl,--compress-sections=.debug_aranges=zlib -Wl,--compress-sections=.debug_addr=zlib | -Wl,--compress-debug-sections=zlib] main_<exe>.o program.o std.o <runtime> -Wl,--gc-sections [-Wl,--strip-debug -Wl,--discard-all] -Wl,-z,pack-relative-relocs -Wl,--as-needed -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc`
+(`-Wl,--strip-debug -Wl,--discard-all` with `--release` only, as cargo's release profile drops debug
+information, and the local symbols with it (internal functions and exception table labels, a tenth
+of `todod`; the global names a profiler shows stay; story `binary-size-back`); the compression
+without `--release`, below; the libraries are the list `cargo rustc -p ignite-rt --print native-static-libs`
 prints, fixed in the driver; `-fuse-ld=lld` on a build without `--release`, `--triple` and
 `--static` when `ld.lld` lies beside the clang the driver runs, its symbolic links resolved,
 else clang's default linker links), and prints `built DIR/bin/<exe>`. Exit statuses as for the Rust
 target; 2 also when clang fails (its output passed through). `--static` links against musl
 instead, with the kit of start files, `libc.a` and `libunwind.a` and none of these libraries
+or `-z pack-relative-relocs`
 (`docs/slice.md` 23).
 
 Size. Every function and datum is in its own section (rustc emits the runtime's code that
@@ -59,6 +62,64 @@ still names the files and lines of the Ignite source and of both crates' frames
 (`dev_build::` in `crates/ignite/tests/dev_build.rs`). lld, where it lies beside clang, links
 on all cores and maps the archive instead of reading it section by section; an executable
 it links carries a build id as one GNU ld links does.
+
+Split line tables (story `binary-size-back`, rows 3.2 and 6.2). The dev profile builds
+`ignite-rt` and `ignite-io` with `split-debuginfo = "unpacked"`: their line tables are in
+`.dwo` files beside the objects in the target directory, and each object keeps a skeleton
+unit naming its file, so the linker neither copies nor relocates them. With lld a dev link
+then compresses the two address tables only, zlib at its fastest level
+(`-Wl,--compress-sections=.debug_aranges=zlib -Wl,--compress-sections=.debug_addr=zlib`):
+`todod` 10.2 to 8.0 MB, the link's instructions 270 to 255 M (compressing the debug strings
+too, the standard library's, would cost 351 M; the archive's line tables in the executable,
+270 M uncompressed and 428 M with its strings compressed). Another linker compresses every
+debug section (`-Wl,--compress-debug-sections=zlib`, which GNU ld knows). gdb, lldb,
+binutils and the standard library's symbolizer read `.dwo` files and zlib sections (zstd the
+last does not), so a backtrace keeps its files and lines as long as the target directory
+holds the `.dwo` files
+(`dev_build::dev_backtrace_names_ignite_and_substrate_lines_on_both_targets` asserts both).
+A driver built in the release profile carries a runtime without debug information, so an
+installed `ignite` is unaffected. A dev build on the Rust target compresses nothing (its
+linker is the toolchain's choice or the user's): the generated dev profile splits the line
+tables of `ignite-io`, of the program and of `ignite-std` the same way (`docs/slice.md` 6.2):
+`todod` 8.4 to 7.7 MB, the link's instructions 176 to 163 M; a backtrace names the files and
+lines of the standard library's frames.
+
+Packed relative relocations (story `binary-size-back`, rows 3.2 and 3.9). Every dynamic
+executable of the LLVM target, dev and release, is linked with `-z pack-relative-relocs`: its
+relative relocations, 24 bytes each in `.rela.dyn`, are packed into a bitmap in `.relr.dyn`
+(`DT_RELR`; stripped `todod` and `terminald` about 37 KB smaller on this target). The
+executable then needs the loader version `GLIBC_ABI_DT_RELR`, so it runs on glibc 2.36 or
+newer (before: 2.34, the newest version any of its symbols names); an older loader refuses
+it by that name instead of running it unrelocated. The toolchain image (Debian trixie,
+glibc 2.41) and the dedicated host (Ubuntu 24.04, glibc 2.39) have it. A `--static` build
+has no dynamic relocations and links without it. The Rust target links without it and
+runs on glibc 2.34 as before: there the packed relocations made the start of `todod` 614
+instructions longer and that of `terminald` 151, and the `target.'cfg(all())'.rustflags`
+that carried the flag took the place of the user's `build.rustflags`; on the LLVM target they
+make the start about 2,900 instructions shorter (`binary_size::` in
+`crates/ignite/tests/binary_size.rs`).
+
+Libraries as needed (story `binary-size-back`, row 3.8). The LLVM target links its runtime
+libraries after `-Wl,--as-needed`, as rustc links the Rust target: a library none of whose
+symbols the executable takes is not loaded. `libm` was loaded by every executable before,
+mapped and relocated at each start, though only a program calling a math function uses it
+(`binary_size::an_llvm_executable_loads_no_library_it_does_not_call`).
+
+Release runtime without the backtrace symbolizer (story `binary-size-back`, row 3.9). A
+release runtime archive, native and bitcode, is built on the standard library compiled from
+its source (the toolchain's `rust-src` component) with `-Zbuild-std=std,panic_unwind
+-Zbuild-std-features=panic-unwind`: every feature of the standard library but `backtrace`, whose
+symbolizer (`gimli`, `addr2line`, `miniz_oxide`) is about 130 KB of every executable. A stable
+cargo takes the flags with `RUSTC_BOOTSTRAP=1`. One recipe, `crates/ignite-rt/release_std.rs`,
+builds every such archive: the driver's build script in the release profile (`task dist`,
+`cargo install`), and `ignite-perf runtime`, which `task bench-throughput` and the dedicated
+host's benchmark run. An Ignite program reports its failures itself, so its failure report is
+unchanged (`binary_size::a_release_failure_report_is_the_dev_one_on_both_targets`); a panic
+inside the runtime prints its message and location and an unsymbolized backtrace. A toolchain
+without `rust-src` builds the archive on the prebuilt standard library and says so
+(`cargo::warning`, `ignite-perf runtime` on stderr; `runtime::` in
+`tools/ignite-perf/tests/runtime.rs`). Dev archives, the test runner's included, keep the
+prebuilt standard library.
 
 LTO (story `llvm-lto-runtime`). A `-linux-gnu` driver carries the runtime twice: the native
 archive and the same archive built with `-Clinker-plugin-lto`, whose Rust code is LLVM

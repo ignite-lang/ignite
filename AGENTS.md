@@ -23,7 +23,7 @@ the IO substrate (Rust) that compiled programs link.
 | `crates/ignite/src/apply/` | the local host and source-bound saved plans (`docs/slice.md` 17): `plan` owns input/artifact identities and action manifests, `host` owns the state lock, socket queue, durable receipts and host journal, `revision` owns retained source/type/model contexts and calls the existing `run` driver; implementation-only server replacements use `std.control`'s existing rollout through a pinned artifact builder; since slice 18 the host journal is checked at start (a torn last record repaired as `journalRepaired`, an altered record, a cut before the `status.json` anchor or a differing revision journal refused with exit 3; 22.7), the host records its working directory in `<state>/workdir`, and `host/recovery` carries the operator's `recover` (22.9) |
 | `crates/ignite-load/` | `ignite-load`: load generator for `terminald` and `todod` (workloads `rr`, `pipe`, `connect`, `get`, `patch`; server and load pinned to disjoint CPUs with `--server-cpus`, `--load-cpus`; `ignite-load matrix` for `task bench-throughput` and the native benchmark, servers in ABBA order per pass; `ignite-load check`, the functional check every benchmarked server passes first); not linked into compiled programs |
 | `bench/native/` | the native benchmark's references (`docs/quality.md` "Against plain Rust"): the todo service and the terminal server in plain Rust (`rust/`, its own Cargo workspace and lockfile, excluded from the main one: hyper and tokio for todo, std threads for terminal) and in Go (`go/`, standard library only); built and timed on the dedicated host by `ignite-perf quality-remote` (`tools/ignite-perf/src/bench.rs`) |
-| `tools/ignite-perf/` | `ignite-perf`: the performance budget harness (modes `self-check`, `recover-baseline`, `smoke`, `prepare`, `cold`, `warm`, `programs`, `cli`, `all`, `summarize`; records `ignite-performance/1`; `quality`, the timing and size rows of `docs/quality.md` on the working tree for `task quality`; `quality-remote` and its host part `quality-host`, the timing rows and the native benchmark (`src/bench.rs`) on a dedicated EC2 host for `task quality-remote`, `src/remote.rs`; `docs/performance/README.md`) and `verify-llvm-readiness`; replaced `scripts/*.py`; not linked into compiled programs |
+| `tools/ignite-perf/` | `ignite-perf`: the performance budget harness (modes `self-check`, `recover-baseline`, `smoke`, `prepare`, `cold`, `warm`, `programs`, `cli`, `all`, `summarize`; records `ignite-performance/1`; `quality`, the timing and size rows of `docs/quality.md` on the working tree for `task quality`; `quality-remote` and its host part `quality-host`, the timing rows and the native benchmark (`src/bench.rs`) on a dedicated EC2 host for `task quality-remote`, `src/remote.rs`; `runtime`, the release runtime archive the benchmark links, built as the dedicated host builds it; `docs/performance/README.md`) and `verify-llvm-readiness`; replaced `scripts/*.py`; not linked into compiled programs |
 | `std/` | standard library in Ignite; module `std.a.b` is `std/a/b.ignite` |
 | `std/console.ignite` | `Console`, `Reply`, `Action`: a line-oriented console application, independent of the protocol that carries it; `CommandConsole` (the declared form: `implementation: Module<ConsoleCommands>`, `command_schema`), `console_of`, `command_names` |
 | `std/text.ignite` | text operations called by UFCS (`split`, `contains`, `to_lower`, `is_digit`, …) |
@@ -523,7 +523,14 @@ was open for three days; a coordinator does this instead of what cost them:
   would carry a musl runtime archive that the default, dynamic LLVM link cannot use), `bin/ignite`
   with `share/ignite/std`, the standard library a driver at `<prefix>/bin/ignite` reads first;
   the Rust target still needs a clone (`--substrate`). The VS Code extension of `ignite-lsp`
-  downloads it.
+  downloads it. `task dist` needs the toolchain's `rust-src` component (`rustup component add
+  rust-src`): the release runtime archive the driver carries is built on the standard library from
+  source without its backtrace symbolizer (`crates/ignite-rt/release_std.rs`, an unstable cargo
+  flag under `RUSTC_BOOTSTRAP=1`; story `binary-size-back`, row 3.9). Without it the build warns
+  and carries an archive about 130 KB larger per LLVM executable: refuse such a build. The same
+  recipe builds the archive of `cargo install`, `task bench-throughput` and the dedicated host's
+  benchmark (`ignite-perf runtime`, its setup installs `rust-src`); the toolchain image takes the
+  released driver and builds no archive.
 - Image (story `toolchain-image`), after the archive is uploaded: `task image VERSION=X.Y.Z`
   (`dist/toolchain/Dockerfile`: `rust:1.98-trixie`, clang, lld, the release archive checked
   against its `.sha256`, the tag's source in `/usr/local/src/ignite` with its crates fetched,

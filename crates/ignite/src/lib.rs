@@ -2205,7 +2205,12 @@ mod c_flags_tests {
 
 /// `cargo build` of the generated project in `out`, `--quiet` when `quiet`,
 /// `--target <triple>` with [`STATIC_RUSTFLAGS`] for a static build
-/// (`docs/slice.md` 23.5).
+/// (`docs/slice.md` 23.5). A dynamic build passes no `rustflags`, so the
+/// `build.rustflags` of the user's cargo configuration apply: packed
+/// relative relocations, which the LLVM target links with, raised the
+/// start of a Rust executable (story `binary-size-back`), and a dev build
+/// compresses no debug section, its line tables split out of the objects
+/// by the generated dev profile (rows 3.2 and 6.2).
 /// Cargo is `$CARGO` when set, else `cargo` from `PATH`.
 fn cargo_build(
     out: &Path,

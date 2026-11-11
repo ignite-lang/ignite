@@ -31,7 +31,8 @@ fn the_subcommands_are_those_of_the_python_tools() {
             "verify-llvm-readiness",
             "quality",
             "quality-remote",
-            "quality-host"
+            "quality-host",
+            "runtime"
         ]
     );
 }

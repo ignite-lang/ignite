@@ -11,6 +11,8 @@ mod apply_probe_handover;
 mod apply_recovery;
 mod apply_transition;
 mod apply_way_out;
+mod binary_size;
+mod binary_size_adversary;
 mod bitwise;
 mod build_cache;
 mod channels;

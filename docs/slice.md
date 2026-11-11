@@ -774,8 +774,8 @@ For `ignite build terminal.ignite --target rust --out DIR` (the default target u
 
 ```
 DIR/Cargo.toml          [package] name = <package last segment>, edition 2024, [workspace] empty,
-                        [profile.release] overflow-checks = true, codegen-units = 1, lto = true (release size, `docs/quality.md` row 3.2)
-                        [profile.dev.package."*"] debug = false, [profile.dev.package.ignite-io] debug = "line-tables-only", [profile.dev.package."<package>"] and, with std, [profile.dev.package."ignite-std"] debug = "line-tables-only" (the crates from outside the project without debug information, `ignite-io` and the members with line tables for backtraces; build time, row 6.2)
+                        [profile.release] overflow-checks = true, codegen-units = 1, lto = true, [profile.release.package.nix] and [profile.release.package.corosensei] opt-level = "s" (a shorter start, story `binary-size-back`)
+                        [profile.dev.package."*"] debug = false, [profile.dev.package.ignite-io], [profile.dev.package."<package>"] and, with std, [profile.dev.package."ignite-std"] debug = "line-tables-only", split-debuginfo = "unpacked" (the crates from outside the project without debug information, `ignite-io`, the program and the standard library with line tables for backtraces, in `.dwo` files beside the objects; build time and dev size, rows 6.2 and 3.2)
                         [profile.dev.build-override] debug-assertions = false, overflow-checks = false (build scripts and their dependencies; build time, row 6.2)
                         [dependencies] ignite-io = { path = <substrate> }, ignite-std = { path = "std" } when the program imports a std module
                         one [[bin]] per component: name = executable, path = src/bin/<executable>.rs
@@ -11295,10 +11295,10 @@ and for a configured `debug` alike.
   installs `lld-<major>` of the LLVM it installs (`tools/ignite-perf/src/remote-user-data.sh`,
   `remote::the_host_installs_lld_beside_its_clang`).
 - Rust target. The generated `Cargo.toml` builds the crates from outside the project without
-  debug information and `ignite-io`, the program and `ignite-std` with line tables (section
-  6.2), whatever the profile's own `debug`; a build or a test build into
-  a directory without `Cargo.lock` starts from the substrate workspace's lock, so cargo makes no
-  index request (`dev_build::fresh_rust_build_makes_no_index_request`).
+  debug information and `ignite-io`, the program and `ignite-std` with line tables, split out
+  into `.dwo` files (section 6.2), whatever the profile's own `debug`; a build or a test build
+  into a directory without `Cargo.lock` starts from the substrate workspace's lock, so cargo
+  makes no index request (`dev_build::fresh_rust_build_makes_no_index_request`).
 - Dependencies ahead (Rust target). Before it parses (after, when `--out` is not given), the
   driver writes a crate that depends on `ignite-io` with the generated project's profiles into
   `<target-dir>/ignite-prebuild/`, with the project's lock or else the substrate workspace's,
@@ -11419,3 +11419,78 @@ Story `http-reply-cost-back` (rows 3.3 `rust/todo/get-1` and 3.8 `todo/get-1` of
   each of its servers answers its only connection: 1 without `reply` (2 before), 2 with one (as
   before).
 - `valgrind` is a prerequisite of `reply_cost::`, as `strace` is of `scheduler::`.
+
+## NN Every binary is at or below its v0.15.0 size, and peak memory at one connection with it
+
+Story `binary-size-back`: rows 3.9 and 3.2 of `docs/quality.md` towards v0.15.0's bytes
+without a program running slower, and row 3.8 at one connection with them. Each rule names the test that holds it; the bytes
+of each step are in the commits.
+
+- Dev links. The line tables of `ignite-rt`, `ignite-io`, the generated program and the
+  generated `ignite-std` are split out of their objects into `.dwo` files beside them
+  (`split-debuginfo = "unpacked"` in the workspace's and the generated dev profile), so the
+  linker neither copies nor relocates them. With lld the LLVM target's dev link compresses
+  the two address tables only
+  (`-Wl,--compress-sections=.debug_aranges=zlib`, the same for `.debug_addr`), with another
+  linker every debug section; the Rust target compresses nothing. gdb, lldb,
+  binutils and the standard library's symbolizer read both, so a backtrace keeps its files
+  and lines while the target directory holds the `.dwo` files, on the Rust target in the
+  standard library's frames too
+  (`dev_build::dev_backtrace_names_ignite_and_substrate_lines_on_both_targets`,
+  `binary_size_adversary::a_rust_dev_backtrace_names_file_and_line_of_a_standard_library_frame`). A dev link
+  takes fewer instructions than without either (`docs/llvm.md` section 1).
+- Packed relative relocations. Every dynamic executable of the LLVM target links with
+  `-z pack-relative-relocs` and needs glibc 2.36 or newer (`GLIBC_ABI_DT_RELR`; before, 2.34);
+  a `--static` build takes none. The Rust target links without it and needs 2.34 as before:
+  there it made the start longer, and the `rustflags` table that carried it replaced the
+  user's `build.rustflags`
+  (`binary_size::llvm_executables_pack_their_relative_relocations_and_rust_ones_do_not`,
+  `binary_size_adversary::a_rust_build_keeps_the_build_rustflags_of_the_cargo_configuration`).
+- Run time first. A binary may stay above its v0.15.0 bytes; a step stays only if the
+  instructions a program runs (callgrind: start, each request kind, a connection, a terminal
+  session, both IO modes, both targets) and the syscalls it makes are equal or fewer with it.
+  The commits that undid a step give the counts.
+- Scheduler. A worker's timers are a binary heap with at most one entry per task, whose
+  position each task slot records: the entry of a task that ends is taken out at once, so the
+  worker never wakes for it, and one armed earlier moves up in place (`sched::tests` in
+  `crates/ignite-io/src/sched.rs`,
+  `timer_adversary::a_worker_does_not_wake_for_the_timer_of_a_session_that_ended`). The epoll
+  reactor holds its registrations in a slab whose tokens carry a generation and whose free
+  slots form a list in the slab (`reactor::*::a_reused_registration_has_a_token_of_its_own`).
+  `IGNITE_IO=threads` stays.
+- Opt-levels. The generated manifest builds `nix` and `corosensei` at `opt-level = "s"`: the
+  start about 200 instructions shorter, the stripped executable about 570 bytes larger
+  (`units::release_profile_builds_nix_and_corosensei_at_opt_level_s`); `ignite-rt`, `ignite-io`
+  and `ignite-std` keep the default level.
+- Release LLVM link. `-Wl,--discard-all` drops the symbols local to the linked objects;
+  global names stay
+  (`binary_size::an_llvm_release_executable_drops_the_local_symbols_of_its_objects`).
+  A release executable's failure report is the dev one's on both targets
+  (`binary_size::a_release_failure_report_is_the_dev_one_on_both_targets`).
+- Release runtime. The LLVM target's release runtime archive is built on the standard
+  library from source without its backtrace symbolizer, one recipe for the driver's build
+  script, `ignite-perf runtime`, `task bench-throughput` and the dedicated host
+  (`crates/ignite-rt/release_std.rs`, `docs/llvm.md` section 1); a toolchain without
+  `rust-src` builds on the prebuilt one and says so
+  (`runtime::the_release_runtime_leaves_out_the_symbolizer_unless_the_std_source_is_missing`).
+  `AGENTS.md` § Releases names the requirement.
+- TLS engine. A program that names no `Tls` holds no symbol and no compile unit of `rustls`,
+  `webpki`, `ring` or `untrusted` on the LLVM target, dev and release, with the runner
+  archive (`binary_size::an_llvm_program_without_tls_links_no_tls_engine_in_dev_and_release`).
+  With the release-profile archive (`--static`, `ignite-perf runtime`) no section of those
+  crates is kept either, but functions of `ignite-io` that LLVM merged with identical ones
+  over `rustls` types keep those names as aliases; one crate of their own for the engine
+  (story `tls-engine-own-crates`) takes them out.
+- Libraries as needed. The LLVM target links its runtime libraries after `-Wl,--as-needed`,
+  as rustc links the Rust target, so an executable loads no `libm` it calls nothing of
+  (`binary_size::an_llvm_executable_loads_no_library_it_does_not_call`).
+- Not taken: DWARF 5, split or not (larger archive and executable, a longer link); zstd
+  debug sections (the standard library's symbolizer does not read them); compressing the
+  debug strings or every debug section (the link's instructions above their uncompressed
+  count); `ignite-io` at `opt-level = 1` in the generated dev profile (a dev `todod` 0.5 MB
+  smaller, compiling `ignite-io` four times the instructions); one codegen unit per crate
+  in it (a few tens of KB, compiled on one core); dropping `IGNITE_IO=threads` (decided to
+  stay); `opt-level = "s"` for `ignite-rt`, `ignite-io` and `ignite-std` (5 to 7 % more
+  instructions per request); a worker limit of its own from the affinity mask and the cgroup
+  quota (about 16,000 more instructions at the first connection than
+  `std::thread::available_parallelism`).
