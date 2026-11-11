@@ -227,6 +227,180 @@ test "a fresh end a callee moves to a task stays open for the task" {
   let runs = soak(20, |run| moved_by_callee())
 }
 
+// The same move through every other form whose value can be its
+// argument: a method call, a role call, a generic fn, a fn value, a field
+// of a call result, an `if` and a `match` whose arms are calls. None of
+// them makes a fresh end, so the task needs an owner of its own; a task
+// given the caller's owner instead loses the end when the caller's
+// temporary is released.
+test type Holder {
+  end: Sender<Int>
+}
+
+test fn hold(t: Sender<Int>) -> Holder = Holder { end = t }
+
+test fn ident<T>(x: T) -> T = x
+
+protocol Pass {
+  fn serve(stream: TcpStream, application: fn(Text) -> Text) -> TcpStream requires [stream.write] {
+    return stream
+  }
+}
+
+test fn launch_method(t: Sender<Int>, go: Receiver<Int>, done: Sender<Int>) -> Unit {
+  let u = t.same()
+  spawn ring_end(u, go, done)
+}
+
+test fn write_end(s: TcpStream, go: Receiver<Int>, done: Sender<Int>) -> Result<Unit, IoError> {
+  let g = go.receive_within(5 seconds)
+  let ok = match s.write_all(b"ok") {
+    Ok(_) => 1
+    Err(_) => 0
+  }
+  let d = done.send(ok)
+  Ok(())
+}
+
+test fn launch_role(t: TcpStream, go: Receiver<Int>, done: Sender<Int>) -> Unit {
+  let u = Pass.serve(t, |x| x)
+  spawn write_end(u, go, done)
+}
+
+// The role form takes a stream: the accepted stream is the temporary.
+test fn role_moved() -> Result<Unit, IoError> {
+  let tasks = Runtime.census().tasks
+  let listener = TcpListener.bind("127.0.0.1", 0)?
+  let client = TcpStream.connect("127.0.0.1", listener.local_port())?
+  let (gtx, grx) = Channel.bounded(1)
+  let (dtx, drx) = Channel.bounded(1)
+  launch_role(listener.accept()?, grx, dtx)
+  let g = gtx.send(1)
+  assert is(drx.receive_within(5 seconds), 1)
+  assert Runtime.settle(tasks, 5 seconds)
+  Ok(())
+}
+
+test fn role_moved_run() -> Unit {
+  let ok = match role_moved() {
+    Ok(_) => true
+    Err(_) => false
+  }
+  assert ok
+}
+
+test fn launch_generic(t: Sender<Int>, go: Receiver<Int>, done: Sender<Int>) -> Unit {
+  let u = ident(t)
+  spawn ring_end(u, go, done)
+}
+
+test fn launch_value(t: Sender<Int>, go: Receiver<Int>, done: Sender<Int>, f: fn(Sender<Int>) -> Sender<Int>) -> Unit {
+  let u = f(t)
+  spawn ring_end(u, go, done)
+}
+
+test fn launch_field(t: Sender<Int>, go: Receiver<Int>, done: Sender<Int>) -> Unit {
+  let u = hold(t).end
+  spawn ring_end(u, go, done)
+}
+
+test fn launch_if(t: Sender<Int>, go: Receiver<Int>, done: Sender<Int>, n: Int) -> Unit {
+  let u = if n > 0 { same(t) } else { ident(t) }
+  spawn ring_end(u, go, done)
+}
+
+test fn launch_match(t: Sender<Int>, go: Receiver<Int>, done: Sender<Int>, n: Int) -> Unit {
+  let u = match n {
+    0 => same(t)
+    _ => ident(t)
+  }
+  spawn ring_end(u, go, done)
+}
+
+test fn moved_through(form: Int) -> Unit {
+  let tasks = Runtime.census().tasks
+  let (btx, brx) = Channel.bounded(1)
+  let (gtx, grx) = Channel.bounded(1)
+  let (dtx, drx) = Channel.bounded(1)
+  match form {
+    0 => launch_method(made(btx), grx, dtx)
+    2 => launch_generic(made(btx), grx, dtx)
+    3 => launch_value(made(btx), grx, dtx, same)
+    4 => launch_field(made(btx), grx, dtx)
+    5 => launch_if(made(btx), grx, dtx, 1)
+    _ => launch_match(made(btx), grx, dtx, 0)
+  }
+  let r = brx.receive_within(1 seconds)
+  let g = gtx.send(1)
+  assert is(drx.receive_within(5 seconds), 1)
+  assert Runtime.settle(tasks, 5 seconds)
+  let got = match r {
+    Some(rx) => {
+      let x: Receiver<Int> = rx
+      x.receive_within(0 ms)
+    }
+    None => None
+  }
+  assert is(got, 3)
+}
+
+test "a fresh end a callee moves to a task through a method call stays open for the task" {
+  let runs = soak(20, |run| moved_through(0))
+}
+
+test "a fresh end a callee moves to a task through a role call stays open for the task" {
+  let runs = soak(20, |run| role_moved_run())
+}
+
+test "a fresh end a callee moves to a task through a generic fn stays open for the task" {
+  let runs = soak(20, |run| moved_through(2))
+}
+
+test "a fresh end a callee moves to a task through a fn value stays open for the task" {
+  let runs = soak(20, |run| moved_through(3))
+}
+
+test "a fresh end a callee moves to a task through a field of a call stays open for the task" {
+  let runs = soak(20, |run| moved_through(4))
+}
+
+test "a fresh end a callee moves to a task through an if of calls stays open for the task" {
+  let runs = soak(20, |run| moved_through(5))
+}
+
+test "a fresh end a callee moves to a task through a match of calls stays open for the task" {
+  let runs = soak(20, |run| moved_through(6))
+}
+
+// The binding form of `moved_by_callee`: the caller's inner block owns the
+// end and releases it when it is left, before the task uses it.
+test fn moved_from_binding() -> Unit {
+  let tasks = Runtime.census().tasks
+  let (btx, brx) = Channel.bounded(1)
+  let (gtx, grx) = Channel.bounded(1)
+  let (dtx, drx) = Channel.bounded(1)
+  if tasks >= 0 {
+    let t = made(btx)
+    launch_end(t, grx, dtx)
+  }
+  let r = brx.receive_within(1 seconds)
+  let g = gtx.send(1)
+  assert is(drx.receive_within(5 seconds), 1)
+  assert Runtime.settle(tasks, 5 seconds)
+  let got = match r {
+    Some(rx) => {
+      let x: Receiver<Int> = rx
+      x.receive_within(0 ms)
+    }
+    None => None
+  }
+  assert is(got, 3)
+}
+
+test "a fresh end bound by the caller and moved to a task by a callee stays open for the task" {
+  let runs = soak(20, |run| moved_from_binding())
+}
+
 // Both branches of an `if`, `break` and `continue` inside an argument, and
 // a short circuit whose right side does not run: one release per copy on
 // every path.

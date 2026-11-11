@@ -547,6 +547,15 @@ position, even with no buffer.
     expression is done; a `return`, `?`, `break` or `continue` inside releases it with the
     blocks', a failure with the task's registrations. A fn's result and a `let`'s value are
     not temporaries: the caller or the block owns them.
+    Known gap (pre-existing, `story:llvm-temporaries-without-owner-rule`): a copied-out
+    value that no owning `let`, statement `match`, `for` or expression above holds keeps
+    that owner forever: the receiver of a builtin method (`senders.values().len()`), the
+    rest of a fresh value read for one field (`open(s).id`), the thrown-away value of a
+    `match` arm, a store read inside a record argument of a call, and a `match` binding
+    put in a store inside `Some`.
+    `leak::five_temporary_forms_are_not_released_on_llvm_yet`
+    (`crates/ignite/tests/soak/temporaries_unreleased.ignite`) holds these five as the
+    failing tests on LLVM; the Rust target passes all 5.
   - At a `spawn` that is the last use of an owned binding (`own::handovers`: in the
     binding's block or in an `if`, `else` or `match` arm nested in it that is itself the
     last use, up to a binding that shadows the name; not in a loop body), the block releases
@@ -557,9 +566,16 @@ position, even with no buffer.
     bound by `let (client, server) = Pipe.pair()` and spawned into a task that fails is
     closed by the failure while the block still runs (story
     `llvm-spawn-pattern-bound-streams`; the Rust target keeps the block's clone until the
-    block ends). A binding that is not owned but bound by name to a fresh value (a call, a
-    method call other than `copy()`, `?` or `match`) and not mentioned after the spawn
-    (`region::moved_to_task`) still passes its owner to the task without `tcp_retain`.
+    block ends). A binding that is not owned but bound by name to a fresh value and not
+    mentioned after the spawn (`region::moved_to_task`) still passes its owner to the task
+    without `tcp_retain`. Fresh is decided by `own::moves_fresh`: a value `own::produces` makes,
+    the result of a builtin other than `copy()`, `?` on one, a `match` of those, and the
+    result of a fn or role call whose every argument holding a handle is fresh as well: a
+    temporary of that kind, or a binding of the same block to one that no later statement
+    mentions (`let b = end(write); spawn overflow(s, b)` with `write` from `Pipe.pair()`).
+    A call that may return a parameter, a binding of an outer block or one used later
+    (`let u = same(t)`), a fn-value call, a field and an `if` are not fresh, so the task
+    gets an owner of its own and the caller's binding or temporary keeps its own.
   Until slice 10 the accept loop was generated and used a shallow `spawn_copy` without the
   handshake; from slice 10 to story spawn-without-handshake the Ignite loop paid it per
   connection.

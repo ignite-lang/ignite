@@ -146,6 +146,107 @@ pub fn kept_temporaries<'e>(e: &'e Expr, cx: &Cx<'_>) -> Vec<&'e Expr> {
     temps
 }
 
+/// Whether `value`, the value of the `let` at `stmts[at]` of a block,
+/// holds only handles no one else owns, so that a `spawn` that is the
+/// binding's last mention may move them to its task without an owner of the
+/// task's own (`region::moved_to_task`): a value [`produces`] makes, the
+/// result of a builtin other than `copy()`, `?` on one, a `match` whose
+/// every arm is one, a name its pattern binds from a scrutinee that is one,
+/// or leaves, and the result of a fn or role call whose every argument
+/// holding a handle is one as well ([`moves_apart`]). That call may return
+/// its argument (`fn same(t: Sender<Int>) -> Sender<Int> = t`), so an
+/// argument another owner holds (a parameter, which the caller owns, a
+/// binding of an outer block, a binding mentioned later) makes the result
+/// not fresh: the task then gets an owner of its own, and the caller's
+/// binding or temporary keeps its own. A fn-value call is never fresh: its
+/// captures are unknown.
+pub fn moves_fresh(value: &Expr, stmts: &[Stmt], at: usize, cx: &Cx<'_>) -> bool {
+    if produces(value, cx) {
+        return true;
+    }
+    match &value.kind {
+        ExprKind::Try(inner) => moves_fresh(inner, stmts, at, cx),
+        ExprKind::Call { .. } | ExprKind::Method { .. } => match cx.types.callee(value) {
+            Some(Callee::Builtin(_)) => {
+                !matches!(&value.kind, ExprKind::Method { name, .. } if name.name == "copy")
+            }
+            Some(Callee::Fn(_) | Callee::Role { .. }) => {
+                call_args(value, cx.types).iter().all(|arg| {
+                    let arg = match &arg.kind {
+                        ExprKind::NamedArg { value, .. } => &**value,
+                        _ => arg,
+                    };
+                    plain(cx.types.type_of(arg)) || moves_apart(arg, stmts, at, cx)
+                })
+            }
+            _ => false,
+        },
+        ExprKind::Match { scrutinee, arms } => arms.iter().all(|arm| {
+            let bound = pattern_names(&arm.pattern);
+            arm_moves_fresh(&arm.body, &bound, scrutinee, stmts, at, cx)
+        }),
+        _ => false,
+    }
+}
+
+/// Whether the argument `arg` of a call in the value of the `let` at
+/// `stmts[at]`, a call that may return it, holds only handles no one else
+/// owns: a name an earlier `let` of the block binds to a value
+/// [`moves_fresh`] accepts (or a `let` pattern to one [`produces`] makes)
+/// and no later statement mentions, which no owner rule holds (the call
+/// does not keep it, [`keeps`]), or a temporary [`moves_fresh`] accepts,
+/// which no owner scope registers (the call is none [`kept_temporaries`]
+/// names).
+fn moves_apart(arg: &Expr, stmts: &[Stmt], at: usize, cx: &Cx<'_>) -> bool {
+    let ExprKind::Name(id) = &arg.kind else {
+        return moves_fresh(arg, stmts, at, cx);
+    };
+    if referred(&stmts[at + 1..], &id.name) {
+        return false;
+    }
+    let Some(bound) = stmts[..at].iter().rposition(|stmt| rebinds(stmt, &id.name)) else {
+        return false;
+    };
+    match &stmts[bound].kind {
+        StmtKind::Let { value, .. } => moves_fresh(value, stmts, bound, cx),
+        StmtKind::LetPattern { value, .. } => produces(value, cx),
+        _ => false,
+    }
+}
+
+/// Whether the value of a `match` arm `body`, whose pattern binds `bound`
+/// from `scrutinee`, is one [`moves_fresh`] accepts.
+fn arm_moves_fresh(
+    body: &Expr,
+    bound: &[String],
+    scrutinee: &Expr,
+    stmts: &[Stmt],
+    at: usize,
+    cx: &Cx<'_>,
+) -> bool {
+    if matches!(cx.types.type_of(body), Ty::Never) {
+        return true;
+    }
+    match &body.kind {
+        ExprKind::Name(id) if bound.contains(&id.name) => moves_fresh(scrutinee, stmts, at, cx),
+        ExprKind::Block(block) => match block.stmts.split_last() {
+            Some((last, inner)) => match &last.kind {
+                StmtKind::Expr(tail) => {
+                    let still: Vec<String> = bound
+                        .iter()
+                        .filter(|name| !inner.iter().any(|stmt| rebinds(stmt, name)))
+                        .cloned()
+                        .collect();
+                    arm_moves_fresh(tail, &still, scrutinee, stmts, at, cx)
+                }
+                _ => false,
+            },
+            None => false,
+        },
+        _ => moves_fresh(body, stmts, at, cx),
+    }
+}
+
 /// The `match` that the statement `stmt` evaluates as a temporary and its
 /// block owns the scrutinee of ([`owned_scrutinee`]): the statement itself
 /// or the value of its `let` (`let present = match senders.get(id) {..}`).

@@ -1198,7 +1198,11 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             if let StmtKind::Expr(e) = &stmt.kind
                 && let ExprKind::Spawn(call) = &e.kind
             {
-                self.moved_streams = crate::region::moved_to_task(&block.stmts, i, call);
+                let cx = self.own_cx();
+                self.moved_streams =
+                    crate::region::moved_to_task(&block.stmts, i, call, |v, stmts, at| {
+                        crate::own::moves_fresh(v, stmts, at, &cx)
+                    });
             }
             if let Some(e) = crate::own::owned_match(stmt, &self.own_cx())
                 && let ExprKind::Match { scrutinee, .. } = &e.kind

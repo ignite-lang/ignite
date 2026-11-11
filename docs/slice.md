@@ -10163,6 +10163,15 @@ and `<Receiver>`.
     (`crates/ignite/tests/soak/temporaries.ignite`, 5 tests: a fn's result, `spawn`, a loop
     condition, `?`, a failing task; each fails on a copy never released and on one released
     twice) pass on both targets.
+  - Known gap (pre-existing, `story:llvm-temporaries-without-owner-rule`): on LLVM a
+    copied-out value that no owning `let`, statement `match`, `for` or expression above
+    holds keeps that owner forever: the receiver of a builtin method
+    (`senders.values().len()`), the rest of a fresh value read for one field
+    (`open(s).id`), the thrown-away value of a `match` arm, a store read inside a record
+    argument of a call, and a `match` binding put in a store inside `Some`.
+    `leak::five_temporary_forms_are_not_released_on_llvm_yet`
+    (`crates/ignite/tests/soak/temporaries_unreleased.ignite`) holds these five as the
+    failing tests on LLVM; the Rust target passes all 5.
   - `spawn` adds an owner in the parent for every handle inside a tuple, record or enum
     argument (`retain_handles.<T>`); the task registers them and releases them when its fn
     returns, as it does a stream argument.
