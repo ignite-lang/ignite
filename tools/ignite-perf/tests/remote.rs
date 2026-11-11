@@ -961,3 +961,39 @@ fn gate_adv2_quality_remote_refuses_a_one_pass_release_before_anything_else() {
         "a release run on one pass did not stop at the pass check: {refused:?}"
     );
 }
+
+/// Size-rule adversary pass 1: the size row has one sample of each tree, so a cell one permille
+/// above BASE, far inside the 5 % tolerance, is worse and is refused without a `decision`, as
+/// one beyond the tolerance is. The unit's tests refuse an undecided cell only beyond the
+/// tolerance (0.720× to 0.869×); a judge that let an undecided cell inside it pass, listed
+/// nowhere, left them green (mutant R13b of the pass). A release does not grow by accident by
+/// one permille either, and several cells are each judged on their own bar.
+#[test]
+fn sizerule_adv1_a_size_cell_inside_the_tolerance_is_refused_without_a_decision() {
+    let baseline = size_baseline(Some("story:x: the bytes"));
+    let judged = remote::judge(
+        &baseline,
+        Some(&size_baseline(None)),
+        &[
+            row("3.9", "llvm/todo", &[720], &[721]),
+            row("3.9", "rust/todo", &[723], &[724]),
+            row("3.9", "rust/terminal", &[1304], &[1305]),
+            row("3.9", "llvm/terminal", &[1406], &[1400]),
+        ],
+    )
+    .unwrap();
+    assert_eq!(
+        judged.grown,
+        ["3.9 rust/todo: 0.723× at the base, 0.724× now; decision: story:x: the bytes"],
+        "the cells listed"
+    );
+    assert_eq!(judged.refused.len(), 2, "{:?}", judged.refused);
+    for (refusal, target) in judged.refused.iter().zip(["llvm/todo", "rust/terminal"]) {
+        assert!(
+            refusal.starts_with(&format!("3.9 {target}: "))
+                && refusal.contains("every sample worse than every sample of the base")
+                && refusal.contains("a `decision` naming the added code is missing"),
+            "{target}, one permille above the base without a decision: {refusal}"
+        );
+    }
+}

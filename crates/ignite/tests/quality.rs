@@ -4777,3 +4777,99 @@ fn a_release_refuses_a_timing_or_benchmark_bar_a_decision_moved_worse_than_at_th
     let plain = release_refusals_against(&at_tag, None, &history, &[gaps(1)], Some("v0.15.0"));
     assert!(plain.is_empty(), "{plain:?}");
 }
+
+/// Size-rule adversary pass 1, the story's acceptance: "the list is also in
+/// the record the release notes are written from, where one exists". The
+/// release notes carry the release's row of `quality/trend.md` (`AGENTS.md`
+/// § Releases), and that row is generated from the baseline and the history
+/// by [`render_trend`]. It names a grown cell of a size row with its value
+/// at the last release and its value now, among every other change; the
+/// decision that holds the cell is the part of the list it does not carry,
+/// so the only place a release shows why a binary grew is the stderr of the
+/// run.
+#[test]
+fn sizerule_adv1_the_release_row_of_the_trend_carries_the_decision_of_a_grown_cell() {
+    let decision = "story:x (2026-11-11): the TLS client session adds 40 B";
+    let baseline = baseline_of(&[("3.2", size_row(true, 1040, Some(decision)))]);
+    let mut history = size_at_the_last_release(1000);
+    let mut release = size_at_the_last_release(1040);
+    release[0].run = "v0.16.0".to_string();
+    release[0].commit = "c".to_string();
+    history.extend(release);
+    let at_tag = baseline_of(&[("3.2", size_row(true, 1000, None))]);
+    let judged = release_judged_against(
+        &baseline,
+        Some(&at_tag),
+        &history[..1],
+        &[size_now(1040)],
+        Some("v0.15.0"),
+    );
+    assert!(
+        judged.refused.is_empty() && judged.grown.len() == 1,
+        "the release this history records passes with one grown cell: {judged:?}"
+    );
+    let trend = render_trend(&baseline, &history);
+    let row = trend
+        .lines()
+        .find(|line| line.starts_with("| v0.16.0 |"))
+        .expect("the release's row of the trend");
+    assert!(
+        row.contains("3.2 rust/todod/release 1000 B→1040 B"),
+        "the release's row does not name the grown cell and both values: {row}"
+    );
+    assert!(
+        row.contains(decision),
+        "the release's row of quality/trend.md, which the release notes carry, names the grown cell and both values and not the decision that holds it: {row}"
+    );
+}
+
+/// Size-rule adversary pass 1: `quality::record` judges a release with
+/// [`release_judged`], which reads the baseline at the last release's tag
+/// from git; every test of the unit gives that baseline by hand
+/// ([`release_judged_against`]). A wrapper that handed over the tag's
+/// baseline without its decisions left the unit's suite green (mutant M20
+/// of the pass), and with it every decision is new. Here the tag's own
+/// baseline is the reference: a decision it holds on a bar does not let a
+/// cell grow, and one it does not hold does. A clone without a `v*` tag, or
+/// whose tag's baseline holds no decision, has nothing to read here.
+#[test]
+fn sizerule_adv1_the_release_check_reads_the_last_releases_decisions_from_the_tag() {
+    let LastRelease::Tag(tag) = last_release_tag("the candidate") else {
+        eprintln!("no `v*` tag is reachable: nothing judged");
+        return;
+    };
+    let Some(held) = baseline_at(&tag).and_then(|at_tag| {
+        at_tag
+            .metrics
+            .values()
+            .flat_map(|metric| metric.bars.values())
+            .filter_map(|bar| bar.decision.clone())
+            .find(|decision| !decision.trim().is_empty())
+    }) else {
+        eprintln!("the baseline at {tag} holds no decision on a bar: nothing judged");
+        return;
+    };
+    let mut history = size_at_the_last_release(1000);
+    history[0].run = tag.clone();
+    let judge = |decision: &str| {
+        release_judged(
+            &baseline_of(&[("3.2", size_row(true, 1040, Some(decision)))]),
+            &history,
+            &[size_now(1040)],
+            LastRelease::Tag(tag.clone()),
+        )
+    };
+    let carried = judge(&held);
+    assert!(
+        carried.grown.is_empty()
+            && carried.refused.len() == 1
+            && carried.refused[0].contains("is the last release's")
+            && carried.refused[0].contains(&tag),
+        "a decision the baseline at {tag} holds let a size cell grow: {carried:?}"
+    );
+    let new = judge("story:x (2026-11-11): code no release before this one names");
+    assert!(
+        new.refused.is_empty() && new.grown.len() == 1,
+        "a decision the baseline at {tag} does not hold: {new:?}"
+    );
+}
