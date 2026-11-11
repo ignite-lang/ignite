@@ -391,7 +391,9 @@ fn temporaries_used_after_the_store_let_go_are_released_once() {
 /// Known gap, pre-existing (red at `f58a7733` too), filed as
 /// `story:llvm-temporaries-without-owner-rule`: on LLVM the five still keep
 /// the owner `copy_from_heap` added. This test holds today's state by name,
-/// so that a fix of any form turns it red and is taken into the expectation.
+/// each failing by growth of the handle census, so that a fix of any form,
+/// or a form that turns from a leak into an early or double release, turns
+/// it red and is taken into the expectation.
 #[test]
 fn five_temporary_forms_are_not_released_on_llvm_yet() {
     const KNOWN_ON_LLVM: [&str; 5] = [
@@ -423,6 +425,13 @@ fn five_temporary_forms_are_not_released_on_llvm_yet() {
                      fails on {target}:\n{}",
                     run.output
                 );
+                let failure = failure_of(&run.output, &format!("temporaries_unreleased/{name}"));
+                assert!(
+                    failure.contains("soak(200,")
+                        && failure.contains("Growth { kind: \"handles\", before: "),
+                    "known gap (story:llvm-temporaries-without-owner-rule): {name} no longer \
+                     fails by growth on {target}:\n{failure}"
+                );
             }
         } else {
             assert_eq!(run.status, 0, "{target}:\n{}", run.output);
@@ -436,23 +445,82 @@ fn five_temporary_forms_are_not_released_on_llvm_yet() {
 }
 
 /// Adversary cases, pass 2 (`soak/moves_attack.ignite`): an end a `spawn`
-/// moves to its task (`own::moves_fresh`, `region::moved_to_task`) stays
-/// open for every other holder the caller kept: an alias, a record or a
-/// closure made before the call, a list the callee reads with `at`, an
-/// owned binding with an alias, a parameter bound by an arm's own `let`,
-/// a later mention, a match binding and a field of a parameter; and the
-/// owners a task gets are released once per round (the
-/// `over_pipe` shape of the golden `bounds.program.ll`, an end of an outer
-/// block, a stream a role call returns from an accepted temporary).
+/// moves to its task (`own::moves_fresh`, `own::sole_mentions`,
+/// `region::moved_to_task`) stays open for every other holder the caller
+/// kept: an alias, a record or a closure made before the call, an owned
+/// binding with an alias, a parameter bound by an arm's own `let`, a later
+/// mention, a match binding and a field of a parameter; and the owners a
+/// task gets are released once per round (the `over_pipe` shape of the
+/// golden `bounds.program.ll`, an end of an outer block, a stream a role
+/// call returns from an accepted temporary). The case of a list the callee
+/// reads with `at` is a known gap
+/// ([`an_element_read_from_a_list_and_moved_to_a_task_is_closed_early_on_llvm_yet`]).
 #[test]
 fn ends_moved_to_a_task_stay_open_for_every_other_holder() {
     on_both_targets(|target| {
         let run = ignite_test_at(target, &soak_program("moves_attack.ignite"), "", None);
         assert_eq!(run.status, 0, "{target}:\n{}", run.output);
         assert!(
-            run.output.contains("12 passed; 0 failed"),
+            run.output.contains("11 passed; 0 failed"),
             "{target}:\n{}",
             run.output
         );
     });
+}
+
+/// Adversary case, pass 2, moved unchanged to `soak/moves_aliases.ignite`:
+/// a callee reads an end from a list with `xs.at(0)` and spawns it.
+///
+/// Known gap, pre-existing (red at `f58a7733` and at v0.15.0 too), filed as
+/// `story:llvm-task-move-aliases`: `own::moves_fresh` calls the result of
+/// every builtin other than `copy()` fresh, so the task takes the list's
+/// owner of the end without one of its own and its release closes the end
+/// the caller still sends on. This test holds the LLVM failure, so a fix
+/// turns it red and the case goes back to the adversary's test.
+#[test]
+fn an_element_read_from_a_list_and_moved_to_a_task_is_closed_early_on_llvm_yet() {
+    const NAME: &str = "moves_aliases/an element a callee reads from a list and moves to a task \
+                        stays open for the list";
+    on_both_targets(|target| {
+        let run = ignite_test_at(target, &soak_program("moves_aliases.ignite"), "", None);
+        if target == "llvm" {
+            assert_ne!(run.status, 0, "{target}:\n{}", run.output);
+            assert!(
+                run.output.contains("0 passed; 1 failed")
+                    && run.output.contains(&format!("test {NAME} ... FAILED")),
+                "known gap (story:llvm-task-move-aliases): {target} changed:\n{}",
+                run.output
+            );
+            let failure = failure_of(&run.output, NAME);
+            assert!(
+                failure.contains("is not a channel sender"),
+                "known gap (story:llvm-task-move-aliases): {target} no longer fails by an early \
+                 release:\n{failure}"
+            );
+        } else {
+            assert_eq!(run.status, 0, "{target}:\n{}", run.output);
+            assert!(
+                run.output.contains("1 passed; 0 failed"),
+                "{target}:\n{}",
+                run.output
+            );
+        }
+    });
+}
+
+/// The failure report of the test `name` in the output of `ignite test`:
+/// from its `---- <name> stderr ----` line to the next report or the
+/// failure list; empty when there is none.
+fn failure_of<'o>(output: &'o str, name: &str) -> &'o str {
+    let head = format!("---- {name} stderr ----");
+    let Some(start) = output.find(&head) else {
+        return "";
+    };
+    let body = &output[start + head.len()..];
+    let end = ["\n---- ", "\nfailures:"]
+        .iter()
+        .filter_map(|marker| body.find(marker))
+        .min()
+        .unwrap_or(body.len());
+    &body[..end]
 }

@@ -180,6 +180,10 @@ pub struct Lower<'a, 'm, 'e> {
     /// The temporaries an open owner scope registers when they are
     /// lowered (`own::kept_temporaries`, `own::fresh`), by [`expr_key`].
     owned_temps: Vec<usize>,
+    /// The mentions that take the only owner of a binding of an open block
+    /// (`own::sole_mentions`), by [`expr_key`]; recorded at the binding's
+    /// `let`, read by `own::moves_fresh`.
+    sole: Vec<usize>,
 }
 
 /// An owned stream binding `name` whose last use is the spawned call with
@@ -190,7 +194,7 @@ struct Handover {
 }
 
 /// The identity of an expression of the AST being lowered.
-fn expr_key(e: &Expr) -> usize {
+pub(crate) fn expr_key(e: &Expr) -> usize {
     e as *const Expr as usize
 }
 
@@ -236,6 +240,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             handovers: Vec::new(),
             owned_matches: Vec::new(),
             owned_temps: Vec::new(),
+            sole: Vec::new(),
         }
     }
 
@@ -1199,10 +1204,10 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 && let ExprKind::Spawn(call) = &e.kind
             {
                 let cx = self.own_cx();
-                self.moved_streams =
-                    crate::region::moved_to_task(&block.stmts, i, call, |v, stmts, at| {
-                        crate::own::moves_fresh(v, stmts, at, &cx)
-                    });
+                let sole = &self.sole;
+                self.moved_streams = crate::region::moved_to_task(&block.stmts, i, call, |v| {
+                    crate::own::moves_fresh(v, sole, &cx)
+                });
             }
             if let Some(e) = crate::own::owned_match(stmt, &self.own_cx())
                 && let ExprKind::Match { scrutinee, .. } = &e.kind
@@ -1226,7 +1231,10 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 StmtKind::Let { .. } | StmtKind::LetPattern { .. }
             ) && !self.f.is_terminated()
             {
-                let owned = crate::own::owned(&block.stmts, i, &self.own_cx());
+                let cx = self.own_cx();
+                let sole = crate::own::sole_mentions(&block.stmts, i, &self.sole, &cx);
+                self.sole.extend(sole.into_iter().map(expr_key));
+                let owned = crate::own::owned(&block.stmts, i, &cx);
                 if !owned.is_empty() {
                     for name in self.own_streams(&owned) {
                         if !self.lookup(&name).is_some_and(|local| is_stream(&local.ty)) {
@@ -5712,9 +5720,15 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         // leaves a tombstone in the task's owner list (`ignite-rt`'s
         // `release`), so the mark a block between the binding's and this
         // one took before the spawn still releases that block's own
-        // streams. An unowned binding that `region::moved_to_task` names
-        // moves its handle to the task as before.
-        let moved = std::mem::take(&mut self.moved_streams);
+        // streams. A binding that `region::moved_to_task` names moves its
+        // handle to the task without an owner of the task's own only when
+        // its block does not own it: an owned binding the spawn does not
+        // hand over (an alias holds it) keeps its owner until the block is
+        // left, and the task gets one of its own.
+        let moved: Vec<String> = std::mem::take(&mut self.moved_streams)
+            .into_iter()
+            .filter(|name| !self.lookup(name).is_some_and(|local| local.owned))
+            .collect();
         let name_of = |arg: &Expr| match &arg.kind {
             ExprKind::Name(n) => Some(n.name.clone()),
             ExprKind::NamedArg { value, .. } => match &value.kind {
@@ -5733,8 +5747,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             }
         }
         self.handovers.retain(|h| h.call != key);
-        let moves =
-            |arg: &Expr| name_of(arg).is_some_and(|n| moved.contains(&n) && !owned.contains(&n));
+        let moves = |arg: &Expr| name_of(arg).is_some_and(|n| moved.contains(&n));
         let hands_over = |arg: &Expr| name_of(arg).is_some_and(|n| owned.contains(&n));
         let mut handed: Vec<(String, Val)> = Vec::new();
         let mut values = Vec::with_capacity(sig.params.len());

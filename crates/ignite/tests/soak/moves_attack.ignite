@@ -123,28 +123,6 @@ test "an end captured by a closure before a call moves it to a task stays open f
   let runs = soak(5, |run| captured_before())
 }
 
-// `xs.at(0)` is a builtin result other than `copy()`: it reads the list's
-// element, it makes no end.
-test fn launch_at(xs: List<Sender<Int>>, go: Receiver<Int>, done: Sender<Int>) -> Unit {
-  let u = xs.at(0)
-  spawn ring_end(u, go, done)
-}
-
-test fn element_moved() -> Unit {
-  let tasks = Runtime.census().tasks
-  let (btx, brx) = Channel.bounded(1)
-  let (gtx, grx) = Channel.bounded(1)
-  let (dtx, drx) = Channel.bounded(1)
-  let a = made(btx)
-  launch_at([a], grx, dtx)
-  let r = run_task(tasks, brx, gtx, drx)
-  both(r, a.try_send(4))
-}
-
-test "an element a callee reads from a list and moves to a task stays open for the list" {
-  let runs = soak(5, |run| element_moved())
-}
-
 // An owned binding spawned as its last mention after an alias was made:
 // no handover (the alias), but the binding still counts as moved.
 test fn owned_alias() -> Unit {

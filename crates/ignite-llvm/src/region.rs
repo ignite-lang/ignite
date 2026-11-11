@@ -82,7 +82,7 @@ pub fn moved_to_task(
     stmts: &[Stmt],
     index: usize,
     call: &Expr,
-    fresh: impl Fn(&Expr, &[Stmt], usize) -> bool,
+    fresh: impl Fn(&Expr) -> bool,
 ) -> Vec<String> {
     let args: Vec<&Expr> = match &call.kind {
         ExprKind::Call { args, .. } => args.iter().collect(),
@@ -97,29 +97,22 @@ pub fn moved_to_task(
             _ => None,
         })
         .filter(|name| {
-            fresh_let(stmts, index, name, &fresh) && !mentioned(&stmts[index + 1..], name)
+            fresh_let(&stmts[..index], name, &fresh) && !mentioned(&stmts[index + 1..], name)
         })
         .collect()
 }
 
-/// Whether the last `let` of `name` before `stmts[index]` binds a value
-/// `fresh` accepts, given the block and the `let`'s place in it. A `copy()`
-/// or a call that may return an argument another owner holds shares a
-/// handle: the task must not release it.
-fn fresh_let(
-    stmts: &[Stmt],
-    index: usize,
-    name: &str,
-    fresh: impl Fn(&Expr, &[Stmt], usize) -> bool,
-) -> bool {
-    stmts[..index]
+/// Whether the last `let` of `name` among `stmts` binds a value `fresh`
+/// accepts. A `copy()` or a call that may return an argument another owner
+/// holds shares a handle: the task must not release it.
+fn fresh_let(stmts: &[Stmt], name: &str, fresh: impl Fn(&Expr) -> bool) -> bool {
+    stmts
         .iter()
-        .enumerate()
         .rev()
-        .find_map(|(at, stmt)| match &stmt.kind {
+        .find_map(|stmt| match &stmt.kind {
             StmtKind::Let {
                 name: bound, value, ..
-            } if bound.name == name => Some(fresh(value, stmts, at)),
+            } if bound.name == name => Some(fresh(value)),
             _ => None,
         })
         .unwrap_or(false)

@@ -566,16 +566,28 @@ position, even with no buffer.
     bound by `let (client, server) = Pipe.pair()` and spawned into a task that fails is
     closed by the failure while the block still runs (story
     `llvm-spawn-pattern-bound-streams`; the Rust target keeps the block's clone until the
-    block ends). A binding that is not owned but bound by name to a fresh value and not
-    mentioned after the spawn (`region::moved_to_task`) still passes its owner to the task
-    without `tcp_retain`. Fresh is decided by `own::moves_fresh`: a value `own::produces` makes,
-    the result of a builtin other than `copy()`, `?` on one, a `match` of those, and the
-    result of a fn or role call whose every argument holding a handle is fresh as well: a
-    temporary of that kind, or a binding of the same block to one that no later statement
-    mentions (`let b = end(write); spawn overflow(s, b)` with `write` from `Pipe.pair()`).
-    A call that may return a parameter, a binding of an outer block or one used later
-    (`let u = same(t)`), a fn-value call, a field and an `if` are not fresh, so the task
-    gets an owner of its own and the caller's binding or temporary keeps its own.
+    block ends). A handle moves to the task without `tcp_retain` only when the task takes
+    the only owner and its block does not release that owner: a binding its block does not
+    own, bound by name to a fresh value and not mentioned after the spawn
+    (`region::moved_to_task`, `Lower::spawn`). In every other case the task gets an owner
+    of its own and whoever held the original owner still releases it; an owned binding the
+    spawn does not hand over (an alias holds it) keeps its owner until its block is left.
+    Fresh is decided by `own::moves_fresh`: a value `own::produces` makes, the result of a
+    builtin other than `copy()`, `?` on one, a `match` of those, and the result of a fn or
+    role call whose every argument that can hold a handle is fresh as well (a fn argument
+    whose result holds none cannot): a temporary of that kind, or the one mention of a
+    binding to one that its block does not own and that runs at most once, in no loop and
+    no closure (`own::sole_mentions`), in the same block or a nested one
+    (`let b = end(write); spawn overflow(s, b)` with `write` from `Pipe.pair()`). A call
+    that may return a parameter or a binding with another mention (an alias, a record or a
+    closure made before, a later use; `let u = same(t)`), a fn-value call, a field and an
+    `if` are not fresh.
+  - Known gap (pre-existing, `story:llvm-task-move-aliases`): the result of a builtin
+    that reads a handle out of a value, such as `xs.at(0)`, counts as fresh, so a `spawn`
+    moves the element's owner to its task and the task's release closes the end the list
+    still holds. `leak::an_element_read_from_a_list_and_moved_to_a_task_is_closed_early_on_llvm_yet`
+    (`crates/ignite/tests/soak/moves_aliases.ignite`) holds it as the failing test on LLVM
+    (`is not a channel sender`); the Rust target passes.
   Until slice 10 the accept loop was generated and used a shallow `spawn_copy` without the
   handshake; from slice 10 to story spawn-without-handshake the Ignite loop paid it per
   connection.

@@ -10191,6 +10191,12 @@ and `<Receiver>`.
     `leak::five_temporary_forms_are_not_released_on_llvm_yet`
     (`crates/ignite/tests/soak/temporaries_unreleased.ignite`) holds these five as the
     failing tests on LLVM; the Rust target passes all 5.
+  - Known gap (pre-existing, `story:llvm-task-move-aliases`): on LLVM a `spawn` of an
+    element a callee reads from a list with `xs.at(0)` moves the list's owner to the task,
+    whose release closes the end the list still holds.
+    `leak::an_element_read_from_a_list_and_moved_to_a_task_is_closed_early_on_llvm_yet`
+    (`crates/ignite/tests/soak/moves_aliases.ignite`) holds it as the failing test on LLVM;
+    the Rust target passes.
   - `spawn` adds an owner in the parent for every handle inside a tuple, record or enum
     argument (`retain_handles.<T>`); the task registers them and releases them when its fn
     returns, as it does a stream argument.

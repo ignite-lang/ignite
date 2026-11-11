@@ -1,0 +1,76 @@
+package moves_aliases
+
+// Known gap on LLVM (`story:llvm-task-move-aliases`), moved here unchanged
+// from `moves_attack.ignite`: `own::moves_fresh` calls the result of every
+// builtin other than `copy()` fresh, so a `spawn` moves an element a
+// callee reads with `xs.at(0)` to its task without an owner of the task's
+// own; the task's release closes the end the caller's list still holds.
+// The Rust target passes. `crates/ignite/tests/leak.rs` holds the LLVM
+// failure, so a fix turns that test red.
+
+import std.runtime.{soak}
+
+test fn is(got: Option<Int>, want: Int) -> Bool = match got {
+  Some(v) => v == want
+  None => false
+}
+
+test fn next(r: Option<Receiver<Int>>) -> Option<Int> = match r {
+  Some(rx) => {
+    let x: Receiver<Int> = rx
+    x.receive_within(0 ms)
+  }
+  None => None
+}
+
+test fn ring_end(t: Sender<Int>, go: Receiver<Int>, done: Sender<Int>) -> Result<Unit, IoError> {
+  let g = go.receive_within(5 seconds)
+  let ok = t.try_send(3)
+  let d = done.send(if ok { 1 } else { 0 })
+  Ok(())
+}
+
+// A fresh end whose receiver goes back on `back`.
+test fn made(back: Sender<Receiver<Int>>) -> Sender<Int> {
+  let (tx, rx) = Channel.bounded(2)
+  let sent = back.send(rx)
+  tx
+}
+
+// Runs the task to its end; `both` then checks the end still sent through
+// the holder the caller kept: the task's 3 and the holder's 4 arrive.
+test fn run_task(tasks: Int, brx: Receiver<Receiver<Int>>, gtx: Sender<Int>, drx: Receiver<Int>) -> Option<Receiver<Int>> {
+  let r = brx.receive_within(1 seconds)
+  let g = gtx.send(1)
+  assert is(drx.receive_within(5 seconds), 1)
+  assert Runtime.settle(tasks, 5 seconds)
+  r
+}
+
+test fn both(r: Option<Receiver<Int>>, poked: Bool) -> Unit {
+  assert poked
+  assert is(next(r), 3)
+  assert is(next(r), 4)
+}
+
+// `xs.at(0)` is a builtin result other than `copy()`: it reads the list's
+// element, it makes no end.
+test fn launch_at(xs: List<Sender<Int>>, go: Receiver<Int>, done: Sender<Int>) -> Unit {
+  let u = xs.at(0)
+  spawn ring_end(u, go, done)
+}
+
+test fn element_moved() -> Unit {
+  let tasks = Runtime.census().tasks
+  let (btx, brx) = Channel.bounded(1)
+  let (gtx, grx) = Channel.bounded(1)
+  let (dtx, drx) = Channel.bounded(1)
+  let a = made(btx)
+  launch_at([a], grx, dtx)
+  let r = run_task(tasks, brx, gtx, drx)
+  both(r, a.try_send(4))
+}
+
+test "an element a callee reads from a list and moves to a task stays open for the list" {
+  let runs = soak(5, |run| element_moved())
+}
