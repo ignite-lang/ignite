@@ -578,36 +578,56 @@ impl Directory {
     }
 }
 
-/// A directory being visited: its descriptor and the subdirectories still
-/// to visit (for [`measure`]) or the entries still to remove (for
-/// [`empty`]). A level holds its descriptor only: it is listed through a
-/// duplicate whose [`Dir`] (and the C library's buffer of 32 KiB) is
-/// closed before the walk descends, so a walk 256 levels deep holds 256
-/// descriptors and one listing at a time, as with its own `getdents64`.
+/// A directory being visited, `depth` levels down (the top is level 1):
+/// what it holds of the directory and the subdirectories still to visit
+/// (for [`measure`]) or the entries still to remove (for [`empty`]). A
+/// level is listed through its own descriptor. A level the walk descends
+/// from (a subdirectory to visit, above [`DEPTH_LIMIT`]) then keeps a
+/// duplicate of that descriptor and closes its [`Dir`], and the C
+/// library's buffer of 32 KiB with it, before the walk descends; any other
+/// level is the deepest on the walk and keeps its [`Dir`] until it is
+/// done. So a walk holds one descriptor per level and at most one
+/// listing: level `k` holds `k + 1` descriptors while it makes its
+/// duplicate, and a tree [`DEPTH_LIMIT`] levels deep needs
+/// [`DEPTH_LIMIT`] descriptors, as with its own `getdents64`.
 struct Level {
-    descriptor: OwnedFd,
+    held: Held,
     pending: Vec<(CString, bool)>,
 }
 
+/// What a [`Level`] holds of its directory: a descriptor, or the listing
+/// that read it.
+enum Held {
+    Descriptor(OwnedFd),
+    Listing(Dir),
+}
+
 impl Level {
-    fn open(descriptor: OwnedFd, path: &Checked<'_>) -> Result<Level, IoError> {
-        let duplicate = descriptor
-            .try_clone()
-            .map_err(|e| path.os(Errno::from_raw(e.raw_os_error().unwrap_or(0))))?;
-        let pending = entries(&mut listed(duplicate, path)?, path, None)?;
-        Ok(Level {
-            descriptor,
-            pending,
-        })
+    fn open(descriptor: OwnedFd, depth: usize, path: &Checked<'_>) -> Result<Level, IoError> {
+        let mut listing = listed(descriptor, path)?;
+        let pending = entries(&mut listing, path, None)?;
+        let descends = depth < DEPTH_LIMIT && pending.iter().any(|&(_, directory)| directory);
+        let held = if descends {
+            let duplicate = listing
+                .as_fd()
+                .try_clone_to_owned()
+                .map_err(|e| path.os(Errno::from_raw(e.raw_os_error().unwrap_or(0))))?;
+            Held::Descriptor(duplicate)
+        } else {
+            Held::Listing(listing)
+        };
+        Ok(Level { held, pending })
+    }
+
+    fn descriptor(&self) -> BorrowedFd<'_> {
+        match &self.held {
+            Held::Descriptor(descriptor) => descriptor.as_fd(),
+            Held::Listing(listing) => listing.as_fd(),
+        }
     }
 
     fn child(&self, name: &CStr, path: &Checked<'_>) -> Result<OwnedFd, IoError> {
-        match openat(
-            self.descriptor.as_fd(),
-            name,
-            DIRECTORY_FLAGS,
-            Mode::empty(),
-        ) {
+        match openat(self.descriptor(), name, DIRECTORY_FLAGS, Mode::empty()) {
             Ok(fd) => Ok(fd),
             Err(errno) => Err(path.os(errno)),
         }
@@ -616,7 +636,7 @@ impl Level {
 
 /// Refuse a tree deeper than [`DEPTH_LIMIT`] levels, `top` being level 1.
 fn measure(top: OwnedFd, path: &Checked<'_>) -> Result<(), IoError> {
-    let mut stack = vec![Level::open(top, path)?];
+    let mut stack = vec![Level::open(top, 1, path)?];
     loop {
         let depth = stack.len();
         let Some(level) = stack.last_mut() else {
@@ -632,7 +652,7 @@ fn measure(top: OwnedFd, path: &Checked<'_>) -> Result<(), IoError> {
                     return Err(too_deep(path));
                 }
                 let child = level.child(&name, path)?;
-                stack.push(Level::open(child, path)?);
+                stack.push(Level::open(child, depth + 1, path)?);
             }
         }
     }
@@ -646,7 +666,7 @@ fn too_deep(path: &Checked<'_>) -> IoError {
 /// link. A tree that grew past [`DEPTH_LIMIT`] since [`measure`] is
 /// refused where it is found.
 fn empty(top: OwnedFd, path: &Checked<'_>) -> Result<(), IoError> {
-    let mut stack: Vec<(Level, CString)> = vec![(Level::open(top, path)?, CString::default())];
+    let mut stack: Vec<(Level, CString)> = vec![(Level::open(top, 1, path)?, CString::default())];
     loop {
         let depth = stack.len();
         let Some((level, _)) = stack.last_mut() else {
@@ -657,7 +677,7 @@ fn empty(top: OwnedFd, path: &Checked<'_>) -> Result<(), IoError> {
                 let (_, name) = stack.pop().unwrap_or_else(|| unreachable!());
                 if let Some((parent, _)) = stack.last() {
                     unlinkat(
-                        parent.descriptor.as_fd(),
+                        parent.descriptor(),
                         name.as_c_str(),
                         UnlinkatFlags::RemoveDir,
                     )
@@ -666,7 +686,7 @@ fn empty(top: OwnedFd, path: &Checked<'_>) -> Result<(), IoError> {
             }
             Some((name, false)) => {
                 unlinkat(
-                    level.descriptor.as_fd(),
+                    level.descriptor(),
                     name.as_c_str(),
                     UnlinkatFlags::NoRemoveDir,
                 )
@@ -677,7 +697,7 @@ fn empty(top: OwnedFd, path: &Checked<'_>) -> Result<(), IoError> {
                     return Err(too_deep(path));
                 }
                 let child = level.child(&name, path)?;
-                stack.push((Level::open(child, path)?, name));
+                stack.push((Level::open(child, depth + 1, path)?, name));
             }
         }
     }
