@@ -123,3 +123,47 @@ fn the_chunk_decoder_copies_no_bytes_parameter_on_either_target() {
         copies.join("\n")
     );
 }
+
+/// Adversary pass 1 on unit counts (wave 11): story
+/// `ignored-tests-and-long-files-back` moves 34 helpers of
+/// `std.protocol.http` into `std.protocol.http.syntax` and promises "every
+/// path an importer names is unchanged". Imports are not re-exported, so a
+/// program that names a moved helper through `std.protocol.http` stops
+/// checking. Every in-repo program that imports `std.protocol.http` checks.
+#[test]
+fn every_program_importing_std_protocol_http_still_checks() {
+    fn walk(dir: &std::path::Path, out: &mut Vec<PathBuf>) {
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                walk(&path, out);
+            } else if path.extension().is_some_and(|e| e == "ignite") {
+                out.push(path);
+            }
+        }
+    }
+    let root = repository();
+    let mut files = Vec::new();
+    walk(&root.join("crates/ignite/tests/fixtures"), &mut files);
+    walk(&root.join("examples"), &mut files);
+    files.sort();
+    let importers: Vec<PathBuf> = files
+        .into_iter()
+        .filter(|f| {
+            std::fs::read_to_string(f)
+                .unwrap()
+                .lines()
+                .any(|l| l.trim_start().starts_with("import std.protocol.http."))
+        })
+        .collect();
+    assert!(importers.len() >= 13, "{importers:?}");
+    let failed: Vec<String> = importers
+        .iter()
+        .filter_map(|f| {
+            ignite::check_with_std(f, Some(&standard_library()))
+                .err()
+                .map(|e| format!("{}: {e}", f.display()))
+        })
+        .collect();
+    assert!(failed.is_empty(), "{}", failed.join("\n"));
+}
