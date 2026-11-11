@@ -118,3 +118,47 @@ fn adversary_a_model_method_reads_its_receiver_before_its_arguments() {
         found.join("\n")
     );
 }
+
+const PLAIN_ORDER: &str = r#"package model.adversary_plain_order
+
+fn note(log: Store<Int>, n: Int) -> Unit requires [log.write] {
+  log.put(log.next_id(), n)
+}
+
+fn text_of(log: Store<Int>) -> Text requires [log.write] {
+  note(log, 1)
+  "abc"
+}
+
+fn prefix_of(log: Store<Int>) -> Text requires [log.write] {
+  note(log, 2)
+  "a"
+}
+
+test "a plain builtin whose receiver and argument act on a store" {
+  let log: Store<Int> = Store.new()
+  let t = text_of(log).starts_with(prefix_of(log))
+  assert t
+  assert log.values() == [1, 2]
+}
+"#;
+
+/// Adversary (story eval-substrate-model, pass 2). The fix of pass 1 moved
+/// the receiver first only in the model's branch of `builtin_method`; the
+/// other builtins still evaluate the arguments first (the `_` arm of
+/// `Evaluator::builtin_method`). Under the model an argument and a receiver
+/// can both write a store, so `text_of(log).starts_with(prefix_of(log))`
+/// logs `[2, 1]` in the evaluator where `ignite test --target all` passes
+/// on Rust and LLVM (`[1, 2]`). At the base (`f58a7733`) the test was
+/// refused (`Store.new()` had no value), so the model turns a refusal into
+/// a difference, the same shape as pass 1's finding.
+#[test]
+fn adversary_a_plain_builtin_reads_its_receiver_before_its_arguments_under_the_model() {
+    let loaded = program("adversary_plain_order", PLAIN_ORDER);
+    let test = "a plain builtin whose receiver and argument act on a store";
+    let outcome = run(&loaded, test);
+    assert!(
+        agrees_or_refuses(&outcome),
+        "the targets pass this test; the evaluator neither passes nor refuses it: {outcome:?}"
+    );
+}
