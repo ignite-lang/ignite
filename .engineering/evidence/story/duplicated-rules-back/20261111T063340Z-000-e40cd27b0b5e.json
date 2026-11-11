@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-11T06:33:40Z",
+  "actor": "human:timo",
+  "artifact": "story:duplicated-rules-back",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "coordinator run on 258f5c11 (wave/11-dup, merged with the integration branch): cargo test over ignite-syntax, ignite-types, ignite-eval, ignite-rustgen, ignite-llvm exit 0 (508 passed, 7 ignored); cargo test -p ignite-check 24 passed, 1 failed (layering::compiler_crates_name_no_application_protocol, unit reply's), 1 ignored; eval:: eval_model leak:: plan:: typed_json:: golden 61 passed; task test-ignite 452 passed per target; row 1.3 rust/patterns 65, rust/builtins 53, llvm/patterns 23, llvm/builtins 13, eval/patterns 13, eval/builtins 124; fmt and clippy exit 0"
+  }
+}
