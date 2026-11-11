@@ -1129,8 +1129,8 @@ mod sched;
 // The one place a signal's disposition is changed.
 mod signal;
 pub use sched::{
-    IoMode, SchedulerCounts, TASK_STACK, TaskLocals, io_mode, scheduler_counts, set_task_locals,
-    worker_limit,
+    IoMode, SchedulerCounts, TASK_STACK, TaskLocals, cpu_limit, io_mode, scheduler_counts,
+    set_task_locals, worker_limit,
 };
 // Story `text-fast-search`: the byte search of `Bytes.index_of` and
 // `Text.pieces`.

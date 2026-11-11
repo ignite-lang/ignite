@@ -12,7 +12,7 @@
 //! descriptor through it (a lone task that may block the worker does not,
 //! `wait_blocking`) and parks its thread until then. Workers start lazily,
 //! one per spawn up to [`worker_limit`] (`IGNITE_WORKERS`, default
-//! `std::thread::available_parallelism`), and a worker without a task for
+//! [`cpu_limit`]: the CPU affinity and cgroup quota), and a worker without a task for
 //! [`crate::LINGER`] since its last task ended ends, so an idle server runs
 //! `main` and the drain's thread only (`docs/readiness-io.md` section 6
 //! row 6).
@@ -56,6 +56,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, VecDeque};
 use std::io;
 use std::os::fd::{AsFd, BorrowedFd};
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU8, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
@@ -94,7 +95,7 @@ pub(crate) fn readiness() -> bool {
 
 /// The most workers the process starts: `IGNITE_WORKERS` when it is a
 /// positive number, else the parallelism available to the process (its
-/// CPU affinity and cgroup quota), at least 1.
+/// CPU affinity and cgroup quota, [`cpu_limit`]), at least 1.
 pub fn worker_limit() -> usize {
     static LIMIT: OnceLock<usize> = OnceLock::new();
     *LIMIT.get_or_init(|| {
@@ -102,12 +103,114 @@ pub fn worker_limit() -> usize {
             .ok()
             .and_then(|value| value.trim().parse::<usize>().ok())
             .filter(|count| *count > 0)
-            .unwrap_or_else(|| {
-                std::thread::available_parallelism()
-                    .map(usize::from)
-                    .unwrap_or(1)
-            })
+            .unwrap_or_else(|| cpu_limit(Path::new("/")))
     })
+}
+
+/// The CPUs the calling thread may use, as the files under `root` (`/` for
+/// this process; a fixture tree in tests) describe them: the CPUs of its
+/// affinity (`Cpus_allowed_list` of `proc/thread-self/status`, else the
+/// online CPUs), at most the CPU quota of its cgroup rounded up
+/// ([`cgroup_quota`]), at least 1. What `std::thread::available_parallelism`
+/// counts, without its mount table walk and its 13 KB of code
+/// (story `binary-size-back`).
+pub fn cpu_limit(root: &Path) -> usize {
+    let cpus = std::fs::read_to_string(root.join("proc/thread-self/status"))
+        .ok()
+        .and_then(|status| {
+            status
+                .lines()
+                .find_map(|line| line.strip_prefix("Cpus_allowed_list:"))
+                .map(cpu_list_count)
+        })
+        .filter(|count| *count > 0)
+        .unwrap_or_else(|| {
+            nix::unistd::sysconf(nix::unistd::SysconfVar::_NPROCESSORS_ONLN)
+                .ok()
+                .flatten()
+                .map_or(1, |count| count.max(1) as usize)
+        });
+    cgroup_quota(root)
+        .map_or(cpus, |quota| cpus.min(quota))
+        .max(1)
+}
+
+/// The number of CPUs a list such as `0-3,8,10-11` names.
+fn cpu_list_count(list: &str) -> usize {
+    list.trim()
+        .split(',')
+        .filter_map(|range| {
+            let (first, last) = range.split_once('-').unwrap_or((range, range));
+            let first: usize = first.trim().parse().ok()?;
+            let last: usize = last.trim().parse().ok()?;
+            Some(last.checked_sub(first)? + 1)
+        })
+        .sum()
+}
+
+/// The CPU quota of the cgroups `root/proc/self/cgroup` names, in CPUs
+/// rounded up; `None` without one. Version 2: the smallest `cpu.max` of
+/// the group and of each ancestor up to the mount `sys/fs/cgroup`, a file
+/// that is missing passing (in a container the host's path of its group
+/// is not inside the mount, which is the group). Version 1: `cpu.cfs_quota_us`
+/// over `cpu.cfs_period_us` of the `cpu` controller's group, at the
+/// mount's root when the group is not inside it.
+fn cgroup_quota(root: &Path) -> Option<usize> {
+    let groups = std::fs::read_to_string(root.join("proc/self/cgroup")).ok()?;
+    let mount = root.join("sys/fs/cgroup");
+    let number =
+        |path: PathBuf| -> Option<u64> { std::fs::read_to_string(path).ok()?.trim().parse().ok() };
+    let cpus = |quota: u64, period: u64| (period > 0).then(|| quota.div_ceil(period) as usize);
+    let mut limit: Option<usize> = None;
+    let mut bound = |quota: Option<usize>| {
+        if let Some(quota) = quota {
+            limit = Some(limit.map_or(quota, |limit| limit.min(quota)));
+        }
+    };
+    for line in groups.lines() {
+        let mut fields = line.splitn(3, ':');
+        let (Some(_), Some(controllers), Some(path)) =
+            (fields.next(), fields.next(), fields.next())
+        else {
+            continue;
+        };
+        let path = path.trim_start_matches('/');
+        let path = if path.split('/').any(|part| part == "..") {
+            ""
+        } else {
+            path
+        };
+        if controllers.is_empty() {
+            let mut dir = mount.join(path);
+            loop {
+                let max = std::fs::read_to_string(dir.join("cpu.max")).ok();
+                bound(max.and_then(|max| {
+                    let (quota, period) = max.trim().split_once(' ')?;
+                    cpus(quota.parse().ok()?, period.parse().ok()?)
+                }));
+                if dir == mount || !dir.pop() {
+                    break;
+                }
+            }
+        } else if controllers.split(',').any(|controller| controller == "cpu") {
+            let Some(controller) = ["cpu,cpuacct", "cpu"]
+                .iter()
+                .map(|name| mount.join(name))
+                .find(|dir| dir.is_dir())
+            else {
+                continue;
+            };
+            let group = Some(controller.join(path))
+                .filter(|dir| dir.is_dir())
+                .unwrap_or(controller);
+            let quota = number(group.join("cpu.cfs_period_us")).and_then(|period| {
+                let quota = std::fs::read_to_string(group.join("cpu.cfs_quota_us")).ok()?;
+                cpus(quota.trim().parse().ok()?, period)
+            });
+            bound(quota);
+        }
+    }
+    limit
 }
 
 /// Stack reserved per task: a thread's default, so recursion depth does not
