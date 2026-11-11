@@ -4,6 +4,8 @@ id: story:std-mysql-client
 kind: story
 status: active
 title: 'std.protocol.mysql: MySQL wire client with caching_sha2_password'
+relations:
+- depends_on: story:path-cost-counted-at-every-merge
 revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-11T10:51:19Z", actor: "human:timo", revision: 3, executor: "agent:claude-coordinator", correlation: "accepted-2026-11-11"}

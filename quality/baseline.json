@@ -456,6 +456,7 @@
       "instrument": "`ignite-perf quality` (task quality): size of `todod` and `terminald` per target and profile",
       "kind": "ratchet",
       "name": "binary size",
+      "release_growth": "decision",
       "source": "perf",
       "tolerance": "5%",
       "unit": "bytes"
@@ -679,6 +680,7 @@
       "instrument": "`ignite-perf quality-remote` (`bench/native/`): the stripped release binary over the plain-Rust implementation's, per program",
       "kind": "ratchet",
       "name": "stripped binary size against plain Rust",
+      "release_growth": "decision",
       "source": "bench",
       "tolerance": "5%",
       "unit": "permille"
