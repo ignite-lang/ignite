@@ -827,6 +827,102 @@ fn tn_on_a_terminal_closes_its_side_on_ctrl_d(target: Target) {
     terminal.assert_canonical_with_echo();
 }
 
+/// The calls of a `strace -f` trace so far, once it has come to rest (no
+/// line for 300 ms; a worker without a task ends after a second, later
+/// than that): a call counts once, at the line that begins it, and
+/// `fcntl(F_GETFD)` not at all, the check a debug build of std makes
+/// before each `close`, which no release build makes.
+fn calls_at_rest(trace: &Path) -> Vec<String> {
+    let deadline = Instant::now() + TIMEOUT;
+    let mut text = String::new();
+    let mut changed = Instant::now();
+    while changed.elapsed() < Duration::from_millis(300) {
+        assert!(Instant::now() < deadline, "the trace never came to rest");
+        std::thread::sleep(Duration::from_millis(20));
+        let now = std::fs::read_to_string(trace).unwrap_or_default();
+        if now != text {
+            text = now;
+            changed = Instant::now();
+        }
+    }
+    text.lines()
+        .filter_map(|line| line.split_once(' ').map(|(_, call)| call.trim_start()))
+        .filter(|call| !call.starts_with(['<', '+', '-']))
+        .filter(|call| !(call.starts_with("fcntl(") && call.contains("F_GETFD")))
+        .filter_map(|call| call.split_once('(').map(|(name, _)| name.to_string()))
+        .collect()
+}
+
+/// The system calls `terminald` makes for the first session of its
+/// process: from the client's `connect` until the session is closed and
+/// the process is at rest, the session's request sent once the server
+/// waits for it. By name with their counts, most first, and the total.
+fn first_session_calls(target: Target) -> (usize, String) {
+    let status = Command::new("strace")
+        .args(["-o", "/dev/null", "true"])
+        .stderr(Stdio::null())
+        .status()
+        .unwrap_or_else(|e| panic!("strace is needed to count system calls and did not run: {e}"));
+    assert!(
+        status.success(),
+        "strace cannot trace a child here: {status:?}"
+    );
+    let trace = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
+        "terminal-first-session-{}-{}.txt",
+        std::process::id(),
+        target.index()
+    ));
+    let _ = std::fs::remove_file(&trace);
+    let server = Server::start_under(target, &["strace", "-f", "-o", trace.to_str().unwrap()]);
+    let before = calls_at_rest(&trace).len();
+    let mut stream = server.raw();
+    calls_at_rest(&trace);
+    send_line(&mut stream, "quit");
+    assert_eq!(shown(&read_until_closed(&mut stream)), shown(b"bye\r\n"));
+    let calls = calls_at_rest(&trace);
+    drop(server);
+    let _ = std::fs::remove_file(&trace);
+    let mut by_name: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+    for call in &calls[before..] {
+        *by_name.entry(call).or_default() += 1;
+    }
+    let mut counts: Vec<(&str, usize)> = by_name.into_iter().collect();
+    counts.sort_by_key(|(name, count)| (std::cmp::Reverse(*count), *name));
+    let table: Vec<String> = counts
+        .iter()
+        .map(|(name, count)| format!("{name} {count}"))
+        .collect();
+    (calls.len() - before, table.join(", "))
+}
+
+/// `story:readiness-session-cost`: the first session of a process, the
+/// worker it starts included, makes the system calls of the first session
+/// of v0.15.0's `terminald` with the thread it started, and at most one
+/// more: v0.15.0 made 30 on the Rust target and 25 on the LLVM target
+/// (release builds on 4 CPUs; this counts the builds of the test matrix),
+/// this build 29 and 26. The one more on the LLVM target is the `prctl`
+/// that names the worker, by which the workers are told from a program's
+/// other threads. Before, 60 and 58: what a process does once was done
+/// while its first session waited (the worker limit read from the cgroup
+/// files, the overflow handler, the eventfd of the lone waits), a `poll`
+/// came before each `accept4`, and a worker of the LLVM target asked for
+/// its alternate stack before it was given one.
+#[test]
+fn the_first_session_costs_at_most_one_system_call_more_than_at_v0_15_0() {
+    let mut failures = Vec::new();
+    for (target, v0_15_0, bound) in [(Target::Rust, 30, 30), (Target::Llvm, 25, 26)] {
+        let (total, table) = first_session_calls(target);
+        println!("{target:?}: {total} calls, v0.15.0 made {v0_15_0}: {table}");
+        if total > bound {
+            failures.push(format!(
+                "{target:?}: {total} calls, at most {bound} expected (v0.15.0 made \
+                 {v0_15_0}): {table}"
+            ));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
 /// The symbol names in `binary`, from `nm`.
 fn symbols(binary: &Path) -> String {
     let output = Command::new("nm").arg(binary).output().expect("run nm");

@@ -1421,7 +1421,7 @@ fn a_connection_makes_none_of_the_calls_the_story_removed() {
 /// deep), the handler of a task's stack overflow (`rt_sigaction` twice) and
 /// the eventfd that ends the lone waits of a burst (`eventfd2`). With them
 /// the first session of `terminald` made 60 calls where v0.15.0's made 30
-/// (`terminal::the_first_session_costs_no_more_system_calls_than_at_v0_15_0`
+/// (`terminal::the_first_session_costs_at_most_one_system_call_more_than_at_v0_15_0`
 /// of `crates/ignite` holds the total, on both targets).
 #[test]
 fn the_first_session_makes_no_call_a_process_makes_once() {

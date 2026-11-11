@@ -826,6 +826,9 @@ fn start_worker(
     // Counted before the worker starts, which may end the task and count
     // it out of `LIVE` before `spawn` returns here. Relaxed: as above.
     let live = LIVE.fetch_add(1, Ordering::Relaxed) + 1;
+    // Named, which is a `prctl` per worker started that a thread of
+    // v0.15.0 did not make: by the name the workers are told from a
+    // program's other threads, in `/proc` and by the tests that watch them.
     match std::thread::Builder::new()
         .name(String::from("worker"))
         .spawn(move || work(started))
