@@ -19,10 +19,11 @@ use std::os::unix::fs::PermissionsExt;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
+use nix::dir::{Dir, Type};
 use nix::errno::Errno;
 use nix::fcntl::{AtFlags, OFlag, OpenHow, ResolveFlag, openat, openat2, renameat};
 use nix::sys::stat::{FileStat, Mode, SFlag, fstat, fstatat, mkdirat};
-use nix::unistd::{UnlinkatFlags, unlinkat};
+use nix::unistd::{UnlinkatFlags, close, unlinkat};
 
 use crate::IoError;
 
@@ -180,78 +181,70 @@ fn reopen(parent: BorrowedFd<'_>, path: &Checked<'_>) -> Result<OwnedFd, IoError
 
 /// The names in `directory` without `.` and `..`, as the raw bytes the OS
 /// gave, each with whether it is a directory (never following a link), in
-/// byte order; at most `limit` when one is given. Read from the
-/// descriptor's current offset with `getdents64` itself: `fdopendir` would
-/// add an `fstat` and two `fcntl` to every listing, and its iterator a
-/// `lseek` back.
+/// byte order; at most `limit` when one is given. Read with `readdir`
+/// through [`Dir`], the directory wrapper of `nix`. The calls of a listing,
+/// as `strace` shows them: `fdopendir` makes an `fstat`, an
+/// `fcntl(F_GETFL)` and an `fcntl(F_SETFD, FD_CLOEXEC)`; then come the
+/// `getdents64` calls; the end of the iteration makes an `lseek` back to
+/// the start; and dropping the [`Dir`] makes the `close` of its
+/// descriptor. A level of [`Directory::remove_tree`] that the walk
+/// descends from also duplicates its descriptor (`fcntl(F_DUPFD_CLOEXEC)`)
+/// before that `close` (see [`Level`]). A directory removed before it is
+/// listed is the error `getdents64` gives for it (`ENOENT`), which
+/// `readdir` reads as the end of the directory: a listing that read no
+/// entry at all, not even `.` and `..`, looks at the directory's link
+/// count (one `fstat`, only then).
 fn entries(
-    directory: BorrowedFd<'_>,
+    directory: &mut Dir,
     path: &Checked<'_>,
     limit: Option<usize>,
 ) -> Result<Vec<(CString, bool)>, IoError> {
-    // `struct linux_dirent64`: `d_ino` (8 bytes), `d_off` (8), `d_reclen`
-    // (2), `d_type` (1), then the name and its NUL; records are 8-aligned,
-    // so the buffer is made of `u64`.
-    const RECORD_LENGTH: usize = 16;
-    const TYPE: usize = 18;
-    const NAME: usize = 19;
-    let mut buffer = vec![0u64; 2048];
-    let mut read: Vec<(CString, u8)> = Vec::new();
-    loop {
-        // SAFETY: the kernel writes at most the buffer's length in bytes
-        // into it, and the buffer outlives the call.
-        let filled = unsafe {
-            nix::libc::syscall(
-                nix::libc::SYS_getdents64,
-                directory.as_raw_fd(),
-                buffer.as_mut_ptr(),
-                buffer.len() * size_of::<u64>(),
-            )
-        };
-        let filled = Errno::result(filled).map_err(|e| path.os(e))? as usize;
-        if filled == 0 {
-            break;
+    let mut read: Vec<(CString, Option<Type>)> = Vec::new();
+    let mut any = false;
+    for entry in directory.iter() {
+        let entry = entry.map_err(|e| path.os(e))?;
+        any = true;
+        let name = entry.file_name();
+        if name.to_bytes() == b"." || name.to_bytes() == b".." {
+            continue;
         }
-        // SAFETY: the first `filled` bytes of the buffer were written by
-        // the call above, and `u8` has no alignment.
-        let bytes = unsafe { std::slice::from_raw_parts(buffer.as_ptr().cast::<u8>(), filled) };
-        let mut offset = 0;
-        while offset < filled {
-            let malformed = || path.error("malformed directory entry");
-            let record = bytes
-                .get(offset + RECORD_LENGTH..offset + TYPE)
-                .map(|b| usize::from(u16::from_ne_bytes([b[0], b[1]])))
-                .filter(|&length| length > NAME && offset + length <= filled)
-                .ok_or_else(malformed)?;
-            let name = CStr::from_bytes_until_nul(&bytes[offset + NAME..offset + record])
-                .map_err(|_| malformed())?;
-            let kind = bytes[offset + TYPE];
-            offset += record;
-            if name.to_bytes() == b"." || name.to_bytes() == b".." {
-                continue;
-            }
-            if limit == Some(read.len()) {
-                return Err(path.error(format_args!("more than {ENTRY_LIMIT} entries")));
-            }
-            read.push((name.to_owned(), kind));
+        if limit == Some(read.len()) {
+            return Err(path.error(format_args!("more than {ENTRY_LIMIT} entries")));
         }
+        read.push((name.to_owned(), entry.file_type()));
+    }
+    let descriptor = directory.as_fd();
+    if !any && fstat(descriptor).map_err(|e| path.os(e))?.st_nlink == 0 {
+        return Err(path.os(Errno::ENOENT));
     }
     let mut found: Vec<(CString, bool)> = read
         .into_iter()
         .map(|(name, kind)| {
             let directory = match kind {
-                nix::libc::DT_DIR => true,
-                nix::libc::DT_UNKNOWN => {
-                    fstatat(directory, name.as_c_str(), AtFlags::AT_SYMLINK_NOFOLLOW)
-                        .is_ok_and(|stat| is_directory(&stat))
-                }
-                _ => false,
+                Some(Type::Directory) => true,
+                None => fstatat(descriptor, name.as_c_str(), AtFlags::AT_SYMLINK_NOFOLLOW)
+                    .is_ok_and(|stat| is_directory(&stat)),
+                Some(_) => false,
             };
             (name, directory)
         })
         .collect();
     found.sort();
     Ok(found)
+}
+
+/// `descriptor`, a directory opened for reading, as a [`Dir`] that lists
+/// it ([`entries`]) and closes it when dropped. `Dir::from_fd` lets go of
+/// the descriptor before it calls `fdopendir`, and `fdopendir` leaves it
+/// open when it fails (no memory for its buffer, or not a directory): it
+/// is closed here by its number, which no other code can have been given
+/// while it is still open.
+fn listed(descriptor: OwnedFd, path: &Checked<'_>) -> Result<Dir, IoError> {
+    let number = descriptor.as_raw_fd();
+    Dir::from_fd(descriptor).map_err(|errno| {
+        let _ = close(number);
+        path.os(errno)
+    })
 }
 
 /// The OS reason of a `std::io::Error`, in the words of [`Errno::desc`].
@@ -516,8 +509,8 @@ impl Directory {
     /// (`path <p>: entry <name> is not UTF-8`).
     pub fn read_directory(&self, path: impl AsRef<str>) -> Result<Vec<String>, IoError> {
         let path = check(path.as_ref())?;
-        let directory = self.directory(&path, path.components.len())?;
-        entries(directory.as_fd(), &path, Some(ENTRY_LIMIT))?
+        let mut directory = listed(self.directory(&path, path.components.len())?, &path)?;
+        entries(&mut directory, &path, Some(ENTRY_LIMIT))?
             .into_iter()
             .map(|(name, directory)| {
                 let text = name.into_string().map_err(|e| {
@@ -598,30 +591,56 @@ impl Directory {
     }
 }
 
-/// A directory being visited: its descriptor and the subdirectories still
-/// to visit (for [`measure`]) or the entries still to remove (for
-/// [`empty`]).
+/// A directory being visited, `depth` levels down (the top is level 1):
+/// what it holds of the directory and the subdirectories still to visit
+/// (for [`measure`]) or the entries still to remove (for [`empty`]). A
+/// level is listed through its own descriptor. A level the walk descends
+/// from (a subdirectory to visit, above [`DEPTH_LIMIT`]) then keeps a
+/// duplicate of that descriptor and closes its [`Dir`], and the C
+/// library's buffer of 32 KiB with it, before the walk descends; any other
+/// level is the deepest on the walk and keeps its [`Dir`] until it is
+/// done. So a walk holds one descriptor per level and at most one
+/// listing: level `k` holds `k + 1` descriptors while it makes its
+/// duplicate, and a tree [`DEPTH_LIMIT`] levels deep needs
+/// [`DEPTH_LIMIT`] descriptors, as with its own `getdents64`.
 struct Level {
-    descriptor: OwnedFd,
+    held: Held,
     pending: Vec<(CString, bool)>,
 }
 
+/// What a [`Level`] holds of its directory: a descriptor, or the listing
+/// that read it.
+enum Held {
+    Descriptor(OwnedFd),
+    Listing(Dir),
+}
+
 impl Level {
-    fn open(descriptor: OwnedFd, path: &Checked<'_>) -> Result<Level, IoError> {
-        let pending = entries(descriptor.as_fd(), path, None)?;
-        Ok(Level {
-            descriptor,
-            pending,
-        })
+    fn open(descriptor: OwnedFd, depth: usize, path: &Checked<'_>) -> Result<Level, IoError> {
+        let mut listing = listed(descriptor, path)?;
+        let pending = entries(&mut listing, path, None)?;
+        let descends = depth < DEPTH_LIMIT && pending.iter().any(|&(_, directory)| directory);
+        let held = if descends {
+            let duplicate = listing
+                .as_fd()
+                .try_clone_to_owned()
+                .map_err(|e| path.os(Errno::from_raw(e.raw_os_error().unwrap_or(0))))?;
+            Held::Descriptor(duplicate)
+        } else {
+            Held::Listing(listing)
+        };
+        Ok(Level { held, pending })
+    }
+
+    fn descriptor(&self) -> BorrowedFd<'_> {
+        match &self.held {
+            Held::Descriptor(descriptor) => descriptor.as_fd(),
+            Held::Listing(listing) => listing.as_fd(),
+        }
     }
 
     fn child(&self, name: &CStr, path: &Checked<'_>) -> Result<OwnedFd, IoError> {
-        match openat(
-            self.descriptor.as_fd(),
-            name,
-            DIRECTORY_FLAGS,
-            Mode::empty(),
-        ) {
+        match openat(self.descriptor(), name, DIRECTORY_FLAGS, Mode::empty()) {
             Ok(fd) => Ok(fd),
             Err(errno) => Err(path.os(errno)),
         }
@@ -630,7 +649,7 @@ impl Level {
 
 /// Refuse a tree deeper than [`DEPTH_LIMIT`] levels, `top` being level 1.
 fn measure(top: OwnedFd, path: &Checked<'_>) -> Result<(), IoError> {
-    let mut stack = vec![Level::open(top, path)?];
+    let mut stack = vec![Level::open(top, 1, path)?];
     loop {
         let depth = stack.len();
         let Some(level) = stack.last_mut() else {
@@ -646,7 +665,7 @@ fn measure(top: OwnedFd, path: &Checked<'_>) -> Result<(), IoError> {
                     return Err(too_deep(path));
                 }
                 let child = level.child(&name, path)?;
-                stack.push(Level::open(child, path)?);
+                stack.push(Level::open(child, depth + 1, path)?);
             }
         }
     }
@@ -660,7 +679,7 @@ fn too_deep(path: &Checked<'_>) -> IoError {
 /// link. A tree that grew past [`DEPTH_LIMIT`] since [`measure`] is
 /// refused where it is found.
 fn empty(top: OwnedFd, path: &Checked<'_>) -> Result<(), IoError> {
-    let mut stack: Vec<(Level, CString)> = vec![(Level::open(top, path)?, CString::default())];
+    let mut stack: Vec<(Level, CString)> = vec![(Level::open(top, 1, path)?, CString::default())];
     loop {
         let depth = stack.len();
         let Some((level, _)) = stack.last_mut() else {
@@ -671,7 +690,7 @@ fn empty(top: OwnedFd, path: &Checked<'_>) -> Result<(), IoError> {
                 let (_, name) = stack.pop().unwrap_or_else(|| unreachable!());
                 if let Some((parent, _)) = stack.last() {
                     unlinkat(
-                        parent.descriptor.as_fd(),
+                        parent.descriptor(),
                         name.as_c_str(),
                         UnlinkatFlags::RemoveDir,
                     )
@@ -680,7 +699,7 @@ fn empty(top: OwnedFd, path: &Checked<'_>) -> Result<(), IoError> {
             }
             Some((name, false)) => {
                 unlinkat(
-                    level.descriptor.as_fd(),
+                    level.descriptor(),
                     name.as_c_str(),
                     UnlinkatFlags::NoRemoveDir,
                 )
@@ -691,7 +710,7 @@ fn empty(top: OwnedFd, path: &Checked<'_>) -> Result<(), IoError> {
                     return Err(too_deep(path));
                 }
                 let child = level.child(&name, path)?;
-                stack.push((Level::open(child, path)?, name));
+                stack.push((Level::open(child, depth + 1, path)?, name));
             }
         }
     }
@@ -1217,5 +1236,26 @@ mod tests {
         std::fs::write(scratch.root().join("plain"), b"").unwrap();
         let plain = scratch.root().join("plain");
         assert!(Directory::open(plain.to_str().unwrap(), false).is_err());
+    }
+
+    /// A descriptor that `fdopendir` refuses is closed, not left open:
+    /// `Dir::from_fd` lets go of it before the call, and the C library
+    /// leaves it open when the call fails. The descriptor's number may be
+    /// reused by another test at once, so the check is that it no longer
+    /// names this file.
+    #[test]
+    fn a_refused_listing_closes_its_descriptor() {
+        use std::os::fd::{AsRawFd, OwnedFd};
+        let scratch = Scratch::new("refused");
+        let file = scratch.root().join("plain");
+        std::fs::write(&file, b"").unwrap();
+        let file = std::fs::canonicalize(file).unwrap();
+        let descriptor = OwnedFd::from(std::fs::File::open(&file).unwrap());
+        let number = descriptor.as_raw_fd();
+        let path = super::check("plain").unwrap();
+        let refused = super::listed(descriptor, &path).unwrap_err().to_string();
+        assert!(refused.ends_with("Not a directory"), "{refused}");
+        let named = std::fs::read_link(format!("/proc/self/fd/{number}")).ok();
+        assert_ne!(named, Some(file), "the refused descriptor is still open");
     }
 }

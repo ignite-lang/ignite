@@ -252,6 +252,8 @@ pub fn heap_counted(bytes: i64) {
 
 /// The counting global allocator: the system allocator, with every
 /// allocation's size added to the heap bytes and every free's subtracted.
+/// A reallocation is the trait's default: a new allocation, a copy and a
+/// free of the old one, both counted here.
 pub struct Counting;
 
 // SAFETY: every call goes to `System` unchanged; the counting touches no
@@ -270,15 +272,6 @@ unsafe impl GlobalAlloc for Counting {
         // SAFETY: as the caller's contract.
         unsafe { System.dealloc(pointer, layout) };
         heap_add(-(layout.size() as i64));
-    }
-
-    unsafe fn realloc(&self, pointer: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-        // SAFETY: as the caller's contract.
-        let moved = unsafe { System.realloc(pointer, layout, new_size) };
-        if !moved.is_null() {
-            heap_add(new_size as i64 - layout.size() as i64);
-        }
-        moved
     }
 }
 

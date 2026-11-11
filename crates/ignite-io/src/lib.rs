@@ -1126,6 +1126,8 @@ pub mod wait;
 // `docs/readiness-io.md` 4.1, 4.3 to 4.6 (phase R1): stackful tasks on
 // epoll workers, the IO mode `readiness`.
 mod sched;
+// The one place a signal's disposition is changed.
+mod signal;
 pub use sched::{
     IoMode, SchedulerCounts, TASK_STACK, TaskLocals, io_mode, scheduler_counts, set_task_locals,
     worker_limit,

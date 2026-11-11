@@ -1352,6 +1352,42 @@ fn static_metrics_hold_the_bar() {
     hold("static", &measured);
 }
 
+/// Row 3.6 at or below its v0.15.0 values in `quality/history.jsonl`
+/// (story `unsafe-sites-back`), counted as [`static_metrics`] counts it:
+/// the release rule of `AGENTS.md` § Releases for the `unsafe` sites of
+/// the substrate, which a bar moved by a decision does not relax.
+#[test]
+fn unsafe_sites_are_no_more_than_at_v0_15_0() {
+    let before: BTreeMap<String, i64> = read_history()
+        .into_iter()
+        .filter(|record| record.run == "v0.15.0" && record.metric == "3.6")
+        .map(|record| (record.target, record.value))
+        .collect();
+    assert_eq!(
+        before.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["llvm", "rust"],
+        "v0.15.0's row 3.6 in quality/history.jsonl"
+    );
+    let now: BTreeMap<String, i64> = static_metrics()
+        .into_iter()
+        .filter(|(id, _, _)| id == "3.6")
+        .map(|(_, target, value)| (target, value))
+        .collect();
+    let over: Vec<String> = before
+        .iter()
+        .filter_map(|(target, then)| match now.get(target) {
+            Some(value) if value <= then => None,
+            Some(value) => Some(format!("3.6 {target}: {value}, at v0.15.0 {then}")),
+            None => Some(format!("3.6 {target}: not measured")),
+        })
+        .collect();
+    assert!(
+        over.is_empty(),
+        "more unsafe sites than at v0.15.0:\n  {}",
+        over.join("\n  ")
+    );
+}
+
 /// 4.1 and 4.2 on both targets against their bars, every merge.
 #[test]
 fn conformance_claims_hold_the_bar() {

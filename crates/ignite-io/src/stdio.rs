@@ -4,7 +4,7 @@
 //! on every call.
 
 use std::io::Write;
-use std::os::fd::{AsFd, AsRawFd};
+use std::os::fd::AsFd;
 
 use nix::errno::Errno;
 
@@ -30,11 +30,8 @@ impl Stdin {
         // the read itself then finds input. A standard input the reactor
         // cannot watch (a regular file, always ready) is read at once.
         if crate::wait::Waiter::current().is_task() {
-            let _ = crate::wait::wait_descriptor(
-                stdin.as_fd().as_raw_fd(),
-                crate::reactor::Interest::READ,
-                None,
-            );
+            let _ =
+                crate::wait::wait_descriptor(stdin.as_fd(), crate::reactor::Interest::READ, None);
         }
         read_input(maximum, |buffer| {
             loop {

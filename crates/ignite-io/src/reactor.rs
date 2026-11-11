@@ -25,15 +25,19 @@
 //!   one when none is in progress, with no event for the wake itself;
 //! - after [`Reactor::deregister`] a descriptor gives no more events.
 //!
-//! A registered descriptor must stay open until it is deregistered.
+//! A descriptor is borrowed ([`BorrowedFd`]) at [`Reactor::register`] and
+//! at [`Reactor::deregister`], so it is open at both, and a reactor hands
+//! the kernel no descriptor it was not lent: [`EpollReactor`] keeps its
+//! number only to compare at the deregistration, [`PollReactor`] keeps a
+//! duplicate of its own until then.
 
 use std::collections::HashMap;
 use std::fmt;
 use std::io;
 use std::ops::BitOr;
-use std::os::fd::{AsFd, AsRawFd, BorrowedFd, RawFd};
+use std::os::fd::{AsFd, AsRawFd, BorrowedFd, OwnedFd, RawFd};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use nix::errno::Errno;
@@ -212,12 +216,19 @@ pub struct Event {
 /// A readiness source (module docs).
 pub trait Reactor: Send + Sync {
     /// Register `descriptor` for `interest`, with the waiter its events
-    /// name. The descriptor stays open until [`Reactor::deregister`].
-    fn register(&self, descriptor: RawFd, interest: Interest, waiter: Waiter) -> io::Result<Token>;
+    /// name. The borrow proves the descriptor open for the call; the
+    /// caller deregisters it, with the same descriptor, while it is open.
+    fn register(
+        &self,
+        descriptor: BorrowedFd<'_>,
+        interest: Interest,
+        waiter: Waiter,
+    ) -> io::Result<Token>;
 
-    /// Stop the events of `token`. A descriptor closed in the meantime is
-    /// not an error.
-    fn deregister(&self, token: Token) -> io::Result<()>;
+    /// Stop the events of `token`, which `descriptor` was registered
+    /// with. Another descriptor than the registered one is refused
+    /// (`InvalidInput`), after the token's events have stopped.
+    fn deregister(&self, token: Token, descriptor: BorrowedFd<'_>) -> io::Result<()>;
 
     /// Wait until a registered descriptor is ready, a [`Reactor::wake`], or
     /// `deadline` (`None`: no deadline), and append the events to
@@ -287,11 +298,32 @@ fn drain(eventfd: &EventFd) {
     let _ = eventfd.read();
 }
 
-/// One registered descriptor.
+/// One descriptor registered with an [`EpollReactor`]: its number, to
+/// compare at [`Reactor::deregister`] only, never handed to the kernel.
 struct Entry {
     descriptor: RawFd,
     interest: Interest,
     waiter: Waiter,
+}
+
+/// One descriptor registered with a [`PollReactor`]: a duplicate the
+/// reactor owns, so it is open at every `poll` until it is deregistered,
+/// and the number of the one it was lent, to compare at
+/// [`Reactor::deregister`].
+struct Watched {
+    registered: RawFd,
+    descriptor: Arc<OwnedFd>,
+    interest: Interest,
+    waiter: Waiter,
+}
+
+/// The refusal of a [`Reactor::deregister`] with another descriptor than
+/// the registered one.
+fn another_descriptor() -> io::Error {
+    io::Error::new(
+        io::ErrorKind::InvalidInput,
+        "deregistered with another descriptor than the registered one",
+    )
 }
 
 /// The token of [`EpollReactor`]'s own `eventfd`.
@@ -416,18 +448,20 @@ impl fmt::Debug for EpollReactor {
 }
 
 impl Reactor for EpollReactor {
-    fn register(&self, descriptor: RawFd, interest: Interest, waiter: Waiter) -> io::Result<Token> {
+    fn register(
+        &self,
+        descriptor: BorrowedFd<'_>,
+        interest: Interest,
+        waiter: Waiter,
+    ) -> io::Result<Token> {
         let token = self.next.fetch_add(1, Ordering::Relaxed);
         let mut entries = lock(&self.entries);
-        // SAFETY: the caller keeps `descriptor` open until it deregisters
-        // it (the trait's contract); the borrow lasts for this call only.
-        let borrowed = unsafe { BorrowedFd::borrow_raw(descriptor) };
         let flags = interest.epoll() | EpollFlags::EPOLLET;
-        self.epoll.add(borrowed, EpollEvent::new(flags, token))?;
+        self.epoll.add(descriptor, EpollEvent::new(flags, token))?;
         entries.insert(
             token,
             Entry {
-                descriptor,
+                descriptor: descriptor.as_raw_fd(),
                 interest,
                 waiter,
             },
@@ -435,14 +469,14 @@ impl Reactor for EpollReactor {
         Ok(Token(token))
     }
 
-    fn deregister(&self, token: Token) -> io::Result<()> {
+    fn deregister(&self, token: Token, descriptor: BorrowedFd<'_>) -> io::Result<()> {
         let Some(entry) = lock(&self.entries).remove(&token.0) else {
             return Ok(());
         };
-        // SAFETY: as in `register`; a descriptor closed meanwhile is
-        // reported as EBADF or ENOENT and ignored.
-        let borrowed = unsafe { BorrowedFd::borrow_raw(entry.descriptor) };
-        match self.epoll.delete(borrowed) {
+        if entry.descriptor != descriptor.as_raw_fd() {
+            return Err(another_descriptor());
+        }
+        match self.epoll.delete(descriptor) {
             Ok(()) | Err(Errno::EBADF | Errno::ENOENT) => Ok(()),
             Err(error) => Err(error.into()),
         }
@@ -478,13 +512,15 @@ impl Reactor for EpollReactor {
     }
 }
 
-/// `poll` over the registered descriptors plus an `eventfd` for wakes: the
-/// reactor of a thread off a worker that waits for a descriptor
-/// ([`crate::wait::wait_descriptor`]). Registration costs no system call,
-/// so a thread registers for each wait. Level-triggered.
+/// `poll` over the registered descriptors plus an `eventfd` for wakes,
+/// level-triggered. A thread off a worker that waits for one descriptor
+/// ([`crate::wait::wait_descriptor`]) waits with
+/// `PollReactor::poll_one`, which registers nothing; a registration
+/// keeps a duplicate of the descriptor (`Watched`) until it is
+/// deregistered.
 pub struct PollReactor {
     wakes: EventFd,
-    entries: Mutex<Vec<(u64, Entry)>>,
+    entries: Mutex<Vec<(u64, Watched)>>,
     next: AtomicU64,
 }
 
@@ -495,6 +531,36 @@ impl PollReactor {
             entries: Mutex::new(Vec::new()),
             next: AtomicU64::new(1),
         })
+    }
+
+    /// Wait until `descriptor`, borrowed for the call and not registered,
+    /// is ready for one of `interest`, [`Reactor::wake`] is called or
+    /// `deadline` passes; what it is ready for, [`Interest::NONE`] after a
+    /// wake, a deadline or an interrupted wait. One `poll` of the
+    /// descriptor and the eventfd, and a `read` of the eventfd after a
+    /// wake: the calls of a registration and a [`Reactor::wait`], without
+    /// the registration.
+    pub(crate) fn poll_one(
+        &self,
+        descriptor: BorrowedFd<'_>,
+        interest: Interest,
+        deadline: Option<Instant>,
+    ) -> io::Result<Interest> {
+        let mut fds = [
+            PollFd::new(self.wakes.as_fd(), PollFlags::POLLIN),
+            PollFd::new(descriptor, interest.poll()),
+        ];
+        match nix::poll::poll(&mut fds, timeout(deadline)) {
+            Ok(_) => {}
+            Err(Errno::EINTR) => return Ok(Interest::NONE),
+            Err(error) => return Err(error.into()),
+        }
+        if fds[0].revents().is_some_and(|ready| !ready.is_empty()) {
+            drain(&self.wakes);
+        }
+        Ok(Interest::of_poll(
+            fds[1].revents().unwrap_or(PollFlags::empty()),
+        ))
     }
 }
 
@@ -507,12 +573,19 @@ impl fmt::Debug for PollReactor {
 }
 
 impl Reactor for PollReactor {
-    fn register(&self, descriptor: RawFd, interest: Interest, waiter: Waiter) -> io::Result<Token> {
+    fn register(
+        &self,
+        descriptor: BorrowedFd<'_>,
+        interest: Interest,
+        waiter: Waiter,
+    ) -> io::Result<Token> {
         let token = self.next.fetch_add(1, Ordering::Relaxed);
+        let duplicate = Arc::new(descriptor.try_clone_to_owned()?);
         lock(&self.entries).push((
             token,
-            Entry {
-                descriptor,
+            Watched {
+                registered: descriptor.as_raw_fd(),
+                descriptor: duplicate,
                 interest,
                 waiter,
             },
@@ -520,18 +593,25 @@ impl Reactor for PollReactor {
         Ok(Token(token))
     }
 
-    fn deregister(&self, token: Token) -> io::Result<()> {
-        lock(&self.entries).retain(|(known, _)| *known != token.0);
+    fn deregister(&self, token: Token, descriptor: BorrowedFd<'_>) -> io::Result<()> {
+        let mut entries = lock(&self.entries);
+        let Some(at) = entries.iter().position(|(known, _)| *known == token.0) else {
+            return Ok(());
+        };
+        let (_, entry) = entries.remove(at);
+        if entry.registered != descriptor.as_raw_fd() {
+            return Err(another_descriptor());
+        }
         Ok(())
     }
 
     fn wait(&self, deadline: Option<Instant>, events: &mut Vec<Event>) -> io::Result<()> {
-        let watched: Vec<(u64, RawFd, Interest, Waiter)> = lock(&self.entries)
+        let watched: Vec<(u64, Arc<OwnedFd>, Interest, Waiter)> = lock(&self.entries)
             .iter()
             .map(|(token, entry)| {
                 (
                     *token,
-                    entry.descriptor,
+                    Arc::clone(&entry.descriptor),
                     entry.interest,
                     entry.waiter.clone(),
                 )
@@ -540,10 +620,7 @@ impl Reactor for PollReactor {
         let mut fds = Vec::with_capacity(watched.len() + 1);
         fds.push(PollFd::new(self.wakes.as_fd(), PollFlags::POLLIN));
         for (_, descriptor, interest, _) in &watched {
-            // SAFETY: registered descriptors stay open until deregistered
-            // (the trait's contract); the borrow lasts for the `poll`.
-            let borrowed = unsafe { BorrowedFd::borrow_raw(*descriptor) };
-            fds.push(PollFd::new(borrowed, interest.poll()));
+            fds.push(PollFd::new(descriptor.as_fd(), interest.poll()));
         }
         match nix::poll::poll(&mut fds, timeout(deadline)) {
             Ok(_) => {}
@@ -553,12 +630,12 @@ impl Reactor for PollReactor {
         if fds[0].revents().is_some_and(|ready| !ready.is_empty()) {
             drain(&self.wakes);
         }
-        for (fd, (token, _, _, waiter)) in fds[1..].iter().zip(watched) {
+        for (fd, (token, _, _, waiter)) in fds[1..].iter().zip(&watched) {
             let ready = Interest::of_poll(fd.revents().unwrap_or(PollFlags::empty()));
             if !ready.is_empty() {
                 events.push(Event {
-                    token: Token(token),
-                    waiter,
+                    token: Token(*token),
+                    waiter: waiter.clone(),
                     ready,
                 });
             }
