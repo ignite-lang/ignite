@@ -219,3 +219,31 @@ fn a_user_fn_named_set_gives_its_receiver_no_roots() {
 fn a_user_fn_named_append_gives_its_receiver_no_roots() {
     assert_user_fn_stores_nothing("append", "other: TcpStream", "b");
 }
+
+/// Adversary pass 2 on unit counts (wave 11): the case of
+/// `a_user_fn_named_put_gives_its_receiver_no_roots` with a receiver whose
+/// type the checker does not know statically (a local bound from an `if`).
+/// `builtin_method` answers yes for an unknown receiver type, so `stores`
+/// takes the `Map.put` row and gives `c` the roots of `b`: E016 for
+/// `b.read` on a program the unit's base accepts (before the unit `put`
+/// extended no roots). The same false E016 for a user `push` is there at
+/// the base.
+#[test]
+fn a_user_fn_named_put_on_a_receiver_of_unknown_type_gives_it_no_roots() {
+    let out = check(
+        r#"type Conn { stream: TcpStream }
+
+fn put(c: Conn, other: TcpStream) -> Int = 0
+
+fn f(a: TcpStream, b: TcpStream, flag: Bool) -> Result<Input, IoError> requires [a.read] {
+  var c = if flag { Conn { stream = a } } else { Conn { stream = a } }
+  let n = c.put(b)
+  return c.stream.read(4096)
+}
+"#,
+    );
+    assert_eq!(
+        out, "",
+        "a user fn named `put` on a receiver of unknown type extended its roots:\n{out}"
+    );
+}
