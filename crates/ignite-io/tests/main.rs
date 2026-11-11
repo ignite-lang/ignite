@@ -14,6 +14,7 @@ mod tcp;
 mod terminal;
 mod tls;
 mod tls_adversary;
+mod unsafe_adversary;
 mod urgent;
 mod waiter;
 mod warnings;
