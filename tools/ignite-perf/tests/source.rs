@@ -13,6 +13,9 @@ fn the_harness_bundle_holds_every_source_file_of_the_crate() {
         ));
     }
     files.sort();
+    // A module of the crate by `#[path]`: the release runtime's recipe,
+    // shared with the driver's build script.
+    files.push("../../crates/ignite-rt/release_std.rs".to_string());
     let listed: Vec<&str> = HARNESS_SOURCE.iter().map(|(name, _)| *name).collect();
     assert_eq!(files, listed);
     for (name, text) in HARNESS_SOURCE {
