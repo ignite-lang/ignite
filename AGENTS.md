@@ -544,7 +544,12 @@ was open for three days; a coordinator does this instead of what cost them:
   with `gh release edit`.
 - Quality gate (`docs/quality.md`): in the release commit, run `task quality RUN=vX.Y.Z`, which
   appends the run to `quality/history.jsonl` and regenerates `quality/trend.md` and the book's
-  quality page. The release is refused, and not cut, when it fails: a count, size or
+  quality page. No measured number refuses a release (Timo, 2026-11-11: "Let's just track the
+  numbers, but let's not block the release"): the run prints what the rest of this bullet calls
+  refused as `worse than the last release, tracked and not refused`, records the run under the
+  release's label and exits 0, and the release notes list each such row with both values and the
+  id of its story (a row without a story gets a draft before the release is cut). What the run
+  lists: a count, size or
   hill-climb row worse by any amount than at the last release (a cell of the binary-size rows
   3.2 and 3.9 held by a new `decision` excepted, below; the nearest `v*` tag reachable
   from HEAD, as `git describe` finds it; its records in the history, never a refused
@@ -560,27 +565,24 @@ was open for three days; a coordinator does this instead of what cost them:
   RUN=vX.Y.Z` with `IGNITE_PERF_AWS_PROFILE` set (spending on it is approved; one spot
   `c7i.metal-24xl`, 5 passes of each tree by default, and the cost of a run with 5 timing passes
   is not measured yet): it measures the timing rows and
-  the native benchmark of both trees interleaved on a dedicated EC2 host and refuses the
-  release, exit 1, when a row of HEAD is worse than BASE's beyond its tolerance, or worse in
-  every pass than every pass of BASE (a release run with fewer than 5 passes is an error). A
-  release needs every row unrefused. A row refused beyond its tolerance stands at once. A row
-  refused only by the every-pass rule, inside its tolerance, is measured in one further run with
-  the same BASE and HEAD; a row two runs refuse stands; a row refused for the first time in the
-  second run gets one third run under the same rule; a release candidate has at most three
-  runs, and after the third every row refused in it stands. This is an operator procedure: no
-  code enforces it. The mode fails when anything tagged by the run is left in
+  the native benchmark of both trees interleaved on a dedicated EC2 host and prints, as `worse
+  than the base, tracked and not refused`, every row of HEAD that is worse than BASE's beyond
+  its tolerance, or worse in every pass than every pass of BASE (a release run with fewer than
+  5 passes is an error). It exits 0 and its records carry the release's label; a release has
+  one such run. The mode fails when anything tagged by the run is left in
   the account. Commit the regenerated files with the release; the release notes carry the
   release's row of `quality/trend.md`, its dedicated-host row and the run's cost (`machine` of
   its records).
-- No release is worse than the release before it on any row (Timo, 2026-11-10: "every release
-  should be an improvement in quality, not even allowed to accept 10% degregation"), the
-  binary-size rows excepted (next bullet). A row that
-  `task quality RUN=vX.Y.Z` or `task quality-remote` reports worse than the last release is fixed
-  before the release; it is not accepted by a `decision`, by an agent or by a threshold above the
-  last release's value. A bar a `decision` made worse since the last release tag blocks the
-  release until the value is back and the decision is withdrawn. The release waits; it is not cut
-  with the row open. None of this holds a binary-size row: there a `decision` is what lets a cell
-  grow.
+- Every release aims to be better than the release before it on every row (Timo, 2026-11-10:
+  "every release should be an improvement in quality"), and the numbers are tracked, not a
+  block (Timo, 2026-11-11: "the general idea is to get better every time, but the metrics, of
+  course, need to make sense"; "Let's just track the numbers, but let's not block the
+  release"). This replaces the rule of 2026-11-10 that a release waits for every row: v0.16.0
+  waited on one cell, the p99 of `terminal/connect-8` at 1.15 of v0.15.0 inside its 20 %
+  tolerance, while the p99 row over its six cells was at 0.65. A row that
+  `task quality RUN=vX.Y.Z` or `task quality-remote` prints as worse than the last release goes
+  into the release notes with both values, and a story in the plan takes it (the next wave's
+  first candidates). The binary-size rows keep their decisions (next bullet).
 - Binary size is the one exception, and time comes before bytes (Timo, 2026-11-11: "increase in
   binary size isn't a big deal ... if we're adding more code and more logic, then obviously the
   size will increase ... what would be bad is execution time, compile time"). A size row (3.2,

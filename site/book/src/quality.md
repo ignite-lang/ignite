@@ -3,8 +3,9 @@
 <!-- Generated from quality/baseline.json and quality/history.jsonl by `task quality`; site::quality_page_is_generated checks it. -->
 
 Ignite keeps a written set of quality metrics. Today's values are the bar: a merge may not make a
-gated metric worse, a release may not be worse than the release before it, and an improvement is
-written into the bar in the same change, so the bar only moves one way. The list, its kinds and its
+gated metric worse, and an improvement is written into the bar in the same change, so the bar only
+moves one way. A release measures every row against the release before it; a row that is worse is
+tracked: the release notes list it with the story that takes it. The list, its kinds and its
 instruments are in [`docs/quality.md`](https://github.com/ignite-lang/ignite-lang/blob/main/docs/quality.md);
 the bars are in `quality/baseline.json` and every measured value in `quality/history.jsonl`.
 
@@ -29,8 +30,8 @@ The binary-size rows (3.2, 3.9) are the one exception for a release, marked `rel
 `quality/baseline.json`: a release that adds code may leave a cell of them above the release before
 it when the cell's bar carries a new decision naming the code that added the bytes, and the release
 run lists every such cell. Without that decision, or with one the release before it already held,
-the release is refused. A merge holds these rows to their bars like any other, and bytes are never
-bought with time.
+the cell is listed as worse. A merge holds these rows to their bars like any other, and bytes are
+never bought with time.
 
 Current values: run `v0.16.0` on 2026-11-10, commit `e009426f`.
 

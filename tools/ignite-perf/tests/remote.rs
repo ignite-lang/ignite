@@ -1294,11 +1294,11 @@ fn the_release_judgement_reads_the_bases_baseline_and_returns_what_it_prints() {
     );
     assert_eq!(carried.listed, "", "a refused cell is listed");
     assert!(
-        carried.refusal.starts_with(
-            "release v0.16.0 refused:\n  3.9 rust/todo: 0.723× at the base, 0.864× now"
-        ) && carried.refusal.ends_with('\n'),
+        carried.tracked.starts_with(
+            "release v0.16.0: worse than the base, tracked and not refused:\n  3.9 rust/todo: 0.723× at the base, 0.864× now"
+        ) && carried.tracked.ends_with('\n'),
         "the refusal the run prints: {:?}",
-        carried.refusal
+        carried.tracked
     );
 
     std::fs::write(
@@ -1318,7 +1318,7 @@ fn the_release_judgement_reads_the_bases_baseline_and_returns_what_it_prints() {
         ),
         "the list the run prints"
     );
-    assert_eq!((passed.note.as_str(), passed.refusal.as_str()), ("", ""));
+    assert_eq!((passed.note.as_str(), passed.tracked.as_str()), ("", ""));
 
     let unread = remote::judge_release(&root, "v0.0.0", "v0.16.0", &rows).unwrap();
     assert!(

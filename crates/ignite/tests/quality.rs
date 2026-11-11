@@ -2212,8 +2212,9 @@ pub fn render_site_page(baseline: &Baseline, history: &[Record]) -> String {
         "# Quality\n\n\
 <!-- Generated from quality/baseline.json and quality/history.jsonl by `task quality`; site::quality_page_is_generated checks it. -->\n\n\
 Ignite keeps a written set of quality metrics. Today's values are the bar: a merge may not make a\n\
-gated metric worse, a release may not be worse than the release before it, and an improvement is\n\
-written into the bar in the same change, so the bar only moves one way. The list, its kinds and its\n\
+gated metric worse, and an improvement is written into the bar in the same change, so the bar only\n\
+moves one way. A release measures every row against the release before it; a row that is worse is\n\
+tracked: the release notes list it with the story that takes it. The list, its kinds and its\n\
 instruments are in [`docs/quality.md`](https://github.com/ignite-lang/ignite-lang/blob/main/docs/quality.md);\n\
 the bars are in `quality/baseline.json` and every measured value in `quality/history.jsonl`.\n\n\
 - **gate**: a count of failures; the bar is never above today, usually 0.\n\
@@ -2242,8 +2243,8 @@ reference without a bar.\n\n",
 `quality/baseline.json`: a release that adds code may leave a cell of them above the release before\n\
 it when the cell's bar carries a new decision naming the code that added the bytes, and the release\n\
 run lists every such cell. Without that decision, or with one the release before it already held,\n\
-the release is refused. A merge holds these rows to their bars like any other, and bytes are never\n\
-bought with time.\n\n",
+the cell is listed as worse. A merge holds these rows to their bars like any other, and bytes are\n\
+never bought with time.\n\n",
             sizes.join(", ")
         ));
     }
@@ -2724,10 +2725,39 @@ pub fn run_judged(
     (release, listed)
 }
 
+/// What [`record`] writes to stderr for the rows of the release `run` that
+/// the release check finds worse than at the last release (`worse`, the
+/// `refused` of [`Release`]): they are tracked and refuse no release (the
+/// operator, 2026-11-11: "track the numbers, but let's not block the
+/// release"); the release notes list each with the story that takes it.
+/// Nothing for an empty list.
+pub fn tracked_section(run: &str, worse: &[String]) -> String {
+    if worse.is_empty() {
+        return String::new();
+    }
+    format!(
+        "release {run}: worse than the last release, tracked and not refused:\n  {}\n",
+        worse.join("\n  ")
+    )
+}
+
+#[test]
+fn a_release_prints_its_worse_rows_as_tracked() {
+    assert_eq!(tracked_section("v0.16.0", &[]), "");
+    let worse = [
+        "3.7 llvm/terminal/connect-8: 1.099 at the last release, 1.282 now".to_string(),
+        "1.2 eval: 770 at the last release, 771 now".to_string(),
+    ];
+    assert_eq!(
+        tracked_section("v0.16.0", &worse),
+        "release v0.16.0: worse than the last release, tracked and not refused:\n  3.7 llvm/terminal/connect-8: 1.099 at the last release, 1.282 now\n  1.2 eval: 770 at the last release, 771 now\n"
+    );
+}
+
 /// The records [`record`] appends to the history for the run `label`: one
 /// per value. Under a release's label the record of a cell in `grown`
 /// carries the decision that holds it, which the release's row of the trend
-/// is generated from; a refused release is labelled `run` and carries none.
+/// is generated from.
 pub fn run_records(
     values: &[Value],
     grown: &[Grown],
@@ -2765,9 +2795,10 @@ pub fn run_records(
 
 /// `task quality`: read every source's measured values from
 /// `target/quality/` (the gate tests and `ignite-perf quality` wrote them),
-/// refuse a release (`IGNITE_QUALITY_RUN=vX.Y.Z`) whose count rows are worse
-/// than the last, print the cells of a size row a decision lets grow
-/// ([`grown_section`], refused or not), append one record per metric and target to
+/// print the rows of a release (`IGNITE_QUALITY_RUN=vX.Y.Z`) that are worse
+/// than at the last ([`tracked_section`]: tracked, the release is not refused
+/// by them), print the cells of a size row a decision lets grow
+/// ([`grown_section`]), append one record per metric and target to
 /// `quality/history.jsonl` with its `host` (`IGNITE_QUALITY_HOST`, default
 /// `local`) and regenerate `quality/trend.md`, the table of
 /// `docs/quality.md` and the book page. The sizes of `ignite-perf quality`
@@ -2803,7 +2834,7 @@ fn record() {
         save_baseline(&baseline);
     }
     let host = std::env::var("IGNITE_QUALITY_HOST").unwrap_or_else(|_| "local".to_string());
-    let mut errors = check(&baseline, "perf", &perf, None);
+    let errors = check(&baseline, "perf", &perf, None);
     let run = std::env::var("IGNITE_QUALITY_RUN").unwrap_or_else(|_| "run".to_string());
     let history = read_history();
     let (Release { refused, grown }, listed) =
@@ -2824,11 +2855,10 @@ fn record() {
             .unwrap()
             .as_secs(),
     );
-    let label = if refused.is_empty() {
-        run.clone()
-    } else {
-        "run".to_string()
-    };
+    std::io::stderr()
+        .write_all(tracked_section(&run, &refused).as_bytes())
+        .unwrap();
+    let label = run.clone();
     let mut text = std::fs::read_to_string(history_path()).unwrap_or_default();
     for record in run_records(&values, &grown, &commit, &date, &label, &host) {
         text.push_str(&record.line());
@@ -2836,11 +2866,6 @@ fn record() {
     }
     std::fs::write(history_path(), text).unwrap();
     write_pages(&baseline, &read_history());
-    errors.extend(
-        refused
-            .iter()
-            .map(|e| format!("release {run} refused: {e}")),
-    );
     assert!(
         errors.is_empty(),
         "task quality refuses this run:\n  {}",
