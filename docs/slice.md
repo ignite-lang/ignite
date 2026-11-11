@@ -11361,8 +11361,8 @@ and for a configured `debug` alike.
 
 ## NN Every binary is at or below its v0.15.0 size, and peak memory at one connection with it
 
-Story `binary-size-back`: rows 3.9 and 3.2 of `docs/quality.md` at v0.15.0's bytes or below,
-and row 3.8 at one connection with them. Each rule names the test that holds it; the bytes
+Story `binary-size-back`: rows 3.9 and 3.2 of `docs/quality.md` towards v0.15.0's bytes
+without a program running slower, and row 3.8 at one connection with them. Each rule names the test that holds it; the bytes
 of each step are in the commits.
 
 - Dev links. The line tables of `ignite-rt`, `ignite-io` and the generated program are split
@@ -11380,20 +11380,17 @@ of each step are in the commits.
   `-z pack-relative-relocs` and needs glibc 2.36 or newer (`GLIBC_ABI_DT_RELR`; before, 2.34);
   a `--static` build takes none
   (`binary_size::executables_pack_their_relative_relocations_on_both_targets`).
-- Scheduler. The worker limit counts the CPUs of the thread's affinity bounded by its
-  cgroup's CPU quota, version 2 and 1, rounded up, with code of its own instead of
-  `std::thread::available_parallelism` (`ignite_io::cpu_limit`, `cpu_limit::` against the
-  fixture trees in `crates/ignite-io/tests/fixtures/cgroup/`); a container's quota stays
-  honoured. A worker's timers are a binary heap whose entries no task is armed for are
+- Run time first. A binary may stay above its v0.15.0 bytes; a step stays only if the
+  instructions a program runs (callgrind: start, each request kind, a connection, a terminal
+  session, both IO modes, both targets) and the syscalls it makes are equal or fewer with it.
+  The commits that undid a step give the counts.
+- Scheduler. A worker's timers are a binary heap whose entries no task is armed for are
   swept when they are half of it (`sched::tests` in `crates/ignite-io/src/sched.rs`). The
   epoll reactor holds its registrations in a slab whose tokens carry a generation
   (`reactor::*::a_reused_registration_has_a_token_of_its_own`). `IGNITE_IO=threads` stays.
-- Size profiles. The workspace builds `ignite-rt` and `ignite-io` at `opt-level = "s"` in the
-  release profile; the generated manifest builds `ignite-io`, `nix`, `corosensei` and, with std,
-  `ignite-std` at `"s"` (`units::release_profile_builds_the_substrate_for_size`,
-  `units::release_profile_builds_the_standard_library_for_size`). Their speed is not
-  measured locally; the dedicated host's run of the release candidate decides, and a row of
-  3.3 or 3.7 it traces to them comes back to this story.
+- Size profiles. The generated manifest builds `nix` and `corosensei` at `opt-level = "s"`
+  (`units::release_profile_builds_the_substrate_for_size`); `ignite-rt`, `ignite-io` and
+  `ignite-std` keep the default level.
 - Release LLVM link. `-Wl,--discard-all` drops the symbols local to the linked objects;
   global names stay
   (`binary_size::an_llvm_release_executable_drops_the_local_symbols_of_its_objects`).
@@ -11422,4 +11419,7 @@ of each step are in the commits.
   count); `ignite-io` at `opt-level = 1` in the generated dev profile (a dev `todod` 0.5 MB
   smaller, compiling `ignite-io` four times the instructions); one codegen unit per crate
   in it (a few tens of KB, compiled on one core); dropping `IGNITE_IO=threads` (decided to
-  stay).
+  stay); `opt-level = "s"` for `ignite-rt`, `ignite-io` and `ignite-std` (5 to 7 % more
+  instructions per request); a worker limit of its own from the affinity mask and the cgroup
+  quota (about 16,000 more instructions at the first connection than
+  `std::thread::available_parallelism`).
