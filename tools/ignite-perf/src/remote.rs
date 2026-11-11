@@ -1714,8 +1714,30 @@ fn git_commit(repo: &Path, rev: &str) -> R<String> {
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
+/// The fewest passes of each tree a release run takes, for the timing rows and the benchmark
+/// alike: with five, two equal builds have disjoint samples on a row by chance in 1 of 252 runs.
+pub const RELEASE_PASSES: usize = 5;
+
+/// A release run (`--run vX.Y.Z`) on fewer than [`RELEASE_PASSES`] passes is an error before
+/// anything starts: `--passes 0` yields no timing row and `--bench-passes 0` no benchmark row,
+/// so the release would pass them unjudged. Other runs take any count.
+pub fn release_samples(run: &str, passes: usize, bench_passes: usize) -> R<()> {
+    if !run.starts_with('v') {
+        return Ok(());
+    }
+    for (flag, count) in [("--passes", passes), ("--bench-passes", bench_passes)] {
+        if count < RELEASE_PASSES {
+            return Err(format!(
+                "release {run}: {flag} {count} is fewer than the {RELEASE_PASSES} passes a release is judged on"
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// `ignite-perf quality-remote`.
 pub fn main(args: &RemoteArgs) -> R<i32> {
+    release_samples(&args.run, args.passes, args.bench_passes)?;
     let profile = profile(args, std::env::var("IGNITE_PERF_AWS_PROFILE").ok())?;
     let region = args
         .region

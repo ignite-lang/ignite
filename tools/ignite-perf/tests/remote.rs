@@ -513,3 +513,26 @@ fn the_host_takes_five_samples_of_each_tree() {
     };
     assert_eq!((count("base"), count("head")), (5, 5));
 }
+
+/// A release run on fewer samples than five refuses to start: `--passes 0` yields no timing
+/// row and `--bench-passes 0` no benchmark row, so the release would pass both unjudged. Runs
+/// that are not a release (`run`, `bar`) take any count.
+#[test]
+fn a_release_run_takes_at_least_five_passes() {
+    assert!(remote::release_samples("v0.16.0", 5, 5).is_ok());
+    assert!(remote::release_samples("v0.16.0", 7, 6).is_ok());
+    assert!(remote::release_samples("run", 0, 0).is_ok());
+    assert!(remote::release_samples("bar", 1, 1).is_ok());
+    for (passes, bench_passes, flag) in [
+        (0, 5, "--passes 0"),
+        (4, 5, "--passes 4"),
+        (5, 0, "--bench-passes 0"),
+        (5, 4, "--bench-passes 4"),
+    ] {
+        let refused = remote::release_samples("v0.16.0", passes, bench_passes);
+        assert!(
+            refused.as_ref().is_err_and(|e| e.contains(flag)),
+            "a release with {flag} was not refused: {refused:?}"
+        );
+    }
+}

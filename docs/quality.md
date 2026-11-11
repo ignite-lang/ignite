@@ -22,8 +22,9 @@ shows the same metrics with their current values and trend.
 - **ratchet**: a value with a direction (`lower` or `higher` is better) and a tolerance, a count
   or a percentage of the bar.
 - **hill-climb**: tracked and aimed at the target the table names; its bar stays the first
-  assessment's value, and a move either way is recorded, not refused (a missing value is). Once
-  the target is reached the metric becomes a gate.
+  assessment's value, and a merge records a move either way, not refused (a missing value is).
+  A release judges it like any other row: worse than the last release is refused (section
+  "`task quality` and releases"). Once the target is reached the metric becomes a gate.
 
 A metric that differs by target has one bar per target: `rust` (the Rust target), `llvm` (the
 LLVM target) and `eval` (the compile-time evaluator, where it runs); `all` is a value that does
@@ -86,13 +87,18 @@ listed it, one `main` does not already hold for it. Every outcome of a run is in
 with its host and regenerates `quality/trend.md`, the table below and the book page.
 `IGNITE_BLESS=1 task quality` writes improvements of the count rows into the bars and gives a
 timing row without a bar its first value. With `RUN=vX.Y.Z` the run is a release:
-`quality::record` refuses it when a row is worse than at the last release (or the bar, before
-the first release) by any amount, and then records the run as `run`, not as the release. Every
+`quality::record` refuses it when a row is worse than at the last release by any amount, and
+then records the run as `run`, not as the release. The last release is the one that was
+published: the newest `v*` tag reachable from HEAD other than the candidate, and its values are
+the history's last local run under that label; records under any other `v*` label (a candidate
+the gate refused, the candidate itself) are never the reference, a tag without a record in the
+history refuses the release, and before the first tag the reference is the `bar` run. Every
 row it judges is a deterministic value (a count, or a size such as 3.2), so its tolerance there
-is 0, whatever the metric's tolerance for a merge. No `decision` holds a row for a release (no
-release is worse than the release before it on any row, `AGENTS.md` § Releases): a merge may
-still move a bar worse with a `decision`, but the release check refuses the row all the same,
-and the refusal names the decision so the reader sees what to withdraw. Timing and benchmark
+is 0, whatever the metric's tolerance for a merge; a hill-climb row is judged like any other.
+No `decision` holds a row for a release (no release is worse than the release before it on any
+row, `AGENTS.md` § Releases): a merge may still move a bar worse with a `decision`, but a bar a
+decision moved worse than the last release refuses the release, whatever the measured value,
+until the decision is withdrawn, and the refusal names the decision. Timing and benchmark
 rows are not part of that refusal: they are judged only on the dedicated host's records, where
 `task quality-remote` refuses them (next section). The release steps in `AGENTS.md` § Releases
 run both.
@@ -140,9 +146,14 @@ Timing on the shared workstation is not comparable between runs, so the timing r
   sample, by any amount (a row of one sample each: any worse value). The tolerance is only a
   bound on noise: where the samples overlap the difference is not shown and the tolerance
   decides; where they do not, the row is worse. With 5 passes two equal builds have disjoint
-  samples by chance in 1 of 252 runs (1 of 20 with 3). No `decision` holds a row. A refused
-  run's records are labelled `run`, and the mode exits 1. Both trees are measured on the same
-  host in the same run, so the refusal does not compare across machines.
+  samples on one row by chance in 1 of 252 runs (1 of 20 with 3). A run judges 41 noisy rows (5
+  timing rows, 36 llvm and rust benchmark rows), so if the rows are independent two equal
+  builds are refused by this rule in about 15 % of runs. A release run refused only by this
+  rule, on rows inside their tolerance, is run once more; a row refused in both runs stands. A
+  release run takes at least 5 passes (`--passes`, `--bench-passes`; fewer is an error before
+  anything starts). No `decision` holds a row. A refused run's records are labelled `run`, and
+  the mode exits 1. Both trees are measured on the same host in the same run, so the refusal
+  does not compare across machines.
 - **Cost.** The first run (BASE = HEAD, an A/A run) took 0.23 instance-hours from launch to
   terminated, 0.23 USD at the spot price, of which about 7 minutes were the termination; its
   passes agreed within 0.3 %. Each record carries its run's cost (`machine`).
@@ -205,6 +216,8 @@ behaviour (`bench/native/`, rows 3.3, 3.7, 3.8 and 3.9), after the timing rows
 The `target` column names the target of a metric where one is set. A wave that moves a metric
 records the change in its close (the wave page under `.engineering/waves/` and the PR body): the
 metric, the target, the value before and after, and the run of `task quality` that measured it.
+A merge may move a hill-climb row either way; a release may not move it worse than the last
+release.
 
 ## The metrics
 

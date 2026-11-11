@@ -513,15 +513,20 @@ without waiting for a person.
   with `gh release edit`.
 - Quality gate (`docs/quality.md`): in the release commit, run `task quality RUN=vX.Y.Z`, which
   appends the run to `quality/history.jsonl` and regenerates `quality/trend.md` and the book's
-  quality page. The release is refused, and not cut, when it fails: a count or size row worse
-  than at the last release (or the bar) by any amount, whether or not a `decision` moved its bar;
-  the refusal names the decision to withdraw. Timing rows there are `host: local` and
+  quality page. The release is refused, and not cut, when it fails: a count, size or
+  hill-climb row worse by any amount than at the last release (the newest `v*` tag; its records
+  in the history, never a refused candidate's; the bar before the first tag), or a bar a
+  `decision` moved worse than the last release, whatever the value; the refusal names the
+  decision to withdraw. Timing rows there are `host: local` and
   refuse nothing. Then run `task quality-remote BASE=<last release tag> HEAD=<release commit>
-  RUN=vX.Y.Z` with `IGNITE_PERF_AWS_PROFILE` set (spending on it is approved, about two thirds of an
-  instance-hour of a spot `c7i.metal-24xl`): it measures the timing rows and the native benchmark of both trees
-  interleaved on a dedicated EC2 host (5 passes each) and refuses the release, exit 1, when a
-  row of HEAD is worse than BASE's beyond its tolerance, or worse in every pass than every pass
-  of BASE; it fails when anything tagged by the run is left in
+  RUN=vX.Y.Z` with `IGNITE_PERF_AWS_PROFILE` set (spending on it is approved; one spot
+  `c7i.metal-24xl`, 5 passes of each tree by default, and the cost of a run with 5 timing passes
+  is not measured yet): it measures the timing rows and
+  the native benchmark of both trees interleaved on a dedicated EC2 host and refuses the
+  release, exit 1, when a row of HEAD is worse than BASE's beyond its tolerance, or worse in
+  every pass than every pass of BASE (a release run with fewer than 5 passes is an error). A
+  run refused only by the every-pass rule, on rows inside their tolerance, is run once more; a
+  row refused in both runs stands. It fails when anything tagged by the run is left in
   the account. Commit the regenerated files with the release; the release notes carry the
   release's row of `quality/trend.md`, its dedicated-host row and the run's cost (`machine` of
   its records).
