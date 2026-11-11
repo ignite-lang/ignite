@@ -542,6 +542,13 @@ pub const IN_PLACE: [InPlace; 15] = [
     in_place_row("Store", "upsert", Change::Handle),
 ];
 
+/// Whether a call of `row` stores an argument into its receiver, so that
+/// the receiver takes the argument's roots: a `Value` row that keeps what
+/// it is given (`push`, `set`, `append`, `Map.put`).
+pub fn stores_argument(row: &InPlace) -> bool {
+    row.change == Change::Value && matches!(row.method, "push" | "set" | "append" | "put")
+}
+
 /// What the builtin `method` changes on a receiver of the builtin type
 /// `receiver` ([`IN_PLACE`]). For a receiver whose type is not known, the
 /// change every row of that method name agrees on: `push` is a `Value`
@@ -2930,9 +2937,12 @@ impl Checker {
         if mutating {
             self.mutable_receiver(expr, receiver, name);
         }
-        if matches!(name.name.as_str(), "push" | "set" | "append")
-            && let Some(list) = place_root(receiver)
-        {
+        let stores = IN_PLACE.iter().any(|row| {
+            row.method == name.name
+                && stores_argument(row)
+                && receiver_type.is_none_or(|ty| ty == row.receiver)
+        });
+        if stores && let Some(list) = place_root(receiver) {
             let roots = self.arg_roots(args.iter());
             if let Some(local) = self
                 .scopes

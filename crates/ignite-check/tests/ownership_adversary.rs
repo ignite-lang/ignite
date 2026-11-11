@@ -97,13 +97,12 @@ fn field_ufcs() -> Int {
     );
 }
 
-/// "A Map.put of a handle losing its roots": the checker extends a
+/// "A Map.put of a handle losing its roots": the checker extended a
 /// receiver's roots with its arguments' for `push`, `set` and `append`
-/// only, not for the other Value rows of `IN_PLACE`. A `TcpStream` put
-/// into a `Map` and read back through `get` is used without the effect
-/// its parameter needs; the same program through `List.push` is E016.
+/// only, not for `Map.put` (story:map-put-handle-roots). A `TcpStream` put
+/// into a `Map` and read back through `get` must need the effect its
+/// parameter needs, as the same program through `List.push` does (E016).
 #[test]
-#[ignore = "story:map-put-handle-roots"]
 fn map_put_of_a_handle_keeps_its_roots() {
     let out = check(
         r#"fn via_list(s: TcpStream) -> Result<Input, IoError> requires [stdin.read] {
@@ -129,5 +128,28 @@ fn via_map(s: TcpStream) -> Result<Input, IoError> requires [stdin.read] {
     assert!(
         out.contains("add it to the `requires` of `via_map`"),
         "a TcpStream put into a Map lost its roots, no E016:\n{out}"
+    );
+}
+
+/// The rows of `IN_PLACE` whose call extends the receiver's roots with its
+/// arguments' roots: the value-changing rows that store an argument.
+#[test]
+fn the_in_place_rows_that_store_an_argument_extend_roots() {
+    let rows: Vec<String> = ignite_check::IN_PLACE
+        .iter()
+        .filter(|row| ignite_check::stores_argument(row))
+        .map(|row| format!("{}.{}", row.receiver, row.method))
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            "List.push",
+            "List.set",
+            "List.append",
+            "Bytes.push",
+            "Bytes.set",
+            "Bytes.append",
+            "Map.put",
+        ]
     );
 }

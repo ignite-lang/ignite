@@ -568,7 +568,9 @@ impl<'a> Typer<'a> {
     /// already (a UFCS receiver) with theirs, `ret` the declared result
     /// type, matched against `expected` first. Every argument of `pairs` is
     /// typed: one whose declared type is a fn type or which needs an
-    /// expected type after the others. E042 for a parameter left unbound.
+    /// expected type after the others, a record literal with a type
+    /// parameter of its own that nothing binds yet after the plain
+    /// arguments. E042 for a parameter left unbound.
     #[allow(clippy::too_many_arguments)]
     fn infer(
         &mut self,
@@ -589,18 +591,23 @@ impl<'a> Typer<'a> {
         for (found, declared) in pre {
             unify(&fresh(declared), found, &mut binds);
         }
-        let deferred: Vec<bool> = {
+        // The pass an argument is typed in: 0 in order, 2 after the others
+        // (a fn type or a value that needs an expected type), 1 a record
+        // literal that waited in pass 0.
+        let mut stage: Vec<u8> = {
             let ambiguous = |n: &str| self.is_ambiguous_variant(n);
             pairs
                 .iter()
                 .map(|(arg, ty)| {
-                    needs_expected(arg, &ambiguous) || matches!(ty, Ty::Fn(..) | Ty::EffectFn(..))
+                    let last = needs_expected(arg, &ambiguous)
+                        || matches!(ty, Ty::Fn(..) | Ty::EffectFn(..));
+                    if last { 2 } else { 0 }
                 })
                 .collect()
         };
-        for pass in [false, true] {
+        for pass in 0..3u8 {
             for (i, (arg, declared)) in pairs.iter().enumerate() {
-                if deferred[i] != pass {
+                if stage[i] != pass {
                     continue;
                 }
                 let param = apply(&fresh(declared), &binds);
@@ -608,6 +615,13 @@ impl<'a> Typer<'a> {
                 let ambiguous = |n: &str| self.is_ambiguous_variant(n);
                 if !open || needs_expected(arg, &ambiguous) {
                     self.check(arg, &param);
+                    continue;
+                }
+                // A record literal with a type parameter nothing binds yet
+                // is typed after the arguments that follow it, as a closure
+                // is: typed now it is E042 whatever they give.
+                if pass == 0 && self.literal_waits(arg, &param) {
+                    stage[i] = 1;
                     continue;
                 }
                 // A closure and a record literal are typed against the
@@ -643,6 +657,35 @@ impl<'a> Typer<'a> {
             }
         }
         Some(instance)
+    }
+
+    /// Whether the record literal `arg`, typed now against `param`, leaves
+    /// one of its own type parameters unbound: one that `param` leaves open
+    /// and that no given field's declared type mentions. A field given a
+    /// record literal that waits by the same rule binds nothing.
+    fn literal_waits(&self, arg: &Expr, param: &Ty) -> bool {
+        let ExprKind::Record { name, fields } = &arg.kind else {
+            return false;
+        };
+        let Some(q) = self.records.get(&name.name) else {
+            return false;
+        };
+        let tparams = self.generics_of(q);
+        let declared = self.record_fields(q).unwrap_or_default();
+        let known: Vec<Ty> = match param {
+            Ty::GenericRecord(pq, args) if pq == q && args.len() == tparams.len() => args.clone(),
+            _ => vec![Ty::Param("'".to_string()); tparams.len()],
+        };
+        tparams.iter().zip(&known).any(|(p, k)| {
+            k.has_param(&is_var)
+                && !fields.iter().any(|f| {
+                    declared.iter().any(|(n, ty)| {
+                        *n == f.name.name
+                            && ty.has_param(&|x| x == p)
+                            && !self.literal_waits(&f.value, &ty.substitute(&tparams, &known))
+                    })
+                })
+        })
     }
 
     /// Arguments of a call of the generic `what` (E043 on a count

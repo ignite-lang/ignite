@@ -433,8 +433,10 @@ may come from:
 - a parameter `p` has the root `p`;
 - a local (`let`, `var`, `for`, pattern binding) has the roots of the expression it was bound
   from; an assignment `x = e` (or `x.f = e`) adds the roots of `e` to those of `x`, whatever
-  the control flow, so a `var` assigned from two parameters needs effects on both; `l.push(e)`
-  and `l.append(e)` add the roots of `e` to those of the local `l`;
+  the control flow, so a `var` assigned from two parameters needs effects on both; `l.push(e)`,
+  `l.set(i, e)`, `l.append(e)` and `m.put(k, e)` add the roots of their arguments to those of
+  the local `l` or `m` (the rows of `ignite_check::IN_PLACE` that store an argument,
+  `ignite_check::stores_argument`);
 - `e.f`, `e[i]`, `e.copy()`, `e.at(i)`, `e.slice(a, b)` and `e?` have the roots of `e`; so
   do the container reads that return an element on a receiver `e` of declared type `Map`:
   `e.get(k)`, `e.remove(k)` and `e.keys()` (since slice 17: a `requires []` fn could otherwise
@@ -10903,11 +10905,12 @@ type HttpServer<S> { listener: TcpListener, application: HttpApp<S, TcpStream>, 
   `HttpApp { .. }` infers `PipeStream` from `Http.serve`'s stream: a record literal passed to a
   generic fn is now typed against the parameter as far as the arguments before it bind it
   (`crates/ignite-types` typer, `generics::a_record_literal_argument_takes_its_type_parameters_from_the_call`).
-  Only those before it: a closure is deferred to the second pass and sees every other argument,
-  a record literal is not, so a literal before the argument that binds its parameter still
-  cannot infer it (E042; `adversary_http_app::a_record_literal_before_the_argument_that_binds_its_parameter`,
-  ignored for `story:typer-record-literal-deferred`). `Http.serve` and `serve_connection` take
-  the stream first, so their literals infer `T`.
+  A closure is deferred to the last pass and sees every other argument. A record literal with a
+  type parameter of its own that neither the arguments before it nor its given fields bind
+  waits for the plain arguments after it and is typed before the closures, so a literal before
+  the argument that binds its parameter infers it too
+  (`adversary_http_app::a_record_literal_before_the_argument_that_binds_its_parameter`); one
+  whose parameter no argument binds is still E042 at the literal.
   A literal bound by `let` with no annotation still has no `T` (E042), so such a binding writes
   `let app: HttpApp<S, PipeStream> = ..`. A declaration that wrote
   `HttpApp<X>` now writes `HttpApp<X, TcpStream>` (two fixtures of `crates/ignite/tests`
