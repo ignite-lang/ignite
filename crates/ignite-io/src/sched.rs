@@ -56,7 +56,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::{BinaryHeap, VecDeque};
 use std::io;
 use std::os::fd::{AsFd, BorrowedFd};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU8, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 use std::time::{Duration, Instant};
@@ -115,24 +115,34 @@ pub fn worker_limit() -> usize {
 /// counts, without its mount table walk and its 13 KB of code
 /// (story `binary-size-back`).
 pub fn cpu_limit(root: &Path) -> usize {
-    let cpus = std::fs::read_to_string(root.join("proc/thread-self/status"))
-        .ok()
-        .and_then(|status| {
-            status
-                .lines()
-                .find_map(|line| line.strip_prefix("Cpus_allowed_list:"))
-                .map(cpu_list_count)
-        })
-        .filter(|count| *count > 0)
-        .unwrap_or_else(|| {
-            nix::unistd::sysconf(nix::unistd::SysconfVar::_NPROCESSORS_ONLN)
-                .ok()
-                .flatten()
-                .map_or(1, |count| count.max(1) as usize)
-        });
+    let cpus = read(&root.join("proc/thread-self/status"))
+        .lines()
+        .find_map(|line| line.strip_prefix("Cpus_allowed_list:"))
+        .map_or(0, cpu_list_count);
+    let cpus = if cpus > 0 {
+        cpus
+    } else {
+        nix::unistd::sysconf(nix::unistd::SysconfVar::_NPROCESSORS_ONLN)
+            .ok()
+            .flatten()
+            .map_or(1, |count| count.max(1) as usize)
+    };
     cgroup_quota(root)
         .map_or(cpus, |quota| cpus.min(quota))
         .max(1)
+}
+
+/// The text of the file at `path`, empty when it cannot be read. Not
+/// inlined, as [`number`]: [`cpu_limit`] runs once per process.
+#[inline(never)]
+fn read(path: &Path) -> String {
+    std::fs::read_to_string(path).unwrap_or_default()
+}
+
+/// `text`, trimmed, as a number.
+#[inline(never)]
+fn number(text: &str) -> Option<u64> {
+    text.trim().parse().ok()
 }
 
 /// The number of CPUs a list such as `0-3,8,10-11` names.
@@ -141,9 +151,7 @@ fn cpu_list_count(list: &str) -> usize {
         .split(',')
         .filter_map(|range| {
             let (first, last) = range.split_once('-').unwrap_or((range, range));
-            let first: usize = first.trim().parse().ok()?;
-            let last: usize = last.trim().parse().ok()?;
-            Some(last.checked_sub(first)? + 1)
+            Some(number(last)?.checked_sub(number(first)?)? as usize + 1)
         })
         .sum()
 }
@@ -156,11 +164,12 @@ fn cpu_list_count(list: &str) -> usize {
 /// over `cpu.cfs_period_us` of the `cpu` controller's group, at the
 /// mount's root when the group is not inside it.
 fn cgroup_quota(root: &Path) -> Option<usize> {
-    let groups = std::fs::read_to_string(root.join("proc/self/cgroup")).ok()?;
+    let groups = read(&root.join("proc/self/cgroup"));
     let mount = root.join("sys/fs/cgroup");
-    let number =
-        |path: PathBuf| -> Option<u64> { std::fs::read_to_string(path).ok()?.trim().parse().ok() };
-    let cpus = |quota: u64, period: u64| (period > 0).then(|| quota.div_ceil(period) as usize);
+    let cpus = |quota: Option<u64>, period: Option<u64>| {
+        let (quota, period) = (quota?, period?);
+        (period > 0).then(|| quota.div_ceil(period) as usize)
+    };
     let mut limit: Option<usize> = None;
     let mut bound = |quota: Option<usize>| {
         if let Some(quota) = quota {
@@ -183,11 +192,9 @@ fn cgroup_quota(root: &Path) -> Option<usize> {
         if controllers.is_empty() {
             let mut dir = mount.join(path);
             loop {
-                let max = std::fs::read_to_string(dir.join("cpu.max")).ok();
-                bound(max.and_then(|max| {
-                    let (quota, period) = max.trim().split_once(' ')?;
-                    cpus(quota.parse().ok()?, period.parse().ok()?)
-                }));
+                let max = read(&dir.join("cpu.max"));
+                let (quota, period) = max.trim().split_once(' ').unwrap_or_default();
+                bound(cpus(number(quota), number(period)));
                 if dir == mount || !dir.pop() {
                     break;
                 }
@@ -203,11 +210,10 @@ fn cgroup_quota(root: &Path) -> Option<usize> {
             let group = Some(controller.join(path))
                 .filter(|dir| dir.is_dir())
                 .unwrap_or(controller);
-            let quota = number(group.join("cpu.cfs_period_us")).and_then(|period| {
-                let quota = std::fs::read_to_string(group.join("cpu.cfs_quota_us")).ok()?;
-                cpus(quota.trim().parse().ok()?, period)
-            });
-            bound(quota);
+            bound(cpus(
+                number(&read(&group.join("cpu.cfs_quota_us"))),
+                number(&read(&group.join("cpu.cfs_period_us"))),
+            ));
         }
     }
     limit
