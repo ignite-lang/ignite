@@ -1,0 +1,276 @@
+package call_moves
+
+// Story `std-mysql-client`, unit `call-moves`: a record passed by value to
+// an update while a later argument of the same call reads it, and a
+// `match` on a tuple of two places. tests/borrowed_reads.rs appends
+// executables to this file that make 1,000 and 2,000 updates or matches
+// over records holding lists of 10 and 200 elements; the allocations of one
+// update or match must not grow with the lists. They are not part of this
+// file, which the differential corpus runs on the evaluator. The functions
+// after `same_kind` are the guards: each one is a program in which a later
+// argument or an arm changes, borrows or leaves early around the variable.
+
+enum Val {
+  Nil
+  Num(Int)
+  Txt(Text)
+  Rec(List<(Text, Val)>)
+}
+
+type Ctx {
+  label: Text
+  inputs: List<(Text, Val)>
+  rows: List<Text>
+  count: Int
+}
+
+fn ctx(m: Int) -> Ctx {
+  var rows: List<Text> = []
+  var i = 0
+  while i < m {
+    rows.push("row {i}")
+    i = i + 1
+  }
+  Ctx { label = "ctx", inputs = [("b", Num(7))], rows = rows, count = 0 }
+}
+
+fn put(fields: List<(Text, Val)>, k: Text, v: Val) -> List<(Text, Val)> {
+  var out = fields
+  out.push((k, v))
+  out
+}
+
+fn set_in(r: Ctx, name: Text, v: Val) -> Ctx {
+  var o = r
+  o.inputs = put(o.inputs, name, v)
+  o.count = o.count + 1
+  o
+}
+
+fn read_in(r: Ctx, name: Text) -> Result<Val, Text> {
+  for e in r.inputs {
+    if e.0 == name {
+      return Ok(e.1)
+    }
+  }
+  Err("no input {name}")
+}
+
+// Form 9: the record is moved into `set_in` after `read_in` read it.
+fn attach(r0: Ctx) -> Result<Ctx, Text> {
+  var r = r0
+  r = set_in(r, "a", read_in(r, "b")?)
+  r = set_in(r, "c", read_in(r, "a")?)
+  Ok(r)
+}
+
+fn updates(m: Int, n: Int) -> Result<Int, Text> {
+  var r = ctx(m)
+  var i = 0
+  while i < n {
+    r = set_in(r, "a", read_in(r, "b")?)
+    i = i + 1
+  }
+  Ok(r.count + r.rows.len())
+}
+
+fn kind_of(v: Val) -> Text = match v {
+  Nil => "nil"
+  Num(_) => "num"
+  Txt(_) => "txt"
+  Rec(_) => "rec"
+}
+
+// Form 7: both places are matched by reference.
+fn same_kind(a: Val, b: Val) -> Result<Bool, Text> {
+  match (a, b) {
+    (Txt(x), Txt(y)) => Ok(x == y)
+    (Num(x), Num(y)) => Ok(x == y)
+    _ => Err("cannot compare {kind_of(a)} and {kind_of(b)}")
+  }
+}
+
+fn record(m: Int) -> Val {
+  var fields: List<(Text, Val)> = []
+  var i = 0
+  while i < m {
+    fields.push(("field {i}", Num(i)))
+    i = i + 1
+  }
+  Rec(fields)
+}
+
+fn compares(m: Int, n: Int) -> Int {
+  let a = record(m)
+  let b = record(m)
+  var k = 0
+  var i = 0
+  while i < n {
+    match same_kind(a, b) {
+      Ok(_) => { k = k + 1 }
+      Err(e) => { k = k + e.len() }
+    }
+    i = i + 1
+  }
+  k
+}
+
+// A later argument assigns the variable: the call gets the record as it was.
+fn later_assigns() -> Int {
+  var r = ctx(2)
+  r = set_in(r, "a", if true {
+    r = ctx(5)
+    Num(1)
+  } else {
+    Nil
+  })
+  r.rows.len() * 10 + r.count
+}
+
+// A later argument changes the variable in place.
+fn later_pushes() -> Int {
+  var r = ctx(2)
+  r = set_in(r, "a", if true {
+    r.rows.push("x")
+    Num(1)
+  } else {
+    Nil
+  })
+  r.rows.len() * 10 + r.count
+}
+
+fn grown(r: Ctx, rows: List<Text>) -> Int {
+  var o = r
+  o.rows.push("x")
+  o.rows.len() * 100 + rows.len()
+}
+
+fn first_of(r: Ctx, row: Text) -> Int {
+  var o = r
+  o.rows = []
+  o.rows.len() * 100 + row.len()
+}
+
+fn apply(r: Ctx, f: fn(Int) -> Int) -> Int {
+  var o = r
+  o.count = o.count + 5
+  f(o.count)
+}
+
+fn bumped(r: Ctx, n: Int) -> Int {
+  var o = r
+  o.count = o.count + n + 1
+  o.count * 10 + n
+}
+
+// Later arguments whose values borrow from the variable: a field and an
+// element to a parameter by reference, a closure that reads it, and an
+// `Int` field, which the Rust target passes by reference too.
+fn later_borrows() -> Int {
+  let r = ctx(3)
+  let s = ctx(2)
+  let t = ctx(1)
+  let u = ctx(0)
+  grown(r, r.rows) * 10000 + first_of(s, s.rows[1]) * 100 + apply(t, |n: Int| n + t.count + t.rows.len()) + bumped(u, u.count) * 1000000
+}
+
+fn step(r0: Ctx, k: Text) -> Result<Ctx, Text> {
+  var r = r0
+  r = set_in(r, "a", read_in(r, k)?)
+  Ok(r)
+}
+
+// `?` in a later argument returns early; the caller uses its record after.
+fn steps(keys: List<Text>) -> Int {
+  var r = ctx(1)
+  var failed = 0
+  for k in keys {
+    match step(r, k) {
+      Ok(next) => { r = next }
+      Err(_) => { failed = failed + 1 }
+    }
+  }
+  r.inputs.len() * 100 + r.count * 10 + failed
+}
+
+fn width(v: Val) -> Int = match v {
+  Txt(t) => t.len()
+  Rec(fields) => fields.len()
+  _ => 0
+}
+
+// An arm assigns one of the places of a tuple scrutinee.
+fn tuple_assigned() -> Int {
+  var a = Txt("ab")
+  var b = Txt("c")
+  match (a, b) {
+    (Txt(x), Txt(y)) => {
+      a = Txt("zzzz")
+      x.len() * 100 + y.len() * 10 + width(a)
+    }
+    _ => 0
+  }
+}
+
+// An arm changes one of the places in place.
+fn tuple_pushed() -> Int {
+  var l = ["a", "b"]
+  var v = Num(3)
+  match (l, v) {
+    (rows, Num(n)) => {
+      l.push("c")
+      rows.len() * 100 + l.len() * 10 + n
+    }
+    _ => 0
+  }
+}
+
+fn consume(v: Val) -> Int {
+  var w = v
+  w = Nil
+  width(w) + 1
+}
+
+// An arm moves one of the places at its last use.
+fn tuple_moved(a0: Val) -> Int {
+  var a = a0
+  let b = Num(2)
+  match (a, b) {
+    (Txt(x), Num(n)) => consume(a) * 1000 + x.len() * 10 + n
+    _ => 0
+  }
+}
+
+test "a record read by a later argument of its update gives the update's value" {
+  let c = ctx(3)
+  let attached = attach(c)
+  assert attached == Ok(Ctx { label = "ctx", inputs = [("b", Num(7)), ("a", Num(7)), ("c", Num(7))], rows = c.rows, count = 2 })
+  assert updates(4, 5) == Ok(9)
+  assert c.count == 0 && c.inputs.len() == 1
+}
+
+test "a tuple of places matched by reference gives the arms' values" {
+  assert same_kind(Txt("a"), Txt("a")) == Ok(true)
+  assert same_kind(Num(1), Num(2)) == Ok(false)
+  assert same_kind(Nil, record(2)) == Err("cannot compare nil and rec")
+  assert compares(3, 4) == 104
+}
+
+test "a later argument that changes the variable sees it as it was" {
+  assert later_assigns() == 21
+  assert later_pushes() == 21
+}
+
+test "a later argument that borrows from the variable reads it as it was" {
+  assert later_borrows() == 10000000 + 4030000 + 5 * 100 + 6
+}
+
+test "an early return from a later argument leaves the variable to the caller" {
+  assert steps(["b", "zz", "a", "q"]) == 322
+}
+
+test "an arm that changes or moves a place of the tuple matched sees the old value" {
+  assert tuple_assigned() == 214
+  assert tuple_pushed() == 233
+  assert tuple_moved(Txt("abc")) == 1032
+}

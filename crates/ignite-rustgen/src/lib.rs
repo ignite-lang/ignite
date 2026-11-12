@@ -50,8 +50,8 @@ use std::sync::OnceLock;
 use ignite_check::{BUILTIN_ENUMS, BUILTIN_STATICS, Symbols};
 use ignite_syntax::ast::{
     AliasDecl, BinaryOp, Block, ComponentDecl, ConstDecl, Decl, EnumDecl, Expr, ExprKind,
-    FieldInit, FnDecl, Ident, Import, Pattern, PatternKind, Program, ProtocolDecl, RecordDecl,
-    ResourceDecl, Span, Stmt, StmtKind, SystemDecl, TestDecl, Type, UnaryOp,
+    FieldInit, FnDecl, Ident, Import, NodeId, Pattern, PatternKind, Program, ProtocolDecl,
+    RecordDecl, ResourceDecl, Span, Stmt, StmtKind, SystemDecl, TestDecl, Type, UnaryOp,
 };
 use ignite_syntax::diagnostic::{Diagnostic, SourceFile};
 use ignite_types::ownership;
@@ -2079,6 +2079,9 @@ struct Generator<'a> {
     /// `for` elements that are references (`&T`) in their body, with the
     /// index of the scope that binds them ([`Generator::borrowed_for`]).
     borrowed_elements: Vec<(usize, String)>,
+    /// The late moves ([`TypedProgram::moves_late`]) of the fn call being
+    /// written, whose later arguments it binds first: only these move.
+    late: BTreeSet<NodeId>,
     /// Set while the next block generated is a fn body: its tail runs
     /// once, after every other use of the fn's variables.
     fn_body: bool,
@@ -2188,6 +2191,7 @@ impl<'a> Generator<'a> {
             renamed_uses: BTreeSet::new(),
             borrowed: BTreeSet::new(),
             borrowed_elements: Vec::new(),
+            late: BTreeSet::new(),
             fn_body: false,
             source,
             escaped_site_file: escape_str(source.map_or(module, |source| source.path.as_str())),
@@ -2396,9 +2400,11 @@ impl<'a> Generator<'a> {
     /// cannot move out of a reference or a capture; the analysis marks no
     /// place rooted at a borrowed parameter, a capture, or a pattern
     /// binding or `for` element of a place (20.3.1), and this keeps the
-    /// copy should it ever mark one.
+    /// copy should it ever mark one. A late move moves only inside the fn
+    /// call that binds its later arguments first ([`fn_call`](Self::fn_call)).
     fn moves(&self, expr: &Expr) -> bool {
-        self.types.is_some_and(|t| t.moves(expr))
+        self.types
+            .is_some_and(|t| t.moves(expr) && (!t.moves_late(expr) || self.late.contains(&expr.id)))
             && place_root(expr)
                 .is_some_and(|root| !self.is_borrowed(root) && !self.is_captured(root))
     }
@@ -3620,8 +3626,10 @@ impl<'a> Generator<'a> {
     /// `let b = t.to_bytes()` as `let b: &[u8] = t.as_bytes();` when `t`
     /// is a `Text` place and `rest`, the statements after it in its block,
     /// read `b` only as a slice (`docs/slice.md` 20.3.7), neither change
-    /// the variable of `t` nor bind `b` again: `b` is then read like a
-    /// borrowed parameter, and the text is not copied.
+    /// the variable of `t` nor bind `b` again, and move that variable
+    /// ([`TypedProgram::moves`], a late move included) in no statement
+    /// that reads `b` or comes before one that does: `b` is then read like
+    /// a borrowed parameter, and the text is not copied.
     fn lent_let(&mut self, stmt: &Stmt, rest: &[Stmt]) -> Option<String> {
         let StmtKind::Let {
             name,
@@ -3642,6 +3650,15 @@ impl<'a> Generator<'a> {
         let root = place_root(text)?;
         let changed = ownership::changed_in_stmts(rest, Some(types)).contains(root);
         if rebinds || changed || !types.reads_as_slice(rest, &name.name) {
+            return None;
+        }
+        let mut read = false;
+        let moved_while_read = rest.iter().rev().any(|stmt| {
+            let stmt = std::slice::from_ref(stmt);
+            read |= ownership::mentions_in_stmts(stmt, &name.name);
+            read && ownership::moved_in_stmts(stmt, types).contains(root)
+        });
+        if moved_while_read {
             return None;
         }
         let text = self.receiver(text);
@@ -4569,25 +4586,68 @@ impl<'a> Generator<'a> {
             .filter(|order| order.iter().enumerate().any(|(i, j)| i != *j))
             .map(<[usize]>::to_vec);
         let callee = self.callee(call);
+        // Late moves (unit `call-moves`): a place a later argument reads
+        // moves once every other argument is bound, in source order. One
+        // rooted at a borrowed or captured variable would be passed as the
+        // copy `moves` keeps for it, after the same bindings.
+        let late: Vec<NodeId> = receiver
+            .into_iter()
+            .chain(args)
+            .map(unnamed)
+            .filter(|arg| self.types.is_some_and(|t| t.moves_late(arg)))
+            .map(|arg| arg.id)
+            .collect();
         let Some(order) = order else {
-            let texts = self.ref_args(callee, receiver.into_iter().chain(args));
-            return format!("{target}({})", texts.join(", "));
+            if late.is_empty() {
+                let texts = self.ref_args(callee, receiver.into_iter().chain(args));
+                return format!("{target}({})", texts.join(", "));
+            }
+            self.late.extend(late.iter().copied());
+            let all: Vec<&Expr> = receiver.into_iter().chain(args).collect();
+            let texts = self.ref_args(callee, all.iter().copied());
+            for id in &late {
+                self.late.remove(id);
+            }
+            let mut lets = String::new();
+            let mut passed = Vec::new();
+            for (index, (arg, text)) in all.iter().zip(texts).enumerate() {
+                if late.contains(&unnamed(arg).id) {
+                    passed.push(text);
+                } else {
+                    let _ = write!(lets, "let __ignite_l{index} = {text}; ");
+                    passed.push(format!("__ignite_l{index}"));
+                }
+            }
+            return format!("{{ {lets}{target}({}) }}", passed.join(", "));
         };
         let borrow = |this: &Self, param: usize| this.pass_prefix(callee, param);
+        self.late.extend(late.iter().copied());
         let mut lets = String::new();
+        let mut bound = |this: &mut Self, arg: &Expr, name: String| {
+            let value = this.value(arg);
+            if late.contains(&unnamed(arg).id) {
+                value
+            } else {
+                let _ = write!(lets, "let {name} = {value}; ");
+                name
+            }
+        };
         let mut texts = Vec::new();
         if let Some(receiver) = receiver {
-            let value = self.value(receiver);
-            let _ = write!(lets, "let __ignite_r = {value}; ");
-            texts.push(format!("{}__ignite_r", borrow(self, 0)));
+            let name = bound(self, receiver, "__ignite_r".to_string());
+            texts.push(format!("{}{name}", borrow(self, 0)));
         }
-        for (index, arg) in args.iter().enumerate() {
-            let value = self.value(arg);
-            let _ = write!(lets, "let __ignite_a{index} = {value}; ");
+        let names: Vec<String> = args
+            .iter()
+            .enumerate()
+            .map(|(index, arg)| bound(self, arg, format!("__ignite_a{index}")))
+            .collect();
+        for id in &late {
+            self.late.remove(id);
         }
         let first = usize::from(receiver.is_some());
         for (param, index) in order.iter().enumerate() {
-            texts.push(format!("{}__ignite_a{index}", borrow(self, first + param)));
+            texts.push(format!("{}{}", borrow(self, first + param), names[*index]));
         }
         format!("{{ {lets}{target}({}) }}", texts.join(", "))
     }
@@ -5477,8 +5537,22 @@ impl<'a> Generator<'a> {
             .fail_call(expr, "no arm matched")
             .unwrap_or_else(|| "unreachable!()".to_string());
         let ty = self.type_of(scrutinee).cloned();
-        let lent = self.match_by_ref(scrutinee, ty.as_ref(), arms);
-        let mut scrutinee_text = if lent {
+        let tuple = self.lent_tuple(scrutinee, ty.as_ref(), arms);
+        let whole = tuple.as_ref().map_or(0, Vec::len);
+        let lent = tuple.is_some() || self.match_by_ref(scrutinee, ty.as_ref(), arms);
+        let mut scrutinee_text = if let Some(items) = tuple {
+            let texts: Vec<String> = items
+                .into_iter()
+                .map(|(item, copy)| {
+                    if copy {
+                        self.value(item)
+                    } else {
+                        self.lent_arg(item)
+                    }
+                })
+                .collect();
+            format!("({})", texts.join(", "))
+        } else if lent {
             self.lent_arg(scrutinee)
         } else {
             self.value(scrutinee)
@@ -5503,10 +5577,24 @@ impl<'a> Generator<'a> {
             guarded |= !native && !catch_all;
             ranged |= has_range(&arm.pattern);
             let lent_before = self.borrowed_elements.len();
+            let mut rebuilt = String::new();
             let pattern = if native {
                 let text = self.pattern(&arm.pattern, ty.as_ref());
-                if lent {
-                    self.lend_bindings(&arm.pattern, &mut bindings);
+                match &arm.pattern.kind {
+                    // A binding of a lent tuple is a tuple of references: an
+                    // arm that reads it gets the tuple of values it names.
+                    // `self.pattern` bound the name: an uppercase one names
+                    // a variant only of an enum, never of this tuple.
+                    PatternKind::Binding(id) if whole > 0 => {
+                        if ownership::mentions(&arm.body, &id.name) {
+                            let name = ident(&id.name);
+                            let items: Vec<String> =
+                                (0..whole).map(|i| format!("{name}.{i}.clone()")).collect();
+                            rebuilt = format!("let {name} = ({}); ", items.join(", "));
+                        }
+                    }
+                    _ if lent => self.lend_bindings(&arm.pattern, &mut bindings),
+                    _ => {}
                 }
                 text
             } else {
@@ -5524,14 +5612,14 @@ impl<'a> Generator<'a> {
             };
             self.borrowed_elements.truncate(lent_before);
             self.scopes.pop();
-            if !bindings.is_empty() {
+            if !bindings.is_empty() || !rebuilt.is_empty() {
                 let lets: String = bindings
                     .iter()
                     .map(|(name, access)| {
                         format!("let {} = {}; ", ident(name), binding_value(access))
                     })
                     .collect();
-                body = format!("{{ {lets}{body} }}");
+                body = format!("{{ {rebuilt}{lets}{body} }}");
             }
             out.push_str(&indentation(self.indent));
             let _ = writeln!(out, "{pattern} => {body},");
@@ -5577,6 +5665,57 @@ impl<'a> Generator<'a> {
             mutated.extend(ownership::changed_in(&arm.body, self.types));
         }
         !mutated.contains(root)
+    }
+
+    /// The items of a `match` scrutinee that is a tuple of places to match
+    /// by reference instead of a tuple of copies (unit `call-moves`): two
+    /// or more places, each of a type that is `Copy` in Rust (`true`, read
+    /// as a value) or not (read by reference, at least one), whose
+    /// variables no arm changes or moves, every arm's pattern
+    /// [`is_native`](Self::is_native), and no handle in the tuple
+    /// ([`TypedProgram::holds_handles`], a fn value's possible captures
+    /// included: an item the analysis moves into the tuple is dropped with
+    /// it at the end of the `match`, which a borrowed one is not). Rust
+    /// matches each pattern of the tuple against its reference, and the
+    /// bindings are lent as for a single place
+    /// ([`lend_bindings`](Self::lend_bindings)): a binding of a type that
+    /// is not [`lendable`] is copied out of its reference at the start of
+    /// the arm, as the tuple copied it. An arm whose
+    /// pattern is one name binds a tuple of references: when its body
+    /// reads the name, the arm starts with a copy of each item
+    /// ([`match_expr`](Self::match_expr)), the copy every arm made before.
+    fn lent_tuple<'e>(
+        &self,
+        scrutinee: &'e Expr,
+        ty: Option<&Ty>,
+        arms: &[ignite_syntax::ast::Arm],
+    ) -> Option<Vec<(&'e Expr, bool)>> {
+        let (ExprKind::Tuple(items), Some(Ty::Tuple(elements)), Some(types)) =
+            (&scrutinee.kind, ty, self.types)
+        else {
+            return None;
+        };
+        if items.len() < 2
+            || items.len() != elements.len()
+            || !arms.iter().all(|arm| self.is_native(&arm.pattern, ty))
+            || ty.is_some_and(|ty| types.holds_handles(ty))
+        {
+            return None;
+        }
+        let mut touched = BTreeSet::new();
+        for arm in arms {
+            touched.extend(ownership::changed_in(&arm.body, self.types));
+            touched.extend(ownership::moved_in(&arm.body, types));
+        }
+        let mut lent = Vec::new();
+        for (item, element) in items.iter().zip(elements) {
+            let root = place_root(item).filter(|_| self.is_place(item))?;
+            if touched.contains(root) {
+                return None;
+            }
+            lent.push((item, rust_copy(element)));
+        }
+        lent.iter().any(|(_, copy)| !copy).then_some(lent)
     }
 
     /// The bindings of a native `pattern` matched against a reference,
@@ -6985,6 +7124,14 @@ fn record_from_substrate(record: &str, value: &str) -> String {
         .map(|f| format!("{}: {value}.{f}", ident(f)))
         .collect();
     format!("{record} {{ {} }}", fields.join(", "))
+}
+
+/// The value of a named argument, any other argument as it is.
+fn unnamed(expr: &Expr) -> &Expr {
+    match &expr.kind {
+        ExprKind::NamedArg { value, .. } => value,
+        _ => expr,
+    }
 }
 
 /// The name a place expression (`x`, `x.a.b`, `x[i]`) starts from.

@@ -407,7 +407,11 @@ position, even with no buffer.
   value or a block's result takes it with a shallow `memcpy` of its representation. The
   result of a call is always written to a fresh temporary, so `s = step(s, i)` moves `s`
   into the call and then the temporary into `s`; the result slot never aliases the moved
-  place. A place in a position that only reads it is not copied:
+  place. A late move (`TypedProgram::moves_late`, `docs/slice.md` 20.3.7: an argument of a
+  fn call that later arguments only read) is a move like any other: the place's pointer is
+  taken when the argument is evaluated, the later arguments read the place through it
+  unchanged, and the callee owns it once called (story `std-mysql-client`, unit
+  `call-moves`; before, a copy). A place in a position that only reads it is not copied:
   - an argument to a borrowed parameter (section 3);
   - the scrutinee of a `match` whose arms do not modify the place's root variable;
   - the list of a `for` whose body does not modify the list's root variable;
@@ -416,6 +420,35 @@ position, even with no buffer.
     is kept, so a change it makes needs no exclusion): the
     element is the pointer into the list that indexing gives (story `std-mysql-client`,
     unit `mysql-cost`; before, a copy);
+  - the places of a `match` scrutinee `(a, b, ..)` that is a tuple of places whose
+    variables no arm changes or moves (`ownership::changed_in`, `ownership::moved_in`) and
+    whose arms move none of the names their patterns bind: the tuple is built from shallow
+    `memcpy`s of the places' representations and read like a borrowed place
+    (`Lower::lent_tuple`; story `std-mysql-client`, unit `call-moves`; before, each place
+    deep-copied). The analysis takes a tuple literal for a fresh value,
+    so it may move a binding of it into a callee; out of this tuple that would hand the
+    callee the place's own buffers (`o.rows[0] = ..` in the callee wrote the place:
+    `borrowed_reads::each_guard_of_the_correction_round_gives_the_evaluator_value_on_both_targets`,
+    4143 for 4123), so such a `match` builds the tuple of copies. An arm that binds the
+    whole tuple to one name (`pair => pair_size(pair)`) binds the borrowed tuple and passes
+    its pointer to a borrowed parameter; one that moves it is one of those. A tuple that
+    holds a handle is lent too (the unit's first commit excluded it; the correction round
+    removed the exclusion): a tuple literal is never an owned match (`own::owned_scrutinee`
+    wants a scrutinee that makes a value no one else owns), so the lent tuple is not
+    released and its handles need no owner of their own; a handle-holding place moved into
+    the tuple is never released, lent or not (the gap below).
+    Read after the `match`, returned from it as a binding, or a channel end on its own, it
+    gives the evaluator's values
+    (`borrowed_reads::each_guard_of_the_correction_round_gives_the_evaluator_value_on_both_targets`);
+  - known gap (at 1dfc2937 as now): a place that holds a handle moved into a `match`
+    scrutinee tuple is never released, so a channel whose last sender it holds stays open
+    after the `match` (`rx.closed()` false where the evaluator and the Rust target say
+    true; `borrowed_reads::a_record_holding_a_sender_moved_into_a_tuple_match_is_dropped_with_it`
+    holds both forms). A fn value that captured the handle holds it as well (`own::plain`: a
+    fn value may hold one): a record with a fn field, a list or option of fn values, a variant
+    with a fn payload
+    (`call_moves_adversary_pass2::adversary2_a_sender_held_by_a_fn_value_is_dropped_with_a_tuple_match`
+    holds the four forms);
   - the receiver of `to_bytes`: the result is the receiver itself, owned or borrowed as the
     receiver is;
   - the argument of `append` when the element type holds no buffer: its elements are

@@ -1582,6 +1582,10 @@ pub struct TypedProgram {
     /// Places in move positions that take their value, by expression id
     /// (`docs/slice.md` 20.3).
     moves: NodeMap<()>,
+    /// The places of `moves` that a later argument of their call reads, so
+    /// that they move only once every later argument is evaluated (unit
+    /// `call-moves`).
+    late_moves: NodeMap<()>,
     /// The consumed parameters of every closure literal inside a body, by
     /// the closure's id (`docs/slice.md` 20.3.1).
     closure_consumed: NodeMap<Vec<bool>>,
@@ -1669,6 +1673,62 @@ impl TypedProgram {
             .enums
             .get(&enum_.name)
             .map(Vec::as_slice)
+    }
+
+    /// Whether a value of `ty` may hold a handle (invariant 3: a listener,
+    /// a stream, a store, a channel end or a capability), in a list,
+    /// option, result, map, tuple, record or enum; a type parameter of the
+    /// code being generated may, and so may a fn value, which can capture
+    /// one (as the LLVM target's `own::plain` takes it). A backend that
+    /// reads such a value in place instead of taking it changes when its
+    /// handles are released, which a program observes (`rx.closed()`).
+    pub fn holds_handles(&self, ty: &Ty) -> bool {
+        self.holds_handles_in(ty, true, &mut Vec::new())
+    }
+
+    /// [`holds_handles`](Self::holds_handles); `param` says whether a type
+    /// parameter may hold one: not inside a generic declaration's fields,
+    /// whose type arguments are looked at instead.
+    fn holds_handles_in(&self, ty: &Ty, param: bool, seen: &mut Vec<QualName>) -> bool {
+        match ty {
+            Ty::TcpListener
+            | Ty::TcpStream
+            | Ty::PipeStream
+            | Ty::TlsStream
+            | Ty::Store(_)
+            | Ty::Sender(_)
+            | Ty::Receiver(_)
+            | Ty::Capability(_)
+            | Ty::Fn(..)
+            | Ty::EffectFn(..) => true,
+            Ty::Param(_) => param,
+            Ty::List(t) | Ty::Option(t) => self.holds_handles_in(t, param, seen),
+            Ty::Result(a, b) | Ty::Map(a, b) => {
+                self.holds_handles_in(a, param, seen) || self.holds_handles_in(b, param, seen)
+            }
+            Ty::Tuple(items) => items.iter().any(|t| self.holds_handles_in(t, param, seen)),
+            Ty::Record(q) | Ty::GenericRecord(q, _) | Ty::Enum(q) | Ty::GenericEnum(q, _) => {
+                if let Ty::GenericRecord(_, args) | Ty::GenericEnum(_, args) = ty
+                    && args.iter().any(|t| self.holds_handles_in(t, param, seen))
+                {
+                    return true;
+                }
+                if seen.contains(q) {
+                    return false;
+                }
+                seen.push(q.clone());
+                let fields = self.record_fields(q).into_iter().flatten().map(|(_, t)| t);
+                let payloads = self
+                    .enum_variants(q)
+                    .into_iter()
+                    .flatten()
+                    .flat_map(|(_, payload)| payload);
+                fields
+                    .chain(payloads)
+                    .any(|t| self.holds_handles_in(t, false, seen))
+            }
+            _ => false,
+        }
     }
 
     /// The type arguments, in the order of the declaration's type
@@ -1852,6 +1912,17 @@ impl TypedProgram {
     /// (`docs/slice.md` 20.3). False for every other expression.
     pub fn moves(&self, expr: &Expr) -> bool {
         self.moves.contains_key(&key(expr))
+    }
+
+    /// Whether `expr`, an argument of a fn call that [`moves`](Self::moves),
+    /// is read by a later argument of the same call, which neither changes
+    /// its variable nor keeps a borrow of it: the place moves into the call
+    /// once the later arguments have run (unit `call-moves`). The LLVM
+    /// target passes the place's pointer and evaluates the later arguments
+    /// before the call, as for any move; the Rust target evaluates them into
+    /// temporaries first and then moves the place.
+    pub fn moves_late(&self, expr: &Expr) -> bool {
+        self.late_moves.contains_key(&key(expr))
     }
 
     /// Whether the callee consumes its parameter `index` (UFCS receiver = 0). Defined for a
@@ -2195,10 +2266,12 @@ pub fn type_module(
         assemblies: typed.system.assemblies,
         effects: typed.system.effects,
         moves: NodeMap::default(),
+        late_moves: NodeMap::default(),
         closure_consumed: NodeMap::default(),
     };
     let found = moves::analyse(program, &program_types, modules);
     program_types.moves = found.moves;
+    program_types.late_moves = found.late;
     program_types.closure_consumed = found.closures;
     if let Some(own) = program_types.modules.get_mut(&program_types.module) {
         own.consumed = found.consumed.clone();

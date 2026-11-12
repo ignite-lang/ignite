@@ -27,7 +27,7 @@ pub(crate) fn source(name: &str, program: &str) -> PathBuf {
 
 /// The failures of the evaluator on the inline tests of `file`: one line
 /// per test that does not pass.
-fn evaluator_failures(file: &Path) -> Vec<String> {
+pub(crate) fn evaluator_failures(file: &Path) -> Vec<String> {
     let loaded = ignite::load(file, None).unwrap_or_else(|e| panic!("{e}"));
     let modules = loaded.modules();
     let module = loaded.types().module.clone();
@@ -95,7 +95,7 @@ pub(crate) fn target_failure(file: &Path, target: &str, count: usize) -> Option<
 
 /// Every inline test of `program` passes on the evaluator, the Rust target
 /// and the LLVM target.
-fn agree(name: &str, program: &str, count: usize) {
+pub(crate) fn agree(name: &str, program: &str, count: usize) {
     let file = source(name, program);
     let mut failures = evaluator_failures(&file);
     for target in ["rust", "llvm"] {

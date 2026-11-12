@@ -7249,8 +7249,13 @@ The Rust target (20.3.4 otherwise):
   arguments).
 - A lent bytes parameter is `p: &[u8]`; the argument `t.to_bytes()` of a `Text` place `t` is
   `t.as_bytes()`, and `let b = t.to_bytes()` without an annotation, whose following statements
-  in its block read `b` only as a slice, bind no other `b` and do not change `t`'s variable, is
-  `let b: &[u8] = t.as_bytes();`, read like a borrowed parameter. `t.to_bytes().slice(i, j)
+  in its block read `b` only as a slice, bind no other `b`, do not change `t`'s variable and
+  move it (`TypedProgram::moves`, a late move included) in no statement that reads `b` or comes
+  before one that does, is `let b: &[u8] = t.as_bytes();`, read like a borrowed parameter;
+  otherwise `b` is a copy (`t.clone().into_bytes()`), as `let r = ctx(2); let b =
+  r.label.to_bytes(); let n = consume(r, b.len(), 1); n + b.len()` needs (rustc E0505
+  before, with `r` moved into `consume` or moved late after `b.len()`; unit `call-moves`
+  correction round). `t.to_bytes().slice(i, j)
   .to_text()` borrows `t.as_bytes()`, and `for x in t.to_bytes()` over a `Text` place whose
   variable the body does not change iterates `t.bytes()`.
 - A `Text` literal read by reference (an argument by reference, a `Map` key) is a `static`
@@ -7290,8 +7295,104 @@ The Rust target (20.3.4 otherwise):
   allocations per lookup before, none after). Still copied: `let v = l[i]` whose `v` is only
   read, an element returned from a borrowed list (`return e.1`, one copy of the value, never
   of the list). `CODEGEN_REVISION` is `ignite-codegen/0.1.0-51` (one bump for both targets).
+- Late moves and tuples of places (story `std-mysql-client`, unit `call-moves`). A place in a
+  move position of a fn call (a variable, or a field place the analysis moves) that is dead
+  after the call and that only later arguments of the same call read moves into the call
+  after them (`TypedProgram::moves_late`, decided by `moves.rs` `Walk::late_moves`): no
+  argument before it mentions it, no later argument changes its variable (an assignment, an
+  in-place builtin, a block or closure that does either, by name as
+  `ownership::changed_in` counts), and no later argument passed by reference has a value
+  that may borrow from it (a field or element of it, an `Int` field too, which this target
+  passes as `&i64`, a `slice` or `to_bytes` of one, a closure that reads it, a block,
+  branch or `match` whose value is one; a call's, an operator's or a scalar builtin's
+  result is a value of its own). The place is held while the later arguments run, so none
+  of them moves it. `r = set_in(r, "a", read_in(r, "b")?)` is
+  `r = { let __ignite_l1 = String::from("a"); let __ignite_l2 = (read_in(&r, ..))?;
+  set_in(r, __ignite_l1, __ignite_l2) }`: every other argument bound in source order, the
+  place passed last; with reordered named arguments the place is left out of the bindings.
+  A `?` in a later argument returns before the move, and a parameter moved late counts as
+  moved only on the paths that reach the call. The receiver of a UFCS call and named
+  arguments take it alike. Before, the place was copied (`r.clone()`). A later argument
+  that borrows keeps that copy of the whole place (`grown(r.clone(), &r.rows)`): copying
+  only the borrowed field instead would need the LLVM target to copy that argument too,
+  which neither target does. The LLVM target takes a late move as any move (`docs/llvm.md`
+  section 4), and the evaluator, which takes a moved variable under a test, takes a late one
+  once the call's arguments have run (`Evaluator::late_args`). Only a fn call
+  (`Callee::Fn`) has late moves: it is the one call whose later arguments the Rust target's
+  `fn_call` and `Evaluator::late_args` bind first, so a variant payload, a role call, a call
+  of a fn value and a builtin keep the copy (marked late in `Two(r, r.count + 1)`, the
+  evaluator would take the variable once an enclosing fn call's arguments ran, from an outer
+  binding of the same name). A late move rooted at a variable this target reads through a
+  reference (a borrowed parameter, a capture, a binding of a lent element or of an item of a
+  lent tuple, which the analysis tracks as owned: a tuple literal is a fresh value) is
+  passed as the copy `Generator::moves` keeps for it, after the same bindings. A parameter
+  whose only move is a late one (`fn renamed(r: Ctx) -> Ctx = set_in(r, "k",
+  Num(r.count))`) is consumed: taken by value and moved on, not borrowed and copied. The
+  analysis runs on every check and plan, for every fn call in every round of its fixpoint:
+  `Walk::late_moves` allocates nothing for a call with no late move (an empty result) and
+  tests, in this order, an operand after the place, a place, a later operand that names its
+  variable (on a reused stack), then liveness, pins and holds. Under callgrind (debug build)
+  it takes 0.12 % of the instructions of `ignite check examples/todo/todo.ignite` and 0.16 %
+  of `examples/terminal/terminal.ignite`, `ignite plan` alike (0.44 % and 0.59 % with the
+  order of the unit's first commit, which allocated per call). `Walk::call` keeps one inline
+  test (`may_move_late`: a fn call with a name or field in a move position before another
+  operand); the rest, and `Walk::take_late`, are out of line and cold (`Walk::late_call`).
+  Release driver, `ignite check` of `examples/terminal/terminal.design.ignite`:
+  250,406,443 instructions and 1,385,671 simulated I1 misses (cachegrind, 32 KB 8-way)
+  against 249,997,181 and 1,348,654 before the unit and 250,689,071 and 1,442,264 with
+  everything inline; `ignite plan` 251,691,445 and 1,386,863 against 251,428,736 and
+  1,349,011, and 252,024,280 and 1,442,774.
+- A `match` whose scrutinee is a tuple of two or more places, each of a type that is `Copy`
+  here (passed as a value) or not (passed by reference, at least one; a binding of a type that
+  is not lendable is copied out of its reference at the start of the arm, as the tuple of
+  copies copied it; before the correction round only lendable types), whose variables
+  no arm changes or moves (`ownership::changed_in`, `ownership::moved_in`) and whose arm
+  patterns are all native, matches a tuple of references: `match (a, b)` of borrowed
+  parameters, `match (&a, &b)` of owned places, the bindings lent as for a single place and
+  those of a `Copy` type copied out at the start of the arm; a lent binding moved into a
+  callee is copied there, as any borrowed one. An arm whose pattern is one name binds the
+  tuple of references; when its body reads the name it starts with `let pair =
+  (pair.0.clone(), pair.1.clone());`, the copy every arm made before, and the other arms
+  stay uncopied (rustc E0308 before, `(&Val, &Val)` read as `(Val, Val)`; unit
+  correction round). A tuple whose type may hold a handle (`TypedProgram::holds_handles`, a
+  type parameter and a fn value included, the latter because it may have captured one, as the
+  LLVM target's `own::plain` takes it) is not lent: an item the analysis moves into the tuple
+  is dropped with it at the end of the `match`, a lent one only at the end of its scope
+  (`rx.closed()` after the `match` read false, the evaluator true; a record with a fn field,
+  a list or option of fn values, a variant with a fn payload holding the only sender:
+  `call_moves_adversary_pass2::adversary2_a_sender_held_by_a_fn_value_is_dropped_with_a_tuple_match`).
+  A tuple with a fn-typed item is therefore matched as before the unit
+  (`match (f.clone(), v)`). Before, `match (a.clone(),
+  b.clone())`. The LLVM target matches a tuple of shallow copies of the places (`docs/llvm.md`
+  section 4). Tests: `borrowed_reads::` in `crates/ignite-rustgen` (the emitted text, the
+  guards keeping their copy) and `crates/ignite-llvm` `copies::` (no copy glue of the record
+  in either form; 2 `copy.Ctx` and 2 `copy.Val` calls before); in `crates/ignite`,
+  `borrowed_reads::an_update_read_by_a_later_argument_and_a_tuple_match_do_not_copy_the_record`
+  (allocations per update 1514.5 over records of 10 rows and 1704.5 over 200 before, 1.0
+  and 1.0 after; per match 25 and 405 before, 3 and 3 after) and
+  `borrowed_reads::each_guard_of_a_call_move_gives_the_evaluator_value_on_both_targets`
+  (`fixtures/call_moves.ignite`, one program per guard). Still copied: a place read by an
+  earlier argument of the call (`set_in(v = read_in(r, "b")?, r = r)`), a place that later
+  elements read in a variant payload, a record, list or tuple literal
+  (`Both(r.clone(), size(&r))`, `Pair { c: r.clone(), n: size(&r) }`), a parameter whose
+  only move is a late one behind a `?` (it stays borrowed and is copied), and a tuple
+  scrutinee with a text, list or constant pattern in an arm (the guard test of such an arm
+  reads every item through a reference, which a `Copy` item passed as a value is not: rustc
+  E0614 on `match (n, t) { (1, "x") => .. }`). Tests of the correction round: in
+  `crates/ignite`, `call_moves_adversary::` (a lent `let` across a move or a late move of
+  its root, four forms; a binding of the whole tuple, three forms; one program per guard of
+  the adversary pass), `borrowed_reads::each_guard_of_the_correction_round_gives_the_evaluator_value_on_both_targets`
+  (the fn-call guard, the text pattern next to a `Copy` item, bindings of a lent tuple
+  moved, late or not, into a callee that changes them in place, returned or replaced, items
+  of a fn type, a type parameter or holding a channel end) and
+  `borrowed_reads::a_record_holding_a_sender_moved_into_a_tuple_match_is_dropped_with_it`
+  (evaluator and Rust; the LLVM gap of `docs/llvm.md` section 4 held as it is);
+  `borrowed_reads::a_parameter_moved_late_is_taken_by_value` in `crates/ignite-rustgen` and
+  `copies::a_parameter_moved_late_is_not_copied` in `crates/ignite-llvm`.
+  `CODEGEN_REVISION` is `ignite-codegen/0.1.0-52` (one bump for both targets).
 
-The LLVM target and the evaluator read none of this.
+The LLVM target and the evaluator read none of this, except the late moves and the tuple
+scrutinees of unit `call-moves`, as the last two items say.
 
 ### 20.4 Closures and calls of fn-typed expressions (D4, D5)
 

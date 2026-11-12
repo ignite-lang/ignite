@@ -128,6 +128,38 @@ fn an_indexed_element_matched_or_iterated_is_read_in_place() {
     }
 }
 
+/// Unit `call-moves`: the reporter's form 9, a record passed by value to
+/// an update that a later argument reads (`set_in(r, "a", read_in(r,
+/// "b")?)`), moves the record after the later argument read it, and form
+/// 7, a `match` on a tuple of two places, copies neither record. Counted by
+/// the copy glue each calls.
+#[test]
+fn an_update_read_by_a_later_argument_and_a_tuple_match_copy_no_record() {
+    let (generated, _) = lower_with("copies", true);
+    let program = &generated.program;
+    for (symbol, glue) in [
+        ("tests.copies.attach", "call void @\"copy.tests.copies.Ctx"),
+        (
+            "tests.copies.same_kind",
+            "call void @\"copy.tests.copies.Val",
+        ),
+    ] {
+        let body = function(program, symbol);
+        assert_eq!(body.matches(glue).count(), 0, "{symbol}:\n{body}");
+    }
+}
+
+/// A parameter whose only move is a late one (`set_in(r, "k",
+/// Num(r.rows.len()))`) is consumed, so the callee moves it on instead of
+/// copying a borrowed record into `set_in`.
+#[test]
+fn a_parameter_moved_late_is_not_copied() {
+    let (generated, _) = lower_with("copies", true);
+    let body = function(&generated.program, "tests.copies.renamed");
+    let glue = "call void @\"copy.tests.copies.Ctx";
+    assert_eq!(body.matches(glue).count(), 0, "{body}");
+}
+
 #[test]
 fn every_copies_test_runs() {
     let (generated, tests) = lower_with("copies", true);
