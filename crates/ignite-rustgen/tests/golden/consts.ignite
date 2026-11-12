@@ -49,3 +49,28 @@ fn or_limit(value: Option<Int>) -> Int {
 fn default_mode() -> Mode {
   return LOUD
 }
+
+type Spot {
+  x: Int
+  label: Text
+}
+
+const NICKNAME: Option<Text> = Option.Some("nick")
+const HOME: Option<Spot> = Option.Some(Spot { x = 1, label = "home" })
+const FALLBACK: Option<Int> = Option.Some(7)
+
+fn nickname_len() -> Int {
+  match NICKNAME {
+    Option.Some(t) => t.len()
+    Option.None => 0
+  }
+}
+
+fn home_x() -> Int {
+  match HOME {
+    Option.Some(s) => s.x
+    Option.None => 0
+  }
+}
+
+fn fallback() -> Int = or_limit(FALLBACK)

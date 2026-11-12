@@ -168,10 +168,25 @@ fn protocol_import_spawn_and_function_values() {
     );
 }
 
+/// A constant whose Rust type is not `Copy` is built once and read as a
+/// `&'static T` (`docs/slice.md` section 6, "Constants"): an `Option` of
+/// `Text` or of a record is one, an `Option<Int>` is a function that
+/// returns its value.
 #[test]
 fn constants_qualified_patterns_and_io_error() {
     let project = check_program("consts", &common::golden_std(), true);
     assert!(project.executables.is_empty());
+    let lib = norm(&project.lib_rs);
+    for built_once in [
+        "pub fn NICKNAME() -> &'static ::std::option::Option<String> { static VALUE: ::std::sync::OnceLock<::std::option::Option<String>>",
+        "pub fn HOME() -> &'static ::std::option::Option<Spot> { static VALUE: ::std::sync::OnceLock<::std::option::Option<Spot>>",
+    ] {
+        assert!(lib.contains(built_once), "missing `{built_once}` in\n{lib}");
+    }
+    assert!(
+        lib.contains("pub fn FALLBACK() -> ::std::option::Option<i64> {"),
+        "{lib}"
+    );
 }
 
 /// Slice 6 surface syntax (`docs/slice.md` section 10), the program the

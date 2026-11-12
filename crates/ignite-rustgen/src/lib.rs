@@ -2515,6 +2515,20 @@ impl<'a> Generator<'a> {
             && self.changed_constant.as_deref() != Some(name)
     }
 
+    /// Whether `expr` names a constant built once.
+    fn is_static_name(&self, expr: &Expr) -> bool {
+        matches!(&expr.kind, ExprKind::Name(id) if self.is_static_const(&id.name))
+    }
+
+    /// A read-only argument of a builtin that is a constant built once or
+    /// a place inside one, by reference where it is (`KEY()`,
+    /// `&BOUNDS().name`) instead of a copy borrowed; `None` for any other
+    /// argument.
+    fn static_read(&mut self, expr: &Expr) -> Option<String> {
+        let root = place_root(expr)?;
+        (self.is_place(expr) && self.is_static_const(root)).then(|| self.ref_arg(expr))
+    }
+
     /// Whether local `name` is a parameter passed by reference or a `for`
     /// element bound by reference, not shadowed; or a constant built once,
     /// which is read the same way.
@@ -2615,13 +2629,30 @@ impl<'a> Generator<'a> {
     /// ([`is_native`](Self::is_native)). Each binding is then a reference
     /// into the element, as in a `match` on a borrowed place
     /// ([`lend_bindings`](Self::lend_bindings)); the body cannot change a
-    /// binding of a `for` (E006).
+    /// binding of a `for` (E006). A `Map` constant built once, or a map
+    /// inside one, is iterated the same way, its entries `(&K, &V)`.
     fn borrowed_for_pattern(&self, pattern: &Pattern, iter: &Expr, body: &Block) -> bool {
-        let Some(Ty::List(element)) = self.type_of(iter) else {
+        let Some(element) = self.for_element(iter) else {
             return false;
         };
-        self.is_native(pattern, Some(element))
+        self.is_native(pattern, Some(&element))
             && self.lent_iterable(iter, &ownership::changed_in_block(body, self.types))
+    }
+
+    /// The element type a `for` over `iter` binds by reference: a list's
+    /// element; a `(K, V)` entry of a map that is a constant built once or
+    /// a place inside one.
+    fn for_element(&self, iter: &Expr) -> Option<Ty> {
+        match self.type_of(iter)? {
+            Ty::List(element) => Some((**element).clone()),
+            Ty::Map(key, value)
+                if self.is_place(iter)
+                    && place_root(iter).is_some_and(|root| self.is_static_const(root)) =>
+            {
+                Some(Ty::Tuple(vec![(**key).clone(), (**value).clone()]))
+            }
+            _ => None,
+        }
     }
 
     /// The list place `l` of `l.slice(i, j)` whose bounds change nothing,
@@ -2685,6 +2716,11 @@ impl<'a> Generator<'a> {
                         return format!("&{f}");
                     }
                     let text = self.bare(arg);
+                    // A constant built once is `F()`, a `&'static Arc<dyn
+                    // Fn>`: one more `*` reaches the `dyn Fn`.
+                    if self.is_static_name(arg) {
+                        return format!("&**{text}");
+                    }
                     return format!("&*{}", wrap(arg, text));
                 }
                 let root = if let Some((list, _, _)) = self.borrowed_at(arg) {
@@ -2764,7 +2800,10 @@ impl<'a> Generator<'a> {
 
     /// `&text`, the argument `expr` already written as `text`, read by
     /// reference; a `Text` literal is a `static`.
-    fn borrow_arg(&self, expr: &Expr, text: String) -> String {
+    fn borrow_arg(&mut self, expr: &Expr, text: String) -> String {
+        if let Some(read) = self.static_read(expr) {
+            return read;
+        }
         match self.text_literal(expr) {
             Some(literal) => borrowed_text_literal(literal),
             None => borrow(expr, text),
@@ -3800,10 +3839,7 @@ impl<'a> Generator<'a> {
                 iter,
                 body,
             } if self.borrowed_for_pattern(pattern, iter, body) => {
-                let element = match self.type_of(iter) {
-                    Some(Ty::List(element)) => Some((**element).clone()),
-                    _ => None,
-                };
+                let element = self.for_element(iter);
                 let iter = self.lent_iterable_text(iter);
                 self.scopes.push(Vec::new());
                 let lent_before = self.borrowed_elements.len();
@@ -5674,9 +5710,11 @@ impl<'a> Generator<'a> {
             .iter()
             .map(|arg| self.text_literal(arg).map(escape_str))
             .collect();
-        let arg = |i: usize, a: &[String]| match &literals[i] {
-            Some(text) => format!("\"{text}\""),
-            None => borrow(&args[i], a[i].clone()),
+        let statics: Vec<Option<String>> = args.iter().map(|arg| self.static_read(arg)).collect();
+        let arg = |i: usize, a: &[String]| match (&literals[i], &statics[i]) {
+            (Some(text), _) => format!("\"{text}\""),
+            (None, Some(read)) => read.clone(),
+            (None, None) => borrow(&args[i], a[i].clone()),
         };
         match (name.name.as_str(), a.len()) {
             ("map", 1) => format!(

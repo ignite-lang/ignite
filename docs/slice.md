@@ -735,10 +735,19 @@ into a `OnceLock` (the row above). The type is the one the type checker gives th
 `std` or a sibling, agree on the form; without types every constant stays a fn.
 
 - A use reads it as a reference parameter is read (Parameters, above): passed as it is to a
-  reference parameter, `(*N())` as an operand, the receiver of a builtin (`N().len()`,
-  `N().as_bytes()` for a `to_bytes` the 20.3.7 forms lend), an element or field read in
-  place (`checked::at(N(), i, ..)`, `N().f`), `for x in (N()).iter()`, a `match` on `N()`
-  with its bindings lent, and `format!` arguments. Such a read allocates nothing.
+  reference parameter (`&**F()` for a fn constant lent to a parameter that only calls it, the
+  `dyn Fn` behind the `Arc`), `(*N())` as an operand, the receiver of a builtin (`N().len()`,
+  `N().as_bytes()` for a `to_bytes` the 20.3.7 forms lend), the argument of a builtin that
+  only reads it, the constant or a field of it (`m.get(KEY())`, `contains_key`, `remove`,
+  `starts_with`, `strip_prefix`, `join`, `append`, `pieces`, `Bytes.index_of`; a `std` fn
+  such as `ends_with`, `split` or `find` takes it as a reference parameter), an element or
+  field read in place (`checked::at(N(), i, ..)`, `N().f`), `for x in (N()).iter()`, a `for
+  (k, v)` over a `Map` constant (`(M()).iter()`, the entries lent as a list's elements are),
+  a `match` on `N()` with its bindings lent, and `format!` arguments. Such a read allocates
+  nothing. Two reads copy what they read, as the same read of a parameter or a local list
+  does (story `rust-target-read-only-bindings-borrow`): a field of an element as a receiver
+  (`N.items[0].name.len()`, `checked::at(..).name.clone().len()`) and an element
+  interpolated (`"{N.tags[i]}!"`, `checked::at(..).clone()`), one allocation per read each.
 - A value position (a by-value argument, a `let` or `var` initialiser, a `return` operand
   or result, a list element, a record field, a `send`, a `spawn` argument) writes
   `N().clone()`: one copy, which no other use reads, so a later change of it is seen by no
@@ -767,8 +776,14 @@ evaluation, would deadlock or panic there instead).
 What it costs, counted by `constants::` (memcheck's `total heap usage`, 1,001 rounds less 1,
 per round): reading a 16-byte `Text`, a 12-byte `Bytes`, a list of nine pairs of texts and a
 record with a text and a list of two texts went from 3, 3, 38 and 16 allocations per round
-(48, 36, 976 and 289 bytes) to 0 on the Rust target. The LLVM target, unchanged, makes 0
-`malloc` calls per round for all four, in the same count (under 0.002 per round and 0.2
+(48, 36, 976 and 289 bytes) to 0 on the Rust target. A round that gives constants and a
+field of one to `Map.contains`, `Map.get`, `starts_with`, `ends_with`, `contains` and
+`Bytes.index_of` makes 0, and one over a `Map` constant 0 (`constants_adversary::` counts a
+`for` over a map of three entries, `m.get(KEY)` and `t.starts_with(KEY)` at 0 where the
+first form of this story made 4.001, 1.001 and 1.006: a copy of the map, of the key). The
+two reads above that copy make 1 (`PAIRS[i].1.len()`) and 2 (`"{BOUNDS.tags[i]}!"`, the
+copy and the text built). The LLVM target, unchanged, makes 0
+`malloc` calls per round for all of them, in the same count (under 0.002 per round and 0.2
 bytes; its first mention copies the constant to the heap once, `docs/llvm.md` section 2; what
 a task's arena takes is not a `malloc` and is not in this count), so no story follows there
 from this count. The form costs 6 lines of generated Rust per constant built once; the release

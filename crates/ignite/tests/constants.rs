@@ -7,10 +7,10 @@
 //! [`READS`] reads a `Text`, a `Bytes`, a list-of-pairs and a record
 //! constant in a loop. [`COUNTS`] appended to it is one executable,
 //! `constant-counts FORM KEY N`, that runs `N` rounds of the form `FORM`
-//! (`text`, `bytes`, `pairs`, `record`; `none` runs no round). Its
-//! allocations at `N` = [`FIRST`] + [`ROUNDS`] less those at `N` =
-//! [`FIRST`] over [`ROUNDS`] are the allocations of one round after the
-//! first, counted with valgrind memcheck's `total heap usage` line as
+//! (`text`, `bytes`, `pairs`, `record`, `args`, `map`; `none` runs no
+//! round). Its allocations at `N` = [`FIRST`] + [`ROUNDS`] less those at
+//! `N` = [`FIRST`] over [`ROUNDS`] are the allocations of one round after
+//! the first, counted with valgrind memcheck's `total heap usage` line as
 //! `shared_lists::` and `value_copies::` count them. [`OWNED`] and
 //! [`POSITIONS`] are the owned uses and every position a constant stands
 //! in; each program's inline tests run on the evaluator and both targets
@@ -32,8 +32,27 @@ const ROUNDS: u64 = 1000;
 /// Fewer allocations than this over [`ROUNDS`] rounds are none per round.
 const STRAY: u64 = 10;
 
-/// Four constants read in a loop, one form per constant.
+/// The forms of [`READS`] and the allocations one round of each makes on
+/// the Rust target. `field` (a field of an element, `PAIRS[i].1.len()`)
+/// and `interp` (an element interpolated, `"{BOUNDS.tags[i]}!"`) copy the
+/// text they read, as the same read of a local list or a parameter does
+/// (`story:rust-target-read-only-bindings-borrow`); `interp` also
+/// allocates the text it builds.
+const FORMS: [(&str, u64); 8] = [
+    ("text", 0),
+    ("bytes", 0),
+    ("pairs", 0),
+    ("record", 0),
+    ("args", 0),
+    ("map", 0),
+    ("field", 1),
+    ("interp", 2),
+];
+
+/// Constants read in a loop, one form per kind of read.
 const READS: &str = r#"package constant_reads
+
+import std.text.{contains, ends_with}
 
 type Bounds {
   depth: Int
@@ -45,6 +64,9 @@ const DIGITS: Text = "0123456789abcdef"
 const MAGIC: Bytes = b"IGNITE-MAGIC"
 const PAIRS: List<(Text, Text)> = [("a", "alpha"), ("b", "bravo"), ("c", "charlie"), ("d", "delta"), ("e", "echo"), ("f", "foxtrot"), ("g", "golf"), ("h", "hotel"), ("i", "india")]
 const BOUNDS: Bounds = Bounds { depth = 3, name = "bounds", tags = ["x", "y"] }
+const KEY: Text = "bounds"
+const NEEDLE: Bytes = b"MAGIC"
+const AGES: Map<Text, Int> = { ada = 36, bounds = 3 }
 
 fn text_round(i: Int) -> Int {
   let digits = DIGITS.to_bytes()
@@ -68,9 +90,46 @@ fn weigh(b: Bounds) -> Int = b.depth + b.name.len() + b.tags.len()
 
 fn record_round(i: Int) -> Int = weigh(BOUNDS) + BOUNDS.depth + BOUNDS.tags[i % 2].len()
 
+fn args_round(m: Map<Text, Int>, t: Text) -> Int {
+  var n = 0
+  if m.contains(KEY) {
+    n = n + 1
+  }
+  n = n + match m.get(BOUNDS.name) {
+    Some(v) => v
+    None => 0
+  }
+  if t.starts_with(KEY) {
+    n = n + 1
+  }
+  if ends_with(t, BOUNDS.name) {
+    n = n + 1
+  }
+  if contains(t, KEY) {
+    n = n + 1
+  }
+  n + match MAGIC.index_of(NEEDLE, 0) {
+    Some(i) => i
+    None => 0
+  }
+}
+
+fn map_round() -> Int {
+  var n = 0
+  for (k, v) in AGES {
+    n = n + v + k.len()
+  }
+  n
+}
+
+fn field_round(i: Int) -> Int = PAIRS[i % 9].1.len()
+
+fn interp_round(i: Int) -> Int = "{BOUNDS.tags[i % 2]}!".len()
+
 fn measure(form: Text, key: Text, n: Int) -> Int {
   var total = 0
   var i = 0
+  let m: Map<Text, Int> = { bounds = 2 }
   if form == "text" {
     while i < n {
       total = total + text_round(i)
@@ -91,15 +150,39 @@ fn measure(form: Text, key: Text, n: Int) -> Int {
       total = total + record_round(i)
       i = i + 1
     }
+  } else if form == "args" {
+    while i < n {
+      total = total + args_round(m, "the bounds")
+      i = i + 1
+    }
+  } else if form == "map" {
+    while i < n {
+      total = total + map_round()
+      i = i + 1
+    }
+  } else if form == "field" {
+    while i < n {
+      total = total + field_round(i)
+      i = i + 1
+    }
+  } else if form == "interp" {
+    while i < n {
+      total = total + interp_round(i)
+      i = i + 1
+    }
   }
   total
 }
 
-test "the four constants read in a loop" {
+test "the constants read in a loop" {
   assert measure("text", "e", 3) == 195
   assert measure("bytes", "e", 3) == 258
   assert measure("pairs", "e", 3) == 39
   assert measure("record", "e", 3) == 45
+  assert measure("args", "e", 3) == 36
+  assert measure("map", "e", 3) == 144
+  assert measure("field", "e", 3) == 17
+  assert measure("interp", "e", 3) == 6
   assert measure("none", "e", 3) == 0
 }
 "#;
@@ -554,7 +637,12 @@ fn per_round(binary: &Path, form: &str) -> (f64, f64, String) {
 
 /// Bullet 1 and 4 of the story: one round that reads a `Text`, a `Bytes`,
 /// a list-of-pairs or a record constant allocates nothing after the
-/// first round on the Rust target. A round's allocations are whole, so
+/// first round on the Rust target; nor does one (`args`) that gives
+/// constants, and a field of one, to builtins and `std` fns that only
+/// read them (`Map.contains`, `Map.get`, `starts_with`, `ends_with`,
+/// `contains`, `Bytes.index_of`), nor one (`map`) that iterates a `Map`
+/// constant; `field` and `interp` make the counts [`FORMS`] gives. A
+/// round's allocations are whole, so
 /// anything under [`STRAY`] over [`ROUNDS`] rounds is not one per round
 /// (6 at `1febe156`, inferred to be the longer run's longer log line;
 /// a round there made 3, 3, 38 and 16). The LLVM executable
@@ -572,13 +660,14 @@ fn reading_a_constant_in_a_loop_allocates_nothing_per_round_on_the_rust_target()
     let rust = counting(Target::Rust);
     let llvm = counting(Target::Llvm);
     let mut failures = Vec::new();
-    for form in ["text", "bytes", "pairs", "record"] {
+    for (form, expected) in FORMS {
         let (allocations, bytes, line) = per_round(&rust, form);
         println!("Rust, {form}: {allocations:.3} allocations and {bytes:.1} bytes per round");
-        if allocations * ROUNDS as f64 >= STRAY as f64 {
+        let counted = (allocations * ROUNDS as f64).round() as u64;
+        if counted.abs_diff(expected * ROUNDS) >= STRAY {
             failures.push(format!(
                 "{form}: {allocations:.3} allocations ({bytes:.1} bytes) per round after the \
-                 first on the Rust target, 0 expected"
+                 first on the Rust target, {expected} expected"
             ));
         }
         let (llvm_allocations, llvm_bytes, llvm_line) = per_round(&llvm, form);
@@ -623,6 +712,105 @@ fn a_constant_compiles_in_every_position_on_every_consumer() {
     let mut failures = evaluator_failures(&file);
     for target in ["rust", "llvm"] {
         failures.extend(target_failure(&file, target, 9));
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// Constants of fn type, of this module and of a sibling module
+/// ([`FN_MORE`]), in every position the language gives one; built once,
+/// each is an `Arc<dyn Fn>` read through a `&'static`. A constant is not
+/// called directly (E003: "bind it first") and fn values do not compare
+/// (E045); `std` declares no constant of fn type.
+const FN_POSITIONS: &str = r#"package fn_constants
+
+import fn_constants.more.{TRIPLE}
+
+type Holder {
+  f: fn(Int) -> Int
+  name: Text
+}
+
+const F: fn(Int) -> Int = |x: Int| x + 1
+const G: fn(Int) -> Int = double
+
+fn double(n: Int) -> Int = n * 2
+
+fn apply(f: fn(Int) -> Int, x: Int) -> Int = f(x)
+
+fn keep(f: fn(Int) -> Int) -> Holder = Holder { f = f, name = "kept" }
+
+fn give() -> fn(Int) -> Int = F
+
+fn give_other() -> fn(Int) -> Int = TRIPLE
+
+test "a fn constant is lent to a parameter that only calls it" {
+  assert apply(F, 3) == 4
+  assert apply(G, 4) == 8
+  assert apply(TRIPLE, 2) == 6
+}
+
+test "a fn constant is bound and called" {
+  let f = F
+  let t = TRIPLE
+  assert f(1) + t(1) == 5
+}
+
+test "a fn constant is a record field" {
+  let h = Holder { f = F, name = "h" }
+  let k = Holder { f = TRIPLE, name = "k" }
+  let hf = h.f
+  let kf = k.f
+  assert hf(1) + kf(1) == 5
+}
+
+test "a fn constant is passed by value" {
+  let h = keep(G)
+  let k = keep(TRIPLE)
+  let hf = h.f
+  let kf = k.f
+  assert hf(3) + kf(3) == 15
+}
+
+test "a fn constant is returned" {
+  let f = give()
+  let t = give_other()
+  assert f(9) + t(1) == 13
+}
+
+test "a fn constant is mapped and listed" {
+  assert [1, 2].map(F) == [2, 3]
+  assert [1, 2].map(TRIPLE) == [3, 6]
+  let fs = [F, G, TRIPLE]
+  var n = 0
+  for f in fs {
+    n = n + f(1)
+  }
+  assert n == 7
+}
+
+test "a fn constant is lent from a closure" {
+  let c = |x: Int| apply(F, x) + apply(TRIPLE, x)
+  assert apply(c, 1) == 5
+}
+"#;
+
+/// The sibling module of [`FN_POSITIONS`].
+const FN_MORE: &str = r#"package fn_constants.more
+
+const TRIPLE: fn(Int) -> Int = |x: Int| x * 3
+"#;
+
+/// A constant of fn type compiles in every position on the Rust target
+/// (lent to a parameter that only calls it: `&**F()`, the `dyn Fn` behind
+/// the `&'static Arc`) and gives the evaluator's values on both targets,
+/// one inline test per position.
+#[test]
+fn a_fn_constant_compiles_in_every_position_on_every_consumer() {
+    let file = source("fn_constants", FN_POSITIONS);
+    std::fs::write(file.with_file_name("more.ignite"), FN_MORE).expect("write the sibling");
+    let mut failures = evaluator_failures(&file);
+    for target in ["rust", "llvm"] {
+        failures.extend(target_failure(&file, target, 7));
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }

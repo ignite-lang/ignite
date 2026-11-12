@@ -75,3 +75,52 @@ pub fn or_limit(value: &::std::option::Option<i64>) -> i64 {
 pub fn default_mode() -> Mode {
     return LOUD().clone();
 }
+
+#[derive(Clone)]
+pub struct Spot {
+    pub x: i64,
+    pub label: String,
+}
+
+#[allow(non_snake_case)]
+pub fn NICKNAME() -> &'static ::std::option::Option<String> {
+    static VALUE: ::std::sync::OnceLock<::std::option::Option<String>> = ::std::sync::OnceLock::new();
+    if let Some(value) = VALUE.get() { return value; }
+    let value = {
+        Some(String::from("nick"))
+    };
+    VALUE.get_or_init(|| value)
+}
+
+#[allow(non_snake_case)]
+pub fn HOME() -> &'static ::std::option::Option<Spot> {
+    static VALUE: ::std::sync::OnceLock<::std::option::Option<Spot>> = ::std::sync::OnceLock::new();
+    if let Some(value) = VALUE.get() { return value; }
+    let value = {
+        Some(Spot { x: 1, label: String::from("home") })
+    };
+    VALUE.get_or_init(|| value)
+}
+
+#[allow(non_snake_case)]
+pub fn FALLBACK() -> ::std::option::Option<i64> {
+    Some(7)
+}
+
+pub fn nickname_len() -> i64 {
+    match NICKNAME() {
+        Some(t) => (t.len() as i64),
+        None => 0,
+    }
+}
+
+pub fn home_x() -> i64 {
+    match HOME() {
+        Some(s) => s.x.clone(),
+        None => 0,
+    }
+}
+
+pub fn fallback() -> i64 {
+    or_limit(&FALLBACK())
+}
