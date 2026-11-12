@@ -110,6 +110,24 @@ fn readers_and_spawns_take_places() {
     assert!(!thunk.contains("call void @\"copy.List"), "{thunk}");
 }
 
+/// Story `std-mysql-client`, unit `mysql-cost`: a `match` on an indexed
+/// element and a `for` over one read it in place in the list, as they read
+/// a place, when their arms or body change nothing it is rooted at
+/// (`docs/llvm.md` section 4); the test block shows one that a body
+/// changes copied first.
+#[test]
+fn an_indexed_element_matched_or_iterated_is_read_in_place() {
+    let (generated, _) = lower_with("copies", true);
+    let program = &generated.program;
+    for symbol in ["tests.copies.picked", "tests.copies.summed"] {
+        let body = function(program, symbol);
+        assert!(
+            !body.contains("call void @\"copy.List"),
+            "{symbol}:\n{body}"
+        );
+    }
+}
+
 #[test]
 fn every_copies_test_runs() {
     let (generated, tests) = lower_with("copies", true);
