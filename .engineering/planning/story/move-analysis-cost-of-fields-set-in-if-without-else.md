@@ -6,7 +6,7 @@ status: draft
 title: The move analysis stays linear when a fn sets many fields in if statements without else
 relations:
 - informed_by: story:slice-16-moves-analysis
-revision: 1
+revision: 2
 ---
 # Story: the move analysis stays linear when a fn sets many fields in `if` statements without `else`
 
@@ -30,7 +30,7 @@ fn fill(k: Int) -> R {
 }
 ```
 
-Instructions of `ignite check` (callgrind, debug build) for N = 6, 8, 10, 12, 14: 10,973,833; 29,778,966; 124,392,959; 591,377,114; 2,857,274,395. From N = 10 on, two more fields cost a factor of 4.6 to 4.8. Peak resident memory: 19.9 MB at N = 12, 124 MB at N = 16, 1.19 GB at N = 20 when a 20 second limit ended the run. At N = 12, 98.78% of the instructions are under `ignite_types::moves::analyse`.
+Instructions of `ignite check` (callgrind, debug build) for N = 6, 8, 10, 12, 14: 10,973,833; 29,778,966; 124,392,959; 591,377,114; 2,857,274,395. Two more fields cost a factor of 4.75 from N = 10 to 12 and 4.83 from N = 12 to 14. Peak resident memory: 19.9 MB at N = 12, 124 MB at N = 16, 1.19 GB at N = 20 when a 20 second limit ended the run. At N = 12, 98.78% of the instructions are under `ignite_types::moves::analyse`.
 
 The same N fields set with an `else` branch each, in an `else if` chain, in `match` arms or in nested `if`s: 15 to 17 MB of peak memory up to N = 32.
 
