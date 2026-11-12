@@ -210,7 +210,7 @@ in [Tests and assertions](tests.md).
 | `--target llvm\|rust\|all` | default `llvm`. `all` runs every supported target with shared preparation |
 | `--exact` | run only the test whose full name equals the filter |
 | `--list` | print `<full name>: test` per selected test and run nothing |
-| `--jobs N` | tests run at once. Default: the CPU count |
+| `--jobs N` | tests run at once. Default: the environment variable `IGNITE_TEST_JOBS` when it holds a positive integer, else the CPU count |
 | `--timeout SECS` | a test still running after this is killed and fails. Default 60 |
 | `--release` | the release profile on Rust, clang `-O2` on LLVM |
 | `--out DIR` | root of the test builds. Default `target/ignite-test` |

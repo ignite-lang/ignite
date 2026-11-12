@@ -18,8 +18,13 @@ pub mod text {
     }
 
     #[allow(non_snake_case)]
-    pub fn SUFFIX() -> String {
-        String::from("!")
+    pub fn SUFFIX() -> &'static String {
+        static VALUE: ::std::sync::OnceLock<String> = ::std::sync::OnceLock::new();
+        if let Some(value) = VALUE.get() { return value; }
+        let value = {
+            String::from("!")
+        };
+        VALUE.get_or_init(|| value)
     }
 
     pub fn shout(line: &String) -> String {

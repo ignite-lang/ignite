@@ -65,7 +65,7 @@ impl Pinger {
 
 #[allow(non_snake_case)]
 pub fn Pinger__main(self_: &Pinger) -> ::std::result::Result<(), ::ignite_io::IoError> {
-    let stream = (::ignite_io::TcpStream::connect(self_.target.address.clone(), self_.target.port.clone()))?;
+    let stream = (::ignite_io::TcpStream::connect(self_.target.address.clone(), self_.target.port))?;
     match (stream.read(4096))? {
         ::ignite_io::Input::Eof => Err(::ignite_io::IoError::new(String::from("no banner"))),
         ::ignite_io::Input::Data(bytes) => {

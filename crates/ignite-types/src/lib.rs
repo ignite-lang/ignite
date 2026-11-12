@@ -1005,8 +1005,9 @@ impl ModuleTypes {
     /// Owned metadata for the public queries on `TypedProgram`, after typing.
     /// Keep every record/enum shape, default, generic parameter list and
     /// bound ([`TypedProgram::bound`]), and the consumed parameters
-    /// ([`TypedProgram::consumed`]).
-    /// Function/constant signatures, protocols, aliases, constant values and
+    /// ([`TypedProgram::consumed`]), and the constant types
+    /// ([`TypedProgram::const_type`]).
+    /// Function signatures, protocols, aliases, constant values and
     /// parameter names are needed while typing, but no retained query reads
     /// them. A new query that needs one must extend this snapshot and the
     /// ownership regression; these snapshots must never be typing inputs.
@@ -1014,6 +1015,7 @@ impl ModuleTypes {
         ModuleTypes {
             records: self.records.clone(),
             enums: self.enums.clone(),
+            consts: self.consts.clone(),
             defaults: self.defaults.clone(),
             generics: self.generics.clone(),
             bounds: self.bounds.clone(),
@@ -1652,6 +1654,13 @@ impl TypedProgram {
     /// (a `system` property that names a declaration).
     pub fn try_type_of(&self, expr: &Expr) -> Option<&Ty> {
         self.types.get(&key(expr))
+    }
+
+    /// The type of the constant `name` of this module or of a module it was
+    /// typed against (`docs/slice.md` section 6: the Rust target builds a
+    /// constant whose type is not `Copy` once).
+    pub fn const_type(&self, name: &QualName) -> Option<&Ty> {
+        self.modules.get(&name.module)?.consts.get(&name.name)
     }
 
     /// The fields of a record of this module or of a module it was typed

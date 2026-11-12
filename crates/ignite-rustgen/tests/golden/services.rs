@@ -48,7 +48,7 @@ pub struct Reader {
 
 #[allow(non_snake_case)]
 pub fn Reader__main(self_: &Reader) -> ::std::result::Result<(), ::ignite_io::IoError> {
-    let stream = match ::ignite_io::TcpStream::connect(self_.target.address.clone(), self_.target.port.clone()) {
+    let stream = match ::ignite_io::TcpStream::connect(self_.target.address.clone(), self_.target.port) {
         Ok(stream) => stream,
         Err(error) => return Err(error.clone().with_exit_code((3) as i32)),
     };

@@ -25,6 +25,8 @@ mod clauses;
 mod cli;
 mod common;
 mod conformance;
+mod constants;
+mod constants_adversary;
 mod control_trace;
 mod data_json;
 mod decode;

@@ -28,7 +28,7 @@ pub fn sum(values: &Vec<i64>) -> i64 {
 }
 
 pub fn greet(name: &String) -> String {
-    format!("{}{}", String::from("hello, "), name.clone())
+    format!("{}{}", String::from("hello, "), name)
 }
 
 pub fn sign(x: &i64) -> i64 {

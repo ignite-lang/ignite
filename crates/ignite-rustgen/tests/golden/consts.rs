@@ -12,13 +12,23 @@ pub fn DOUBLE_LIMIT() -> i64 {
 }
 
 #[allow(non_snake_case)]
-pub fn GREETING() -> String {
-    format!("{}{}", String::from("hello"), SUFFIX())
+pub fn GREETING() -> &'static String {
+    static VALUE: ::std::sync::OnceLock<String> = ::std::sync::OnceLock::new();
+    if let Some(value) = VALUE.get() { return value; }
+    let value = {
+        format!("{}{}", String::from("hello"), SUFFIX())
+    };
+    VALUE.get_or_init(|| value)
 }
 
 #[allow(non_snake_case)]
-pub fn LOUD() -> Mode {
-    Mode::Loud
+pub fn LOUD() -> &'static Mode {
+    static VALUE: ::std::sync::OnceLock<Mode> = ::std::sync::OnceLock::new();
+    if let Some(value) = VALUE.get() { return value; }
+    let value = {
+        Mode::Loud
+    };
+    VALUE.get_or_init(|| value)
 }
 
 #[derive(Clone)]
@@ -39,7 +49,7 @@ pub fn describe(verdict: &Verdict, mode: &Mode) -> String {
     match verdict {
         Verdict::Accept(room) => { let room = (room).clone(); {
             match mode {
-                Mode::Loud => shout(&GREETING()),
+                Mode::Loud => shout(GREETING()),
                 Mode::Quiet => room.clone().to_string(),
             }
         } },
@@ -63,5 +73,54 @@ pub fn or_limit(value: &::std::option::Option<i64>) -> i64 {
 }
 
 pub fn default_mode() -> Mode {
-    return LOUD();
+    return LOUD().clone();
+}
+
+#[derive(Clone)]
+pub struct Spot {
+    pub x: i64,
+    pub label: String,
+}
+
+#[allow(non_snake_case)]
+pub fn NICKNAME() -> &'static ::std::option::Option<String> {
+    static VALUE: ::std::sync::OnceLock<::std::option::Option<String>> = ::std::sync::OnceLock::new();
+    if let Some(value) = VALUE.get() { return value; }
+    let value = {
+        Some(String::from("nick"))
+    };
+    VALUE.get_or_init(|| value)
+}
+
+#[allow(non_snake_case)]
+pub fn HOME() -> &'static ::std::option::Option<Spot> {
+    static VALUE: ::std::sync::OnceLock<::std::option::Option<Spot>> = ::std::sync::OnceLock::new();
+    if let Some(value) = VALUE.get() { return value; }
+    let value = {
+        Some(Spot { x: 1, label: String::from("home") })
+    };
+    VALUE.get_or_init(|| value)
+}
+
+#[allow(non_snake_case)]
+pub fn FALLBACK() -> ::std::option::Option<i64> {
+    Some(7)
+}
+
+pub fn nickname_len() -> i64 {
+    match NICKNAME() {
+        Some(t) => (t.len() as i64),
+        None => 0,
+    }
+}
+
+pub fn home_x() -> i64 {
+    match HOME() {
+        Some(s) => s.x,
+        None => 0,
+    }
+}
+
+pub fn fallback() -> i64 {
+    or_limit(&FALLBACK())
 }

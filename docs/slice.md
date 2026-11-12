@@ -546,7 +546,9 @@ the spawning function keeps its own copies; an argument the moves analysis marks
 **Ownership rule.** Rust moves what Ignite copies. A *place* (an identifier, or a place
 followed by `.field`) used in a value position is emitted with `.clone()`, except where
 `TypedProgram::moves` marks it (20.3): that place is dead after its move position, and it is
-emitted bare, so Rust moves it. Value positions:
+emitted bare, so Rust moves it. A field read (`p.field`, `p.0`) of type `Int`, `Byte`, `U32`,
+`Bool` or `Unit` is emitted bare as well: Rust copies such a value out through any reference
+(`Some(s) => s.x` for a matched constant). Value positions:
 call and method arguments, `let`/`var` initializers, assignment right-hand sides, `match`
 scrutinees, `return` operands, list elements, record field values, `for` iterables, and
 operands of `await`, `?`, `!` and `-`. Non-value positions: the receiver of a method call or
@@ -708,8 +710,9 @@ the same whitespace rule (ASCII space, tab, CR, LF, FF, VT).
 
 | Ignite | Rust |
 |---|---|
-| `const N: T = e` | `#[allow(non_snake_case)] pub fn N() -> T { e }` |
-| `N` (a constant, own or imported) in any expression | `N()` |
+| `const N: T = e`, `T` `Copy` in Rust | `#[allow(non_snake_case)] pub fn N() -> T { e }` |
+| `const N: T = e`, any other `T` (built once, "Constants" below) | `#[allow(non_snake_case)] pub fn N() -> &'static T { static VALUE: ::std::sync::OnceLock<T> = ::std::sync::OnceLock::new(); if let Some(value) = VALUE.get() { return value; } let value = { e }; VALUE.get_or_init(\|\| value) }` |
+| `N` (a constant, own or imported) in any expression | `N()`; a value position of a constant built once `N().clone()` |
 | `IoError.new(m)` | `::ignite_io::IoError::new(m)` |
 | `Enum.Variant(p)` pattern | `Enum::Variant(p)` |
 | `x.to_text()` on `Int`, `Byte`, `Bool` | `x.to_string()` |
@@ -719,10 +722,81 @@ the same whitespace rule (ASCII space, tab, CR, LF, FF, VT).
 list pattern, and a constant is not a Rust pattern. An arm whose pattern contains a text,
 list or constant pattern anywhere becomes `__m if <test> => { let a = (<access>).clone(); ...
 body }`: `<test>` evaluates the whole pattern against `&__m` (`*s == N()` for a constant,
+`*s == (*N())` for one built once,
 `*s == "x"` for text, `s.len() == 2 && ...` for a list, a `match` with `_ => false` for a
 variant payload), and each binding is read out of `&__m` by its path (`&s.0`, `&s[1]`,
 `match s { E::V(_, __x) => __x, _ => unreachable!() }`) and cloned. Every other arm is a
 Rust pattern as written.
+
+**Constants.** Story `rust-target-constants-built-once`. A constant whose type is `Copy` in
+Rust (`Int`, `Byte`, `U32`, `Bool`, `Unit`, a quantity, an `Option`, `Result` or tuple of
+these) stays a fn that returns its value. Every other constant (`Text`, `Bytes`, a list, a
+map, a record, an enum, a fn value) is built once per process: `N()` returns a `&'static T`
+into a `OnceLock` (the row above). The type is the one the type checker gives the constant
+(`TypedProgram::const_type`, aliases resolved), so the declaring module and every importer,
+`std` or a sibling, agree on the form; without types every constant stays a fn.
+
+- A use reads it as a reference parameter is read (Parameters, above): passed as it is to a
+  reference parameter (`&**F()` for a fn constant lent to a parameter that only calls it, the
+  `dyn Fn` behind the `Arc`), `(*N())` as an operand, the receiver of a builtin (`N().len()`,
+  `N().as_bytes()` for a `to_bytes` the 20.3.7 forms lend), the argument of a builtin that
+  only reads it, the constant or a field of it (`m.get(KEY())`, `contains_key`, `remove`,
+  `starts_with`, `strip_prefix`, `join`, `append`, `pieces`, `Bytes.index_of`; a `std` fn
+  such as `ends_with`, `split` or `find` takes it as a reference parameter), an element or
+  field read in place (`checked::at(N(), i, ..)`, `N().f`), `for x in (N()).iter()`, a `for
+  (k, v)` over a `Map` constant (`(M()).iter()`, the entries lent as a list's elements are),
+  a `match` on `N()` with its bindings lent, and `format!` arguments. Such a read allocates
+  nothing. Two reads copy what they read, as the same read of a parameter or a local list
+  does (story `rust-target-read-only-bindings-borrow`): a field of an element as a receiver
+  (`N.items[0].name.len()`, `checked::at(..).name.clone().len()`) and an element
+  interpolated (`"{N.tags[i]}!"`, `checked::at(..).clone()`), one allocation per read each.
+- A value position (a by-value argument, a `let` or `var` initialiser, a `return` operand
+  or result, a list element, a record field, a `send`, a `spawn` argument) writes
+  `N().clone()`: one copy, which no other use reads, so a later change of it is seen by no
+  other use. A closure captures nothing for it: `N()` names a `'static`.
+- A change in place of a constant (`C.push(x)`, `C[i] = x`, `C.f.clear()`, `C.put(k, v)`:
+  the checker accepts these and refuses only an assignment to a field, E006) is written on
+  the copy `N().clone()` and is lost, as before, as on the LLVM target (`docs/llvm.md`
+  section 2) and in the evaluator.
+- The generated code has no `unsafe`. Inside the `ignite-std` crate and the program crate
+  each constant has one cell, so it is built once per process, where the LLVM target builds
+  an aggregate constant once per process and IR module.
+
+The order of effects. A constant's value is pure (E010, 4.3) but may call pure fns, and a
+pure fn may `log` (not an effect) or fail (an overflow, an index out of range, no arm). Such an
+initialiser exists. The first use that finds the cell empty evaluates the value outside the
+cell, then publishes it; every later use reads the published value. So a `log` in it prints
+once per process, at the first use, where it printed at every use before the story (the LLVM
+target printed it once already); two tasks at the first use at once both evaluate it and both
+log, and the one that publishes second drops its value and reads the first one's. A failure
+publishes nothing: each later use evaluates it again and fails as every use did before. An
+initialiser that reaches its own constant through a fn body (E015 follows only direct
+references) recurses until the stack overflows, as before, since it is evaluated outside the
+cell and no use waits for it (a `LazyLock`, or `OnceLock::get_or_init` around the
+evaluation, would deadlock or panic there instead).
+
+What it costs, counted by `constants::` (memcheck's `total heap usage`, 1,001 rounds less 1,
+per round): reading a 16-byte `Text`, a 12-byte `Bytes`, a list of nine pairs of texts and a
+record with a text and a list of two texts went from 3, 3, 38 and 16 allocations per round
+(48, 36, 976 and 289 bytes) to 0 on the Rust target. A round that gives constants and a
+field of one to `Map.contains`, `Map.get`, `starts_with`, `ends_with`, `contains` and
+`Bytes.index_of` makes 0, and one over a `Map` constant 0 (`constants_adversary::` counts a
+`for` over a map of three entries, `m.get(KEY)` and `t.starts_with(KEY)` at 0 where the
+first form of this story made 4.001, 1.001 and 1.006: a copy of the map, of the key). The
+two reads above that copy make 1 (`PAIRS[i].1.len()`) and 2 (`"{BOUNDS.tags[i]}!"`, the
+copy and the text built). The LLVM target, unchanged, makes 0
+`malloc` calls per round for all of them, in the same count (under 0.002 per round and 0.2
+bytes; its first mention copies the constant to the heap once, `docs/llvm.md` section 2; what
+a task's arena takes is not a `malloc` and is not in this count), so no story follows there
+from this count. The form costs 6 lines of generated Rust per constant built once; the release
+`todod` stripped grew from 878,064 to 878,752 bytes and `terminald` stayed at 600,176 (row 3.9's
+method: `ignite build --target rust --release`, then `strip`); one `GET /todos/1` of `todod`,
+`valgrind --tool=callgrind` over 200 replies after 50, went from 125,363 to 125,367
+instructions (dev) and from 19,757 to 19,760 (release), its allocations stay 36 (`reply_cost::`'s
+count): that path reads no constant built once. A form that is cheaper still, a `&'static
+str` or `&'static [u8]` Rust builds at compile time, was not taken: every reference parameter
+is a `&String` or `&Vec<u8>`, so such a constant would need a second calling convention or a
+copy at each use that passes it on. `CODEGEN_REVISION` is `ignite-codegen/0.1.0-54` since this unit.
 
 The generator reads types (`generate_typed`, `generate_std_typed`) for UFCS, fn-field calls,
 `to_text`, `+` on `Text`, constant patterns and variants resolved by expected type; without
@@ -1854,7 +1928,8 @@ leaves out.
 - `<exe> [FILTER] [--exact] [--list] [--jobs N] [--timeout SECS]`: the runner. It selects the
   tests whose full name contains `FILTER` (equals it with `--exact`; all without a filter) and
   runs each as a child process `<exe> --run-one <full name>`, at most `N` at a time (default:
-  the CPU count), each with a timeout (default 60 s; the child is killed when it expires).
+  the environment variable `IGNITE_TEST_JOBS` when it holds a positive integer, else the CPU
+  count; a build pool sets the variable to the CPUs it grants), each with a timeout (default 60 s; the child is killed when it expires).
   It captures each child's stdout and stderr and shows them only for failures.
 - Per test: exit 0 passes; 101 fails; a timeout fails as `timed out after <SECS> s`; any other
   code `N` fails as `exited with code N`; death by a signal fails as `killed by signal N`.
