@@ -155,7 +155,7 @@ enum Commands {
         /// List the selected tests instead of running them.
         #[arg(long)]
         list: bool,
-        /// Tests run at once (default: the CPU count).
+        /// Tests run at once (default: IGNITE_TEST_JOBS when set, else the CPU count).
         #[arg(long)]
         jobs: Option<usize>,
         /// Seconds after which a test is killed (default 60).

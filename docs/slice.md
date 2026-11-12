@@ -1928,7 +1928,8 @@ leaves out.
 - `<exe> [FILTER] [--exact] [--list] [--jobs N] [--timeout SECS]`: the runner. It selects the
   tests whose full name contains `FILTER` (equals it with `--exact`; all without a filter) and
   runs each as a child process `<exe> --run-one <full name>`, at most `N` at a time (default:
-  the CPU count), each with a timeout (default 60 s; the child is killed when it expires).
+  the environment variable `IGNITE_TEST_JOBS` when it holds a positive integer, else the CPU
+  count; a build pool sets the variable to the CPUs it grants), each with a timeout (default 60 s; the child is killed when it expires).
   It captures each child's stdout and stderr and shows them only for failures.
 - Per test: exit 0 passes; 101 fails; a timeout fails as `timed out after <SECS> s`; any other
   code `N` fails as `exited with code N`; death by a signal fails as `killed by signal N`.

@@ -7,7 +7,9 @@
 //! The runner starts every selected test as a child process of the same
 //! executable (`--run-one <full name>`), so a failed assert, a panic, a
 //! `Process.exit`, a leaked socket or raw terminal mode ends only that
-//! child. Children run at most `--jobs` at a time on a pool of threads;
+//! child. Children run at most `--jobs` at a time on a pool of threads
+//! (default: `IGNITE_TEST_JOBS` when set to a positive integer, else the
+//! CPU count);
 //! each has a deadline (`--timeout`) after which it is killed. Results
 //! are printed in the order of `tests`, each once it and every test before
 //! it have finished, so the output does not depend on scheduling.
@@ -26,6 +28,20 @@ pub const USAGE_EXIT_CODE: i32 = 2;
 
 /// Default per-test timeout in seconds.
 pub const DEFAULT_TIMEOUT: u64 = 60;
+
+/// The environment variable that sets the default of `--jobs`: a build
+/// pool that grants a job N CPUs sets it to N. `--jobs` on the command
+/// line wins over it.
+pub const JOBS_VARIABLE: &str = "IGNITE_TEST_JOBS";
+
+/// The default of `--jobs`: `value` (the content of [`JOBS_VARIABLE`])
+/// when it is a positive integer, else the CPU count.
+fn default_jobs(value: Option<&str>) -> usize {
+    value
+        .and_then(|text| text.trim().parse::<usize>().ok())
+        .filter(|jobs| *jobs > 0)
+        .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, usize::from))
+}
 
 /// One test of a test executable: its full name (`<module>/<name>`) and
 /// its body.
@@ -54,7 +70,7 @@ impl Arguments {
             filter: None,
             exact: false,
             list: false,
-            jobs: std::thread::available_parallelism().map_or(1, usize::from),
+            jobs: default_jobs(std::env::var(JOBS_VARIABLE).ok().as_deref()),
             timeout: DEFAULT_TIMEOUT,
         };
         let mut args = args.iter();
@@ -408,6 +424,13 @@ mod tests {
             Some("m/a b")
         );
         assert!(parse(&["--jobs", "0"]).is_err());
+        let cpus = std::thread::available_parallelism().map_or(1, usize::from);
+        assert_eq!(default_jobs(Some("3")), 3);
+        assert_eq!(default_jobs(Some(" 2\n")), 2);
+        assert_eq!(default_jobs(Some("0")), cpus);
+        assert_eq!(default_jobs(Some("many")), cpus);
+        assert_eq!(default_jobs(Some("")), cpus);
+        assert_eq!(default_jobs(None), cpus);
         assert!(parse(&["--timeout"]).is_err());
         assert!(parse(&["--bogus"]).is_err());
         assert!(parse(&["a", "b"]).is_err());
