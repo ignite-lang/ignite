@@ -7332,7 +7332,8 @@ The Rust target (20.3.4 otherwise):
   elements read in a variant payload, a record, list or tuple literal
   (`Both(r.clone(), size(&r))`, `Pair { c: r.clone(), n: size(&r) }`), a parameter whose
   only move is a late one behind a `?` (it stays borrowed and is copied), and a tuple
-  scrutinee with a text, list or constant pattern in an arm.
+  scrutinee with a text, list or constant pattern in an arm. `CODEGEN_REVISION` is
+  `ignite-codegen/0.1.0-52` (one bump for both targets).
 
 The LLVM target and the evaluator read none of this, except the late moves and the tuple
 scrutinees of unit `call-moves`, as the last two items say.
