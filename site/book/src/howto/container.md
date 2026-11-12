@@ -28,8 +28,10 @@ this ignite carries could not be written: Permission denied`.
 
 ## The Rust target
 
-The image's `ignite` finds the substrate crate in its own source tree, so `--target rust`
-needs no `--substrate`. It builds with no network:
+The image's `ignite` finds the substrate crate beside itself, in
+`/usr/local/share/ignite/substrate`, where the release archive installed it (in images before
+v0.17.0, in the release's source tree). So `--target rust` needs no `--substrate`. It builds
+with no network:
 
 ```sh
 docker run --rm --network none --user "$(id -u):$(id -g)" -e XDG_CACHE_HOME=/tmp -v "$PWD:/work" \
