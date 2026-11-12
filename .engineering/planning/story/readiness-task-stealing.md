@@ -32,7 +32,7 @@ scope:
   path: crates/ignite-rt/tests
 - confidence: cited
   path: docs/readiness-io.md
-revision: 5
+revision: 6
 ---
 # Story: a session whose socket becomes readable while its worker is busy is run by a worker that has nothing to run
 
@@ -102,3 +102,34 @@ Derived 2026-11-11 by a scoping pass. Every line is cited (read from the tree) o
 - `main` on a worker (`docs/readiness-io.md` Q7).
 - More workers than CPUs.
 - Moving a task at any park other than its first read.
+
+## Measured 2026-11-12: refuted as built
+
+The design of this draft was built as a prototype (branch `measure/x-move`, `19fecaeb`, one commit on `1e16dfba`: a task's first read park waits on a shared epoll instance that every worker registers in its own epoll; the worker that gets the event adopts the task; a task moves at most once; `IGNITE_STEAL=0` switches it off) and measured on the dedicated host against v0.16.0 (run `iq-20261112t004412z-1b07`, c7i.metal-24xl, 5 passes, 0.6810 USD). It is refuted as built: every cell it was meant to help is worse, and so are the cells at 16 and 64 connections.
+
+Row 3.7, p99 against plain Rust, lower is better (v0.16.0 → prototype):
+
+- `terminal/connect-8`: LLVM 1.307 → 1.518, Rust target 1.216 → 1.318.
+- `terminal/rr-64`: LLVM 0.393 → 0.629, Rust target 0.402 → 0.624.
+- `todo/get-64`: LLVM 0.496 → 0.909, Rust target 0.551 → 0.991 (passes from 0.629 to 1.858).
+- `todo/patch-16`: LLVM 0.571 → 1.107, Rust target 0.747 → 0.966.
+- one connection (`rr-1`, `get-1`): unchanged within 0.03.
+
+Row 3.3, throughput against plain Rust, higher is better:
+
+- `terminal/connect-8`: LLVM 0.913 → 0.829, Rust target 0.958 → 0.899.
+- `todo/patch-16`: LLVM 1.198 → 0.904, Rust target 1.189 → 0.667.
+- `terminal/rr-64`: LLVM 1.251 → 1.198, Rust target 1.218 → 1.124; `todo/get-64`: 1.290 → 1.238, 1.177 → 1.109.
+
+Rows 3.8 (peak RSS) and 6.x (build time) moved by at most 0.07 and 0.013.
+
+What the prototype established beside the timing:
+
+- The sites that keep per-thread state across a park (the read buffer, the arena state address the generated LLVM caches, the open `catch` count, the timer slot, `wait::Lock` guards) can each be made correct for a task that changes threads; each has a test that fails without its fix. All thread-locals a task reaches go through a non-inlined accessor.
+- The move needs one `unsafe impl Send` for the carried coroutine (row 3.6: Rust target 12 → 13, LLVM 79 → 80).
+- A soak of 18,000 sessions on four servers was correct with the move on and off; about 2950 of 4500 sessions were given up and adopted per server.
+- Counted in the soak: every sleeping worker wakes for a shared event (`shared_polls_empty` 184 on the Rust target's terminal server, 3012 on the LLVM target's), and while any task is adrift every worker gives up its lone-wait and blocking-read paths.
+
+Not established: whether one watcher of the shared instance (handed over with `EPOLL_CTL_DEL`/`ADD`) instead of all workers changes the result; which of the two counted effects carries the loss.
+
+The story's premise (the first read of a new session waits behind its worker's run queue, and moving it to an idle worker shortens the p99 of `connect-8`) is not supported by this run. Before another design, the p99 of `connect-8` needs to be located by measurement on the dedicated host (where the reply's time goes between the client's send and the server's read), not inferred from counts.

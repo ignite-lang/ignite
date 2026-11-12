@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-12T03:05:26Z",
+  "actor": "human:timo",
+  "artifact": "story:rust-target-read-only-forms-borrow",
+  "kind": "story",
+  "revision": 1,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate exit 0 on 1988b62f (merged as 21bc8eda, PR 140), 2026-11-12 02:07Z to 03:03Z, 29 suites, 389 UI checks; borrowed_reads:: 132.5 allocations per lookup before, 0 after"
+  }
+}

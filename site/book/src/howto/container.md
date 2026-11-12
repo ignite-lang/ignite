@@ -14,7 +14,7 @@ LLVM target writes its runtime archive:
 
 ```sh
 docker run --rm --user "$(id -u):$(id -g)" -e XDG_CACHE_HOME=/tmp -v "$PWD:/work" \
-  ghcr.io/ignite-lang/ignite-toolchain:0.16.0 ignite build hello.ignite
+  ghcr.io/ignite-lang/ignite-toolchain:0.16.1 ignite build hello.ignite
 ./target/ignite/hello/bin/hello
 ```
 
@@ -28,12 +28,14 @@ this ignite carries could not be written: Permission denied`.
 
 ## The Rust target
 
-The image's `ignite` finds the substrate crate in its own source tree, so `--target rust`
-needs no `--substrate`. It builds with no network:
+The image's `ignite` finds the substrate crate beside itself, in
+`/usr/local/share/ignite/substrate`, where the release archive installed it (in images before
+v0.16.1, in the release's source tree). So `--target rust` needs no `--substrate`. It builds
+with no network:
 
 ```sh
 docker run --rm --network none --user "$(id -u):$(id -g)" -e XDG_CACHE_HOME=/tmp -v "$PWD:/work" \
-  ghcr.io/ignite-lang/ignite-toolchain:0.16.0 ignite build hello.ignite --target rust
+  ghcr.io/ignite-lang/ignite-toolchain:0.16.1 ignite build hello.ignite --target rust
 ```
 
 ```text
@@ -47,7 +49,7 @@ built target/ignite/hello/target/debug/hello
 
 ```sh
 docker run --rm --user "$(id -u):$(id -g)" -e XDG_CACHE_HOME=/tmp -v "$PWD:/work" \
-  ghcr.io/ignite-lang/ignite-toolchain:0.16.0 ignite test hello.ignite --target all
+  ghcr.io/ignite-lang/ignite-toolchain:0.16.1 ignite test hello.ignite --target all
 ```
 
 ```text
@@ -69,7 +71,7 @@ The first block is the LLVM target, the second the Rust target.
 
 ```sh
 docker run --rm --user "$(id -u):$(id -g)" -e XDG_CACHE_HOME=/tmp -v "$PWD:/work" \
-  ghcr.io/ignite-lang/ignite-toolchain:0.16.0 ignite build hello.ignite --static
+  ghcr.io/ignite-lang/ignite-toolchain:0.16.1 ignite build hello.ignite --static
 file target/ignite/hello/bin/hello
 ```
 

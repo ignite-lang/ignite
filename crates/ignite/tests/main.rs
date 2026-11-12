@@ -31,6 +31,7 @@ mod default_target;
 mod dev_build;
 mod dev_build_adversary;
 mod differential;
+mod dist;
 mod drain;
 mod eval;
 mod eval_model;

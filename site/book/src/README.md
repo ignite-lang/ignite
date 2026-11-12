@@ -27,7 +27,7 @@ through the full program.
 
 ## What works today
 
-Ignite is an early prototype, at release v0.16.0. It builds native executables on two targets,
+Ignite is an early prototype, at release v0.16.1. It builds native executables on two targets,
 LLVM by default and Rust, and runs and applies systems on one local machine. The syntax is not
 frozen. The [roadmap](roadmap.md) lists what is released, what is being built and what is only
 designed.

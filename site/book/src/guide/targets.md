@@ -9,12 +9,15 @@ program and must behave the same; why both exist is in
 ## The Rust target
 
 `--target rust` writes a Rust project and runs `cargo build` on it, so cargo must be on the
-`PATH`. The generated project depends on the IO substrate crate, `crates/ignite-io` of a clone.
+`PATH`. The generated project depends on the IO substrate crate, `ignite-io`
+([where it is looked for](install.md#pre-built-binary)).
 
 - An `ignite` installed from source finds the crate in its own clone. Nothing to pass.
-- The pre-built binary does not carry it. Pass the crate of a clone of the same release with
-  `--substrate`, as an absolute path. The clone of [Get the examples](install.md#get-the-examples)
-  has it:
+- The pre-built binary from v0.16.1 on finds the crate its archive installed beside it,
+  `share/ignite/substrate`. Nothing to pass.
+- An older pre-built binary does not carry it. Pass the crate of a clone of the same release
+  with `--substrate`, as an absolute path. The clone of
+  [Get the examples](install.md#get-the-examples) has it:
 
 ```sh
 ignite build examples/todo/todo.ignite --target rust --substrate "$PWD/crates/ignite-io"
@@ -34,8 +37,7 @@ first build of a project fetches the substrate's crates from crates.io. `ignite 
 prints the generated Rust instead of building it. Generated Rust is an artifact: never edit it
 and never commit it.
 
-`ignite test --target rust` and `--target all` take no `--substrate`. Run them with an
-`ignite` installed from source, or in the [toolchain image](../howto/container.md#tests-on-both-targets).
+`ignite test --target rust` and `--target all` take `--substrate` too, with the same meaning.
 
 ## Release builds
 
