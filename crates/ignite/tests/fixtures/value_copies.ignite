@@ -30,12 +30,11 @@ package value_copies
 // `answer_lean` gives the same answer with the source forms of part 5 of the
 // note, which copy no row today.
 //
-// The system at the end has one executable per size and request count:
+// The inline tests are units of the differential corpus. The executables
+// that count one request are appended by `crates/ignite/tests/value_copies.rs`:
 // `s1` is 33 parents, 128 middles and 222 children, `s10` ten times that;
 // `r1` answers one request, `r2` two, so that `r2` less `r1` is one request
-// without building the tables. `lean-*` answer with `answer_lean`. The
-// inline tests run on both targets with `ignite test`; the evaluator ran
-// them as a unit of the differential corpus (the note says when).
+// without building the tables; `lean-*` answer with `answer_lean`.
 
 enum Val {
   Nil
@@ -504,32 +503,4 @@ test "the forms that copy nothing give the values of the forms that copy" {
   assert mine == [5, 13]
   assert digest(answer_lean(db)) == digest(answer(db))
   assert run_lean(Sizes { parents = 3, middles = 8, children = 14, fields = 6, depth = 2 }, 2) == 170595725
-}
-
-// One request at a time, for counting (the header names the executables).
-type Run {
-  executable: Text
-  parents: Int
-  middles: Int
-  children: Int
-  requests: Int
-  lean: Bool = false
-}
-
-fn Run.main(self: Run) -> Result<Unit, IoError> {
-  let sizes = Sizes { parents = self.parents, middles = self.middles, children = self.children, fields = 8, depth = 3 }
-  let h = if self.lean { run_lean(sizes, self.requests) } else { run(sizes, self.requests) }
-  log("{self.requests} requests: {h}")
-  return Ok(Unit)
-}
-
-system ValueCopies {
-  component s1r1: Run { executable = "s1-r1", parents = 33, middles = 128, children = 222, requests = 1 }
-  component s1r2: Run { executable = "s1-r2", parents = 33, middles = 128, children = 222, requests = 2 }
-  component s10r1: Run { executable = "s10-r1", parents = 330, middles = 1280, children = 2220, requests = 1 }
-  component s10r2: Run { executable = "s10-r2", parents = 330, middles = 1280, children = 2220, requests = 2 }
-  component leans1r1: Run { executable = "lean-s1-r1", parents = 33, middles = 128, children = 222, requests = 1, lean = true }
-  component leans1r2: Run { executable = "lean-s1-r2", parents = 33, middles = 128, children = 222, requests = 2, lean = true }
-  component leans10r1: Run { executable = "lean-s10-r1", parents = 330, middles = 1280, children = 2220, requests = 1, lean = true }
-  component leans10r2: Run { executable = "lean-s10-r2", parents = 330, middles = 1280, children = 2220, requests = 2, lean = true }
 }

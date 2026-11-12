@@ -40,11 +40,11 @@ unnecessary.
 
 ## 1 The workload
 
-`docs/value-copies/workload.ignite`, beside this note. Not in `crates/ignite/tests/fixtures/`:
-there the differential corpus runs it on every merge, which raises metric 1.2 and so needs a
-blessed `quality/baseline.json`, `docs/quality.md` and book page, the same lines unit
-`call-moves` changes; and the counts below need executables the corpus would run as units. The
-first implementation unit (section 4.4) moves it into the fixtures with its count test.
+[`crates/ignite/tests/fixtures/value_copies.ignite`](../crates/ignite/tests/fixtures/value_copies.ignite)
+since unit `value-copies-harness` (section 4.4; written as `docs/value-copies/workload.ignite`
+for this note): its two inline tests are units of the differential corpus, and
+`crates/ignite/tests/value_copies.rs` appends the executables `s1-r1` and `s1-r2` and counts one
+request at s1 on the Rust target with memcheck on every merge.
 
 - Data: three tables of rows, parents, middles (each under one parent) and children (each under
   one middle). A row is a dynamic record, `Rec(List<(Text, Val)>)`, as the reporter's are: an
@@ -68,9 +68,10 @@ first implementation unit (section 4.4) moves it into the fixtures with its coun
   pattern in a `for`, `size(rows[i])`, `match rows[i]`, `rows[i] == Nil`).
 - `answer_lean`: the same answer from the same filters per row, written with the source forms of
   section 5 only.
-- The system `ValueCopies` at the end of the file builds eight executables: `s1-r1`, `s1-r2`,
-  `s10-r1`, `s10-r2` and the same four with `lean-`. `rN` answers N requests over one set of
-  tables, so `r2` less `r1` is one request without building the tables.
+- The system `ValueCopies` the note's file ended with builds eight executables: `s1-r1`,
+  `s1-r2`, `s10-r1`, `s10-r2` and the same four with `lean-`. `rN` answers N requests over one
+  set of tables, so `r2` less `r1` is one request without building the tables. The harness
+  appends the first two.
 
 Same output on every consumer: both inline tests pass on the Rust target, the LLVM target (`ignite
 test --target rust|llvm`) and the evaluator (run as a unit of the differential runner on a
