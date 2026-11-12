@@ -2558,25 +2558,19 @@ impl<'a> Generator<'a> {
     }
 
     /// Whether `for pattern in iter { body }` can iterate `iter` by
-    /// reference: the list is a [`lent_iterable`](Self::lent_iterable), the
-    /// pattern is one Rust matches against a reference (a tuple or a
-    /// variant of bindings and wildcards, [`is_native`](Self::is_native)),
-    /// and the body changes none of its bindings. Each binding is then a
-    /// reference into the element, as in a `match` on a borrowed place
-    /// ([`lend_bindings`](Self::lend_bindings)).
+    /// reference: the list is a [`lent_iterable`](Self::lent_iterable) and
+    /// the pattern, a tuple of names and wildcards (the only other pattern
+    /// `for` takes), is one Rust matches against a reference
+    /// ([`is_native`](Self::is_native)). Each binding is then a reference
+    /// into the element, as in a `match` on a borrowed place
+    /// ([`lend_bindings`](Self::lend_bindings)); the body cannot change a
+    /// binding of a `for` (E006).
     fn borrowed_for_pattern(&self, pattern: &Pattern, iter: &Expr, body: &Block) -> bool {
         let Some(Ty::List(element)) = self.type_of(iter) else {
             return false;
         };
-        if !self.is_native(pattern, Some(element)) {
-            return false;
-        }
-        let mutated = ownership::changed_in_block(body, self.types);
-        pattern
-            .bindings()
-            .iter()
-            .all(|id| !mutated.contains(id.name.as_str()))
-            && self.lent_iterable(iter, &mutated)
+        self.is_native(pattern, Some(element))
+            && self.lent_iterable(iter, &ownership::changed_in_block(body, self.types))
     }
 
     /// The list place `l` of `l.slice(i, j)` whose bounds change nothing,
@@ -2660,9 +2654,33 @@ impl<'a> Generator<'a> {
                 {
                     return format!("{}.as_bytes()", self.receiver(text));
                 }
-                self.ref_arg(arg)
+                self.lent_arg(arg)
             })
             .collect()
+    }
+
+    /// [`ref_arg`](Self::ref_arg), and a [`lent_element`](Self::lent_element)
+    /// as the `&T` into its list ([`element_at`](Self::element_at)). Only
+    /// for a caller that has checked that nothing evaluated while the
+    /// loan is held (a later argument, a match arm) changes the list:
+    /// `ref_args`, `match`. Any other caller of `ref_arg` copies the
+    /// element, so a later argument that assigns the list compiles.
+    fn lent_arg(&mut self, arg: &Expr) -> String {
+        if self.lent_element(arg) {
+            return self.element_at(arg);
+        }
+        self.ref_arg(arg)
+    }
+
+    /// Whether `expr` is a [`lent_element`](Self::lent_element) that
+    /// `later`, evaluated while it is borrowed, does not change the list of.
+    fn lent_across(&self, expr: &Expr, later: &[Expr]) -> bool {
+        self.lent_element(expr)
+            && self.element_root(expr).is_none_or(|root| {
+                !later
+                    .iter()
+                    .any(|e| ownership::changed_in(e, self.types).contains(root))
+            })
     }
 
     fn ref_arg(&mut self, arg: &Expr) -> String {
@@ -2676,9 +2694,6 @@ impl<'a> Generator<'a> {
         }
         if let Some((list, index, site)) = self.borrowed_at(arg) {
             return self.checked_at_call(list, index, site);
-        }
-        if self.lent_element(arg) {
-            return self.element_at(arg);
         }
         if self.field_of_element(arg) {
             return format!("&{}", self.element_field(arg));
@@ -4595,7 +4610,11 @@ impl<'a> Generator<'a> {
 
     /// `ignite_io::checked::at(list, index, site)`: a `&T` into the list.
     fn checked_at_call(&mut self, receiver: &Expr, index: &Expr, site: FailureSite) -> String {
-        let list = self.ref_arg(receiver);
+        let list = if self.lent_across(receiver, std::slice::from_ref(index)) {
+            self.element_at(receiver)
+        } else {
+            self.ref_arg(receiver)
+        };
         let index_text = self.value(index);
         let index_text = self.deref_if_borrowed(index, index_text);
         format!(
@@ -4652,12 +4671,7 @@ impl<'a> Generator<'a> {
         ];
         READS.contains(&name.name.as_str())
             && !self.element_clone(receiver).is_empty()
-            && self.lent_element(receiver)
-            && self.element_root(receiver).is_none_or(|root| {
-                !args
-                    .iter()
-                    .any(|arg| ownership::changed_in(arg, self.types).contains(root))
-            })
+            && self.lent_across(receiver, args)
     }
 
     /// Whether `expr` is a field (or tuple field) of an
@@ -5224,6 +5238,8 @@ impl<'a> Generator<'a> {
                     && place_root(receiver).is_some_and(|root| modified.contains(root))
                 {
                     format!("&{}", self.value(receiver))
+                } else if self.lent_across(receiver, args) {
+                    self.element_at(receiver)
                 } else {
                     self.ref_arg(receiver)
                 };
@@ -5463,7 +5479,7 @@ impl<'a> Generator<'a> {
         let ty = self.type_of(scrutinee).cloned();
         let lent = self.match_by_ref(scrutinee, ty.as_ref(), arms);
         let mut scrutinee_text = if lent {
-            self.ref_arg(scrutinee)
+            self.lent_arg(scrutinee)
         } else {
             self.value(scrutinee)
         };

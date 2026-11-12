@@ -321,7 +321,7 @@ release.
 | # | metric | kind | better | instrument | bar | target |
 |---|---|---|---|---|---|---|
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | lower | `differential::corpus_agrees_across_rust_llvm_and_the_evaluator` (every merge): units of the corpus whose exit, stdout or failure text differs from the Rust target's | eval 2, llvm 0 |  |
-| 1.2 | differential corpus size | ratchet | higher | the differential runner: units (inline tests and executables) each consumer ran | eval 770, llvm 931, rust 931 |  |
+| 1.2 | differential corpus size | ratchet | higher | the differential runner: units (inline tests and executables) each consumer ran | eval 771, llvm 932, rust 932 |  |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | lower | `quality::static_metrics_hold_the_bar`: per consumer crate, `PatternKind::` mentions (patterns) and distinct `Builtin::` variants named (builtins) | eval/builtins 112, eval/patterns 13, llvm/builtins 12, llvm/patterns 30, rust/builtins 43, rust/patterns 71 | one implementation per rule: after story:mid-level-ir the backends name no `PatternKind` and no `Builtin` the IR lowers |
 | 1.4 | generated-code goldens changed without a `CODEGEN_REVISION` bump | gate | lower | `quality::static_metrics_hold_the_bar`: golden `.rs` and `.ll` outputs changed against the merge base with main while `CODEGEN_REVISION` is unchanged | all 0 |  |
 | 1.5 | random programs on which the consumers disagree | gate | lower | a typed program generator, N seeds per gate | unmeasured: no program generator yet (out of scope of story:quality-ratchet) |  |
@@ -343,7 +343,7 @@ release.
 
 | # | metric | kind | better | instrument | bar | target |
 |---|---|---|---|---|---|---|
-| 3.1 | copies in the generated code of the golden corpus | ratchet | lower | `quality::static_metrics_hold_the_bar`: `.clone()` in the Rust generator's goldens, calls of `copy.*` in the LLVM goldens | llvm 90, rust 166 |  |
+| 3.1 | copies in the generated code of the golden corpus | ratchet | lower | `quality::static_metrics_hold_the_bar`: `.clone()` in the Rust generator's goldens, calls of `copy.*` in the LLVM goldens | llvm 90, rust 163 |  |
 | 3.2 | binary size | ratchet | lower | `ignite-perf quality` (task quality): size of `todod` and `terminald` per target and profile | llvm/terminald/dev 7264448 B, llvm/terminald/release 1394760 B, llvm/todod/dev 7969688 B, llvm/todod/release 1968184 B, rust/terminald/dev 6347480 B, rust/terminald/release 744296 B, rust/todod/dev 7590064 B, rust/todod/release 1038712 B |  |
 | 3.3 | throughput against plain Rust | ratchet | higher | `ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): replies per second of todod and terminald over the plain-Rust implementation's, per cell | llvm/terminal/connect-8 0.929×, llvm/terminal/rr-1 0.994×, llvm/terminal/rr-64 1.254×, llvm/todo/get-1 1.033×, llvm/todo/get-64 1.282×, llvm/todo/patch-16 1.203×, rust/terminal/connect-8 0.966×, rust/terminal/rr-1 0.972×, rust/terminal/rr-64 1.222×, rust/todo/get-1 0.990×, rust/todo/get-64 1.176×, rust/todo/patch-16 1.193× |  |
 | 3.4 | peak RSS, leaked handles and threads after a load run | gate | lower | `llvm_memory::` and `terminal::idle_terminald_runs_one_thread` (every merge) | unmeasured: no number: the named tests gate it in task gate |  |
