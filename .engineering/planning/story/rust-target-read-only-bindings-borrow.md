@@ -4,7 +4,7 @@ id: story:rust-target-read-only-bindings-borrow
 kind: story
 status: draft
 title: A binding that is only read, and a Map lookup, borrow on the Rust target
-revision: 1
+revision: 2
 ---
 # Story: a binding that is only read, and a `Map` lookup, borrow on the Rust target
 
@@ -21,7 +21,7 @@ Unit `mysql-cost` (`4bcda2ab`) lends an element or a `for` pattern that is read 
 - `match m.get(k)`: `m.get(&k.clone()).cloned()`, a copy of the key and of the value.
 - `for k in m.keys()`: `m.keys().cloned().collect::<Vec<_>>()`.
 
-The first user of `std.protocol.mysql` (a read-only HTTP service backed by MySQL 8 over TLS) reported on 2026-11-12 that with `4bcda2ab` its profile still has 9.9 % of samples in copies of record fields and 11.1 % in drops of values, and names `m.get` and record field reads.
+The first user of `std.protocol.mysql` (a read-only HTTP service backed by MySQL 8 over TLS) reported on 2026-11-12 that with `4bcda2ab` its profile still has samples in copies of record fields and in drops of values, and names `m.get` and record field reads.
 
 ## Acceptance
 

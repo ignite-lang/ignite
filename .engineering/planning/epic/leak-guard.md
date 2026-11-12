@@ -2,12 +2,13 @@
 format: aep.planning-md/3
 id: epic:leak-guard
 kind: epic
-status: proposed
+status: active
 title: 'Leak guard: a leak fails a test, not a server'
 summary: Per-kind runtime census, counted heap bytes, soak, a leak check in ignite test and runtime metrics, both targets
-revision: 6
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T15:04:35Z", actor: "human:timo", revision: 2}
+- {from: "proposed", to: "active", at: "2026-11-12T20:59:59Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"review_outcome":1}}, executor: "agent:claude-coordinator", correlation: "upkeep-2026-11-12"}
 ---
 # Epic: leak-guard
 

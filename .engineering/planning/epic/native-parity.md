@@ -2,9 +2,12 @@
 format: aep.planning-md/3
 id: epic:native-parity
 kind: epic
-status: draft
+status: active
 title: Ignite programs within 1.1x of plain Rust
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-12T20:59:58Z", actor: "human:timo", revision: 2, executor: "agent:claude-coordinator", correlation: "upkeep-2026-11-12"}
+- {from: "proposed", to: "active", at: "2026-11-12T20:59:58Z", actor: "human:timo", revision: 3, executor: "agent:claude-coordinator", correlation: "upkeep-2026-11-12"}
 ---
 # Epic: native-parity
 

@@ -6,7 +6,7 @@ status: active
 title: A text or byte string that is only read is not copied on the Rust target
 relations:
 - informed_by: story:rust-target-shared-list-storage
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-12T12:37:04Z", actor: "human:timo", revision: 2, executor: "agent:claude-coordinator", correlation: "after-v0.16.2"}
 - {from: "proposed", to: "active", at: "2026-11-12T12:37:04Z", actor: "human:timo", revision: 3, executor: "agent:claude-coordinator", correlation: "after-v0.16.2"}
@@ -19,7 +19,7 @@ On the Rust target a `Text` or `Bytes` that a function only reads is read in pla
 
 ## Why
 
-Reported on 2026-11-12 by the first user of `std.protocol.mysql` (a read-only HTTP service backed by MySQL 8 over TLS, Rust target, release). After the shared lists (branch `wave/14-shared-lists`) 23 % of the allocations of its largest answer are copies of `Text`, and after the user's own source changes its row building still allocates 12,602 times per request. The user reduced its five functions to one synthetic program of 140 lines; `ignite emit` of that program at `3673bee8` (branch `wave/14-shared-lists`) gives the lines quoted here.
+Reported on 2026-11-12 by the first user of `std.protocol.mysql` (a read-only HTTP service backed by MySQL 8 over TLS, Rust target, release). After the shared lists (branch `wave/14-shared-lists`) copies of `Text` are the second largest group of allocations of its largest answer, and after the user's own source changes its row building is still the largest allocating site of a request. The user reduced its five functions to one synthetic program of 140 lines; `ignite emit` of that program at `3673bee8` (branch `wave/14-shared-lists`) gives the lines quoted here.
 
 1. Bytes of a text that are only read. `let b = s.to_bytes()` followed by `for c in b` or `b.is_empty()` is emitted as `let b = s.clone().into_bytes();`: one allocation and a copy of the text for a read. With a constant: `let digits = TABLE().clone().into_bytes();`, two allocations (`story:rust-target-constants-built-once` removes one).
 2. A payload of a lent option that is moved out and only read. `let b = match raw { Some(x) => x  None => return Nil }` on a read-only `Option<Bytes>` parameter is emitted as `Some(x) => x.clone(),`, and `b.to_text()` as `String::from_utf8_lossy(&b).into_owned()`: two allocations where the text is the only thing kept.
@@ -27,7 +27,7 @@ Reported on 2026-11-12 by the first user of `std.protocol.mysql` (a read-only HT
 4. A loop over a lent list of records that keeps a field. `for c in cells { columns.push((c.name, decode_cell(c.raw, c.kind))) }` is emitted as `columns.push((c.name.clone(), decode_cell(&c.raw, &c.kind)));`: the name is copied because `cells` is lent, and `cells` is lent although its caller passes an element it copied out for the call.
 5. A text payload turned into bytes. `WTxt(t) => t.to_bytes()` in a function over a lent enum is emitted as `Wire::WTxt(t) => t.clone().into_bytes(),`: the same form as 1 inside an arm; here the copy is needed unless the caller gives the value up (as 3).
 
-std has form 2: `std/protocol/mysql.ignite:883` `Text(bytes.to_text())` in `string_value` copies a cell that `take_bytes` (line 344) has just sliced out, one copy per text cell that a move of the buffer would save; in the first user's profile at `3673bee8` it is 2.6 % of the allocations of the largest answer.
+std has form 2: `std/protocol/mysql.ignite:883` `Text(bytes.to_text())` in `string_value` copies a cell that `take_bytes` (line 344) has just sliced out, one copy per text cell that a move of the buffer would save; in the first user's profile at `3673bee8` it is among the ten largest allocating sites of the largest answer.
 
 Forms 1, 2 and 5 are a read of a text's bytes; forms 3 and 4 are the choice between lending a parameter and moving into it, which the generator makes from the function's body alone and not from what its callers do with the argument.
 

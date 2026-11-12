@@ -6,7 +6,7 @@ status: draft
 title: A pooled MySQL connection keeps its prepared statements
 relations:
 - informed_by: story:std-mysql-client
-revision: 2
+revision: 3
 ---
 # Story: a pooled MySQL connection keeps its prepared statements
 
@@ -16,7 +16,7 @@ A statement that a program runs again on a pooled connection of `std.protocol.my
 
 ## Why
 
-The first user of `std.protocol.mysql` (a read-only HTTP service backed by MySQL 8 over TLS) counted 6 round trips to the database per request where the same service in Rust makes 3: each of its statements is prepared, executed and closed per request (reported 2026-11-11). It is adding a cache of its own.
+The first user of `std.protocol.mysql` (a read-only HTTP service backed by MySQL 8 over TLS) counted more round trips to the database per request than the same service in Rust makes: each of its statements is prepared, executed and closed per request (reported 2026-11-11). It is adding a cache of its own.
 
 ## Acceptance
 
