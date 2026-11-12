@@ -4,7 +4,7 @@ ARG VERSION
 
 LABEL org.opencontainers.image.source="https://github.com/ignite-lang/ignite" \
       org.opencontainers.image.title="ignite-toolchain" \
-      org.opencontainers.image.description="Ignite ${VERSION}: ignite, its std, clang and lld for --target llvm, Rust and the tag's substrate with its crates fetched for --target rust, offline" \
+      org.opencontainers.image.description="Ignite ${VERSION}: ignite, its std, clang and lld for --target llvm, Rust and the archive's substrate with its crates fetched for --target rust, offline" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.documentation="https://ignite-lang.github.io/ignite/book/guide/install.html"
 
@@ -22,7 +22,7 @@ RUN test -n "${VERSION}" \
  && tar -xzf "${name}.tar.gz" \
  && install -m 0755 "${name}/bin/ignite" /usr/local/bin/ignite \
  && mkdir -p /usr/local/share/ignite \
- && cp -R "${name}/share/ignite/std" /usr/local/share/ignite/std \
+ && cp -R "${name}/share/ignite/std" "${name}/share/ignite/substrate" /usr/local/share/ignite/ \
  && rm -rf "${name}" "${name}.tar.gz" "${name}.tar.gz.sha256" \
  && curl -fsSL -o source.tar.gz "https://github.com/ignite-lang/ignite/archive/refs/tags/v${VERSION}.tar.gz" \
  && gzip -dc source.tar.gz | git get-tar-commit-id > COMMIT \
@@ -33,13 +33,10 @@ RUN test -n "${VERSION}" \
  && mv COMMIT ignite/COMMIT \
  && ignite --version | grep -qx "ignite ${VERSION}"
 
-RUN root="$(ignite emit /usr/local/src/ignite/examples/todo/todo.ignite \
-      | sed -n 's|^ignite-io = { path = "\(.*\)/crates/ignite/\.\./ignite-io" }$|\1|p' | head -n 1)" \
- && test -n "${root}" \
- && if [ "${root}" != /usr/local/src/ignite ]; then mkdir -p "$(dirname "${root}")" && ln -s /usr/local/src/ignite "${root}"; fi \
- && test -f "${root}/crates/ignite/../ignite-io/Cargo.toml" \
- && cd /usr/local/src/ignite \
- && cargo fetch --locked
+RUN ignite emit /usr/local/src/ignite/examples/todo/todo.ignite > /tmp/todo-emit.txt \
+ && grep -qxF 'ignite-io = { path = "/usr/local/share/ignite/substrate/crates/ignite-io" }' /tmp/todo-emit.txt \
+ && rm /tmp/todo-emit.txt \
+ && cargo fetch --locked --manifest-path /usr/local/share/ignite/substrate/Cargo.toml
 
 ENV CARGO_NET_OFFLINE=true
 WORKDIR /work

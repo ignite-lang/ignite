@@ -6,7 +6,7 @@
 //! ignite emit <file.ignite> [--substrate PATH] [--std PATH]
 //! ignite emit --typed-json <file.ignite> [--std PATH]
 //! ignite build <file.ignite> [--target llvm|rust] [--out DIR] [--target-dir DIR] [--substrate PATH] [--std PATH] [--clang PATH] [--runtime PATH] [--release] [--triple TRIPLE] [--static]
-//! ignite test <file.ignite>… [FILTER] [--target llvm|rust|all] [--std DIR] [--out DIR] [--exact] [--list] [--jobs N] [--timeout SECS] [--release] [--triple TRIPLE] [--static]
+//! ignite test <file.ignite>… [FILTER] [--target llvm|rust|all] [--std DIR] [--out DIR] [--substrate PATH] [--exact] [--list] [--jobs N] [--timeout SECS] [--release] [--triple TRIPLE] [--static]
 //! ignite plan <file.ignite> [--assembly NAME] [--out FILE] [--fuel N] [--std PATH]
 //! ignite plan <file.ignite> --for-apply --state DIR --out PLAN [--assembly NAME] [--target llvm|rust] [--release] [--std PATH] [--runtime FILE] [--fuel N]
 //! ignite host --state DIR
@@ -14,17 +14,22 @@
 //! ignite inspect --state DIR [--operation ID] [--json]
 //! ignite recover --state DIR --operation ID [--json]
 //! ignite explain <file.ignite> <path> [--assembly NAME] [--fuel N] [--std PATH]
-//! ignite run <file.ignite> [--assembly NAME] [--state DIR] [--build DIR] [--target llvm|rust] [--release] [--clock real|manual] [--epoch RFC3339] [--settle DURATION] [--port RESOURCE=PORT]... [--json] [--fresh] [--std PATH] [--fuel N] [--runtime PATH] [--target-dir DIR]
+//! ignite run <file.ignite> [--assembly NAME] [--state DIR] [--build DIR] [--target llvm|rust] [--release] [--clock real|manual] [--epoch RFC3339] [--settle DURATION] [--port RESOURCE=PORT]... [--json] [--fresh] [--std PATH] [--fuel N] [--runtime PATH] [--target-dir DIR] [--substrate PATH]
 //! ignite replay <file.ignite> [--assembly NAME] [--state DIR] [--std PATH] [--fuel N]
 //! ignite rfc import FILE [--sections LIST] [--package NAME] [--url URL] [--out FILE]
 //! ignite rfc check CATALOGUE [SOURCE]
-//! ignite conformance <file.ignite> [--target llvm|rust] [--std DIR] [--out DIR] [--clang PATH] [--runtime PATH] [--target-dir DIR] [--release] [--triple TRIPLE] [--static]
+//! ignite conformance <file.ignite> [--target llvm|rust] [--std DIR] [--out DIR] [--clang PATH] [--runtime PATH] [--target-dir DIR] [--substrate PATH] [--release] [--triple TRIPLE] [--static]
 //! ```
 //!
 //! `--std` is the standard-library root (default: `share/ignite/std` beside
 //! the driver's `bin/` when it exists, as `task dist` packs it, else the
-//! repository's `std/` next to this crate).Exit statuses: 0 success, 1 diagnostics (printed to
-//! stderr, one per line, in the `SourceFile::render` format, with the path
+//! repository's `std/` next to this crate). `--substrate` is the `ignite-io`
+//! crate of the Rust target (default: `share/ignite/substrate/crates/ignite-io`
+//! beside the driver's `bin/` when it exists, as `task dist` packs it, else
+//! the `crates/ignite-io` of the source tree the driver was built from,
+//! which the release archive's driver does not record).
+//!
+//! Exit statuses: 0 success, 1 diagnostics (printed to stderr, one per line, in the `SourceFile::render` format, with the path
 //! of the file they are in), 2 cargo or clang failed (its output passed through) or
 //! invalid arguments, 3 a file could not be read or the project could not be
 //! written. `ignite test` exits with the test executable's status (0 every test passed,
@@ -47,7 +52,12 @@ use clap::{Parser, Subcommand};
 #[command(
     name = "ignite",
     version = ignite::version::VERSION,
-    about = "Check, build, plan and operate Ignite programs"
+    about = "Check, build, plan and operate Ignite programs",
+    after_help = "The Rust target (--target rust) builds against the substrate crate ignite-io, the \
+                  first of: --substrate PATH of build, test, emit, run or conformance; \
+                  PREFIX/share/ignite/substrate/crates/ignite-io for a driver at \
+                  PREFIX/bin/ignite, as the release archive installs it; the crates/ignite-io of \
+                  the source tree this driver was built from."
 )]
 struct Cli {
     #[command(subcommand)]
@@ -79,7 +89,9 @@ enum Commands {
         /// `docs/slice.md` 24) instead of the generated projects.
         #[arg(long, conflicts_with = "substrate")]
         typed_json: bool,
-        /// Path of the `ignite-io` crate written into `Cargo.toml`.
+        /// Path of the `ignite-io` crate written into `Cargo.toml`. Default:
+        /// PREFIX/share/ignite/substrate/crates/ignite-io for a driver at PREFIX/bin/ignite when
+        /// it exists, else the crates/ignite-io of the source tree this driver was built from.
         #[arg(long)]
         substrate: Option<PathBuf>,
         /// Root of the standard library.
@@ -105,7 +117,9 @@ enum Commands {
         /// Cargo target directory (default `<out>/target`).
         #[arg(long)]
         target_dir: Option<PathBuf>,
-        /// Path of the `ignite-io` crate.
+        /// Path of the `ignite-io` crate for `--target rust`. Default:
+        /// PREFIX/share/ignite/substrate/crates/ignite-io for a driver at PREFIX/bin/ignite when
+        /// it exists, else the crates/ignite-io of the source tree this driver was built from.
         #[arg(long)]
         substrate: Option<PathBuf>,
         /// Root of the standard library.
@@ -156,6 +170,11 @@ enum Commands {
         /// Cargo target directory for Rust tests (default `<out>/<name>/rust/target`).
         #[arg(long)]
         target_dir: Option<PathBuf>,
+        /// Path of the `ignite-io` crate for the Rust tests (`--target rust` or `all`). Default:
+        /// PREFIX/share/ignite/substrate/crates/ignite-io for a driver at PREFIX/bin/ignite when
+        /// it exists, else the crates/ignite-io of the source tree this driver was built from.
+        #[arg(long)]
+        substrate: Option<PathBuf>,
         /// Build the tests with the release profile (`-O2` on `--target llvm`).
         #[arg(long)]
         release: bool,
@@ -303,6 +322,11 @@ enum Commands {
         /// Cargo target directory of the Rust target (default: `<build>/target`).
         #[arg(long)]
         target_dir: Option<PathBuf>,
+        /// Path of the `ignite-io` crate for `--target rust`. Default:
+        /// PREFIX/share/ignite/substrate/crates/ignite-io for a driver at PREFIX/bin/ignite when
+        /// it exists, else the crates/ignite-io of the source tree this driver was built from.
+        #[arg(long)]
+        substrate: Option<PathBuf>,
     },
     /// Re-step the journal of a state directory and print the final standings
     /// (`docs/slice.md` section 16.15).
@@ -351,6 +375,11 @@ enum Commands {
         /// Cargo target directory for `--target rust`.
         #[arg(long)]
         target_dir: Option<PathBuf>,
+        /// Path of the `ignite-io` crate for `--target rust`. Default:
+        /// PREFIX/share/ignite/substrate/crates/ignite-io for a driver at PREFIX/bin/ignite when
+        /// it exists, else the crates/ignite-io of the source tree this driver was built from.
+        #[arg(long)]
+        substrate: Option<PathBuf>,
         /// Build the tests with the release profile.
         #[arg(long)]
         release: bool,
@@ -517,6 +546,7 @@ fn run() {
         clang,
         runtime,
         target_dir,
+        substrate,
         release,
         triple,
         static_link,
@@ -529,6 +559,7 @@ fn run() {
                 runtime,
                 out,
                 target_dir,
+                substrate,
                 std,
                 release,
                 triple,
@@ -563,6 +594,7 @@ fn run() {
         clang,
         runtime,
         target_dir,
+        substrate,
         release,
         triple,
         static_link,
@@ -595,6 +627,7 @@ fn run() {
                 runtime,
                 out,
                 target_dir,
+                substrate,
                 std,
                 release,
                 triple,
@@ -635,6 +668,7 @@ fn run() {
         fuel,
         runtime,
         target_dir,
+        substrate,
     } = cli.command
     {
         let ports = match ports.iter().map(|arg| parse_port(arg)).collect() {
@@ -675,6 +709,7 @@ fn run() {
             fuel,
             runtime,
             target_dir,
+            substrate,
         };
         match ignite::run(&file, &options) {
             Ok(status) => std::process::exit(status),

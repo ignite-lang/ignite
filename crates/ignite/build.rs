@@ -35,7 +35,8 @@
 //! It also sets `IGNITE_VERSION`, the version `ignite --version` prints
 //! (`src/version.rs`): the package version, with the
 //! commit the driver was built from unless it is a clean build of the
-//! release tag.
+//! release tag; and `IGNITE_SOURCE_ROOT`, the workspace, empty for the
+//! release archive's driver ([`source_root`]).
 
 #[path = "src/version/describe.rs"]
 mod version;
@@ -75,6 +76,7 @@ fn main() {
         println!("cargo::rerun-if-changed={}", path.display());
     }
     version(workspace);
+    source_root(workspace);
 
     let out = PathBuf::from(env("OUT_DIR"));
     let target_dir = runtime_target_dir(&out);
@@ -326,6 +328,28 @@ fn version(workspace: &Path) {
         "cargo::rustc-env=IGNITE_VERSION={}",
         version::describe(&env("CARGO_PKG_VERSION"), &source)
     );
+}
+
+/// Sets `IGNITE_SOURCE_ROOT`, the source tree the driver falls back to for
+/// the standard library and the substrate crate (`ignite::source_root`):
+/// `workspace`, or nothing when `IGNITE_RELEASE_COMMIT` is set, as `task
+/// dist` sets it. The driver of the release archive then holds no path of
+/// the tree that built it and finds both beside itself
+/// (`<prefix>/share/ignite`); `task dist` searches it for the tree's path
+/// (`dist::` in `tests/dist.rs`). Outside its tests the driver's code reads
+/// `CARGO_MANIFEST_DIR` only in this script.
+fn source_root(workspace: &Path) {
+    let release =
+        std::env::var_os("IGNITE_RELEASE_COMMIT").is_some_and(|commit| !commit.is_empty());
+    let root = if release {
+        String::new()
+    } else {
+        workspace
+            .to_str()
+            .expect("a UTF-8 workspace path")
+            .to_string()
+    };
+    println!("cargo::rustc-env=IGNITE_SOURCE_ROOT={root}");
 }
 
 /// The checkout's source, when `workspace` is a checkout's top level
