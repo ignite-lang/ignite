@@ -430,22 +430,22 @@
           "value": 7264448
         },
         "llvm/terminald/release": {
-          "value": 1394760
+          "value": 1394536
         },
         "llvm/todod/dev": {
           "value": 7969688
         },
         "llvm/todod/release": {
-          "value": 1968184
+          "value": 1967944
         },
         "rust/terminald/dev": {
-          "value": 6347480
+          "value": 6344576
         },
         "rust/terminald/release": {
-          "value": 744296
+          "value": 743384
         },
         "rust/todod/dev": {
-          "value": 7590064
+          "value": 7586840
         },
         "rust/todod/release": {
           "value": 1038712
