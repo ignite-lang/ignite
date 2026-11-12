@@ -2,9 +2,12 @@
 format: aep.planning-md/3
 id: epic:data-formats
 kind: epic
-status: draft
+status: active
 title: 'Data formats: one value model, derived codecs, JSON, YAML, TOML'
-revision: 3
+revision: 5
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-12T20:59:59Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"review_outcome":2}}, executor: "agent:claude-coordinator", correlation: "upkeep-2026-11-12"}
+- {from: "proposed", to: "active", at: "2026-11-12T20:59:59Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"review_outcome":2}}, executor: "agent:claude-coordinator", correlation: "upkeep-2026-11-12"}
 ---
 # Epic: data-formats
 

@@ -1,7 +1,9 @@
 # Readiness IO: connections without a blocked thread each
 
 **Status: decided (Timo, 2026-11-08: option A, with the reactor swappable and stackless
-lowering kept possible); not implemented.** "Option A" is the choice as it was put to Timo:
+lowering kept possible); implemented as `IGNITE_IO=readiness` since v0.16.0
+(`story:readiness-waiters`, `story:readiness-scheduler`), threads stay the default, and the rows of
+`story:readiness-session-cost` and `story:readiness-syscalls-per-connection` are open.** "Option A" is the choice as it was put to Timo:
 section 3.3's stackful tasks over epoll, column B of table 3.1, not its column A.
 **Date:** 8 November 2026
 **Story:** `story:readiness-io` of `epic:native-parity` (goal set by Timo, 2026-11-08: Ignite
@@ -132,7 +134,7 @@ its implementations, not as a stage to remove.
   cgroup-aware), and stay.
 - A **task** is a stack and a control block (its arena state, section 4.5; its owned handles;
   its parked reason). `spawn` creates a task; `task_end` frees it and returns the stack to the
-  worker's pool. As landed (`story:readiness-connect-latency`): each worker keeps two free
+  worker's pool. As landed (unit `wave/9-latency`, merge `fd6c9ad0`): each worker keeps two free
   stacks, the rest go to one shared pool of 64; a spawn takes the stack from the cache of the
   worker it places the task on, from `main` too, else from another worker's cache (a worker
   it starts has none), else from the pool, and maps one, without the placement lock held,
