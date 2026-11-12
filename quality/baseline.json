@@ -427,13 +427,13 @@
       "area": "Generated code and runtime behaviour",
       "bars": {
         "llvm/terminald/dev": {
-          "value": 7264448
+          "value": 7264152
         },
         "llvm/terminald/release": {
           "value": 1394536
         },
         "llvm/todod/dev": {
-          "value": 7969688
+          "value": 7969480
         },
         "llvm/todod/release": {
           "value": 1967944
