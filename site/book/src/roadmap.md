@@ -24,7 +24,8 @@ Released and documented in this book:
 - two native targets over one IO substrate, LLVM by default and Rust with `--target rust`,
   and static executables with `--static`;
 - the standard library in Ignite: text, JSON and the `std.data` value model, files, child
-  processes, settings, channels, and the Telnet, HTTP/1.1 and JSON-RPC protocols;
+  processes, settings, channels and timers, a TLS client session, and the Telnet, HTTP/1.1,
+  JSON-RPC, RESP3, NATS and MySQL protocols;
 - inline `test` blocks, run on both targets by `ignite test`;
 - the system declaration: resources, components, contracts, policies and assemblies;
 - `ignite plan`, `ignite explain`, `ignite run`, `ignite replay`, and local `ignite apply`
@@ -58,24 +59,26 @@ The measured state of each release, build times included, is on the [Quality](qu
 
 ## What's next
 
-The work after v0.16.0 comes in waves of a few stories each. A wave is merged when every story
-in it passes the gate, and a release follows every third wave. The order below is the current
-plan, not a promise of dates.
+The work after v0.16.2 comes in waves of a few stories each. A wave is merged when every story
+in it passes the gate. A release follows every third wave, and a patch release comes earlier
+when a user of the last release needs a change. The order below is the current plan, not a
+promise of dates.
 
 ### Being built <span class="badge wip">unreleased</span>
 
 | work | content | state |
 |---|---|---|
-| native parity | Ignite programs within 1.1× of plain Rust: fixed-size lists `[T; N]` of scalars and `List.with_capacity` complete the minimal set for codecs ([`docs/fixed-width-ints.md`](https://github.com/ignite-lang/ignite/blob/main/docs/fixed-width-ints.md)) | wave 11 |
+| path costs | every merge counts the instructions and system calls of scenarios frozen at the last release, and is refused when one of them costs more; the refusal names the functions and system calls that grew | in work |
 
 ### Planned
 
-| wave | content | state |
+| order | content | state |
 |---|---|---|
-| 9 | protocol clients: WebSocket (RFC 6455) and an HTTP client role ([protocol clients](#protocol-clients-websocket-resp3-nats-design)); `Codec<T>` and its combinators ([data formats](#data-formats-json-yaml-and-toml-from-one-value-model-design)); a static build from source with no setup and no network | planned |
-| 10 | one mid-level IR that both targets lower from; beside it, blocking work off the readiness scheduler's workers, its memory, and runtime metrics | planned |
-| 11 | fixed-size lists; YAML 1.2.2, the safe subset ([data formats](#data-formats-json-yaml-and-toml-from-one-value-model-design)); `ignite fmt` | planned |
-| 12 | `Store` keyed by text, the largest compiler files split, then the web framework ([x.web](#xweb-the-web-app-is-part-of-the-system-design)) | planned |
+| 1 | copies on the Rust target: a module constant is built once; a text or byte string that is only read is not copied; a shared list costs nothing in a program that never shares one (binary size, build time and the p99 of the todo PATCH back at v0.16.1) | planned |
+| 2 | protocol clients: WebSocket (RFC 6455) and an HTTP client role ([protocol clients](#protocol-clients-websocket-design)); `Codec<T>` and its combinators ([data formats](#data-formats-json-yaml-and-toml-from-one-value-model-design)); a static build from source with no setup and no network | planned |
+| 3 | one mid-level IR that both targets lower from; beside it, blocking work off the readiness scheduler's workers, its memory, and runtime metrics | planned |
+| 4 | fixed-size lists `[T; N]` of scalars ([`docs/fixed-width-ints.md`](https://github.com/ignite-lang/ignite/blob/main/docs/fixed-width-ints.md)); YAML 1.2.2, the safe subset ([data formats](#data-formats-json-yaml-and-toml-from-one-value-model-design)); `ignite fmt` | planned |
+| 5 | `Store` keyed by text, the largest compiler files split, then the web framework ([x.web](#xweb-the-web-app-is-part-of-the-system-design)) | planned |
 
 ## Designs
 
@@ -91,31 +94,29 @@ Who may call a route is a handler parameter type. CORS, limits and timeouts are 
 properties instead of middleware. A called service is a resource, so `ignite plan` shows it as a
 dependency. The framework needs language extensions: derived codecs and record types, views,
 route annotations and files embedded at check time. A first version runs on today's language
-with hand-built routes. Design: [`docs/web.md`](https://github.com/ignite-lang/ignite/blob/main/docs/web.md),
-wave 12.
+with hand-built routes. Design: [`docs/web.md`](https://github.com/ignite-lang/ignite/blob/main/docs/web.md).
 
 ### Data formats: JSON, YAML and TOML from one value model <span class="badge design">design</span>
 
 The value model `std.data` and its bridge to `std.json` (`read`, `write`, `to_data`, `of_data`)
 are released in v0.15.0 ([std.data](reference/std/data.md)). The rest is planned in four layers.
 `Codec<T>` is a pair of functions with combinators to build one for any type by hand, in `std`
-only, planned for wave 9. `std.yaml` reads YAML 1.2.2 under the core schema and refuses anchors,
-aliases, custom tags and the `<<` merge key, planned for wave 11. Last, `codec<T>()` is written by
+only, planned with the protocol clients. `std.yaml` reads YAML 1.2.2 under the core schema and refuses anchors,
+aliases, custom tags and the `<<` merge key, planned after it. Last, `codec<T>()` is written by
 the compiler from the type, and `std.toml` follows. A decode error names the path and what was
 expected, such as `$[2].match_path: expected Text, found Int`. Design:
 [`docs/serde.md`](https://github.com/ignite-lang/ignite/blob/main/docs/serde.md).
 
-### Protocol clients: WebSocket, RESP3, NATS <span class="badge design">design</span>
+### Protocol clients: WebSocket <span class="badge design">design</span>
 
-Three more protocols in the standard library, written in Ignite like Telnet and HTTP and generic
+One more protocol in the standard library, written in Ignite like Telnet and HTTP and generic
 over any byte stream. `std.protocol.websocket` has server and client roles, reached through the
-HTTP upgrade, and declares `conforms [RFC6455]`. `std.protocol.resp` is a client for
-Redis-compatible servers with RESP2 and RESP3 types, pipelining, pub/sub and Sentinel.
-`std.protocol.nats` is a NATS core client with queue groups and request and reply with a
-deadline. Each protocol's tests run over `Pipe.pair()` against a scripted peer, on both
-targets. The RESP3, NATS and MySQL clients are released in v0.16.0, with a TLS client session that
-either runs over; WebSocket is planned. Layering: [`docs/protocols.md`](https://github.com/ignite-lang/ignite/blob/main/docs/protocols.md),
-wave 9.
+HTTP upgrade, and declares `conforms [RFC6455]`. Its tests run over `Pipe.pair()` against a
+scripted peer, on both targets. The clients designed beside it are released in v0.16.0:
+`std.protocol.resp` for Redis-compatible servers (RESP2 and RESP3 types, pipelining, pub/sub and
+Sentinel), `std.protocol.nats` (NATS core with queue groups and request and reply with a
+deadline) and `std.protocol.mysql`, with a TLS client session that each runs over. Layering:
+[`docs/protocols.md`](https://github.com/ignite-lang/ignite/blob/main/docs/protocols.md).
 
 ### Fault injection and deterministic simulation <span class="badge design">design</span>
 
@@ -134,7 +135,7 @@ source. The design is a draft for decision, with options and a recommendation:
 |---|---|---|
 | actors | typed actors: `Address`, `ReplyTo`, `Outbox`, an `Actor` kind, mailboxes, `std/actor`, `std/table`, `Topic`, `Sink`, `Supervisor`; the todo example on an actor | [`docs/actors.md`](https://github.com/ignite-lang/ignite/blob/main/docs/actors.md) |
 | WebAssembly | machine scalars, `Buffer`, `--target wasm`, a runtime written in Ignite, `ignite run --watch`, hot reload with `migrate` | [`docs/wasm.md`](https://github.com/ignite-lang/ignite/blob/main/docs/wasm.md) |
-| protocols, later phases | ABNF grammars, user `interface` and `impl`, TLS and Unix transports | [`docs/protocols.md`](https://github.com/ignite-lang/ignite/blob/main/docs/protocols.md) |
+| protocols, later phases | ABNF grammars, user `interface` and `impl`, TLS and Unix transports declared by a system (the `Tls.client` session is released) | [`docs/protocols.md`](https://github.com/ignite-lang/ignite/blob/main/docs/protocols.md) |
 | self-hosting | packages and manifests, the frontend in Ignite, an emitter in Ignite, a bootstrap chain | [`docs/design.md`](https://github.com/ignite-lang/ignite/blob/main/docs/design.md) section 12 |
 | syntactic sugar | a proposal; an item is implemented only when a planned step needs it | [`docs/syntax.md`](https://github.com/ignite-lang/ignite/blob/main/docs/syntax.md) |
 
