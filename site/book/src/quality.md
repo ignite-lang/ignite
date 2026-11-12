@@ -41,9 +41,9 @@ Current values: run `v0.16.0` on 2026-11-11, commit `cee2be35`.
 |---|---|---|---|---|---|---|
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | eval | 2 | 2 | −2 better |
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | llvm | 0 | 0 | = |
-| 1.2 | differential corpus size | ratchet | eval | 770 | 770 | +318 better |
-| 1.2 | differential corpus size | ratchet | llvm | 931 | 931 | +243 better |
-| 1.2 | differential corpus size | ratchet | rust | 931 | 931 | +243 better |
+| 1.2 | differential corpus size | ratchet | eval | 771 | 770 | +318 better |
+| 1.2 | differential corpus size | ratchet | llvm | 932 | 931 | +243 better |
+| 1.2 | differential corpus size | ratchet | rust | 932 | 931 | +243 better |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/builtins | 112 | 124 | −9 better |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/patterns | 13 | 13 | = |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | llvm/builtins | 12 | 13 | −1 better |
@@ -72,7 +72,7 @@ Current values: run `v0.16.0` on 2026-11-11, commit `cee2be35`.
 | # | metric | kind | target | bar | current | trend |
 |---|---|---|---|---|---|---|
 | 3.1 | copies in the generated code of the golden corpus | ratchet | llvm | 90 | 90 | = |
-| 3.1 | copies in the generated code of the golden corpus | ratchet | rust | 166 | 166 | = |
+| 3.1 | copies in the generated code of the golden corpus | ratchet | rust | 163 | 166 | = |
 | 3.2 | binary size | ratchet | llvm/terminald/dev | 7264448 B | 7264448 B | −566568 better |
 | 3.2 | binary size | ratchet | llvm/terminald/release | 1394760 B | 1394760 B | −118032 better |
 | 3.2 | binary size | ratchet | llvm/todod/dev | 7969688 B | 7969688 B | −561784 better |

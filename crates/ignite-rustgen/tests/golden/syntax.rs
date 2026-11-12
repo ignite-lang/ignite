@@ -123,7 +123,7 @@ pub fn vowel(w: &String) -> bool {
 }
 
 pub fn first_positive(values: &Vec<i64>) -> i64 {
-    for v in (values.clone()) {
+    for v in (values).iter().copied() {
         if v > 0 {
             return v.clone();
         };
@@ -146,7 +146,7 @@ pub fn sign(n: &i64) -> String {
 
 pub fn count_spaces(bytes: &Vec<u8>) -> i64 {
     let mut n = 0;
-    for c in (bytes.clone()) {
+    for c in (bytes).iter().copied() {
         match c.clone() {
             __m if (*(&__m) == SPACE()) => {
                 n = ::ignite_io::checked::add(n, 1, "crates/ignite-rustgen/tests/golden/syntax.ignite", 99, 13);

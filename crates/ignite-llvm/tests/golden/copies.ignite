@@ -497,3 +497,36 @@ test "every task reads the arguments its spawn saw after the loop freed them" {
     k = k + 1
   }
 }
+
+test fn picked(lists: List<List<Int>>, i: Int) -> Int = match lists[i] {
+  [] => 0
+  [first, ..] => first
+}
+
+test fn summed(lists: List<List<Int>>, i: Int) -> Int {
+  var sum = 0
+  for x in lists[i] {
+    sum = sum + x
+  }
+  sum
+}
+
+test "an element matched or iterated in place keeps its value, one the body changes is copied" {
+  var lists = [[4, 5], []]
+  assert picked(lists, 0) == 4 && picked(lists, 1) == 0
+  assert summed(lists, 0) == 9 && summed(lists, 1) == 0
+  var n = 0
+  for x in lists[0] {
+    lists[0].push(x)
+    n = n + 1
+  }
+  assert n == 2 && lists[0] == [4, 5, 4, 5]
+  let grown = match lists[1] {
+    [] => {
+      lists[1].push(1)
+      lists[1].len()
+    }
+    _ => 0
+  }
+  assert grown == 1 && lists[1] == [1]
+}
