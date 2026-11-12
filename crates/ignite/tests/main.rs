@@ -48,6 +48,7 @@ mod ignite_test;
 mod image;
 mod leak;
 mod list_sort;
+mod list_sort_adversary;
 mod llvm;
 mod llvm_build;
 mod llvm_memory;
