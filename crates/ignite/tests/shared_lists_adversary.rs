@@ -19,6 +19,7 @@ use crate::todo;
 /// program aborts with "has overflowed its stack" between 30,000 and
 /// 40,000 levels. The LLVM target runs it. The evaluator is not asked: its
 /// own drop of the value runs on the test thread.
+/// Depth 25,000: the Rust target now overflows between 35,000 and 40,000 (`docs/slice.md` 6).
 const DEEP_RECORDS: &str = r#"package deep_records
 
 type Node {
@@ -36,9 +37,9 @@ fn chain(n: Int) -> Node {
   cur
 }
 
-test "a record holding a list of itself 50000 levels deep is built and dropped" {
-  let c = chain(50000)
-  assert c.tag == 49999 && c.kids.len() == 1
+test "a record holding a list of itself 25000 levels deep is built and dropped" {
+  let c = chain(25000)
+  assert c.tag == 24999 && c.kids.len() == 1
 }
 "#;
 

@@ -75,6 +75,14 @@ fn measure(form: Text, m: Int, n: Int) -> Int {
       total = total + c.words.len()
       i = i + 1
     }
+  } else if form == "clear-then-push" {
+    while i < n {
+      var c = same_shelf(s)
+      c.words.clear()
+      c.words.push("x")
+      total = total + c.words.len()
+      i = i + 1
+    }
   } else if form == "unshared-payload" {
     while i < n {
       u = grown(u, "x")
@@ -173,7 +181,8 @@ fn allocations(binary: &Path, form: &str, m: u64) -> u64 {
 /// list of M elements allocates nothing; the first change after a share
 /// copies the elements once; a change of an unshared list copies nothing;
 /// a payload or field taken out into a list of its own copies its
-/// elements once, each element that holds a list by an increment.
+/// elements once, each element that holds a list by an increment;
+/// clearing a shared list copies nothing (it takes the empty storage).
 #[test]
 fn a_shared_list_is_copied_once_at_its_first_change_and_never_at_a_copy() {
     let status = Command::new("valgrind")
@@ -196,11 +205,12 @@ fn a_shared_list_is_copied_once_at_its_first_change_and_never_at_a_copy() {
     };
     // What one operation may allocate more at M = 200 than at M = 10: 0
     // (nothing copied, or only increments) or the 190 texts copied once.
-    let forms: [(&str, f64); 10] = [
+    let forms: [(&str, f64); 11] = [
         ("copy-payload", 0.0),
         ("copy-field", 0.0),
         ("change-payload", 190.0),
         ("change-field", 190.0),
+        ("clear-then-push", 0.0),
         ("unshared-payload", 0.0),
         ("unshared-field", 0.0),
         ("take-payload-rows", 0.0),

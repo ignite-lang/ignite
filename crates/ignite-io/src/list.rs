@@ -48,6 +48,19 @@ impl<T> List<T> {
     pub fn is_shared(&self) -> bool {
         self.0.as_ref().is_some_and(|a| Arc::strong_count(a) > 1)
     }
+
+    /// Removes every element: a shared list takes the empty storage and
+    /// leaves the elements to the other copies, without copying them; an
+    /// unshared one drops them in place and keeps its buffer.
+    #[inline]
+    pub fn clear(&mut self) {
+        if let Some(shared) = &mut self.0 {
+            match Arc::get_mut(shared) {
+                Some(elements) => elements.clear(),
+                None => self.0 = None,
+            }
+        }
+    }
 }
 
 impl<T: Clone> List<T> {
@@ -183,6 +196,30 @@ mod tests {
         assert_ne!(w.as_ptr(), b.as_ptr());
         assert_eq!(w, [4, 5]);
         assert_eq!(*b, [4, 5]);
+    }
+
+    #[test]
+    fn clearing_a_shared_list_takes_the_empty_storage_and_leaves_the_other_copy() {
+        let a = List::from_vec(vec![String::from("x"), String::from("y")]);
+        let mut b = a.clone();
+        b.clear();
+        assert!(b.0.is_none() && b.is_empty());
+        assert!(!a.is_shared());
+        assert_eq!(*a, ["x", "y"]);
+    }
+
+    #[test]
+    fn clearing_an_unshared_list_keeps_its_buffer() {
+        let mut elements = Vec::with_capacity(8);
+        elements.push(1);
+        let mut a = List::from_vec(elements);
+        let at = a.as_ptr();
+        a.clear();
+        assert!(a.is_empty());
+        assert!(a.capacity() >= 8);
+        a.make_mut().push(2);
+        assert_eq!(a.as_ptr(), at);
+        assert_eq!(*a, [2]);
     }
 
     #[test]

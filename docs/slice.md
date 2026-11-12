@@ -613,22 +613,48 @@ empty list, else an `Arc<Vec<T>>`, with an atomic count (values cross `spawn` an
 `DerefMut` and no `unsafe`. The declared type decides, before type arguments are substituted,
 so every instance of a generic declaration has one layout. Construction wraps the `Vec`
 (`Val::Rec(::ignite_io::List::from_vec(fields))`, also in record updates, defaults and
-assignments to the field); a read derefs (`(*r.items)`, a payload binding
-`let l = &**l;`); a change goes through `make_mut` (`(*r.items.make_mut()).push(x)`, also
-under indexes); a field or payload that moves into a `Vec` position, and a field of a value
-no local holds (`f().items`), is `::ignite_io::List::into_vec(..)`, which takes the `Vec`
-when nothing else shares it and copies it otherwise. Substrate records with list fields
-(`Invocation`, `TlsOptions`) convert at the call with `.into()`. The LLVM target and the
-evaluator are unchanged. `CODEGEN_REVISION` is `ignite-codegen/0.1.0-53` since this unit.
+assignments to the field); a read derefs (`(*r.items)`; a payload binding is `let l = &**l;`
+when the `match` lends its scrutinee, and `let l = &*l;`, read like a reference parameter,
+when the scrutinee is a value no local holds and the arm neither changes nor moves `l`); a
+change goes through `make_mut` (`(*r.items.make_mut()).push(x)`, also under indexes), except
+`clear`, which is `::ignite_io::List::clear`: a shared list takes the empty storage without a
+copy, an unshared one drops its elements and keeps its buffer; a field or payload that moves
+into a `Vec` position, a payload binding of a value no local holds that its arm changes or
+moves, and a field of a value no local holds (`f().items`), is
+`::ignite_io::List::into_vec(..)`, which takes the `Vec` when nothing else shares it and
+copies it otherwise. Substrate records with list fields (`Invocation`, `TlsOptions`) convert
+at the call with `.into()`. The LLVM target and the evaluator are unchanged.
+`CODEGEN_REVISION` is `ignite-codegen/0.1.0-53` since this unit.
 
 What a copy costs now: copying a value that holds such a list is one increment per list,
 whatever the list holds; the first change through one holder after a share copies the
 elements once (each element that is itself a shared list by an increment); a change of a
-list nothing else shares copies nothing. On the workload of `docs/value-copies.md`, one
-request at s1 goes from 607,784 allocations and 250,639,812 instructions to 51,172 and
-17,498,837 (release). Still copied: the elements of a shared payload or field taken out
-into a list of its own (`match v { Words(l) => l }` copies the texts once), lists in locals,
-parameters and results, `Text`, `Bytes`, `Map`, and every value on the LLVM target.
+list nothing else shares copies nothing; reading a payload of a value no local holds
+(`match lookup(v, i) { Some(Seq(l)) => l.len() }`) copies nothing; clearing a shared list
+copies nothing. On the workload of `docs/value-copies.md`, one request at s1 goes from 607,784
+allocations and 250,639,812 instructions to 51,172 and 17,498,837 (release). Still copied
+(allocations per operation at M = 10 / 200 elements):
+
+- the elements of a shared payload or field taken out into a list of its own
+  (`match v { Words(l) => l }` copies the texts once);
+- a payload binding of a value no local holds that its arm changes, moves or stores
+  (`match lookup(v, i) { Some(Seq(l)) => Shelf { id = 1, words = l } }`) copies the elements
+  when the value still shares them;
+- a field declared `Option<List<T>>` or a tuple holding a list: not shared, copied in full on
+  every copy of the value (11.0 / 201.0, as before the unit);
+- the inner lists of a `List<List<T>>` field: the outer list is shared, its elements are
+  plain `Vec`s, so the first change copies every inner list in full (43 / 803; before the
+  unit 42 / 802);
+- lists in locals, parameters and results, `Text`, `Bytes`, `Map`, and every value on the
+  LLVM target.
+
+What dropping a deep value costs: the Rust target drops a record that holds a list of itself
+recursively, and the shared list's `Arc` adds frames to each level. On the 8 MiB main stack a
+chain of such records runs at 35,000 levels and overflows at 40,000 (before the unit it ran to
+between 70,000 and 80,000); a chain of enum values each holding a list of the next runs at
+35,000 and overflows at 50,000 (before the unit it overflowed at 20,000). A `Drop for List`
+that drops the last holder's `Vec` in its own frame lowered both (records and enum chains
+overflow at 35,000) and was withdrawn.
 
 What a path that never shares pays: each payload or field list built is a second block,
 one `malloc` and one `free` more than a `Vec`. `terminald`, whose `echo` reply builds one

@@ -259,7 +259,9 @@ row is one increment, wherever the row goes. Paths that build lists in local var
 put them into a value pay nothing, unlike A, which tests uniqueness on every `push`.
 
 As built: a payload taken out into a `Vec` position is `List::into_vec`, which takes the `Vec`
-without a copy when nothing else shares it and copies it otherwise; `Bytes` (`List<Byte>`)
+without a copy when nothing else shares it and copies it otherwise; a payload bound in a `match`
+arm that only reads it is read in place; `clear` on a shared list takes the empty storage
+without a copy; `Bytes` (`List<Byte>`)
 stays `Vec<u8>`. The layout is the prototype's, two blocks, with no `unsafe`
 (`docs/slice.md` section 6).
 

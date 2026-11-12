@@ -5256,6 +5256,19 @@ impl<'a> Generator<'a> {
         args: &[Expr],
     ) -> String {
         let mut lets = Vec::new();
+        if let (Some(Callee::Builtin(Builtin::ListClear)), ExprKind::Field { receiver, name }) =
+            (self.callee(expr), &receiver.kind)
+            && self.is_shared_field(self.type_of(receiver), &name.name)
+        {
+            // `List::clear`: a shared list takes the empty storage instead
+            // of copying the elements it drops.
+            let owner = self.mutable_place(receiver, &mut lets);
+            return format!(
+                "{{ {} ::ignite_io::List::clear(&mut {owner}.{}) }}",
+                lets.join(" "),
+                ident(&name.name)
+            );
+        }
         let place = self.mutable_place(receiver, &mut lets);
         if let ("append", [value]) = (name.name.as_str(), args)
             && !self.indexed_place(receiver)
@@ -5676,7 +5689,7 @@ impl<'a> Generator<'a> {
             let pattern = if native {
                 self.shared_bindings.clear();
                 let text = self.pattern(&arm.pattern, ty.as_ref());
-                shared = self.shared_lets(lent);
+                shared = self.shared_lets(lent, &arm.body);
                 if lent {
                     self.lend_bindings(&arm.pattern, &mut bindings);
                 }
@@ -5817,45 +5830,33 @@ impl<'a> Generator<'a> {
 
     /// The `let`s that start an arm whose native pattern bound shared list
     /// payloads ([`Generator::shared_bindings`]), each read as the `Vec`
-    /// behind it: borrowed (`&**l`) when the arm matched a reference, else
-    /// taken out of its `ignite_io::List` (copied only when shared).
-    fn shared_lets(&mut self, lent: bool) -> String {
-        std::mem::take(&mut self.shared_bindings)
-            .iter()
-            .map(|name| {
-                let name = ident(name);
-                if lent {
-                    format!("let {name} = &**{name}; ")
-                } else {
-                    format!("let {name} = ::ignite_io::List::into_vec({name}); ")
-                }
-            })
-            .collect()
-    }
-
-    /// Whether `pattern` binds a name to a shared list payload
-    /// ([`Generator::is_shared_payload`]) anywhere.
-    fn binds_shared(&self, pattern: &Pattern, ty: Option<&Ty>) -> bool {
-        match &pattern.kind {
-            PatternKind::Or(items) => items.iter().any(|p| self.binds_shared(p, ty)),
-            PatternKind::Tuple(items) => {
-                let elements = tuple_elements(ty, items.len());
-                items
-                    .iter()
-                    .zip(&elements)
-                    .any(|(p, t)| self.binds_shared(p, t.as_ref()))
+    /// behind it: borrowed (`&**l`) when the arm matched a reference;
+    /// borrowed from the payload (`&*l`, read like a lent binding) when the
+    /// arm `body` neither changes nor moves it; else taken out of its
+    /// `ignite_io::List` (copied only when shared).
+    fn shared_lets(&mut self, lent: bool, body: &Expr) -> String {
+        let scope = self.scopes.len() - 1;
+        let touched: BTreeSet<&str> = match self.types {
+            Some(types) if !lent => {
+                let mut touched = ownership::changed_in(body, self.types);
+                touched.extend(ownership::moved_in(body, types));
+                touched
             }
-            PatternKind::Variant { path, args } => {
-                let variant = path.last().map_or("_", |i| i.name.as_str());
-                let (_, payload) = self.variant_owner(path, variant, ty);
-                args.iter().enumerate().any(|(i, p)| {
-                    (matches!(&p.kind, PatternKind::Binding(id) if !id.is_uppercase())
-                        && self.is_shared_payload(ty, variant, i))
-                        || self.binds_shared(p, payload.get(i))
-                })
+            _ => BTreeSet::new(),
+        };
+        let mut lets = String::new();
+        for name in std::mem::take(&mut self.shared_bindings) {
+            let text = ident(&name);
+            if lent {
+                let _ = write!(lets, "let {text} = &**{text}; ");
+            } else if self.types.is_some() && !touched.contains(name.as_str()) {
+                let _ = write!(lets, "let {text} = &*{text}; ");
+                self.borrowed_elements.push((scope, name));
+            } else {
+                let _ = write!(lets, "let {text} = ::ignite_io::List::into_vec({text}); ");
             }
-            _ => false,
         }
+        lets
     }
 
     /// An `if`; `value` says whether it is in value position. Its branches
@@ -5919,9 +5920,7 @@ impl<'a> Generator<'a> {
         match &pattern.kind {
             PatternKind::Range { .. } => self.range(pattern).is_some(),
             PatternKind::Str(_) | PatternKind::List(_) | PatternKind::Rest(_) => false,
-            PatternKind::Or(items) => {
-                items.iter().all(|p| self.is_native(p, ty)) && !self.binds_shared(pattern, ty)
-            }
+            PatternKind::Or(items) => items.iter().all(|p| self.is_native(p, ty)),
             PatternKind::Tuple(items) => {
                 let elements = tuple_elements(ty, items.len());
                 items
