@@ -60,7 +60,9 @@ The measured state of each release, build times included, is on the [Quality](qu
 ## What's next
 
 The work after v0.16.2 comes in waves of a few stories each. A wave is merged when every story
-in it passes the gate. The order below is the current plan, not a promise of dates.
+in it passes the gate. A release follows every third wave, and a patch release comes earlier
+when a user of the last release needs a change. The order below is the current plan, not a
+promise of dates.
 
 ### Being built <span class="badge wip">unreleased</span>
 
