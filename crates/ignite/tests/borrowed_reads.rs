@@ -314,9 +314,8 @@ fn each_guard_of_a_call_move_gives_the_evaluator_value_on_both_targets() {
 ///   binding where it moves; the LLVM target does not lend a tuple whose
 ///   arm moves a binding (lent, the callee's `o.rows[0] = ..` wrote the
 ///   place's own buffer: 4143 and 4104).
-/// - `apply_pair`, `apply_local`: an item of a fn type, lent, its binding
-///   copied out; `first_of`: a type parameter, not lent (it may hold a
-///   handle).
+/// - `apply_pair`, `apply_local`: an item of a fn type; `first_of`: a type
+///   parameter. Neither is lent: each may hold a handle.
 /// - `read_after`, `pair_of_ends`, `closed_after`, `returned_binding`: a
 ///   channel end, or a record that holds one, matched in a tuple and used
 ///   after it, its binding returned from the `match` included. The LLVM

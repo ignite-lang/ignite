@@ -7344,8 +7344,8 @@ The Rust target (20.3.4 otherwise):
   1,349,011, and 252,024,280 and 1,442,774.
 - A `match` whose scrutinee is a tuple of two or more places, each of a type that is `Copy`
   here (passed as a value) or not (passed by reference, at least one; a binding of a type that
-  is not lendable, a fn value, is copied out of its reference at the start of the arm, as the
-  tuple of copies copied it; before the correction round only lendable types), whose variables
+  is not lendable is copied out of its reference at the start of the arm, as the tuple of
+  copies copied it; before the correction round only lendable types), whose variables
   no arm changes or moves (`ownership::changed_in`, `ownership::moved_in`) and whose arm
   patterns are all native, matches a tuple of references: `match (a, b)` of borrowed
   parameters, `match (&a, &b)` of owned places, the bindings lent as for a single place and
@@ -7355,9 +7355,14 @@ The Rust target (20.3.4 otherwise):
   (pair.0.clone(), pair.1.clone());`, the copy every arm made before, and the other arms
   stay uncopied (rustc E0308 before, `(&Val, &Val)` read as `(Val, Val)`; unit
   correction round). A tuple whose type may hold a handle (`TypedProgram::holds_handles`, a
-  type parameter included) is not lent: an item the analysis moves into the tuple is dropped
-  with it at the end of the `match`, a lent one only at the end of its scope (`rx.closed()`
-  after the `match` read false, the evaluator true). Before, `match (a.clone(),
+  type parameter and a fn value included, the latter because it may have captured one, as the
+  LLVM target's `own::plain` takes it) is not lent: an item the analysis moves into the tuple
+  is dropped with it at the end of the `match`, a lent one only at the end of its scope
+  (`rx.closed()` after the `match` read false, the evaluator true; a record with a fn field,
+  a list or option of fn values, a variant with a fn payload holding the only sender:
+  `call_moves_adversary_pass2::adversary2_a_sender_held_by_a_fn_value_is_dropped_with_a_tuple_match`).
+  A tuple with a fn-typed item is therefore matched as before the unit
+  (`match (f.clone(), v)`). Before, `match (a.clone(),
   b.clone())`. The LLVM target matches a tuple of shallow copies of the places (`docs/llvm.md`
   section 4). Tests: `borrowed_reads::` in `crates/ignite-rustgen` (the emitted text, the
   guards keeping their copy) and `crates/ignite-llvm` `copies::` (no copy glue of the record

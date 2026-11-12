@@ -444,7 +444,11 @@ position, even with no buffer.
     scrutinee tuple is never released, so a channel whose last sender it holds stays open
     after the `match` (`rx.closed()` false where the evaluator and the Rust target say
     true; `borrowed_reads::a_record_holding_a_sender_moved_into_a_tuple_match_is_dropped_with_it`
-    holds both forms);
+    holds both forms). A fn value that captured the handle holds it as well (`own::plain`: a
+    fn value may hold one): a record with a fn field, a list or option of fn values, a variant
+    with a fn payload
+    (`call_moves_adversary_pass2::adversary2_a_sender_held_by_a_fn_value_is_dropped_with_a_tuple_match`
+    holds the four forms);
   - the receiver of `to_bytes`: the result is the receiver itself, owned or borrowed as the
     receiver is;
   - the argument of `append` when the element type holds no buffer: its elements are

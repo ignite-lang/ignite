@@ -5583,10 +5583,9 @@ impl<'a> Generator<'a> {
                 match &arm.pattern.kind {
                     // A binding of a lent tuple is a tuple of references: an
                     // arm that reads it gets the tuple of values it names.
-                    PatternKind::Binding(id)
-                        if whole > 0
-                            && self.scopes.last().is_some_and(|s| s.contains(&id.name)) =>
-                    {
+                    // `self.pattern` bound the name: an uppercase one names
+                    // a variant only of an enum, never of this tuple.
+                    PatternKind::Binding(id) if whole > 0 => {
                         if ownership::mentions(&arm.body, &id.name) {
                             let name = ident(&id.name);
                             let items: Vec<String> =
@@ -5674,13 +5673,14 @@ impl<'a> Generator<'a> {
     /// as a value) or not (read by reference, at least one), whose
     /// variables no arm changes or moves, every arm's pattern
     /// [`is_native`](Self::is_native), and no handle in the tuple
-    /// ([`TypedProgram::holds_handles`]: an item the analysis moves into
-    /// the tuple is dropped with it at the end of the `match`, which a
-    /// borrowed one is not). Rust matches each pattern of
-    /// the tuple against its reference, and the bindings are lent as for a
-    /// single place ([`lend_bindings`](Self::lend_bindings)): a binding of
-    /// a type that is not [`lendable`] (a fn value) is copied out of its
-    /// reference at the start of the arm, as the tuple copied it. An arm whose
+    /// ([`TypedProgram::holds_handles`], a fn value's possible captures
+    /// included: an item the analysis moves into the tuple is dropped with
+    /// it at the end of the `match`, which a borrowed one is not). Rust
+    /// matches each pattern of the tuple against its reference, and the
+    /// bindings are lent as for a single place
+    /// ([`lend_bindings`](Self::lend_bindings)): a binding of a type that
+    /// is not [`lendable`] is copied out of its reference at the start of
+    /// the arm, as the tuple copied it. An arm whose
     /// pattern is one name binds a tuple of references: when its body
     /// reads the name, the arm starts with a copy of each item
     /// ([`match_expr`](Self::match_expr)), the copy every arm made before.

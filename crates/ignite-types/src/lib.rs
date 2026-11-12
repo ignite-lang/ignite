@@ -1678,10 +1678,10 @@ impl TypedProgram {
     /// Whether a value of `ty` may hold a handle (invariant 3: a listener,
     /// a stream, a store, a channel end or a capability), in a list,
     /// option, result, map, tuple, record or enum; a type parameter of the
-    /// code being generated may. A fn value's captures are not looked
-    /// into. A backend that reads such a value in place instead of taking
-    /// it changes when its handles are released, which a program observes
-    /// (`rx.closed()`).
+    /// code being generated may, and so may a fn value, which can capture
+    /// one (as the LLVM target's `own::plain` takes it). A backend that
+    /// reads such a value in place instead of taking it changes when its
+    /// handles are released, which a program observes (`rx.closed()`).
     pub fn holds_handles(&self, ty: &Ty) -> bool {
         self.holds_handles_in(ty, true, &mut Vec::new())
     }
@@ -1698,7 +1698,9 @@ impl TypedProgram {
             | Ty::Store(_)
             | Ty::Sender(_)
             | Ty::Receiver(_)
-            | Ty::Capability(_) => true,
+            | Ty::Capability(_)
+            | Ty::Fn(..)
+            | Ty::EffectFn(..) => true,
             Ty::Param(_) => param,
             Ty::List(t) | Ty::Option(t) => self.holds_handles_in(t, param, seen),
             Ty::Result(a, b) | Ty::Map(a, b) => {
