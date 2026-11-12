@@ -6,7 +6,7 @@ status: draft
 title: A list on the Rust target is copied by reference count and copied in full only when it changes
 relations:
 - informed_by: story:rust-target-read-only-forms-borrow
-revision: 4
+revision: 5
 ---
 # Story: a list on the Rust target is copied by reference count and copied in full only when it changes
 
@@ -67,3 +67,15 @@ The synthetic workload of `docs/value-copies.md` predicted −93 % instructions 
 - No copy of a whole list is among the top 15 sites.
 
 What this changes: the shared lists remove what they were built to remove, and the next units on this path are the constants and the `Text` copies, in that order, each after its forms are reduced from the service's source to synthetic programs.
+
+## Measured 2026-11-12: the corrected branch on the first user's service
+
+The same service, with its own source changed since the first measurement (digits from byte arithmetic, an integer fast path in its arithmetic), built at v0.16.0 and at `3673bee8` (branch `wave/14-shared-lists` after the adversary pass: a matched payload that is only read is read in place, `clear` of a shared list copies nothing). One request at a time, the second request of each answer:
+
+- Largest answer: allocations −29.6 %, instructions −12 %.
+- Small answer: allocations −39.8 %, instructions −36 %.
+- The bodies are byte-identical on all ten requests; the service's own conformance run passes as before; no compile error and the same three compiler warnings as at v0.16.0.
+
+By site at `3673bee8`, one request of the largest answer (frame names, an estimate): 46 % of the allocations are copies and 54 % build values. The ten largest sites hold 81 %; eight of them are the service's own functions (row decoding 27 %, a generated route function 13 %, the cells of the result rows 12 %). Two are std's: `take_bytes` 2.9 % and `string_value` 2.6 % in `std.protocol.mysql`, the second of which is one avoidable copy per text cell (`story:rust-target-text-reads-borrow`).
+
+What this changes: nothing in the order of the next units. The copies that remain in the service's functions are the text forms of `story:rust-target-text-reads-borrow`, reduced by the user to a synthetic program.

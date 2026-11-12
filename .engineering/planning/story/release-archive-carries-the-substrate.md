@@ -2,9 +2,11 @@
 format: aep.planning-md/3
 id: story:release-archive-carries-the-substrate
 kind: story
-status: draft
+status: proposed
 title: The release archive builds and tests on the Rust target without a clone
-revision: 1
+revision: 2
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-12T05:40:24Z", actor: "human:timo", revision: 2, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 ---
 # Story: the release archive builds and tests on the Rust target without a clone
 
