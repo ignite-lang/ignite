@@ -615,8 +615,9 @@ so every instance of a generic declaration has one layout. Construction wraps th
 (`Val::Rec(::ignite_io::List::from_vec(fields))`, also in record updates, defaults and
 assignments to the field); a read derefs (`(*r.items)`; a payload binding is `let l = &**l;`
 when the `match` lends its scrutinee, and `let l = &*l;`, read like a reference parameter,
-when the scrutinee is a value no local holds and the arm neither changes nor moves `l`); a
-change goes through `make_mut` (`(*r.items.make_mut()).push(x)`, also under indexes), except
+when the scrutinee is a value no local holds and the arm neither changes nor moves `l`; in an
+arm whose pattern becomes a guard, such as `Some(Tag("k", l))`, the same `l` is the `&Vec`
+read out of `__m` instead of a copy of it); a change goes through `make_mut` (`(*r.items.make_mut()).push(x)`, also under indexes), except
 `clear`, which is `::ignite_io::List::clear`: a shared list takes the empty storage without a
 copy, an unshared one drops its elements and keeps its buffer; a field or payload that moves
 into a `Vec` position, a payload binding of a value no local holds that its arm changes or

@@ -5686,8 +5686,9 @@ impl<'a> Generator<'a> {
             ranged |= has_range(&arm.pattern);
             let lent_before = self.borrowed_elements.len();
             let mut shared = String::new();
+            let mut lent_reads = BTreeSet::new();
+            self.shared_bindings.clear();
             let pattern = if native {
-                self.shared_bindings.clear();
                 let text = self.pattern(&arm.pattern, ty.as_ref());
                 shared = self.shared_lets(lent, &arm.body);
                 if lent {
@@ -5698,6 +5699,7 @@ impl<'a> Generator<'a> {
                 let subject = if lent { "__m" } else { "(&__m)" }.to_string();
                 let test = self.test(&arm.pattern, &subject, ty.as_ref());
                 self.extract(&arm.pattern, subject, ty.as_ref(), &mut bindings);
+                lent_reads = self.lent_shared_reads(&arm.body);
                 match test {
                     Some(test) => format!("__m if {test}"),
                     None => "__m".to_string(),
@@ -5713,7 +5715,11 @@ impl<'a> Generator<'a> {
                 let lets: String = bindings
                     .iter()
                     .map(|(name, access)| {
-                        format!("let {} = {}; ", ident(name), binding_value(access))
+                        if lent_reads.contains(name) {
+                            format!("let {} = {access}; ", ident(name))
+                        } else {
+                            format!("let {} = {}; ", ident(name), binding_value(access))
+                        }
                     })
                     .collect();
                 body = format!("{{ {shared}{lets}{body} }}");
@@ -5836,13 +5842,10 @@ impl<'a> Generator<'a> {
     /// `ignite_io::List` (copied only when shared).
     fn shared_lets(&mut self, lent: bool, body: &Expr) -> String {
         let scope = self.scopes.len() - 1;
-        let touched: BTreeSet<&str> = match self.types {
-            Some(types) if !lent => {
-                let mut touched = ownership::changed_in(body, self.types);
-                touched.extend(ownership::moved_in(body, types));
-                touched
-            }
-            _ => BTreeSet::new(),
+        let touched = if lent {
+            BTreeSet::new()
+        } else {
+            self.touched_in(body)
         };
         let mut lets = String::new();
         for name in std::mem::take(&mut self.shared_bindings) {
@@ -5857,6 +5860,37 @@ impl<'a> Generator<'a> {
             }
         }
         lets
+    }
+
+    /// The names an arm `body` changes in place or moves: every name when
+    /// the types are not known.
+    fn touched_in<'e>(&self, body: &'e Expr) -> BTreeSet<&'e str> {
+        let mut touched = ownership::changed_in(body, self.types);
+        if let Some(types) = self.types {
+            touched.extend(ownership::moved_in(body, types));
+        }
+        touched
+    }
+
+    /// The bindings of an arm whose pattern became a guard
+    /// ([`Generator::extract`]) that are shared list payloads the arm
+    /// `body` neither changes nor moves: each stays the `&Vec` it is read
+    /// out of `__m` as, read like a lent binding, instead of a copy.
+    fn lent_shared_reads(&mut self, body: &Expr) -> BTreeSet<String> {
+        let names = std::mem::take(&mut self.shared_bindings);
+        if self.types.is_none() {
+            return BTreeSet::new();
+        }
+        let touched = self.touched_in(body);
+        let scope = self.scopes.len() - 1;
+        let mut lent = BTreeSet::new();
+        for name in names {
+            if !touched.contains(name.as_str()) {
+                self.borrowed_elements.push((scope, name.clone()));
+                lent.insert(name);
+            }
+        }
+        lent
     }
 
     /// An `if`; `value` says whether it is in value position. Its branches
@@ -6284,6 +6318,11 @@ impl<'a> Generator<'a> {
                         "(match {subject} {{ {head}({}) => {deref}__x, _ => unreachable!() }})",
                         fields.join(", ")
                     );
+                    if let PatternKind::Binding(id) = &arg.kind
+                        && self.is_shared_payload(ty, variant, i)
+                    {
+                        self.shared_bindings.push(id.name.clone());
+                    }
                     self.extract(arg, access, payload.get(i), out);
                 }
             }

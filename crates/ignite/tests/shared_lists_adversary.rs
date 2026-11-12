@@ -44,7 +44,7 @@ test "a record holding a list of itself 25000 levels deep is built and dropped" 
 "#;
 
 #[test]
-fn adversary_a_deep_chain_of_records_holding_lists_drops_where_it_did_before() {
+fn adversary_a_chain_of_records_holding_lists_25000_levels_deep_drops_on_both_targets() {
     let file = source("deep_records", DEEP_RECORDS);
     let failures: Vec<String> = ["rust", "llvm"]
         .into_iter()
@@ -67,17 +67,22 @@ const N: u64 = 1000;
 /// increment and a read derefs (`(*r.items)`, a payload binding
 /// `let l = &**l;`); only a payload "taken out into a list of its own"
 /// is still copied. `read-field` (the field of a copy, `same(s).words`) is
-/// read in place; `read-payload` (the payload of a copy, matched) is not:
-/// the arm binds `let l = ::ignite_io::List::into_vec(l);`, which copies
-/// every element (here a text each), since the value it came from still
-/// shares them.
+/// read in place; `read-payload` (the payload of a copy, matched) was not
+/// at 3de42165: the arm bound `let l = ::ignite_io::List::into_vec(l);`,
+/// which copies every element (here a text each), since the value it came
+/// from still shares them. It binds `let l = &*l;` now.
 const READS: &str = r#"package shared_reads
 
 enum Val {
   Nil
   Txt(Text)
   Seq(List<Val>)
+  Tag(Text, List<Val>)
+  Num(Int, List<Val>)
+  Pair(List<Int>, List<Val>)
 }
+
+const LIMIT: Int = 7
 
 type Shelf {
   id: Int
@@ -106,9 +111,44 @@ fn number(t: Text) -> Int = match Int.parse(t) {
 fn measure(form: Text, m: Int, n: Int) -> Int {
   let v = Seq(items(m))
   let s = Shelf { id = 1, words = items(m) }
+  let t = Tag("k", items(m))
+  let c = Num(7, items(m))
+  let p = Pair([1, 2], items(m))
   var total = 0
   var i = 0
-  if form == "read-field" {
+  if form == "read-payload-text" {
+    while i < n {
+      total = total + match lookup(t, i) {
+        Some(Tag("k", l)) => l.len()
+        _ => 0
+      }
+      i = i + 1
+    }
+  } else if form == "read-payload-text-if" {
+    while i < n {
+      total = total + match lookup(t, i) {
+        Some(Tag("k", l)) => if l.is_empty() { 0 } else { l.len() }
+        _ => 0
+      }
+      i = i + 1
+    }
+  } else if form == "read-payload-const" {
+    while i < n {
+      total = total + match lookup(c, i) {
+        Some(Num(LIMIT, l)) => l.len()
+        _ => 0
+      }
+      i = i + 1
+    }
+  } else if form == "read-payload-list" {
+    while i < n {
+      total = total + match lookup(p, i) {
+        Some(Pair([1, _], l)) => l.len()
+        _ => 0
+      }
+      i = i + 1
+    }
+  } else if form == "read-field" {
     while i < n {
       total = total + same(s).words.len()
       i = i + 1
@@ -213,6 +253,83 @@ fn adversary_a_payload_of_a_copy_matched_and_only_read_copies_no_element() {
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// The same read where the arm's pattern becomes a guard (`docs/slice.md`
+/// section 6): a text, a constant or a list pattern beside the list
+/// payload (`Some(Tag("k", l)) => l.len()`), and an arm that branches on
+/// the payload (the language has no `if` guard on an arm). Such an arm
+/// matches `__m if ..` and reads each binding out of it; a binding the
+/// arm only reads must be read there, not copied.
+#[test]
+fn a_payload_of_a_copy_matched_through_a_guard_and_only_read_copies_no_element() {
+    let mut failures = Vec::new();
+    for form in [
+        "read-payload-text",
+        "read-payload-text-if",
+        "read-payload-const",
+        "read-payload-list",
+    ] {
+        let (small, large) = per_operation(form);
+        println!("{form}: {small:.3} allocations per read at M = 10, {large:.3} at M = 200");
+        if (large - small).abs() >= 0.5 {
+            failures.push(format!(
+                "{form}: {small:.3} allocations per read at M = 10, {large:.3} at M = 200: \
+                 the read copies the elements"
+            ));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// The guard arms of [`READS`] give the evaluator's values on both
+/// targets, also where the arm changes or moves the payload it binds.
+const GUARD_READS: &str = r#"package guard_reads
+
+enum Val {
+  Nil
+  Txt(Text)
+  Tag(Text, List<Val>)
+  Num(Int, List<Val>)
+  Pair(List<Int>, List<Val>)
+}
+
+const LIMIT: Int = 7
+
+fn lookup(v: Val, k: Int) -> Option<Val> = if k >= 0 { Some(v) } else { None }
+
+fn read(v: Val) -> Int = match lookup(v, 1) {
+  Some(Tag("k", l)) => if l.is_empty() { 0 } else { l.len() }
+  Some(Num(LIMIT, l)) => l.len() * 10
+  Some(Pair([1, _], l)) => l.len() * 100
+  _ => 0 - 1
+}
+
+fn grown(v: Val) -> List<Val> = match lookup(v, 1) {
+  Some(Tag("k", l)) => {
+    var m = l
+    m.push(Nil)
+    m
+  }
+  Some(Num(LIMIT, l)) => l
+  _ => []
+}
+
+test "guard arms read, change and move the payload of a copy" {
+  let t = Tag("k", [Txt("a"), Nil])
+  let c = Num(7, [Nil])
+  let p = Pair([1, 2], [Nil, Nil, Nil])
+  assert read(t) == 2 && read(c) == 10 && read(p) == 300
+  assert read(Tag("j", [Nil])) == 0 - 1 && read(Num(8, [])) == 0 - 1
+  assert read(Pair([2, 1], [Nil])) == 0 - 1 && read(Tag("k", [])) == 0
+  assert grown(t) == [Txt("a"), Nil, Nil] && grown(c) == [Nil]
+  assert t == Tag("k", [Txt("a"), Nil]) && c == Num(7, [Nil])
+}
+"#;
+
+#[test]
+fn guard_arms_on_a_copy_agree_on_every_consumer() {
+    crate::borrowed_reads_adversary::agree("guard_reads", GUARD_READS, 1);
 }
 
 /// A list field moved into a new record (`Shelf { words = cur.words, .. }`
