@@ -2,11 +2,14 @@
 format: aep.planning-md/3
 id: story:move-analysis-cost-of-fields-set-in-if-without-else
 kind: story
-status: draft
+status: active
 title: The move analysis stays linear when a fn sets many fields in if statements without else
 relations:
 - informed_by: story:slice-16-moves-analysis
-revision: 2
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-12T23:49:08Z", actor: "human:timo", revision: 3, executor: "agent:claude-coordinator", correlation: "accepted-2026-11-13"}
+- {from: "proposed", to: "active", at: "2026-11-12T23:49:08Z", actor: "human:timo", revision: 4, executor: "agent:claude-coordinator", correlation: "accepted-2026-11-13"}
 ---
 # Story: the move analysis stays linear when a fn sets many fields in `if` statements without `else`
 
