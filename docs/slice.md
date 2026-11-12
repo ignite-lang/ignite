@@ -794,7 +794,7 @@ instructions (dev) and from 19,757 to 19,760 (release), its allocations stay 36 
 count): that path reads no constant built once. A form that is cheaper still, a `&'static
 str` or `&'static [u8]` Rust builds at compile time, was not taken: every reference parameter
 is a `&String` or `&Vec<u8>`, so such a constant would need a second calling convention or a
-copy at each use that passes it on.
+copy at each use that passes it on. `CODEGEN_REVISION` is `ignite-codegen/0.1.0-54` since this unit.
 
 The generator reads types (`generate_typed`, `generate_std_typed`) for UFCS, fn-field calls,
 `to_text`, `+` on `Text`, constant patterns and variants resolved by expected type; without
