@@ -1766,9 +1766,14 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             ExprKind::Match { scrutinee, arms } => {
                 let ty = self.ty(e);
                 let sty = self.ty(scrutinee);
-                let s = self.expr(scrutinee, true);
-                let keep = self.unchanged_in(scrutinee, arms.iter().map(|arm| &arm.body));
-                let s = if keep { s } else { self.owned(&sty, s) };
+                let s = match self.lent_tuple(scrutinee, arms) {
+                    Some(s) => s,
+                    None => {
+                        let s = self.expr(scrutinee, true);
+                        let keep = self.unchanged_in(scrutinee, arms.iter().map(|arm| &arm.body));
+                        if keep { s } else { self.owned(&sty, s) }
+                    }
+                };
                 if s == Val::Never {
                     return Val::Never;
                 }
@@ -1825,6 +1830,56 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             }
             ExprKind::Block(block) => self.block(block, want),
         }
+    }
+
+    /// A `match` scrutinee `(a, b, ..)` of places (`ownership::place_root`)
+    /// whose variables no arm changes or moves, read in place (unit
+    /// `call-moves`): a tuple whose elements are the places' own
+    /// representations, copied shallow, read like a borrowed place, so the
+    /// arms see each place without a deep copy. `None` for any other
+    /// scrutinee, and for a tuple that holds handles, which an owned match
+    /// would release.
+    fn lent_tuple(&mut self, scrutinee: &Expr, arms: &[ignite_syntax::ast::Arm]) -> Option<Val> {
+        let ExprKind::Tuple(items) = &scrutinee.kind else {
+            return None;
+        };
+        let ty = self.ty(scrutinee);
+        let Ty::Tuple(elements) = &ty else {
+            return None;
+        };
+        if items.is_empty() || self.env.holds_handles(&ty) {
+            return None;
+        }
+        let types = self.cx.types;
+        let mut touched = std::collections::BTreeSet::new();
+        for arm in arms {
+            touched.extend(ownership::changed_in(&arm.body, Some(types)));
+            touched.extend(ownership::moved_in(&arm.body, types));
+        }
+        if !items
+            .iter()
+            .all(|item| ownership::place_root(item).is_some_and(|root| !touched.contains(root)))
+        {
+            return None;
+        }
+        let (offsets, _) = self.env.tuple_layout(elements);
+        let t = self.temp(&ty);
+        for ((item, element), offset) in items.iter().zip(elements).zip(offsets) {
+            let v = self.expr(item, true);
+            if v == Val::Never {
+                return Some(Val::Never);
+            }
+            let v = self.coerce(element, &self.ty(item), v);
+            let dst = self.gep(&t, offset);
+            match v {
+                Val::Ptr(src, _) => {
+                    let size = self.layout(element).size;
+                    self.memcpy(&dst, &src, size);
+                }
+                other => self.store_value(element, &dst, other),
+            }
+        }
+        Some(Val::Ptr(t, false))
     }
 
     /// `(a, b)`: each element in a value position, stored at its offset in

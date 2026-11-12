@@ -407,7 +407,11 @@ position, even with no buffer.
   value or a block's result takes it with a shallow `memcpy` of its representation. The
   result of a call is always written to a fresh temporary, so `s = step(s, i)` moves `s`
   into the call and then the temporary into `s`; the result slot never aliases the moved
-  place. A place in a position that only reads it is not copied:
+  place. A late move (`TypedProgram::moves_late`, `docs/slice.md` 20.3.7: an argument of a
+  fn call that later arguments only read) is a move like any other: the place's pointer is
+  taken when the argument is evaluated, the later arguments read the place through it
+  unchanged, and the callee owns it once called (story `std-mysql-client`, unit
+  `call-moves`; before, a copy). A place in a position that only reads it is not copied:
   - an argument to a borrowed parameter (section 3);
   - the scrutinee of a `match` whose arms do not modify the place's root variable;
   - the list of a `for` whose body does not modify the list's root variable;
@@ -416,6 +420,11 @@ position, even with no buffer.
     is kept, so a change it makes needs no exclusion): the
     element is the pointer into the list that indexing gives (story `std-mysql-client`,
     unit `mysql-cost`; before, a copy);
+  - the places of a `match` scrutinee `(a, b, ..)` that is a tuple of places whose
+    variables no arm changes or moves (`ownership::changed_in`, `ownership::moved_in`) and
+    that holds no handle: the tuple is built from shallow `memcpy`s of the places'
+    representations and read like a borrowed place (`Lower::lent_tuple`; story
+    `std-mysql-client`, unit `call-moves`; before, each place deep-copied);
   - the receiver of `to_bytes`: the result is the receiver itself, owned or borrowed as the
     receiver is;
   - the argument of `append` when the element type holds no buffer: its elements are

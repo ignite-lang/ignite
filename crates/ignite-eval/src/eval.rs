@@ -215,6 +215,10 @@ pub struct Evaluator<'p> {
     /// `docs/slice.md` 33.5), as this evaluator's task sees it; `None`
     /// at compile time, where its builtins have no value.
     world: Option<World>,
+    /// The variables whose late moves (`TypedProgram::moves_late`) the
+    /// arguments being evaluated read: each is taken once the call's
+    /// arguments have all run ([`Evaluator::late_args`]).
+    late: Vec<String>,
 }
 
 impl<'p> Evaluator<'p> {
@@ -238,6 +242,7 @@ impl<'p> Evaluator<'p> {
             time_limit: None,
             deadline: None,
             world: None,
+            late: Vec::new(),
         }
     }
 
@@ -824,6 +829,17 @@ impl<'p> Evaluator<'p> {
         // Under a test a last use moves (20.3.1): the handles the value
         // holds go with it, so they are dropped where the targets drop
         // them.
+        // A late move is taken after the later arguments of its call read
+        // the variable (`late_args`): until then it is a copy.
+        if self.world.is_some()
+            && types.moves(e)
+            && types.moves_late(e)
+            && let Some(value) = self.lookup(name)
+        {
+            let value = value.clone();
+            self.late.push(name.to_string());
+            return Ok(value);
+        }
         if self.world.is_some()
             && types.moves(e)
             && let Some(slot) = self.lookup_mut(name)
@@ -1071,10 +1087,28 @@ impl<'p> Evaluator<'p> {
         }
     }
 
+    /// `evaluate` the arguments of a fn call, then take the variables of
+    /// the late moves among them, as the targets move them into the call
+    /// after every later argument ran. An argument that fails or returns
+    /// early takes none.
+    fn late_args<T>(&mut self, evaluate: impl FnOnce(&mut Self) -> Eval<T>) -> Eval<T> {
+        let mark = self.late.len();
+        let values = evaluate(self);
+        let names = self.late.split_off(mark);
+        if values.is_ok() {
+            for name in names {
+                if let Some(slot) = self.lookup_mut(&name) {
+                    *slot = Value::Unit;
+                }
+            }
+        }
+        values
+    }
+
     fn call_expr(&mut self, cx: &Cx<'p>, e: &Expr, callee: &Expr, args: &[Expr]) -> Eval<Value> {
         match cx.types().callee(e).cloned() {
             Some(Callee::Fn(q)) => {
-                let values = self.args(cx, e, args)?;
+                let values = self.late_args(|this| this.args(cx, e, args))?;
                 self.call_fn(&q, values)
             }
             Some(Callee::Variant { enum_, index }) => {
@@ -1119,12 +1153,15 @@ impl<'p> Evaluator<'p> {
     ) -> Eval<Value> {
         match cx.types().callee(e).cloned() {
             Some(Callee::Fn(q)) if q.name.contains('.') => {
-                let values = self.args(cx, e, args)?;
+                let values = self.late_args(|this| this.args(cx, e, args))?;
                 self.call_fn(&q, values)
             }
             Some(Callee::Fn(q)) => {
-                let mut values = vec![self.expr(cx, receiver)?];
-                values.extend(self.args(cx, e, args)?);
+                let values = self.late_args(|this| {
+                    let mut values = vec![this.expr(cx, receiver)?];
+                    values.extend(this.args(cx, e, args)?);
+                    Ok(values)
+                })?;
                 self.call_fn(&q, values)
             }
             Some(Callee::Variant { enum_, index }) => {

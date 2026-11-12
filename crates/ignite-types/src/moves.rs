@@ -44,6 +44,9 @@ const ROUNDS: usize = 64;
 /// closure's id.
 pub(crate) struct Moves {
     pub moves: NodeMap<()>,
+    /// The moves that wait for the later arguments of their call
+    /// ([`Walk::late_moves`]).
+    pub late: NodeMap<()>,
     pub consumed: BTreeMap<String, Vec<bool>>,
     pub closures: NodeMap<Vec<bool>>,
 }
@@ -93,7 +96,7 @@ pub(crate) fn analyse(program: &Program, types: &TypedProgram, modules: &TypedMo
             break;
         }
     }
-    let mut marks: NodeMap<bool> = NodeMap::default();
+    let mut marks: NodeMap<(bool, bool)> = NodeMap::default();
     let mut closures: NodeMap<Vec<bool>> = NodeMap::default();
     for (body, res) in bodies.iter().zip(&resolved) {
         let own = match (&body.key, body.closure) {
@@ -118,9 +121,14 @@ pub(crate) fn analyse(program: &Program, types: &TypedProgram, modules: &TypedMo
     }
     Moves {
         moves: marks
-            .into_iter()
-            .filter(|(_, moves)| *moves)
-            .map(|(k, _)| (k, ()))
+            .iter()
+            .filter(|(_, (moves, _))| *moves)
+            .map(|(k, _)| (*k, ()))
+            .collect(),
+        late: marks
+            .iter()
+            .filter(|(_, (moves, late))| *moves && *late)
+            .map(|(k, _)| (*k, ()))
             .collect(),
         consumed,
         closures,
@@ -425,6 +433,14 @@ pub fn reads_as_slice(
 
 fn key(expr: &Expr) -> NodeId {
     expr.id
+}
+
+/// The value of a named argument, any other operand as it is.
+fn unnamed(e: &Expr) -> &Expr {
+    match &e.kind {
+        ExprKind::NamedArg { value, .. } => value,
+        _ => e,
+    }
 }
 
 fn target_key(target: &Target) -> NodeId {
@@ -1094,7 +1110,7 @@ struct Walk<'a> {
     loops: Vec<(State, State)>,
     /// Parameters some path moves, from the settled round of every loop.
     any_move: BTreeSet<usize>,
-    marks: Option<NodeMap<bool>>,
+    marks: Option<NodeMap<(bool, bool)>>,
 }
 
 /// An operand of an enclosing call that the call holds while a later
@@ -1118,7 +1134,7 @@ fn walk<'a>(
     consumed: &'a BTreeMap<String, Vec<bool>>,
     own: &'a [bool],
     record: bool,
-) -> (BTreeSet<usize>, NodeMap<bool>) {
+) -> (BTreeSet<usize>, NodeMap<(bool, bool)>) {
     let mut w = Walk {
         types,
         modules,
@@ -1338,7 +1354,15 @@ impl<'a> Walk<'a> {
 
     fn record(&mut self, e: &Expr, moves: bool) {
         if let Some(marks) = &mut self.marks {
-            marks.insert(key(e), moves);
+            marks.insert(key(e), (moves, false));
+        }
+    }
+
+    /// [`record`](Self::record) a move that waits for the later arguments
+    /// of its call ([`late_moves`](Self::late_moves)).
+    fn record_late(&mut self, e: &Expr, moves: bool) {
+        if let Some(marks) = &mut self.marks {
+            marks.insert(key(e), (moves, true));
         }
     }
 
@@ -1695,28 +1719,47 @@ impl<'a> Walk<'a> {
                 }
             }
         }
+        let late = if spawned || !matches!(callee, Some(Callee::Fn(_))) {
+            vec![false; operands.len()]
+        } else {
+            self.late_moves(&operands, &st)
+        };
+        // A late move happens at the call, after every later operand ran,
+        // so a `?` in one of them leaves the parameter unmoved.
+        for (&(operand, _), _) in operands.iter().zip(&late).filter(|(_, late)| **late) {
+            if let Some(i) = self
+                .movable(unnamed(operand))
+                .and_then(|place| self.res.vars[place.var].param)
+            {
+                st.moved.insert(i);
+                self.any_move.insert(i);
+            }
+        }
         for (i, &(operand, kind)) in operands.iter().enumerate().rev() {
             // While operand `i` runs, the call holds the operands before
             // it that it reads in place (borrowed arguments, builtin
-            // receivers, a fn-field receiver); a move under operand `i`
-            // must not change them (20.3.2). An operand in a move
-            // position is a value (moved or copied) once evaluated, and
-            // an operand after `i` reads what liveness already keeps.
+            // receivers, a fn-field receiver) and the places it moves
+            // late; a move under operand `i` must not change them
+            // (20.3.2). Any other operand in a move position is a value
+            // (moved or copied) once evaluated, and an operand after `i`
+            // reads what liveness already keeps.
             let depth = self.held.len();
-            for (other, other_kind) in operands[..i].iter().copied() {
+            for (j, (other, other_kind)) in operands[..i].iter().copied().enumerate() {
                 let field = match other_kind {
+                    Operand::Move if late[j] => None,
                     Operand::Move => continue,
                     Operand::Read | Operand::Spawned => None,
                     Operand::Field(name) => Some(name),
                 };
                 self.held.push(Held {
-                    expr: other,
+                    expr: unnamed(other),
                     field,
                     places: None,
                 });
             }
             st = match kind {
                 Operand::Read => self.expr(operand, st),
+                Operand::Move if late[i] => self.take_late(operand, st),
                 Operand::Move | Operand::Spawned => {
                     let inner = match &operand.kind {
                         ExprKind::NamedArg { value, .. } => &**value,
@@ -1801,5 +1844,101 @@ impl<'a> Walk<'a> {
                 .iter()
                 .any(|q| q.overlaps(place))
         })
+    }
+
+    /// Per operand of a fn call, whether it moves late (unit
+    /// `call-moves`): a movable place in a move position that is dead after
+    /// the call (`after`, the state after it), not pinned or held by an
+    /// enclosing call, mentioned by no operand before it and read by one
+    /// after it, where no later operand changes its variable (by name, as
+    /// [`crate::ownership::changed_in`] counts) and none passed by
+    /// reference [`lends`](Self::lends) from it. The place then moves into
+    /// the call once the later operands have run: they read it as it was,
+    /// and it is held while they run, so none of them moves it.
+    fn late_moves(&mut self, operands: &[(&'a Expr, Operand<'a>)], after: &State) -> Vec<bool> {
+        let mut late = vec![false; operands.len()];
+        for (i, &(operand, kind)) in operands.iter().enumerate() {
+            if !matches!(kind, Operand::Move) {
+                continue;
+            }
+            let inner = unnamed(operand);
+            let Some(place) = self.movable(inner).filter(|_| self.aggregate_expr(inner)) else {
+                continue;
+            };
+            let Some(root) = crate::ownership::place_root(inner) else {
+                continue;
+            };
+            if !after.live.dead(&place) || self.pinned(&place) || self.held_overlaps(&place) {
+                continue;
+            }
+            let mentions = |w: &Self, (other, kind): &(&Expr, Operand<'_>)| {
+                let field = match kind {
+                    Operand::Field(name) => Some(*name),
+                    _ => None,
+                };
+                w.operand_places(other, field)
+                    .iter()
+                    .any(|q| q.overlaps(&place))
+            };
+            let later = &operands[i + 1..];
+            if operands[..i].iter().any(|o| mentions(self, o))
+                || !later.iter().any(|o| mentions(self, o))
+            {
+                continue;
+            }
+            late[i] = later.iter().all(|&(other, kind)| {
+                !crate::ownership::changed_in(other, Some(self.types)).contains(root)
+                    && (matches!(kind, Operand::Move) || !self.lends(other, &place))
+            });
+        }
+        late
+    }
+
+    /// Whether the value of `operand`, passed by reference, may borrow from
+    /// `place`: it mentions the place and is not [`fresh`](Self::fresh).
+    /// A field or element of the place (an `Int` field too: the Rust target
+    /// passes it as `&i64`), a `slice` or `to_bytes` of one, a closure that
+    /// reads it, a block or a branch whose value is one, are taken to
+    /// borrow.
+    fn lends(&self, operand: &Expr, place: &Place) -> bool {
+        let operand = unnamed(operand);
+        self.operand_places(operand, None)
+            .iter()
+            .any(|q| q.overlaps(place))
+            && !self.fresh(operand)
+    }
+
+    /// Whether `e` is a value of its own on both targets, under any `?` or
+    /// `await`: the result of a fn or role call, of an operator, or a
+    /// scalar result of a builtin.
+    fn fresh(&self, e: &Expr) -> bool {
+        match &e.kind {
+            ExprKind::Try(inner) | ExprKind::Await(inner) => self.fresh(inner),
+            ExprKind::Binary { .. } | ExprKind::Unary { .. } => true,
+            ExprKind::Call { .. } | ExprKind::Method { .. } => match self.types.callee(e) {
+                Some(Callee::Fn(_) | Callee::Role { .. }) => true,
+                Some(Callee::Builtin(_)) => self.types.try_type_of(e).is_some_and(|ty| {
+                    matches!(
+                        ty,
+                        Ty::Int | Ty::Byte | Ty::U32 | Ty::Bool | Ty::Unit | Ty::Quantity(_)
+                    )
+                }),
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
+    /// A late move ([`late_moves`](Self::late_moves)) of `operand`: its
+    /// parameter is already in the moved set (the call moves it), the place
+    /// is read here.
+    fn take_late(&mut self, operand: &'a Expr, mut st: State) -> State {
+        let e = unnamed(operand);
+        let place = self.movable(e).expect("a late move is a movable place");
+        let param = self.res.vars[place.var].param;
+        let own = param.is_none_or(|i| self.own.get(i).copied().unwrap_or(false));
+        self.record_late(e, own);
+        st.live.read(place);
+        st
     }
 }

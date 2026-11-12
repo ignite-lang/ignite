@@ -60,6 +60,15 @@ impl Typed {
     /// The text of every marked expression inside fn `name`, in source
     /// order.
     fn marked_in(&self, name: &str) -> Vec<String> {
+        self.in_fn(name, |e| self.typed.moves(e))
+    }
+
+    /// The marked places of fn `name` that move after the later arguments of their call.
+    fn late_in(&self, name: &str) -> Vec<String> {
+        self.in_fn(name, |e| self.typed.moves_late(e))
+    }
+
+    fn in_fn(&self, name: &str, keep: impl Fn(&Expr) -> bool) -> Vec<String> {
         let span = self
             .program
             .decls
@@ -72,7 +81,7 @@ impl Typed {
         let mut inside: Vec<&Expr> = common::expressions(&self.program)
             .into_iter()
             .filter(|e| e.span.start >= span.start && e.span.end <= span.end)
-            .filter(|e| self.typed.moves(e))
+            .filter(|e| keep(e))
             .collect();
         inside.sort_by_key(|e| e.span.start);
         inside.iter().map(|e| self.text(e).to_string()).collect()
@@ -560,7 +569,10 @@ fn scalars(conn: TcpStream, f: fn(Int) -> Int) -> Int {
     }
     assert_eq!(t.marked_in("handle_loop"), vec!["a.state", "a"]);
     assert_eq!(t.marked_in("step_literal"), vec!["st.state", "st.out"]);
-    assert_eq!(t.marked_in("answering"), vec!["state.table"]);
+    // `state` moves after the later argument, which reads `state.table` and returns a value of its own.
+    assert_eq!(t.marked_in("answering"), vec!["state"]);
+    assert_eq!(t.late_in("answering"), vec!["state"]);
+    assert_eq!(t.late_in("answering_after"), none());
     assert_eq!(t.marked_in("answering_after"), vec!["state"]);
 }
 

@@ -179,3 +179,116 @@ fn an_element_of_an_element_whose_index_replaces_the_list_compiles_on_the_rust_t
         panic!("{failure}");
     }
 }
+
+/// Unit `call-moves`: the executables appended to
+/// `fixtures/call_moves.ignite`. Form 9 makes `count` updates
+/// `r = set_in(r, "a", read_in(r, "b")?)` of a record whose `rows` hold
+/// `rows` texts; form 7 makes `count` matches `match (a, b)` of two records
+/// of `rows` fields each.
+const CALL_EXECUTABLES: &str = r#"
+type Calls {
+  executable: Text
+  form: Int
+  rows: Int
+  count: Int
+}
+
+fn updated(m: Int, n: Int) -> Int = match updates(m, n) {
+  Ok(k) => k
+  Err(_) => -1
+}
+
+fn Calls.main(self: Calls) -> Result<Unit, IoError> {
+  if self.form == 9 {
+    log("{self.count} updates of {self.rows} rows: {updated(self.rows, self.count)}")
+  } else {
+    log("{self.count} matches of {self.rows} fields: {compares(self.rows, self.count)}")
+  }
+  return Ok(Unit)
+}
+
+system CallMoves {
+  component updates_small_fewer: Calls { executable = "updates-10-1000", form = 9, rows = 10, count = 1000 }
+  component updates_small_more: Calls { executable = "updates-10-2000", form = 9, rows = 10, count = 2000 }
+  component updates_large_fewer: Calls { executable = "updates-200-1000", form = 9, rows = 200, count = 1000 }
+  component updates_large_more: Calls { executable = "updates-200-2000", form = 9, rows = 200, count = 2000 }
+  component matches_small_fewer: Calls { executable = "matches-10-1000", form = 7, rows = 10, count = 1000 }
+  component matches_small_more: Calls { executable = "matches-10-2000", form = 7, rows = 10, count = 2000 }
+  component matches_large_fewer: Calls { executable = "matches-200-1000", form = 7, rows = 200, count = 1000 }
+  component matches_large_more: Calls { executable = "matches-200-2000", form = 7, rows = 200, count = 2000 }
+}
+"#;
+
+/// The executable `name` of `fixtures/call_moves.ignite` with
+/// [`CALL_EXECUTABLES`] appended, built for `target`.
+fn call_executable(target: Target, name: &str) -> PathBuf {
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/call_moves.ignite");
+    let text = std::fs::read_to_string(&fixture).expect("the fixture");
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("call-moves-source-{target:?}"));
+    std::fs::create_dir_all(&dir).expect("the source directory");
+    let source = dir.join("call_moves.ignite");
+    std::fs::write(&source, text + CALL_EXECUTABLES).expect("write the source");
+    todo::build(&source, &format!("call-moves-{target:?}"), target, name)
+}
+
+/// The allocations one operation of `form` (`updates` or `matches`) makes
+/// over `rows` elements on the Rust target, from the runs of 1,000 and
+/// 2,000 operations, and the two log lines.
+fn per_operation(form: &str, rows: u32) -> (f64, [String; 2]) {
+    let fewer = call_executable(Target::Rust, &format!("{form}-{rows}-1000"));
+    let more = call_executable(Target::Rust, &format!("{form}-{rows}-2000"));
+    let (first, first_line) = allocations(&fewer);
+    let (second, second_line) = allocations(&more);
+    let per = second.saturating_sub(first) as f64 / EXTRA;
+    println!("Rust {form}, {rows} rows: {first} and {second} allocations, {per:.3} per operation");
+    (per, [first_line, second_line])
+}
+
+/// Form 9 and form 7 of the reporter's program: an update of a record that
+/// a later argument reads, and a match on a tuple of two records, allocate
+/// as many times over records of 200 elements as over records of 10 on the
+/// Rust target (before the unit, one copy of the record or of both per
+/// operation: 190 and 380 allocations more). The LLVM target gives the
+/// same values.
+#[test]
+fn an_update_read_by_a_later_argument_and_a_tuple_match_do_not_copy_the_record() {
+    let status = Command::new("valgrind")
+        .args(["--tool=memcheck", "--log-file=/dev/null", "true"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .unwrap_or_else(|e| panic!("valgrind is needed to count allocations and did not run: {e}"));
+    assert!(status.success(), "valgrind did not run `true`: {status:?}");
+    let mut failures = Vec::new();
+    for form in ["updates", "matches"] {
+        let (small, small_lines) = per_operation(form, 10);
+        let (large, large_lines) = per_operation(form, 200);
+        if large - small >= 0.5 {
+            failures.push(format!(
+                "{form}: {small:.3} allocations per operation over 10 elements, \
+                 {large:.3} over 200"
+            ));
+        }
+        for (rows, lines) in [(10, small_lines), (200, large_lines)] {
+            for (count, line) in [1000, 2000].iter().zip(lines) {
+                let llvm = call_executable(Target::Llvm, &format!("{form}-{rows}-{count}"));
+                let text = logged(Command::new(&llvm));
+                if text.trim() != line {
+                    failures.push(format!("LLVM {form}-{rows}-{count}: {text} against {line}"));
+                }
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// Every inline test of `fixtures/call_moves.ignite`, the forms and one
+/// program per guard, passes on the evaluator and both targets.
+#[test]
+fn each_guard_of_a_call_move_gives_the_evaluator_value_on_both_targets() {
+    crate::borrowed_reads_adversary::agree(
+        "call_moves",
+        include_str!("fixtures/call_moves.ignite"),
+        6,
+    );
+}

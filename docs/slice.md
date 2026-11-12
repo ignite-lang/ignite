@@ -7290,8 +7290,53 @@ The Rust target (20.3.4 otherwise):
   allocations per lookup before, none after). Still copied: `let v = l[i]` whose `v` is only
   read, an element returned from a borrowed list (`return e.1`, one copy of the value, never
   of the list). `CODEGEN_REVISION` is `ignite-codegen/0.1.0-51` (one bump for both targets).
+- Late moves and tuples of places (story `std-mysql-client`, unit `call-moves`). A place in a
+  move position of a fn call (a variable, or a field place the analysis moves) that is dead
+  after the call and that only later arguments of the same call read moves into the call
+  after them (`TypedProgram::moves_late`, decided by `moves.rs` `Walk::late_moves`): no
+  argument before it mentions it, no later argument changes its variable (an assignment, an
+  in-place builtin, a block or closure that does either, by name as
+  `ownership::changed_in` counts), and no later argument passed by reference has a value
+  that may borrow from it (a field or element of it, an `Int` field too, which this target
+  passes as `&i64`, a `slice` or `to_bytes` of one, a closure that reads it, a block,
+  branch or `match` whose value is one; a call's, an operator's or a scalar builtin's
+  result is a value of its own). The place is held while the later arguments run, so none
+  of them moves it. `r = set_in(r, "a", read_in(r, "b")?)` is
+  `r = { let __ignite_l1 = String::from("a"); let __ignite_l2 = (read_in(&r, ..))?;
+  set_in(r, __ignite_l1, __ignite_l2) }`: every other argument bound in source order, the
+  place passed last; with reordered named arguments the place is left out of the bindings.
+  A `?` in a later argument returns before the move, and a parameter moved late counts as
+  moved only on the paths that reach the call. The receiver of a UFCS call and named
+  arguments take it alike. Before, the place was copied (`r.clone()`). A later argument
+  that borrows keeps that copy of the whole place (`grown(r.clone(), &r.rows)`): copying
+  only the borrowed field instead would need the LLVM target to copy that argument too,
+  which neither target does. The LLVM target takes a late move as any move (`docs/llvm.md`
+  section 4), and the evaluator, which takes a moved variable under a test, takes a late one
+  once the call's arguments have run (`Evaluator::late_args`).
+- A `match` whose scrutinee is a tuple of two or more places, each of a type that is `Copy`
+  here (passed as a value) or lendable (passed by reference, at least one), whose variables
+  no arm changes or moves (`ownership::changed_in`, `ownership::moved_in`) and whose arm
+  patterns are all native, matches a tuple of references: `match (a, b)` of borrowed
+  parameters, `match (&a, &b)` of owned places, the bindings lent as for a single place and
+  those of a `Copy` type copied out at the start of the arm. Before, `match (a.clone(),
+  b.clone())`. The LLVM target matches a tuple of shallow copies of the places (`docs/llvm.md`
+  section 4). Tests: `borrowed_reads::` in `crates/ignite-rustgen` (the emitted text, the
+  guards keeping their copy) and `crates/ignite-llvm` `copies::` (no copy glue of the record
+  in either form; 2 `copy.Ctx` and 2 `copy.Val` calls before); in `crates/ignite`,
+  `borrowed_reads::an_update_read_by_a_later_argument_and_a_tuple_match_do_not_copy_the_record`
+  (allocations per update 1514.5 over records of 10 rows and 1704.5 over 200 before, 1.0
+  and 1.0 after; per match 25 and 405 before, 3 and 3 after) and
+  `borrowed_reads::each_guard_of_a_call_move_gives_the_evaluator_value_on_both_targets`
+  (`fixtures/call_moves.ignite`, one program per guard). Still copied: a place read by an
+  earlier argument of the call (`set_in(v = read_in(r, "b")?, r = r)`), a place that later
+  elements read in a variant payload, a record, list or tuple literal
+  (`Both(r.clone(), size(&r))`, `Pair { c: r.clone(), n: size(&r) }`), a parameter whose
+  only move is a late one behind a `?` (it stays borrowed and is copied), and a tuple
+  scrutinee with a text, list or constant pattern in an arm. `CODEGEN_REVISION` is
+  `ignite-codegen/0.1.0-52` (one bump for both targets).
 
-The LLVM target and the evaluator read none of this.
+The LLVM target and the evaluator read none of this, except the late moves and the tuple
+scrutinees of unit `call-moves`, as the last two items say.
 
 ### 20.4 Closures and calls of fn-typed expressions (D4, D5)
 
