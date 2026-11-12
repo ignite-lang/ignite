@@ -2,11 +2,15 @@
 format: aep.planning-md/3
 id: story:rust-target-shared-list-storage
 kind: story
-status: draft
+status: implemented
 title: A list on the Rust target is copied by reference count and copied in full only when it changes
 relations:
 - informed_by: story:rust-target-read-only-forms-borrow
-revision: 6
+revision: 9
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-12T20:29:57Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"test_result":3,"review_outcome":1}}, executor: "agent:claude-coordinator", correlation: "accepted-2026-11-12"}
+- {from: "proposed", to: "active", at: "2026-11-12T20:29:57Z", actor: "human:timo", revision: 8, decided_on: {"recorded":{"test_result":3,"review_outcome":1}}, executor: "agent:claude-coordinator", correlation: "accepted-2026-11-12"}
+- {from: "active", to: "implemented", at: "2026-11-12T20:29:57Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"test_result":3,"review_outcome":1}}, executor: "agent:claude-coordinator", correlation: "accepted-2026-11-12"}
 ---
 # Story: a list on the Rust target is copied by reference count and copied in full only when it changes
 
