@@ -476,7 +476,7 @@
           "value": 1033
         },
         "llvm/todo/get-64": {
-          "value": 1296
+          "value": 1299
         },
         "llvm/todo/patch-16": {
           "value": 1203
@@ -488,7 +488,7 @@
           "value": 972
         },
         "rust/terminal/rr-64": {
-          "value": 1222
+          "value": 1235
         },
         "rust/todo/get-1": {
           "value": 990
@@ -569,7 +569,7 @@
           "value": 984
         },
         "llvm/todo/get-64": {
-          "value": 494
+          "value": 492
         },
         "llvm/todo/patch-16": {
           "value": 566
@@ -584,7 +584,7 @@
           "value": 399
         },
         "rust/todo/get-1": {
-          "value": 1011
+          "value": 1008
         },
         "rust/todo/get-64": {
           "value": 551
@@ -612,7 +612,7 @@
           "value": 1061
         },
         "llvm/terminal/rr-64": {
-          "value": 1171
+          "value": 1168
         },
         "llvm/todo/get-1": {
           "value": 740
