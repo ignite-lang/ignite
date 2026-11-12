@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-12T23:13:40Z",
+  "actor": "human:timo",
+  "artifact": "story:rust-target-constants-built-once",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "unit constants, dedicated-host comparison v0.16.2 against 513955c8, run iq-20261112t182428z-83ab, 5 passes, exit 0: no row worse by the rule of docs/quality.md, 0 refused cells; the head measured is before b47afb42 (scalar field reads without clone), which the release cut's run covers"
+  }
+}

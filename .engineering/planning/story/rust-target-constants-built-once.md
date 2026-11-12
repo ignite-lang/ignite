@@ -2,14 +2,15 @@
 format: aep.planning-md/3
 id: story:rust-target-constants-built-once
 kind: story
-status: active
+status: implemented
 title: A module constant is built once on the Rust target
 relations:
 - informed_by: story:rust-target-shared-list-storage
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-12T12:37:03Z", actor: "human:timo", revision: 2, executor: "agent:claude-coordinator", correlation: "after-v0.16.2"}
 - {from: "proposed", to: "active", at: "2026-11-12T12:37:03Z", actor: "human:timo", revision: 3, executor: "agent:claude-coordinator", correlation: "after-v0.16.2"}
+- {from: "active", to: "implemented", at: "2026-11-12T23:13:41Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"test_result":2}}, executor: "agent:claude-coordinator", correlation: "wave-15"}
 ---
 # Story: a module constant is built once on the Rust target
 
