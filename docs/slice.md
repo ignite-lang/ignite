@@ -7334,7 +7334,14 @@ The Rust target (20.3.4 otherwise):
   variable (on a reused stack), then liveness, pins and holds. Under callgrind (debug build)
   it takes 0.12 % of the instructions of `ignite check examples/todo/todo.ignite` and 0.16 %
   of `examples/terminal/terminal.ignite`, `ignite plan` alike (0.44 % and 0.59 % with the
-  order of the unit's first commit, which allocated per call).
+  order of the unit's first commit, which allocated per call). `Walk::call` keeps one inline
+  test (`may_move_late`: a fn call with a name or field in a move position before another
+  operand); the rest, and `Walk::take_late`, are out of line and cold (`Walk::late_call`).
+  Release driver, `ignite check` of `examples/terminal/terminal.design.ignite`:
+  250,406,443 instructions and 1,385,671 simulated I1 misses (cachegrind, 32 KB 8-way)
+  against 249,997,181 and 1,348,654 before the unit and 250,689,071 and 1,442,264 with
+  everything inline; `ignite plan` 251,691,445 and 1,386,863 against 251,428,736 and
+  1,349,011, and 252,024,280 and 1,442,774.
 - A `match` whose scrutinee is a tuple of two or more places, each of a type that is `Copy`
   here (passed as a value) or not (passed by reference, at least one; a binding of a type that
   is not lendable, a fn value, is copied out of its reference at the start of the arm, as the

@@ -119,17 +119,19 @@ pub(crate) fn analyse(program: &Program, types: &TypedProgram, modules: &TypedMo
         let (_, found) = walk(body, res, types, modules, &consumed, &own, true);
         marks.extend(found);
     }
+    let mut moves = NodeMap::default();
+    let mut late = NodeMap::default();
+    for (k, (moved, waits)) in marks {
+        if moved {
+            moves.insert(k, ());
+            if waits {
+                late.insert(k, ());
+            }
+        }
+    }
     Moves {
-        moves: marks
-            .iter()
-            .filter(|(_, (moves, _))| *moves)
-            .map(|(k, _)| (*k, ()))
-            .collect(),
-        late: marks
-            .iter()
-            .filter(|(_, (moves, late))| *moves && *late)
-            .map(|(k, _)| (*k, ()))
-            .collect(),
+        moves,
+        late,
         consumed,
         closures,
     }
@@ -441,6 +443,23 @@ fn unnamed(e: &Expr) -> &Expr {
         ExprKind::NamedArg { value, .. } => value,
         _ => e,
     }
+}
+
+/// Whether an operand of a call may move late ([`Walk::late_moves`]): one
+/// in a move position that is a name or a field, as a movable place is,
+/// with an operand after it. The first test of the late moves, the only
+/// one a call without a late move pays inline.
+#[inline]
+fn may_move_late(operands: &[(&Expr, Operand<'_>)]) -> bool {
+    operands.split_last().is_some_and(|(_, before)| {
+        before.iter().any(|&(operand, kind)| {
+            matches!(kind, Operand::Move)
+                && matches!(
+                    unnamed(operand).kind,
+                    ExprKind::Name(_) | ExprKind::Field { .. }
+                )
+        })
+    })
 }
 
 fn target_key(target: &Target) -> NodeId {
@@ -1344,8 +1363,24 @@ impl<'a> Walk<'a> {
     /// the pattern binds them afresh, so a later mention (in the next loop
     /// iteration) is of another value.
     fn unbind(&self, pattern: &Pattern, st: &mut State) {
-        for name in pattern.bindings() {
-            self.unbind_name(name, st);
+        // A walk of its own rather than `Pattern::bindings`, which collects
+        // the names into a vector: this runs for every arm in every round.
+        match &pattern.kind {
+            PatternKind::Binding(name) | PatternKind::Rest(Some(name)) => {
+                self.unbind_name(name, st)
+            }
+            PatternKind::Or(items)
+            | PatternKind::Tuple(items)
+            | PatternKind::List(items)
+            | PatternKind::Variant { args: items, .. } => {
+                items.iter().for_each(|item| self.unbind(item, st))
+            }
+            PatternKind::Range { .. }
+            | PatternKind::Rest(None)
+            | PatternKind::Wildcard
+            | PatternKind::Int(_)
+            | PatternKind::Str(_)
+            | PatternKind::Bool(_) => {}
         }
     }
 
@@ -1726,23 +1761,14 @@ impl<'a> Walk<'a> {
         // `fn_call`, the evaluator's `late_args`); a `spawn` has no
         // `Operand::Move` left to move late.
         // Empty for a call with no late move, the common case: no
-        // allocation, every operand read as not late.
-        let late = if matches!(callee, Some(Callee::Fn(_))) {
-            self.late_moves(&operands, &st)
+        // allocation, every operand read as not late. The walk runs here
+        // for every call in every round, so the common path holds one
+        // cheap test; the rest is out of line ([`late_call`](Self::late_call)).
+        let late = if matches!(callee, Some(Callee::Fn(_))) && may_move_late(&operands) {
+            self.late_call(&operands, &mut st)
         } else {
             Vec::new()
         };
-        // A late move happens at the call, after every later operand ran,
-        // so a `?` in one of them leaves the parameter unmoved.
-        for (&(operand, _), _) in operands.iter().zip(&late).filter(|(_, late)| **late) {
-            if let Some(i) = self
-                .movable(unnamed(operand))
-                .and_then(|place| self.res.vars[place.var].param)
-            {
-                st.moved.insert(i);
-                self.any_move.insert(i);
-            }
-        }
         for (i, &(operand, kind)) in operands.iter().enumerate().rev() {
             // While operand `i` runs, the call holds the operands before
             // it that it reads in place (borrowed arguments, builtin
@@ -1854,6 +1880,28 @@ impl<'a> Walk<'a> {
         })
     }
 
+    /// The late moves of a fn call that [`may_move_late`] lets through
+    /// ([`late_moves`](Self::late_moves)), out of line so the walk of a
+    /// call without one stays as small as before unit `call-moves`. A late
+    /// move happens at the call, after every later operand ran, so a `?`
+    /// in one of them leaves the parameter unmoved: its parameter goes into
+    /// the moved sets of `st` here.
+    #[cold]
+    #[inline(never)]
+    fn late_call(&mut self, operands: &[(&'a Expr, Operand<'a>)], st: &mut State) -> Vec<bool> {
+        let late = self.late_moves(operands, st);
+        for (&(operand, _), _) in operands.iter().zip(&late).filter(|(_, late)| **late) {
+            if let Some(i) = self
+                .movable(unnamed(operand))
+                .and_then(|place| self.res.vars[place.var].param)
+            {
+                st.moved.insert(i);
+                self.any_move.insert(i);
+            }
+        }
+        late
+    }
+
     /// Per operand of a fn call, whether it moves late (unit
     /// `call-moves`): a movable place in a move position that is dead after
     /// the call (`after`, the state after it), not pinned or held by an
@@ -1926,18 +1974,23 @@ impl<'a> Walk<'a> {
     /// Whether `e` names `root` anywhere, as [`crate::ownership::mentions`]
     /// does, on the reused [`Walk::stack`].
     fn names(&mut self, e: &'a Expr, root: &str) -> bool {
+        // Most operands are a name or a literal: no stack for those.
+        match &e.kind {
+            ExprKind::Name(id) => return id.name == root,
+            ExprKind::Int(_) | ExprKind::Str(_) | ExprKind::Bool(_) => return false,
+            _ => {}
+        }
         let mut stack = std::mem::take(&mut self.stack);
         stack.push(Node::Expr(e));
         let mut found = false;
         while let Some(node) = stack.pop() {
             match node {
                 Node::Target(target) => found = target.base.name == root,
-                Node::Expr(e) => {
-                    found = matches!(&e.kind, ExprKind::Name(id) if id.name == root);
-                    if !found {
-                        expr_children(e, &mut stack);
-                    }
-                }
+                Node::Expr(e) => match &e.kind {
+                    ExprKind::Name(id) => found = id.name == root,
+                    ExprKind::Int(_) | ExprKind::Str(_) | ExprKind::Bool(_) => {}
+                    _ => expr_children(e, &mut stack),
+                },
             }
             if found {
                 break;
@@ -1986,6 +2039,8 @@ impl<'a> Walk<'a> {
     /// A late move ([`late_moves`](Self::late_moves)) of `operand`: its
     /// parameter is already in the moved set (the call moves it), the place
     /// is read here.
+    #[cold]
+    #[inline(never)]
     fn take_late(&mut self, operand: &'a Expr, mut st: State) -> State {
         let e = unnamed(operand);
         let place = self.movable(e).expect("a late move is a movable place");
