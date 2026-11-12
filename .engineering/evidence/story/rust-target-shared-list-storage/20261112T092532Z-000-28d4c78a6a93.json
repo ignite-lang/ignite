@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-12T09:25:32Z",
+  "actor": "human:timo",
+  "artifact": "story:rust-target-shared-list-storage",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "unit shared-lists, task gate on d6f308f1 (merged as e7318ed7): exit 0, 3077 passed, 0 failed, 23 ignored; task ux 389 passed"
+  }
+}

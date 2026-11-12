@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-12T09:25:32Z",
+  "actor": "human:timo",
+  "artifact": "story:rust-target-shared-list-storage",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "unit shared-lists, dedicated-host comparison 26c9c7e2 against d6f308f1, 5 passes: 3.9 rust/terminal 1.507 to 1.509 and rust/todo 0.839 to 0.840 (worse), 6.2 rust 4104 to 4120 ms with every pass above the base (worse); no other row with disjoint samples; tracked as story shared-list-costs-back"
+  }
+}
