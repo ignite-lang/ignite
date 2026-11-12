@@ -33,7 +33,7 @@ run lists every such cell. Without that decision, or with one the release before
 the cell is listed as worse. A merge holds these rows to their bars like any other, and bytes are
 never bought with time.
 
-Current values: run `v0.16.1` on 2026-11-12, commit `f3b1e159`.
+Current values: run `v0.16.2` on 2026-11-12, commit `20cfcbe6`.
 
 ## 1 Semantics: one meaning across the three consumers
 
@@ -41,15 +41,15 @@ Current values: run `v0.16.1` on 2026-11-12, commit `f3b1e159`.
 |---|---|---|---|---|---|---|
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | eval | 2 | 2 | = |
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | llvm | 0 | 0 | = |
-| 1.2 | differential corpus size | ratchet | eval | 788 | 771 | +1 better |
-| 1.2 | differential corpus size | ratchet | llvm | 949 | 932 | +1 better |
-| 1.2 | differential corpus size | ratchet | rust | 949 | 932 | +1 better |
+| 1.2 | differential corpus size | ratchet | eval | 788 | 788 | +17 better |
+| 1.2 | differential corpus size | ratchet | llvm | 949 | 949 | +17 better |
+| 1.2 | differential corpus size | ratchet | rust | 949 | 949 | +17 better |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/builtins | 112 | 124 | = |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/patterns | 13 | 13 | = |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | llvm/builtins | 12 | 13 | = |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | llvm/patterns | 30 | 23 | = |
-| 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | rust/builtins | 43 | 53 | = |
-| 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | rust/patterns | 71 | 65 | = |
+| 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | rust/builtins | 43 | 54 | +1 worse |
+| 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | rust/patterns | 71 | 68 | +3 worse |
 | 1.4 | generated-code goldens changed without a `CODEGEN_REVISION` bump | gate | all | 0 | 0 | = |
 | 1.5 | random programs on which the consumers disagree | gate | | unmeasured: no program generator yet (out of scope of story:quality-ratchet) | | |
 | 1.6 | corpus units the evaluator cannot run | ratchet | eval | 161 | 161 | = |
@@ -72,77 +72,77 @@ Current values: run `v0.16.1` on 2026-11-12, commit `f3b1e159`.
 | # | metric | kind | target | bar | current | trend |
 |---|---|---|---|---|---|---|
 | 3.1 | copies in the generated code of the golden corpus | ratchet | llvm | 90 | 90 | = |
-| 3.1 | copies in the generated code of the golden corpus | ratchet | rust | 163 | 163 | −3 better |
-| 3.2 | binary size | ratchet | llvm/terminald/dev | 7264448 B | 7264456 B | +8 |
-| 3.2 | binary size | ratchet | llvm/terminald/release | 1394536 B | 1394536 B | −224 better |
-| 3.2 | binary size | ratchet | llvm/todod/dev | 7969688 B | 7969760 B | +72 |
-| 3.2 | binary size | ratchet | llvm/todod/release | 1967944 B | 1967944 B | −240 better |
-| 3.2 | binary size | ratchet | rust/terminald/dev | 6344576 B | 6344576 B | −2904 better |
-| 3.2 | binary size | ratchet | rust/terminald/release | 743384 B | 743384 B | −912 better |
-| 3.2 | binary size | ratchet | rust/todod/dev | 7586840 B | 7586840 B | −3224 better |
-| 3.2 | binary size | ratchet | rust/todod/release | 1038712 B | 1062560 B | −400 better |
-| 3.3 | throughput against plain Rust | ratchet | llvm/terminal/connect-8 | 0.929× | 0.913× | ec2:c7i.metal-24xl, −6 |
-| 3.3 | throughput against plain Rust | ratchet | llvm/terminal/rr-1 | 0.995× | 0.995× | ec2:c7i.metal-24xl, +1 better |
-| 3.3 | throughput against plain Rust | ratchet | llvm/terminal/rr-64 | 1.254× | 1.244× | ec2:c7i.metal-24xl, −10 |
-| 3.3 | throughput against plain Rust | ratchet | llvm/todo/get-1 | 1.033× | 1.016× | ec2:c7i.metal-24xl, −7 |
-| 3.3 | throughput against plain Rust | ratchet | llvm/todo/get-64 | 1.296× | 1.296× | ec2:c7i.metal-24xl, +14 better |
-| 3.3 | throughput against plain Rust | ratchet | llvm/todo/patch-16 | 1.203× | 1.190× | ec2:c7i.metal-24xl, −13 |
-| 3.3 | throughput against plain Rust | ratchet | rust/terminal/connect-8 | 0.971× | 0.971× | ec2:c7i.metal-24xl, +5 better |
-| 3.3 | throughput against plain Rust | ratchet | rust/terminal/rr-1 | 0.972× | 0.966× | ec2:c7i.metal-24xl, −6 |
-| 3.3 | throughput against plain Rust | ratchet | rust/terminal/rr-64 | 1.222× | 1.215× | ec2:c7i.metal-24xl, −7 |
-| 3.3 | throughput against plain Rust | ratchet | rust/todo/get-1 | 0.990× | 0.979× | ec2:c7i.metal-24xl, −11 |
-| 3.3 | throughput against plain Rust | ratchet | rust/todo/get-64 | 1.176× | 1.176× | ec2:c7i.metal-24xl, = |
-| 3.3 | throughput against plain Rust | ratchet | rust/todo/patch-16 | 1.193× | 1.177× | ec2:c7i.metal-24xl, −16 |
-| 3.3 | throughput against plain Rust | ratchet | go/terminal/connect-8 | reference, no bar | 0.729× | ec2:c7i.metal-24xl |
-| 3.3 | throughput against plain Rust | ratchet | go/terminal/rr-1 | reference, no bar | 0.915× | ec2:c7i.metal-24xl |
-| 3.3 | throughput against plain Rust | ratchet | go/terminal/rr-64 | reference, no bar | 1.002× | ec2:c7i.metal-24xl |
-| 3.3 | throughput against plain Rust | ratchet | go/todo/get-1 | reference, no bar | 0.725× | ec2:c7i.metal-24xl |
-| 3.3 | throughput against plain Rust | ratchet | go/todo/get-64 | reference, no bar | 0.676× | ec2:c7i.metal-24xl |
-| 3.3 | throughput against plain Rust | ratchet | go/todo/patch-16 | reference, no bar | 0.882× | ec2:c7i.metal-24xl |
+| 3.1 | copies in the generated code of the golden corpus | ratchet | rust | 163 | 163 | = |
+| 3.2 | binary size | ratchet | llvm/terminald/dev | 7264152 B | 7264152 B | −304 better |
+| 3.2 | binary size | ratchet | llvm/terminald/release | 1394536 B | 1394864 B | +328 |
+| 3.2 | binary size | ratchet | llvm/todod/dev | 7969480 B | 7969480 B | −280 better |
+| 3.2 | binary size | ratchet | llvm/todod/release | 1967944 B | 1968272 B | +328 |
+| 3.2 | binary size | ratchet | rust/terminald/dev | 6344576 B | 6349688 B | +5112 |
+| 3.2 | binary size | ratchet | rust/terminald/release | 743384 B | 744360 B | +976 |
+| 3.2 | binary size | ratchet | rust/todod/dev | 7586840 B | 7616952 B | +30112 |
+| 3.2 | binary size | ratchet | rust/todod/release | 1038712 B | 1063856 B | +1296 |
+| 3.3 | throughput against plain Rust | ratchet | llvm/terminal/connect-8 | 0.929× | 0.918× | ec2:c7i.metal-24xl, +5 better |
+| 3.3 | throughput against plain Rust | ratchet | llvm/terminal/rr-1 | 0.995× | 0.980× | ec2:c7i.metal-24xl, −15 |
+| 3.3 | throughput against plain Rust | ratchet | llvm/terminal/rr-64 | 1.254× | 1.251× | ec2:c7i.metal-24xl, +7 better |
+| 3.3 | throughput against plain Rust | ratchet | llvm/todo/get-1 | 1.033× | 1.027× | ec2:c7i.metal-24xl, +11 better |
+| 3.3 | throughput against plain Rust | ratchet | llvm/todo/get-64 | 1.299× | 1.299× | ec2:c7i.metal-24xl, +3 better |
+| 3.3 | throughput against plain Rust | ratchet | llvm/todo/patch-16 | 1.203× | 1.173× | ec2:c7i.metal-24xl, −17 |
+| 3.3 | throughput against plain Rust | ratchet | rust/terminal/connect-8 | 0.971× | 0.965× | ec2:c7i.metal-24xl, −6 |
+| 3.3 | throughput against plain Rust | ratchet | rust/terminal/rr-1 | 0.972× | 0.967× | ec2:c7i.metal-24xl, +1 better |
+| 3.3 | throughput against plain Rust | ratchet | rust/terminal/rr-64 | 1.235× | 1.235× | ec2:c7i.metal-24xl, +20 better |
+| 3.3 | throughput against plain Rust | ratchet | rust/todo/get-1 | 0.990× | 0.983× | ec2:c7i.metal-24xl, +4 better |
+| 3.3 | throughput against plain Rust | ratchet | rust/todo/get-64 | 1.176× | 1.170× | ec2:c7i.metal-24xl, −6 |
+| 3.3 | throughput against plain Rust | ratchet | rust/todo/patch-16 | 1.193× | 1.189× | ec2:c7i.metal-24xl, +12 better |
+| 3.3 | throughput against plain Rust | ratchet | go/terminal/connect-8 | reference, no bar | 0.722× | ec2:c7i.metal-24xl |
+| 3.3 | throughput against plain Rust | ratchet | go/terminal/rr-1 | reference, no bar | 0.925× | ec2:c7i.metal-24xl |
+| 3.3 | throughput against plain Rust | ratchet | go/terminal/rr-64 | reference, no bar | 1.009× | ec2:c7i.metal-24xl |
+| 3.3 | throughput against plain Rust | ratchet | go/todo/get-1 | reference, no bar | 0.740× | ec2:c7i.metal-24xl |
+| 3.3 | throughput against plain Rust | ratchet | go/todo/get-64 | reference, no bar | 0.675× | ec2:c7i.metal-24xl |
+| 3.3 | throughput against plain Rust | ratchet | go/todo/patch-16 | reference, no bar | 0.889× | ec2:c7i.metal-24xl |
 | 3.4 | peak RSS, leaked handles and threads after a load run | gate | | unmeasured: no number: the named tests gate it in task gate | | |
 | 3.5 | runtime entries that can unwind a panic across `extern "C"` | gate | llvm | 0 | 0 | = |
 | 3.6 | `unsafe` sites in the substrate a target links | ratchet | llvm | 79 | 79 | = |
 | 3.6 | `unsafe` sites in the substrate a target links | ratchet | rust | 12 | 12 | = |
-| 3.7 | p99 latency against plain Rust | ratchet | llvm/terminal/connect-8 | 1.105× | 1.268× | ec2:c7i.metal-24xl, −13 better |
-| 3.7 | p99 latency against plain Rust | ratchet | llvm/terminal/rr-1 | 0.992× | 1.008× | ec2:c7i.metal-24xl, −10 better |
-| 3.7 | p99 latency against plain Rust | ratchet | llvm/terminal/rr-64 | 0.400× | 0.418× | ec2:c7i.metal-24xl, +18 |
-| 3.7 | p99 latency against plain Rust | ratchet | llvm/todo/get-1 | 0.984× | 0.992× | ec2:c7i.metal-24xl, −8 better |
-| 3.7 | p99 latency against plain Rust | ratchet | llvm/todo/get-64 | 0.494× | 0.494× | ec2:c7i.metal-24xl, −6 better |
-| 3.7 | p99 latency against plain Rust | ratchet | llvm/todo/patch-16 | 0.566× | 0.574× | ec2:c7i.metal-24xl, +8 |
-| 3.7 | p99 latency against plain Rust | ratchet | rust/terminal/connect-8 | 1.055× | 1.194× | ec2:c7i.metal-24xl, = |
-| 3.7 | p99 latency against plain Rust | ratchet | rust/terminal/rr-1 | 0.980× | 1.016× | ec2:c7i.metal-24xl, +1 |
-| 3.7 | p99 latency against plain Rust | ratchet | rust/terminal/rr-64 | 0.399× | 0.418× | ec2:c7i.metal-24xl, +19 |
-| 3.7 | p99 latency against plain Rust | ratchet | rust/todo/get-1 | 1.011× | 1.016× | ec2:c7i.metal-24xl, +5 |
-| 3.7 | p99 latency against plain Rust | ratchet | rust/todo/get-64 | 0.551× | 0.551× | ec2:c7i.metal-24xl, −4 better |
-| 3.7 | p99 latency against plain Rust | ratchet | rust/todo/patch-16 | 0.740× | 0.759× | ec2:c7i.metal-24xl, +19 |
-| 3.7 | p99 latency against plain Rust | ratchet | go/terminal/connect-8 | reference, no bar | 2.085× | ec2:c7i.metal-24xl |
-| 3.7 | p99 latency against plain Rust | ratchet | go/terminal/rr-1 | reference, no bar | 1.041× | ec2:c7i.metal-24xl |
-| 3.7 | p99 latency against plain Rust | ratchet | go/terminal/rr-64 | reference, no bar | 1.387× | ec2:c7i.metal-24xl |
-| 3.7 | p99 latency against plain Rust | ratchet | go/todo/get-1 | reference, no bar | 1.580× | ec2:c7i.metal-24xl |
-| 3.7 | p99 latency against plain Rust | ratchet | go/todo/get-64 | reference, no bar | 3.554× | ec2:c7i.metal-24xl |
-| 3.7 | p99 latency against plain Rust | ratchet | go/todo/patch-16 | reference, no bar | 2.016× | ec2:c7i.metal-24xl |
-| 3.8 | peak RSS under load against plain Rust | ratchet | llvm/terminal/connect-8 | 0.934× | 0.936× | ec2:c7i.metal-24xl, +2 |
-| 3.8 | peak RSS under load against plain Rust | ratchet | llvm/terminal/rr-1 | 1.061× | 1.065× | ec2:c7i.metal-24xl, +4 |
-| 3.8 | peak RSS under load against plain Rust | ratchet | llvm/terminal/rr-64 | 1.171× | 1.172× | ec2:c7i.metal-24xl, +1 |
-| 3.8 | peak RSS under load against plain Rust | ratchet | llvm/todo/get-1 | 0.740× | 0.740× | ec2:c7i.metal-24xl, −1 better |
-| 3.8 | peak RSS under load against plain Rust | ratchet | llvm/todo/get-64 | 1.083× | 1.096× | ec2:c7i.metal-24xl, +13 |
-| 3.8 | peak RSS under load against plain Rust | ratchet | llvm/todo/patch-16 | 0.808× | 0.817× | ec2:c7i.metal-24xl, +9 |
-| 3.8 | peak RSS under load against plain Rust | ratchet | rust/terminal/connect-8 | 0.912× | 0.912× | ec2:c7i.metal-24xl, −11 better |
-| 3.8 | peak RSS under load against plain Rust | ratchet | rust/terminal/rr-1 | 1.063× | 1.076× | ec2:c7i.metal-24xl, +10 |
-| 3.8 | peak RSS under load against plain Rust | ratchet | rust/terminal/rr-64 | 0.810× | 0.814× | ec2:c7i.metal-24xl, +4 |
-| 3.8 | peak RSS under load against plain Rust | ratchet | rust/todo/get-1 | 0.765× | 0.769× | ec2:c7i.metal-24xl, +1 |
-| 3.8 | peak RSS under load against plain Rust | ratchet | rust/todo/get-64 | 0.770× | 0.780× | ec2:c7i.metal-24xl, +10 |
-| 3.8 | peak RSS under load against plain Rust | ratchet | rust/todo/patch-16 | 0.770× | 0.778× | ec2:c7i.metal-24xl, +8 |
-| 3.8 | peak RSS under load against plain Rust | ratchet | go/terminal/connect-8 | reference, no bar | 3.723× | ec2:c7i.metal-24xl |
-| 3.8 | peak RSS under load against plain Rust | ratchet | go/terminal/rr-1 | reference, no bar | 3.918× | ec2:c7i.metal-24xl |
-| 3.8 | peak RSS under load against plain Rust | ratchet | go/terminal/rr-64 | reference, no bar | 2.773× | ec2:c7i.metal-24xl |
-| 3.8 | peak RSS under load against plain Rust | ratchet | go/todo/get-1 | reference, no bar | 3.541× | ec2:c7i.metal-24xl |
-| 3.8 | peak RSS under load against plain Rust | ratchet | go/todo/get-64 | reference, no bar | 3.173× | ec2:c7i.metal-24xl |
-| 3.8 | peak RSS under load against plain Rust | ratchet | go/todo/patch-16 | reference, no bar | 3.488× | ec2:c7i.metal-24xl |
+| 3.7 | p99 latency against plain Rust | ratchet | llvm/terminal/connect-8 | 1.105× | 1.288× | ec2:c7i.metal-24xl, +20 |
+| 3.7 | p99 latency against plain Rust | ratchet | llvm/terminal/rr-1 | 0.992× | 0.996× | ec2:c7i.metal-24xl, −12 better |
+| 3.7 | p99 latency against plain Rust | ratchet | llvm/terminal/rr-64 | 0.400× | 0.412× | ec2:c7i.metal-24xl, −6 better |
+| 3.7 | p99 latency against plain Rust | ratchet | llvm/todo/get-1 | 0.984× | 0.988× | ec2:c7i.metal-24xl, −4 better |
+| 3.7 | p99 latency against plain Rust | ratchet | llvm/todo/get-64 | 0.492× | 0.492× | ec2:c7i.metal-24xl, −2 better |
+| 3.7 | p99 latency against plain Rust | ratchet | llvm/todo/patch-16 | 0.566× | 0.586× | ec2:c7i.metal-24xl, +12 |
+| 3.7 | p99 latency against plain Rust | ratchet | rust/terminal/connect-8 | 1.055× | 1.202× | ec2:c7i.metal-24xl, +8 |
+| 3.7 | p99 latency against plain Rust | ratchet | rust/terminal/rr-1 | 0.980× | 1.008× | ec2:c7i.metal-24xl, −8 better |
+| 3.7 | p99 latency against plain Rust | ratchet | rust/terminal/rr-64 | 0.399× | 0.416× | ec2:c7i.metal-24xl, −2 better |
+| 3.7 | p99 latency against plain Rust | ratchet | rust/todo/get-1 | 1.008× | 1.008× | ec2:c7i.metal-24xl, −8 better |
+| 3.7 | p99 latency against plain Rust | ratchet | rust/todo/get-64 | 0.551× | 0.553× | ec2:c7i.metal-24xl, +2 |
+| 3.7 | p99 latency against plain Rust | ratchet | rust/todo/patch-16 | 0.740× | 0.778× | ec2:c7i.metal-24xl, +19 |
+| 3.7 | p99 latency against plain Rust | ratchet | go/terminal/connect-8 | reference, no bar | 2.071× | ec2:c7i.metal-24xl |
+| 3.7 | p99 latency against plain Rust | ratchet | go/terminal/rr-1 | reference, no bar | 1.050× | ec2:c7i.metal-24xl |
+| 3.7 | p99 latency against plain Rust | ratchet | go/terminal/rr-64 | reference, no bar | 1.380× | ec2:c7i.metal-24xl |
+| 3.7 | p99 latency against plain Rust | ratchet | go/todo/get-1 | reference, no bar | 1.562× | ec2:c7i.metal-24xl |
+| 3.7 | p99 latency against plain Rust | ratchet | go/todo/get-64 | reference, no bar | 3.672× | ec2:c7i.metal-24xl |
+| 3.7 | p99 latency against plain Rust | ratchet | go/todo/patch-16 | reference, no bar | 1.992× | ec2:c7i.metal-24xl |
+| 3.8 | peak RSS under load against plain Rust | ratchet | llvm/terminal/connect-8 | 0.934× | 0.941× | ec2:c7i.metal-24xl, +5 |
+| 3.8 | peak RSS under load against plain Rust | ratchet | llvm/terminal/rr-1 | 1.061× | 1.065× | ec2:c7i.metal-24xl, = |
+| 3.8 | peak RSS under load against plain Rust | ratchet | llvm/terminal/rr-64 | 1.168× | 1.168× | ec2:c7i.metal-24xl, −4 better |
+| 3.8 | peak RSS under load against plain Rust | ratchet | llvm/todo/get-1 | 0.740× | 0.742× | ec2:c7i.metal-24xl, +2 |
+| 3.8 | peak RSS under load against plain Rust | ratchet | llvm/todo/get-64 | 1.083× | 1.088× | ec2:c7i.metal-24xl, −8 better |
+| 3.8 | peak RSS under load against plain Rust | ratchet | llvm/todo/patch-16 | 0.808× | 0.815× | ec2:c7i.metal-24xl, −2 better |
+| 3.8 | peak RSS under load against plain Rust | ratchet | rust/terminal/connect-8 | 0.912× | 0.930× | ec2:c7i.metal-24xl, +18 |
+| 3.8 | peak RSS under load against plain Rust | ratchet | rust/terminal/rr-1 | 1.063× | 1.080× | ec2:c7i.metal-24xl, +4 |
+| 3.8 | peak RSS under load against plain Rust | ratchet | rust/terminal/rr-64 | 0.810× | 0.814× | ec2:c7i.metal-24xl, = |
+| 3.8 | peak RSS under load against plain Rust | ratchet | rust/todo/get-1 | 0.765× | 0.769× | ec2:c7i.metal-24xl, = |
+| 3.8 | peak RSS under load against plain Rust | ratchet | rust/todo/get-64 | 0.770× | 0.774× | ec2:c7i.metal-24xl, −6 better |
+| 3.8 | peak RSS under load against plain Rust | ratchet | rust/todo/patch-16 | 0.770× | 0.781× | ec2:c7i.metal-24xl, +3 |
+| 3.8 | peak RSS under load against plain Rust | ratchet | go/terminal/connect-8 | reference, no bar | 3.780× | ec2:c7i.metal-24xl |
+| 3.8 | peak RSS under load against plain Rust | ratchet | go/terminal/rr-1 | reference, no bar | 3.953× | ec2:c7i.metal-24xl |
+| 3.8 | peak RSS under load against plain Rust | ratchet | go/terminal/rr-64 | reference, no bar | 2.871× | ec2:c7i.metal-24xl |
+| 3.8 | peak RSS under load against plain Rust | ratchet | go/todo/get-1 | reference, no bar | 3.589× | ec2:c7i.metal-24xl |
+| 3.8 | peak RSS under load against plain Rust | ratchet | go/todo/get-64 | reference, no bar | 3.143× | ec2:c7i.metal-24xl |
+| 3.8 | peak RSS under load against plain Rust | ratchet | go/todo/patch-16 | reference, no bar | 3.466× | ec2:c7i.metal-24xl |
 | 3.9 | stripped binary size against plain Rust | ratchet | llvm/terminal | 1.308× | 1.308× | ec2:c7i.metal-24xl, = |
 | 3.9 | stripped binary size against plain Rust | ratchet | llvm/todo | 0.706× | 0.706× | ec2:c7i.metal-24xl, = |
-| 3.9 | stripped binary size against plain Rust | ratchet | rust/terminal | 1.507× | 1.507× | ec2:c7i.metal-24xl, −3 better |
-| 3.9 | stripped binary size against plain Rust | ratchet | rust/todo | 0.839× | 0.839× | ec2:c7i.metal-24xl, = |
+| 3.9 | stripped binary size against plain Rust | ratchet | rust/terminal | 1.507× | 1.509× | ec2:c7i.metal-24xl, +2 |
+| 3.9 | stripped binary size against plain Rust | ratchet | rust/todo | 0.839× | 0.840× | ec2:c7i.metal-24xl, +1 |
 | 3.9 | stripped binary size against plain Rust | ratchet | go/terminal | reference, no bar | 4.996× | ec2:c7i.metal-24xl |
 | 3.9 | stripped binary size against plain Rust | ratchet | go/todo | reference, no bar | 4.849× | ec2:c7i.metal-24xl |
 
@@ -173,17 +173,17 @@ Current values: run `v0.16.1` on 2026-11-12, commit `f3b1e159`.
 |---|---|---|---|---|---|---|
 | 5.1 | replay mismatches (E127) on recorded journals | gate | | unmeasured: no number: the named suites gate it in task gate | | |
 | 5.2 | crash-recovery matrix rows failing (docs/slice.md 17.7) | gate | | unmeasured: no number: the named suites gate it in task gate | | |
-| 5.3 | restart readiness, real clock | ratchet | llvm | 384 ms | 106 ms | ec2:c7i.metal-24xl, +1 |
+| 5.3 | restart readiness, real clock | ratchet | llvm | 384 ms | 105 ms | ec2:c7i.metal-24xl, −1 better |
 | 5.4 | apply cycle time of the todo, per target | ratchet | | unmeasured: not in task quality: `ignite-perf apply-cycle` exports and builds the benchmark trees and runs about 15 minutes; it is measured per slice (docs/performance/) | | |
 
 ## 6 Compiler speed
 
 | # | metric | kind | target | bar | current | trend |
 |---|---|---|---|---|---|---|
-| 6.1 | check and plan of the design file | ratchet | all/check | 176 ms | 198 ms | ec2:c7i.metal-24xl, = |
-| 6.1 | check and plan of the design file | ratchet | all/plan | 153 ms | 198 ms | ec2:c7i.metal-24xl, −1 better |
-| 6.2 | todo build, dev profile | ratchet | llvm | 993 ms | 934 ms | ec2:c7i.metal-24xl, +1 |
-| 6.2 | todo build, dev profile | ratchet | rust | 3081 ms | 4118 ms | ec2:c7i.metal-24xl, +8 |
+| 6.1 | check and plan of the design file | ratchet | all/check | 176 ms | 199 ms | ec2:c7i.metal-24xl, +1 |
+| 6.1 | check and plan of the design file | ratchet | all/plan | 153 ms | 201 ms | ec2:c7i.metal-24xl, +3 |
+| 6.2 | todo build, dev profile | ratchet | llvm | 993 ms | 933 ms | ec2:c7i.metal-24xl, −1 better |
+| 6.2 | todo build, dev profile | ratchet | rust | 3081 ms | 4128 ms | ec2:c7i.metal-24xl, +10 |
 | 6.3 | `task gate` wall time | ratchet | | unmeasured: no instrument records the gate's wall time; waves note it in their close (AGENTS.md § Gate time) | | |
 
 ## 7 Engineering health

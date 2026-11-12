@@ -11,15 +11,15 @@ glibc, and `share/ignite/std`, the standard library it reads. From v0.16.1 on it
 it into a prefix whose `bin` is on your `PATH`, here `~/.local`:
 
 ```sh
-curl -LO https://github.com/ignite-lang/ignite/releases/download/v0.16.1/ignite-0.16.1-x86_64-linux.tar.gz
-tar -xzf ignite-0.16.1-x86_64-linux.tar.gz
-cp ignite-0.16.1-x86_64-linux/bin/ignite ~/.local/bin/
+curl -LO https://github.com/ignite-lang/ignite/releases/download/v0.16.2/ignite-0.16.2-x86_64-linux.tar.gz
+tar -xzf ignite-0.16.2-x86_64-linux.tar.gz
+cp ignite-0.16.2-x86_64-linux/bin/ignite ~/.local/bin/
 mkdir -p ~/.local/share/ignite
-cp -R ignite-0.16.1-x86_64-linux/share/ignite/. ~/.local/share/ignite/
+cp -R ignite-0.16.2-x86_64-linux/share/ignite/. ~/.local/share/ignite/
 ```
 
 Each archive has a checksum beside it on the release page, `<archive>.sha256`. Check the
-download with `sha256sum -c ignite-0.16.1-x86_64-linux.tar.gz.sha256`.
+download with `sha256sum -c ignite-0.16.2-x86_64-linux.tar.gz.sha256`.
 
 Check it:
 
@@ -28,7 +28,7 @@ ignite --version
 ```
 
 ```text
-ignite 0.16.1
+ignite 0.16.2
 ```
 
 A driver at `PREFIX/bin/ignite` reads `PREFIX/share/ignite/std` when it exists. It also
@@ -51,7 +51,7 @@ The guide's pages build the examples of the repository. Fetch the release's sour
 history:
 
 ```sh
-git clone --depth 1 --branch v0.16.1 https://github.com/ignite-lang/ignite
+git clone --depth 1 --branch v0.16.2 https://github.com/ignite-lang/ignite
 cd ignite
 ignite check examples/terminal/terminal.ignite
 ```
@@ -68,7 +68,7 @@ targets. [Build in a container](../howto/container.md) shows how to use it.
 
 ## Install from source
 
-The releases are also tags of the repository, v0.1.0 to v0.16.1. You need:
+The releases are also tags of the repository, v0.1.0 to v0.16.2. You need:
 
 | tool | needed for |
 |---|---|
@@ -90,7 +90,7 @@ ignite --version
 ```
 
 ```text
-ignite 0.16.1+g91fa0a25740a
+ignite 0.16.2+g91fa0a25740a
 ```
 
 A build from a clone prints the commit after `+g`. It appends `.dirty` when a tracked source of
