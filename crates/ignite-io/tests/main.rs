@@ -5,6 +5,7 @@
 
 mod entropy_adversary;
 mod fs_adversary;
+mod list_adversary;
 mod pipe;
 mod reactor;
 mod reply_adversary;
