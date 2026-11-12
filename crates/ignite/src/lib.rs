@@ -76,8 +76,7 @@ pub struct BuildOptions {
     pub out: Option<PathBuf>,
     /// `--target-dir` passed to cargo. Default: `<out>/target`.
     pub target_dir: Option<PathBuf>,
-    /// Path of the `ignite-io` crate. Default: the crate this driver was
-    /// built with (`CARGO_MANIFEST_DIR/../ignite-io`, canonicalized).
+    /// Path of the `ignite-io` crate. Default: [`default_substrate_path`].
     pub substrate: Option<PathBuf>,
     pub release: bool,
     /// Root of the standard library. Default: [`default_std_path`].
@@ -293,32 +292,76 @@ pub struct Emitted {
 
 /// The standard library of an installed driver, `<prefix>/share/ignite/std`
 /// for a driver at `<prefix>/bin/ignite` (the layout `task dist` packs),
-/// when that directory exists; otherwise the repository's `std/` next to
-/// this driver's crate (`CARGO_MANIFEST_DIR/../../std`, canonicalized when
-/// it exists), where `cargo install` leaves it.
+/// when that directory exists; otherwise the `std/` of the source tree this
+/// driver was built in ([`source_root`], canonicalized when it exists),
+/// where `cargo install` leaves it; for a driver that records no source
+/// tree, `<prefix>/share/ignite/std` all the same.
 pub fn default_std_path() -> PathBuf {
-    if let Some(path) = std::env::current_exe()
-        .ok()
-        .and_then(|exe| installed_std_path(&exe))
-    {
-        return path;
-    }
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../std");
-    path.canonicalize().unwrap_or(path)
+    located(installed_std_path, "std", "std")
 }
 
 /// `<prefix>/share/ignite/std` for a driver at `<prefix>/bin/<name>`, the
 /// driver's symbolic links resolved, when it is a directory.
 pub fn installed_std_path(driver: &Path) -> Option<PathBuf> {
-    let driver = driver.canonicalize().ok()?;
-    let path = driver.parent()?.parent()?.join("share/ignite/std");
+    let path = beside(driver, "std")?;
     path.is_dir().then_some(path)
 }
 
-/// The `ignite-io` crate this driver was built next to.
+/// The `ignite-io` crate of the Rust target when `--substrate` names none:
+/// the substrate of an installed driver,
+/// `<prefix>/share/ignite/substrate/crates/ignite-io` for a driver at
+/// `<prefix>/bin/ignite` (the layout `task dist` packs), when it has a
+/// `Cargo.toml`; otherwise the `crates/ignite-io` of the source tree this
+/// driver was built in ([`source_root`], canonicalized when it exists);
+/// for a driver that records no source tree, the path beside it all the
+/// same, which cargo's error then names.
 pub fn default_substrate_path() -> PathBuf {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../ignite-io");
-    path.canonicalize().unwrap_or(path)
+    located(installed_substrate_path, SUBSTRATE, "crates/ignite-io")
+}
+
+/// `<prefix>/share/ignite/substrate/crates/ignite-io` for a driver at
+/// `<prefix>/bin/<name>`, the driver's symbolic links resolved, when it
+/// holds a `Cargo.toml`.
+pub fn installed_substrate_path(driver: &Path) -> Option<PathBuf> {
+    let path = beside(driver, SUBSTRATE)?;
+    path.join("Cargo.toml").is_file().then_some(path)
+}
+
+/// The substrate crate under `<prefix>/share/ignite`: `task dist` packs it
+/// in a workspace of its own, whose `Cargo.lock` is the crate's
+/// `../../Cargo.lock` as in the repository ([`seed_lock`]).
+const SUBSTRATE: &str = "substrate/crates/ignite-io";
+
+/// The source tree this driver was built in, `IGNITE_SOURCE_ROOT` of
+/// `build.rs`; `None` for the driver `task dist` builds, which holds no
+/// path of the machine that built it.
+pub fn source_root() -> Option<&'static Path> {
+    let root = env!("IGNITE_SOURCE_ROOT");
+    (!root.is_empty()).then(|| Path::new(root))
+}
+
+/// `<prefix>/share/ignite/<path>` for a driver at `<prefix>/bin/<name>`, the
+/// driver's symbolic links resolved.
+fn beside(driver: &Path, path: &str) -> Option<PathBuf> {
+    let driver = driver.canonicalize().ok()?;
+    Some(driver.parent()?.parent()?.join("share/ignite").join(path))
+}
+
+/// What `installed` finds beside the running driver, else `source` in
+/// [`source_root`], else `share` beside the driver even though it does not
+/// exist.
+fn located(installed: fn(&Path) -> Option<PathBuf>, share: &str, source: &str) -> PathBuf {
+    let exe = std::env::current_exe().ok();
+    if let Some(path) = exe.as_deref().and_then(installed) {
+        return path;
+    }
+    if let Some(root) = source_root() {
+        let path = root.join(source);
+        return path.canonicalize().unwrap_or(path);
+    }
+    exe.as_deref()
+        .and_then(|exe| beside(exe, share))
+        .unwrap_or_else(|| Path::new("share/ignite").join(share))
 }
 
 fn io_error(path: &Path) -> impl FnOnce(std::io::Error) -> Error + '_ {

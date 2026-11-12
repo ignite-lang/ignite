@@ -115,7 +115,7 @@ tasks:
       - cargo run -q -p ignite -- build {{.TODO}} --target llvm --out {{.TODO_OUT_LLVM}} --runtime {{.T}}/ignite-test/rt/debug/libignite_rt.a
 
   dist:
-    desc: Build the release ignite for Linux x86_64 (glibc, statically linked) and pack it with std/ as T/dist/ignite-VERSION-x86_64-linux.tar.gz (bin/ignite, share/ignite/std)
+    desc: Build the release ignite for Linux x86_64 (glibc, statically linked) and pack it with std/ and the substrate as T/dist/ignite-VERSION-x86_64-linux.tar.gz (bin/ignite, share/ignite/std, share/ignite/substrate) and its .sha256, checked on the Rust target
     vars:
       T: '{{.CARGO_TARGET_DIR | default "target"}}'
       VERSION:
@@ -124,20 +124,20 @@ tasks:
       DIR: '{{.T}}/dist/{{.NAME}}'
       RELEASE_COMMIT:
         sh: git rev-parse --verify 'v{{.VERSION}}^{commit}'
-    env:
-      CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: -C target-feature=+crt-static
-      IGNITE_RELEASE_COMMIT: '{{.RELEASE_COMMIT}}'
     cmds:
-      - cargo build --release --locked -p ignite --target x86_64-unknown-linux-gnu
-      - rm -rf '{{.DIR}}' '{{.DIR}}.tar.gz'
+      - CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS='-C target-feature=+crt-static' IGNITE_RELEASE_COMMIT='{{.RELEASE_COMMIT}}' cargo build --release --locked -p ignite --target x86_64-unknown-linux-gnu
+      - rm -rf '{{.DIR}}' '{{.DIR}}.tar.gz' '{{.DIR}}.tar.gz.sha256'
       - mkdir -p '{{.DIR}}/bin' '{{.DIR}}/share/ignite'
       - cp '{{.T}}/x86_64-unknown-linux-gnu/release/ignite' '{{.DIR}}/bin/ignite'
       - 'v="$(''{{.DIR}}/bin/ignite'' --version)" && echo "$v" && test "$v" = ''ignite {{.VERSION}}'''
-      - git diff --quiet 'v{{.VERSION}}' -- std README.md && test -z "$(git ls-files --others -- std)"
+      - git diff --quiet 'v{{.VERSION}}' -- std README.md Cargo.toml Cargo.lock crates/ignite-io && test -z "$(git ls-files --others -- std)"
       - cp -R std '{{.DIR}}/share/ignite/std'
+      - IGNITE_DIST_SHARE='{{.DIR}}/share/ignite' cargo test -q --locked -p ignite --test main -- --exact dist::the_substrate_packs_into_a_workspace_of_its_own
       - cp README.md '{{.DIR}}/'
       - tar -czf '{{.DIR}}.tar.gz' -C '{{.T}}/dist' '{{.NAME}}'
-      - echo 'built {{.DIR}}.tar.gz'
+      - cd '{{.T}}/dist' && sha256sum '{{.NAME}}.tar.gz' > '{{.NAME}}.tar.gz.sha256'
+      - IGNITE_DIST_ARCHIVE='{{.DIR}}.tar.gz' cargo test -q --locked -p ignite --test main -- --exact dist::the_archive_builds_and_tests_on_the_rust_target_without_the_repository
+      - echo 'built {{.DIR}}.tar.gz and {{.DIR}}.tar.gz.sha256'
 
   image:
     desc: Build the toolchain image ghcr.io/ignite-lang/ignite-toolchain:VERSION from release vVERSION's archive and the tag's source
