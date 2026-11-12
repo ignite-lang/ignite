@@ -99,7 +99,7 @@ Rules of the layout:
 | all tests | `task test` |
 | format and lint | `task check` |
 | merge gate | `task gate` |
-| pack the release binary | `task dist` (release `ignite` for Linux x86_64, glibc linked statically, with `std/` and the substrate as `target/dist/ignite-VERSION-x86_64-linux.tar.gz` and its `.sha256`: `bin/ignite`, `share/ignite/std`, `share/ignite/substrate` (`crates/ignite-io`, a workspace manifest of that one member written for the archive and the repository's lock trimmed to it, `dist::the_substrate_packs_into_a_workspace_of_its_own` with `IGNITE_DIST_SHARE`); a driver at `<prefix>/bin/ignite` reads `<prefix>/share/ignite/std` and `<prefix>/share/ignite/substrate/crates/ignite-io` first when they exist, and holds no path of the tree that built it (`IGNITE_SOURCE_ROOT` of `crates/ignite/build.rs` is empty under `IGNITE_RELEASE_COMMIT`); fails unless the driver prints the bare `ignite VERSION`, a clean build of the tag `vVERSION`, which must exist, and unless `dist::the_archive_builds_and_tests_on_the_rust_target_without_the_repository` passes on the archive (`IGNITE_DIST_ARCHIVE`); both tests run in `task gate` on a layout of their own) |
+| pack the release binary | `task dist` (release `ignite` for Linux x86_64, glibc linked statically, with `std/` and the substrate as `target/dist/ignite-VERSION-x86_64-linux.tar.gz` and its `.sha256`: `bin/ignite`, `share/ignite/std`, `share/ignite/substrate` (`crates/ignite-io`, a workspace manifest of that one member written for the archive and the repository's lock trimmed to it, `dist::the_substrate_packs_into_a_workspace_of_its_own` with `IGNITE_DIST_SHARE`); a driver at `<prefix>/bin/ignite` reads `<prefix>/share/ignite/std` and `<prefix>/share/ignite/substrate/crates/ignite-io` first when they exist, and holds no path of the tree that built it (`IGNITE_SOURCE_ROOT` of `crates/ignite/build.rs` is empty under `IGNITE_RELEASE_COMMIT`) nor of the cargo home, toolchain or home directory (remapped; ring's C source names in the bitcode runtime excepted); checks the `.sha256` it wrote; fails unless the driver prints the bare `ignite VERSION`, a clean build of the tag `vVERSION`, which must exist, and unless `dist::the_archive_builds_and_tests_on_the_rust_target_without_the_repository` passes on the archive (`IGNITE_DIST_ARCHIVE`); both tests run in `task gate` on a layout of their own) |
 | build and check the toolchain image | `task image VERSION=X.Y.Z` (`dist/toolchain/Dockerfile`, tags `ghcr.io/ignite-lang/ignite-toolchain:X.Y.Z` from release vX.Y.Z's archive and the tag's source), `task image-check VERSION=X.Y.Z [IMAGE=REF]` (`image::` in `crates/ignite/tests/image.rs`, ignored elsewhere: needs docker) |
 | compile the example | `task compile` (`ignite build --target rust`; writes `target/ignite/terminal/`, prints `built …/terminald` and `built …/tn`) |
 | run the compiled server | `task server` |
@@ -533,9 +533,12 @@ was open for three days; a coordinator does this instead of what cost them:
   with `share/ignite/std`, the standard library a driver at `<prefix>/bin/ignite` reads first,
   and `share/ignite/substrate`, the substrate crate `ignite-io` with a workspace manifest and
   lock of its own, which the same driver builds the Rust target against first, so the Rust
-  target needs no clone (since v0.17.0; `--substrate` still comes before it). The driver holds
-  no path of the tree that built it; `task dist` unpacks the archive, searches the driver for
-  the tree's path and builds and tests a package on the Rust target from it, offline. The VS
+  target needs no clone (since v0.16.1; `--substrate` still comes before it). The driver holds
+  no path of the tree that built it, and none of the cargo home, the Rust toolchain or the home
+  directory: `task dist` builds with `--remap-path-prefix` (cargo home to `/cargo`, sysroot to
+  `/rust`) and `CFLAGS="-g0 -ffile-prefix-map=..."`, unpacks the archive, searches the driver
+  for those paths (it passes over ring's C source names under the cargo home, which the
+  bitcode runtime holds as module `source_filename` and clang does not remap) and builds and tests a package on the Rust target from it, offline. The VS
   Code extension of `ignite-lsp` downloads it. `task dist` needs the toolchain's `rust-src` component (`rustup component add
   rust-src`): the release runtime archive the driver carries is built on the standard library from
   source without its backtrace symbolizer (`crates/ignite-rt/release_std.rs`, an unstable cargo
@@ -548,7 +551,9 @@ was open for three days; a coordinator does this instead of what cost them:
   (`dist/toolchain/Dockerfile`: `rust:1.98-trixie`, clang, lld, the release archive checked
   against its `.sha256` and installed under `/usr/local` with its substrate, whose crates are
   fetched, the tag's source in `/usr/local/src/ignite` for its examples,
-  `CARGO_NET_OFFLINE=true`; the image creates no path of the machine that built the release), `task image-check VERSION=X.Y.Z` (the todo example built on both
+  `CARGO_NET_OFFLINE=true`; the image creates no path of the machine that built the release;
+  this Dockerfile builds images of v0.16.1 and later only, since the archives before it hold no
+  `share/ignite/substrate` and its `cp` fails), `task image-check VERSION=X.Y.Z` (the todo example built on both
   targets with no network, each `todod` answers), `docker push
   ghcr.io/ignite-lang/ignite-toolchain:X.Y.Z` (login: `gh auth token | docker login ghcr.io -u
   <gh user> --password-stdin`; the package is public), then add the reference with its

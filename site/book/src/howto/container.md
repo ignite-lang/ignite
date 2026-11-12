@@ -30,7 +30,7 @@ this ignite carries could not be written: Permission denied`.
 
 The image's `ignite` finds the substrate crate beside itself, in
 `/usr/local/share/ignite/substrate`, where the release archive installed it (in images before
-v0.17.0, in the release's source tree). So `--target rust` needs no `--substrate`. It builds
+v0.16.1, in the release's source tree). So `--target rust` needs no `--substrate`. It builds
 with no network:
 
 ```sh

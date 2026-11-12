@@ -13,7 +13,7 @@ program and must behave the same; why both exist is in
 ([where it is looked for](install.md#pre-built-binary)).
 
 - An `ignite` installed from source finds the crate in its own clone. Nothing to pass.
-- The pre-built binary from v0.17.0 on finds the crate its archive installed beside it,
+- The pre-built binary from v0.16.1 on finds the crate its archive installed beside it,
   `share/ignite/substrate`. Nothing to pass.
 - An older pre-built binary does not carry it. Pass the crate of a clone of the same release
   with `--substrate`, as an absolute path. The clone of

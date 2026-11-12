@@ -125,7 +125,7 @@ tasks:
       RELEASE_COMMIT:
         sh: git rev-parse --verify 'v{{.VERSION}}^{commit}'
     cmds:
-      - CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS='-C target-feature=+crt-static' IGNITE_RELEASE_COMMIT='{{.RELEASE_COMMIT}}' cargo build --release --locked -p ignite --target x86_64-unknown-linux-gnu
+      - cargo_home="${CARGO_HOME:-$HOME/.cargo}" && sysroot="$(rustc --print sysroot)" && CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS="-C target-feature=+crt-static --remap-path-prefix=$cargo_home=/cargo --remap-path-prefix=$sysroot=/rust" CFLAGS="-g0 -ffile-prefix-map=$cargo_home=/cargo" IGNITE_RELEASE_COMMIT='{{.RELEASE_COMMIT}}' cargo build --release --locked -p ignite --target x86_64-unknown-linux-gnu
       - rm -rf '{{.DIR}}' '{{.DIR}}.tar.gz' '{{.DIR}}.tar.gz.sha256'
       - mkdir -p '{{.DIR}}/bin' '{{.DIR}}/share/ignite'
       - cp '{{.T}}/x86_64-unknown-linux-gnu/release/ignite' '{{.DIR}}/bin/ignite'
@@ -136,6 +136,7 @@ tasks:
       - cp README.md '{{.DIR}}/'
       - tar -czf '{{.DIR}}.tar.gz' -C '{{.T}}/dist' '{{.NAME}}'
       - cd '{{.T}}/dist' && sha256sum '{{.NAME}}.tar.gz' > '{{.NAME}}.tar.gz.sha256'
+      - cd '{{.T}}/dist' && sha256sum -c '{{.NAME}}.tar.gz.sha256'
       - IGNITE_DIST_ARCHIVE='{{.DIR}}.tar.gz' cargo test -q --locked -p ignite --test main -- --exact dist::the_archive_builds_and_tests_on_the_rust_target_without_the_repository
       - echo 'built {{.DIR}}.tar.gz and {{.DIR}}.tar.gz.sha256'
 

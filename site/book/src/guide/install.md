@@ -6,7 +6,7 @@ pre-built `ignite` for Linux x86_64. On any other system, install from source.
 ## Pre-built binary
 
 The archive `ignite-X.Y.Z-x86_64-linux.tar.gz` holds `bin/ignite`, linked statically against
-glibc, and `share/ignite/std`, the standard library it reads. From v0.17.0 on it also holds
+glibc, and `share/ignite/std`, the standard library it reads. From v0.16.1 on it also holds
 `share/ignite/substrate`, the IO substrate crate that the Rust target builds against. Unpack
 it into a prefix whose `bin` is on your `PATH`, here `~/.local`:
 
@@ -36,13 +36,13 @@ carries the runtime archive of the LLVM target, the default. So `check`, `build`
 need only clang on the `PATH`. The Rust target, `--target rust`, also needs cargo. It builds
 against the IO substrate crate `ignite-io`, the first of:
 
-1. `--substrate PATH` of `ignite build`, `ignite test` or `ignite emit`;
+1. `--substrate PATH` of `ignite build`, `test`, `emit`, `run` or `conformance`;
 2. `PREFIX/share/ignite/substrate/crates/ignite-io` for a driver at `PREFIX/bin/ignite`, when
    it exists;
 3. the `crates/ignite-io` of the source tree the driver was built from. The pre-built driver
    records none.
 
-So from v0.17.0 on the archive builds and tests on the Rust target without a clone. With an
+So from v0.16.1 on the archive builds and tests on the Rust target without a clone. With an
 older archive, pass a clone's crate: [Build for the Rust target](targets.md#the-rust-target).
 
 ## Get the examples

@@ -54,7 +54,7 @@ modified. A build from a source archive without git names the commit in the arch
 | `--static` | `build`, `test`, `conformance` | link against musl ([static executables](#static-executables)) |
 | `--target-dir DIR` | `build`, `test`, `run`, `conformance` | cargo target directory of the Rust target |
 | `--out DIR` | `build`, `test`, `conformance` | `build`: the generated project. `test`, `conformance`: root of the test builds |
-| `--substrate PATH` | `build`, `test`, `emit` | the `ignite-io` crate of the Rust target ([the substrate crate](#the-substrate-crate)) |
+| `--substrate PATH` | `build`, `test`, `emit`, `run`, `conformance` | the `ignite-io` crate of the Rust target ([the substrate crate](#the-substrate-crate)) |
 
 ### The substrate crate
 
@@ -64,7 +64,7 @@ first of:
 1. `--substrate PATH`, an absolute path; a relative one is resolved against the generated
    project;
 2. `PREFIX/share/ignite/substrate/crates/ignite-io` for a driver at `PREFIX/bin/ignite`, when
-   it holds a `Cargo.toml`. The release archive installs it there from v0.17.0 on, with a
+   it holds a `Cargo.toml`. The release archive installs it there from v0.16.1 on, with a
    workspace manifest and a `Cargo.lock` two directories up;
 3. the `crates/ignite-io` of the source tree `ignite` was built from. The release archive's
    driver records no source tree.
@@ -297,7 +297,7 @@ its contracts. Each event goes to the journal of the state directory before redu
 | `--assembly NAME` | the assembly to run |
 | `--state DIR` | journal, lock and executables. Default `target/ignite-run/<assembly>/` |
 | `--build DIR` | build directory. Default `<state>/build/` |
-| `--target llvm\|rust`, `--release`, `--runtime FILE`, `--target-dir DIR` | how the members are built, as in `ignite build`. `--target-dir` defaults to `<build>/target` |
+| `--target llvm\|rust`, `--release`, `--runtime FILE`, `--target-dir DIR`, `--substrate PATH` | how the members are built, as in `ignite build`. `--target-dir` defaults to `<build>/target` |
 | `--clock real\|manual` | the clock the reducers see. Default `real` |
 | `--epoch RFC3339` | epoch of the manual clock. Default `2026-01-01T00:00:00Z` |
 | `--settle DURATION` | settle time of the manual clock, a Duration literal. Default `2 s` |
@@ -467,7 +467,8 @@ std/rfc/rfc854.ignite: unchecked
 
 ```text
 ignite conformance FILE [--target llvm|rust] [--out DIR] [--target-dir DIR] [--release]
-                   [--clang PATH] [--runtime FILE] [--triple T] [--static] [--std DIR]
+                   [--clang PATH] [--runtime FILE] [--triple T] [--static] [--substrate PATH]
+                   [--std DIR]
 ```
 
 Print the conformance matrix of every protocol in `FILE` that declares `conforms`. When a row

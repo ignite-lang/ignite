@@ -33,8 +33,9 @@ RUN test -n "${VERSION}" \
  && mv COMMIT ignite/COMMIT \
  && ignite --version | grep -qx "ignite ${VERSION}"
 
-RUN ignite emit /usr/local/src/ignite/examples/todo/todo.ignite \
-      | grep -qxF 'ignite-io = { path = "/usr/local/share/ignite/substrate/crates/ignite-io" }' \
+RUN ignite emit /usr/local/src/ignite/examples/todo/todo.ignite > /tmp/todo-emit.txt \
+ && grep -qxF 'ignite-io = { path = "/usr/local/share/ignite/substrate/crates/ignite-io" }' /tmp/todo-emit.txt \
+ && rm /tmp/todo-emit.txt \
  && cargo fetch --locked --manifest-path /usr/local/share/ignite/substrate/Cargo.toml
 
 ENV CARGO_NET_OFFLINE=true

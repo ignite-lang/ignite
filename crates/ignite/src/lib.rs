@@ -176,6 +176,9 @@ pub struct RunOptions {
     /// `--target-dir DIR`: cargo's target directory of the Rust target.
     /// Default: `<build>/target`. Tests share one across programs.
     pub target_dir: Option<PathBuf>,
+    /// `--substrate PATH`: the `ignite-io` crate of the Rust target.
+    /// Default: [`default_substrate_path`].
+    pub substrate: Option<PathBuf>,
 }
 
 /// Options of `ignite replay` (`docs/slice.md` 16.3, 16.16).
@@ -1605,7 +1608,8 @@ fn run_members(model: &ignite_eval::Model) -> (BTreeMap<String, String>, Vec<Str
 
 /// A hash of everything a build of `file` reads: the target and profile,
 /// every `.ignite` file of the program's directory and the standard
-/// library, the driver's own executable and the runtime archive. Equal
+/// library, the driver's own executable and the runtime archive (LLVM) or
+/// the substrate's path (Rust). Equal
 /// stamps mean an unchanged build (16.3).
 fn build_stamp(file: &Path, options: &RunOptions) -> Result<u64, Error> {
     use std::hash::{Hash, Hasher};
@@ -1641,6 +1645,12 @@ fn build_stamp(file: &Path, options: &RunOptions) -> Result<u64, Error> {
             &runtime_or_default(options.runtime.as_ref())
                 .unwrap_or_else(|_| default_runtime_path()),
         );
+    } else {
+        options
+            .substrate
+            .clone()
+            .unwrap_or_else(default_substrate_path)
+            .hash(&mut hasher);
     }
     Ok(hasher.finish())
 }
@@ -1705,6 +1715,7 @@ fn build_members(
         release: options.release,
         std: options.std.clone(),
         runtime: options.runtime.clone(),
+        substrate: options.substrate.clone(),
         ..BuildOptions::default()
     };
     let output = build(file, &build_options)?;
