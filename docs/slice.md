@@ -7278,9 +7278,10 @@ The Rust target (20.3.4 otherwise):
   variable, the list of a `for` whose body does not change it, the receiver of `len`,
   `is_empty`, `trim`, `starts_with`, `strip_prefix`, `to_text`, `to_bytes`, `join` and `map`,
   and an operand of a comparison (`(*checked::at(..)) == k`). A `for` iterates by reference
-  also over such an element and over a field of one, and a `for` with a tuple or variant
-  pattern (`for (name, v) in l`) iterates `(l).iter()` as one with a single binding does when
-  the body changes neither the list's variable nor a binding: each binding is a reference
+  also over such an element and over a field of one, and a `for` with a tuple pattern
+  (`for (name, v) in l`, the only pattern besides a name and `_` that `for` takes) iterates
+  `(l).iter()` as one with a single binding does when the body does not change the list's
+  variable (a binding of a `for` cannot be changed, E006): each binding is a reference
   read like a borrowed parameter, and one of a `Copy` type is copied out at the start of the
   body. A `for` over a list of `Copy` elements (`List<Int>`, `Bytes`) that can be iterated
   by reference reads them out of it, `(l).iter().copied()`. Each of these copied the list or

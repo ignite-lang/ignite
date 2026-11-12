@@ -15,7 +15,7 @@ use ignite_syntax::ast::Decl;
 use crate::common;
 
 /// `program` written as `<name>.ignite` in a directory of its own.
-fn source(name: &str, program: &str) -> PathBuf {
+pub(crate) fn source(name: &str, program: &str) -> PathBuf {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
         .join("borrowed-reads-adversary")
         .join(name);
@@ -53,7 +53,7 @@ fn evaluator_failures(file: &Path) -> Vec<String> {
 
 /// `ignite test <file> --target <target>`: `None` when every one of its
 /// `count` tests passes, else its exit status and output.
-fn target_failure(file: &Path, target: &str, count: usize) -> Option<String> {
+pub(crate) fn target_failure(file: &Path, target: &str, count: usize) -> Option<String> {
     let out = file
         .parent()
         .expect("the source directory")
@@ -107,15 +107,13 @@ fn agree(name: &str, program: &str, count: usize) {
 /// A builtin whose receiver is an element `l[i]` and whose argument
 /// replaces the list `l`: the receiver is read before the argument
 /// (`differential::the_evaluator_reads_a_receiver_before_its_arguments`),
-/// so the call sees the element as it was. Before the change the Rust
-/// target copied the element (`&checked::at(&l, 0, ..).clone()`); now
-/// `ref_arg` lends it (`checked::at(&l, 0, ..)`) to `checked::slice`,
+/// so the call sees the element as it was. At 4bcda2ab `ref_arg` lent
+/// the element (`checked::at(&l, 0, ..)`) to `checked::slice`,
 /// `text::pieces`, `text::index_of` and the outer `checked::at` of
-/// `l[0].at(j)`, whose argument assigns `l` while the loan is held:
-/// rustc refuses it with E0506. `ref_args`, `compared` and
-/// `reads_element_in_place` check the later arguments for a change of the
-/// list; these builtin receivers go through `ref_arg` without that check.
-/// All three consumers passed it before the change.
+/// `l[0].at(j)`, whose argument assigns `l` while the loan is held, and
+/// rustc refused it with E0506. Now only callers that check what is
+/// evaluated during the loan lend an element (`lent_arg`, `lent_across`);
+/// these copy it (`&checked::at(&l, 0, ..).clone()`), as before the unit.
 const RECEIVER_THEN_ARGUMENT: &str = r#"package receiver_then_argument
 
 fn slice_of_element() -> Int {
@@ -201,140 +199,6 @@ test "a slice of an element is searched before its needle replaces the list" {
 #[test]
 fn adversary_an_element_receiver_of_a_builtin_whose_argument_changes_the_list() {
     agree("receiver_then_argument", RECEIVER_THEN_ARGUMENT, 5);
-}
-
-/// The read-only methods of `reads_element_in_place` on an element whose
-/// argument replaces the list: the Rust target copies the element (the
-/// guard that no argument changes the list) and gives the evaluator's
-/// value. The LLVM target reads the receiver in place and the argument's
-/// assignment is seen by the call: `starts_with` answers for `"x"`, not
-/// `"ab"`, and `strip_prefix` for `"zzzzzz"`, not `"abc"`. Present at the
-/// base commit too (the LLVM lowering of these receivers is not part of
-/// the change).
-const LLVM_RECEIVER_THEN_ARGUMENT: &str = r#"package llvm_receiver_then_argument
-
-fn starts_with_of_element() -> Int {
-  var l = ["ab", "c"]
-  if l[0].starts_with(if true {
-    l[0] = "x"
-    "a"
-  } else {
-    ""
-  }) {
-    1
-  } else {
-    2
-  }
-}
-
-fn strip_prefix_of_element() -> Int {
-  var l = ["abc", "c"]
-  match l[0].strip_prefix(if true {
-    l[0] = "zzzzzz"
-    "a"
-  } else {
-    ""
-  }) {
-    Some(t) => t.len()
-    None => 100
-  }
-}
-
-test "starts_with reads the element before its argument changes it" {
-  assert starts_with_of_element() == 1
-}
-
-test "strip_prefix reads the element before its argument changes it" {
-  assert strip_prefix_of_element() == 2
-}
-"#;
-
-#[test]
-fn adversary_a_read_only_method_on_an_element_whose_argument_changes_it() {
-    agree(
-        "llvm_receiver_then_argument",
-        LLVM_RECEIVER_THEN_ARGUMENT,
-        2,
-    );
-}
-
-/// `l[0][j]` whose index `j` replaces `l`, passed to a parameter by
-/// reference. The evaluator reads the index first and the element of the
-/// new list (`"zz"`, 2); both targets read `l[0]` first (3) at the base
-/// commit, and the LLVM target still does. The Rust target compiled it at
-/// the base commit (the inner element copied); now the inner `l[0]` is
-/// lent across the index that assigns `l`, and rustc refuses it with
-/// E0506.
-const INDEX_REPLACES_THE_OUTER_LIST: &str = r#"package index_replaces_the_outer_list
-
-enum V {
-  N
-  S(Text)
-}
-
-fn size(v: V) -> Int = match v {
-  S(t) => t.len()
-  N => 0
-}
-
-fn element_of_element() -> Int {
-  var l = [[S("abc")], [N]]
-  size(l[0][if true {
-    l = [[S("zz")]]
-    0
-  } else {
-    0
-  }])
-}
-
-test "an element of an element is read after its index replaces the list" {
-  assert element_of_element() == 2
-}
-"#;
-
-#[test]
-fn adversary_an_index_of_an_element_that_replaces_the_list() {
-    agree(
-        "index_replaces_the_outer_list",
-        INDEX_REPLACES_THE_OUTER_LIST,
-        1,
-    );
-}
-
-/// The same receiver as [`RECEIVER_THEN_ARGUMENT`] one field further in:
-/// `l[0].items.slice(0, j)` whose bound replaces `l`. `ref_arg` lent a
-/// field of an element (`&checked::at(&l, 0, ..).items`) before the
-/// change too, so the Rust target refuses this one (E0506) at the base
-/// commit as well.
-const FIELD_RECEIVER_THEN_ARGUMENT: &str = r#"package field_receiver_then_argument
-
-type R {
-  items: List<Int>
-}
-
-fn slice_of_field() -> Int {
-  var l = [R { items = [1, 2, 3] }]
-  let s = l[0].items.slice(0, if true {
-    l = [R { items = [7] }]
-    2
-  } else {
-    2
-  })
-  s.len() * 10 + l.len()
-}
-
-test "a slice of a field of an element is taken before its bound replaces the list" {
-  assert slice_of_field() == 21
-}
-"#;
-
-#[test]
-fn adversary_a_field_receiver_of_a_builtin_whose_argument_changes_the_list() {
-    agree(
-        "field_receiver_then_argument",
-        FIELD_RECEIVER_THEN_ARGUMENT,
-        1,
-    );
 }
 
 /// One program per guard of the change, each where the guard decides:

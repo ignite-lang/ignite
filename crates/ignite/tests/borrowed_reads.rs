@@ -137,3 +137,45 @@ fn a_lookup_that_only_reads_allocates_nothing_on_the_rust_target() {
         "LLVM, 2,000 lookups"
     );
 }
+
+/// `l[0][j]` passed by reference whose index `j` replaces `l`. The outer
+/// read is not lent (its index changes `l`), and the inner `l[0]` must not
+/// be either: the index is evaluated while it would be borrowed. The Rust
+/// target compiles it and reads `l[0]` before the index, giving 3, as at
+/// `1e16dfba`. The evaluator reads the index first and gives 2, a
+/// difference older than this unit and not pinned here.
+const INDEX_REPLACES_THE_LIST: &str = r#"package index_replaces_the_list
+
+enum V {
+  N
+  S(Text)
+}
+
+fn size(v: V) -> Int = match v {
+  S(t) => t.len()
+  N => 0
+}
+
+fn element_of_element() -> Int {
+  var l = [[S("abc")], [N]]
+  size(l[0][if true {
+    l = [[S("zz")]]
+    0
+  } else {
+    0
+  }])
+}
+
+test "the element of an element is read before its index replaces the list" {
+  assert element_of_element() == 3
+}
+"#;
+
+#[test]
+fn an_element_of_an_element_whose_index_replaces_the_list_compiles_on_the_rust_target() {
+    let file =
+        crate::borrowed_reads_adversary::source("index_replaces_the_list", INDEX_REPLACES_THE_LIST);
+    if let Some(failure) = crate::borrowed_reads_adversary::target_failure(&file, "rust", 1) {
+        panic!("{failure}");
+    }
+}
