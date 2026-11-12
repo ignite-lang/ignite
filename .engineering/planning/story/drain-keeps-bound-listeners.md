@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:drain-keeps-bound-listeners
 kind: story
-status: active
+status: implemented
 title: A listener bound at run time can be kept through the drain
 summary: 'Case study G31: keep_through_drain for TcpListener.bind'
 relations:
@@ -26,10 +26,11 @@ scope:
   path: docs/slice.md
 - confidence: inferred
   path: site/book/src/reference/std/net.md
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T15:00:48Z", actor: "human:timo", revision: 3}
 - {from: "proposed", to: "active", at: "2026-11-08T21:40:02Z", actor: "human:timo", revision: 4}
+- {from: "active", to: "implemented", at: "2026-11-12T12:37:08Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"test_result":1}}, executor: "agent:claude-coordinator", correlation: "audit-2026-11-12"}
 ---
 # Story: drain-keeps-bound-listeners
 

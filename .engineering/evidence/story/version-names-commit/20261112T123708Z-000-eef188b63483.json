@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-12T12:37:08Z",
+  "actor": "human:timo",
+  "artifact": "story:version-names-commit",
+  "kind": "story",
+  "revision": 15,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "release v0.16.0: task gate on a317a6fc exit 0 (29 suites ok, 0 failed; comment on PR 138), merged as 591876af; the story's commits and tests are named in approval-record audit-moves-2026-11-12"
+  }
+}

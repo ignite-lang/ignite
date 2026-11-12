@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:std-digest
 kind: story
-status: active
+status: implemented
 title: SHA-1, SHA-256 and base64 in std
 relations:
 - depends_on: story:bitwise-operators
@@ -32,10 +32,11 @@ scope:
   path: std/encoding.ignite
 - confidence: cited
   path: std/json.ignite
-revision: 15
+revision: 16
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T03:04:57Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-08T21:40:02Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-12T12:37:09Z", actor: "human:timo", revision: 16, decided_on: {"recorded":{"test_result":1}}, executor: "agent:claude-coordinator", correlation: "audit-2026-11-12"}
 ---
 # Story: std-digest
 
