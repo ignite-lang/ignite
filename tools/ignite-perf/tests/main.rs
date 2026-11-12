@@ -10,6 +10,7 @@ mod cycle;
 mod export;
 mod json;
 mod path_cost;
+mod path_cost_adv;
 mod readiness;
 mod records;
 mod remote;
