@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-12T08:02:07Z",
+  "actor": "human:timo",
+  "artifact": "story:rust-target-read-only-forms-borrow",
+  "kind": "story",
+  "revision": 2,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "unit call-moves, dedicated-host comparison v0.16.1 against e6e328e0, 5 passes: 6.1 check 198 to 198 ms, plan 198 to 200 ms with overlapping samples (tolerance 10 %); 3.2 and 3.9 unchanged; no row with disjoint samples"
+  }
+}

@@ -1,15 +1,22 @@
 //! The toolchain image of a release (`dist/toolchain/Dockerfile`, `task
 //! image`): `ignite --version` prints the release, and inside the image,
 //! without a network, `ignite build` of the todo example succeeds on both
-//! targets and each built `todod` answers one HTTP request. Run by `task
+//! targets, the Rust build against the substrate the release archive
+//! installed beside the driver, and each built `todod` answers one HTTP
+//! request. Run by `task
 //! image-check IMAGE=… VERSION=…`; ignored otherwise, since it needs docker
 //! and a built image.
 
 use std::process::{Command, Output};
 use std::time::{Duration, Instant};
 
-/// The tag's source inside the image (`dist/toolchain/Dockerfile`).
+/// The tag's source inside the image (`dist/toolchain/Dockerfile`), for
+/// its examples.
 const SOURCE: &str = "/usr/local/src/ignite";
+
+/// The archive's substrate crate inside the image, beside the driver at
+/// `/usr/local/bin/ignite`.
+const SUBSTRATE: &str = "/usr/local/share/ignite/substrate/crates/ignite-io";
 
 fn docker(args: &[&str]) -> Output {
     Command::new("docker")
@@ -127,6 +134,13 @@ fn the_image_builds_and_serves_the_todo_example_on_both_targets() {
             "llvm" => format!("{out}/bin/todod"),
             _ => format!("{out}/target/debug/todod"),
         };
+        if target == "rust" {
+            let manifest = ok(&["exec", &container.0, "cat", &format!("{out}/Cargo.toml")]);
+            assert!(
+                manifest.contains(&format!("ignite-io = {{ path = \"{SUBSTRATE}\" }}")),
+                "the Rust build does not use the archive's substrate:\n{manifest}"
+            );
+        }
         assert_eq!(health(&container.0, &binary), "ok\n", "{target}");
     }
 }

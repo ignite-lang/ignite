@@ -1675,6 +1675,62 @@ impl TypedProgram {
             .map(Vec::as_slice)
     }
 
+    /// Whether a value of `ty` may hold a handle (invariant 3: a listener,
+    /// a stream, a store, a channel end or a capability), in a list,
+    /// option, result, map, tuple, record or enum; a type parameter of the
+    /// code being generated may, and so may a fn value, which can capture
+    /// one (as the LLVM target's `own::plain` takes it). A backend that
+    /// reads such a value in place instead of taking it changes when its
+    /// handles are released, which a program observes (`rx.closed()`).
+    pub fn holds_handles(&self, ty: &Ty) -> bool {
+        self.holds_handles_in(ty, true, &mut Vec::new())
+    }
+
+    /// [`holds_handles`](Self::holds_handles); `param` says whether a type
+    /// parameter may hold one: not inside a generic declaration's fields,
+    /// whose type arguments are looked at instead.
+    fn holds_handles_in(&self, ty: &Ty, param: bool, seen: &mut Vec<QualName>) -> bool {
+        match ty {
+            Ty::TcpListener
+            | Ty::TcpStream
+            | Ty::PipeStream
+            | Ty::TlsStream
+            | Ty::Store(_)
+            | Ty::Sender(_)
+            | Ty::Receiver(_)
+            | Ty::Capability(_)
+            | Ty::Fn(..)
+            | Ty::EffectFn(..) => true,
+            Ty::Param(_) => param,
+            Ty::List(t) | Ty::Option(t) => self.holds_handles_in(t, param, seen),
+            Ty::Result(a, b) | Ty::Map(a, b) => {
+                self.holds_handles_in(a, param, seen) || self.holds_handles_in(b, param, seen)
+            }
+            Ty::Tuple(items) => items.iter().any(|t| self.holds_handles_in(t, param, seen)),
+            Ty::Record(q) | Ty::GenericRecord(q, _) | Ty::Enum(q) | Ty::GenericEnum(q, _) => {
+                if let Ty::GenericRecord(_, args) | Ty::GenericEnum(_, args) = ty
+                    && args.iter().any(|t| self.holds_handles_in(t, param, seen))
+                {
+                    return true;
+                }
+                if seen.contains(q) {
+                    return false;
+                }
+                seen.push(q.clone());
+                let fields = self.record_fields(q).into_iter().flatten().map(|(_, t)| t);
+                let payloads = self
+                    .enum_variants(q)
+                    .into_iter()
+                    .flatten()
+                    .flat_map(|(_, payload)| payload);
+                fields
+                    .chain(payloads)
+                    .any(|t| self.holds_handles_in(t, false, seen))
+            }
+            _ => false,
+        }
+    }
+
     /// The type arguments, in the order of the declaration's type
     /// parameters, of a generic use (`docs/slice.md` section 11.7): a call
     /// or method call of a generic fn or role, a generic fn used as a

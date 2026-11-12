@@ -16,7 +16,7 @@ are the links on the previous page, and three more:
 
 "Yes" means the project does it as part of what it is. "Partial" is explained in a footnote.
 "No" means it is not part of the project, often by choice of scope. Ignite's column describes
-v0.16.0.
+v0.16.1.
 
 | capability | Ignite | Lean 4 | Winglang | Pulumi | CUE | Kubernetes controllers | Temporal |
 |---|---|---|---|---|---|---|---|

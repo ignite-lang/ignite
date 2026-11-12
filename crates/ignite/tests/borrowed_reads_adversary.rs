@@ -27,7 +27,7 @@ pub(crate) fn source(name: &str, program: &str) -> PathBuf {
 
 /// The failures of the evaluator on the inline tests of `file`: one line
 /// per test that does not pass.
-fn evaluator_failures(file: &Path) -> Vec<String> {
+pub(crate) fn evaluator_failures(file: &Path) -> Vec<String> {
     let loaded = ignite::load(file, None).unwrap_or_else(|e| panic!("{e}"));
     let modules = loaded.modules();
     let module = loaded.types().module.clone();

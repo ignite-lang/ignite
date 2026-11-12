@@ -1837,8 +1837,9 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     /// `call-moves`): a tuple whose elements are the places' own
     /// representations, copied shallow, read like a borrowed place, so the
     /// arms see each place without a deep copy. `None` for any other
-    /// scrutinee, and for a tuple that holds handles, which an owned match
-    /// would release.
+    /// scrutinee. A tuple that holds handles is lent too: a tuple literal
+    /// is never an owned match (`own::owned_scrutinee`), so neither form
+    /// releases the tuple, and a lent handle needs no owner of its own.
     fn lent_tuple(&mut self, scrutinee: &Expr, arms: &[ignite_syntax::ast::Arm]) -> Option<Val> {
         let ExprKind::Tuple(items) = &scrutinee.kind else {
             return None;
@@ -1847,14 +1848,26 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         let Ty::Tuple(elements) = &ty else {
             return None;
         };
-        if items.is_empty() || self.env.holds_handles(&ty) {
+        if items.is_empty() {
             return None;
         }
         let types = self.cx.types;
         let mut touched = std::collections::BTreeSet::new();
         for arm in arms {
             touched.extend(ownership::changed_in(&arm.body, Some(types)));
-            touched.extend(ownership::moved_in(&arm.body, types));
+            let moved = ownership::moved_in(&arm.body, types);
+            // The analysis takes the tuple literal for a fresh value whose
+            // bindings it may move; one moved out of this tuple would take
+            // the place's own buffers.
+            if arm
+                .pattern
+                .bindings()
+                .iter()
+                .any(|id| moved.contains(id.name.as_str()))
+            {
+                return None;
+            }
+            touched.extend(moved);
         }
         if !items
             .iter()

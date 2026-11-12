@@ -565,6 +565,8 @@ test fn attach(r0: Ctx) -> Result<Ctx, Text> {
   Ok(r)
 }
 
+test fn renamed(r: Ctx) -> Ctx = set_in(r, "k", Num(r.rows.len()))
+
 test fn kind_of(v: Val) -> Text = match v {
   Nil => "nil"
   Num(_) => "num"
@@ -587,4 +589,12 @@ test "a record read by a later argument is moved after it, a tuple of places is 
   assert c.inputs.len() == 1
   assert same_kind(Txt("a"), Txt("a")) == Ok(true)
   assert same_kind(Num(1), Txt("b")) == Err("cannot compare num and txt")
+}
+
+test "a parameter moved late is the callee's to move on" {
+  let c = Ctx { label = "c", inputs = [("b", Num(7))], rows = ["x", "y"] }
+  let d = renamed(Ctx { label = "d", inputs = [], rows = ["z"] })
+  let e = renamed(c)
+  assert d.inputs == [("k", Num(1))] && e.inputs == [("b", Num(7)), ("k", Num(2))]
+  assert c.inputs.len() == 1 && e.label == "c"
 }

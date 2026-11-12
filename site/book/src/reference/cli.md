@@ -54,6 +54,23 @@ modified. A build from a source archive without git names the commit in the arch
 | `--static` | `build`, `test`, `conformance` | link against musl ([static executables](#static-executables)) |
 | `--target-dir DIR` | `build`, `test`, `run`, `conformance` | cargo target directory of the Rust target |
 | `--out DIR` | `build`, `test`, `conformance` | `build`: the generated project. `test`, `conformance`: root of the test builds |
+| `--substrate PATH` | `build`, `test`, `emit`, `run`, `conformance` | the `ignite-io` crate of the Rust target ([the substrate crate](#the-substrate-crate)) |
+
+### The substrate crate
+
+The Rust target's generated project depends on the IO substrate crate `ignite-io`. It is the
+first of:
+
+1. `--substrate PATH`, an absolute path; a relative one is resolved against the generated
+   project;
+2. `PREFIX/share/ignite/substrate/crates/ignite-io` for a driver at `PREFIX/bin/ignite`, when
+   it holds a `Cargo.toml`. The release archive installs it there from v0.16.1 on, with a
+   workspace manifest and a `Cargo.lock` two directories up;
+3. the `crates/ignite-io` of the source tree `ignite` was built from. The release archive's
+   driver records no source tree.
+
+A project without a `Cargo.lock` gets a copy of the lock two directories above the crate, so
+cargo takes the locked versions from its cache.
 
 ### The runtime archive
 
@@ -149,7 +166,7 @@ declaration order. `build` owns the directory `--out` and overwrites it.
 | `--release` | optimised build, below |
 | `--clang PATH`, `--runtime FILE`, `--triple T` | LLVM only: clang, the [runtime archive](#the-runtime-archive) and the triple |
 | `--static` | link against musl ([static executables](#static-executables)) |
-| `--substrate PATH` | absolute path of the `ignite-io` crate for `--target rust`. Default: the `crates/ignite-io` of the source tree `ignite` was built from. A relative path is resolved against the generated project |
+| `--substrate PATH` | path of the `ignite-io` crate for `--target rust` ([the substrate crate](#the-substrate-crate)) |
 
 On the LLVM target:
 
@@ -200,10 +217,7 @@ in [Tests and assertions](tests.md).
 | `--target-dir DIR` | cargo target directory of the Rust tests. Default `<out>/<name>/rust/target` |
 | `--clang PATH`, `--runtime FILE`, `--triple T` | LLVM only: clang, the [runtime archive](#the-runtime-archive) with the test runner, and the triple |
 | `--static` | link the test executables against musl |
-
-`ignite test` has no `--substrate`. The Rust tests use the `crates/ignite-io` of the source
-tree `ignite` was built from, so a release binary runs `--target rust` or `all` only where that
-tree exists, as in the toolchain image.
+| `--substrate PATH` | the `ignite-io` crate of the Rust tests ([the substrate crate](#the-substrate-crate)) |
 
 The output follows `cargo test`:
 
@@ -283,7 +297,7 @@ its contracts. Each event goes to the journal of the state directory before redu
 | `--assembly NAME` | the assembly to run |
 | `--state DIR` | journal, lock and executables. Default `target/ignite-run/<assembly>/` |
 | `--build DIR` | build directory. Default `<state>/build/` |
-| `--target llvm\|rust`, `--release`, `--runtime FILE`, `--target-dir DIR` | how the members are built, as in `ignite build`. `--target-dir` defaults to `<build>/target` |
+| `--target llvm\|rust`, `--release`, `--runtime FILE`, `--target-dir DIR`, `--substrate PATH` | how the members are built, as in `ignite build`. `--target-dir` defaults to `<build>/target` |
 | `--clock real\|manual` | the clock the reducers see. Default `real` |
 | `--epoch RFC3339` | epoch of the manual clock. Default `2026-01-01T00:00:00Z` |
 | `--settle DURATION` | settle time of the manual clock, a Duration literal. Default `2 s` |
@@ -453,7 +467,8 @@ std/rfc/rfc854.ignite: unchecked
 
 ```text
 ignite conformance FILE [--target llvm|rust] [--out DIR] [--target-dir DIR] [--release]
-                   [--clang PATH] [--runtime FILE] [--triple T] [--static] [--std DIR]
+                   [--clang PATH] [--runtime FILE] [--triple T] [--static] [--substrate PATH]
+                   [--std DIR]
 ```
 
 Print the conformance matrix of every protocol in `FILE` that declares `conforms`. When a row

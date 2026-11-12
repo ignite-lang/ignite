@@ -302,7 +302,17 @@ pub fn changed_in_stmts<'a>(
 /// Whether `e` names `name` anywhere: a read, an assignment target or a
 /// capture, closure bodies included, by name (a shadowing binding counts).
 pub fn mentions(e: &Expr, name: &str) -> bool {
-    let mut stack = vec![Node::Expr(e)];
+    mentioned(vec![Node::Expr(e)], name)
+}
+
+/// Whether a run of statements names `name`, as [`mentions`].
+pub fn mentions_in_stmts(stmts: &[ignite_syntax::ast::Stmt], name: &str) -> bool {
+    let mut stack = Vec::new();
+    stmts_children(stmts, &mut stack);
+    mentioned(stack, name)
+}
+
+fn mentioned(mut stack: Vec<Node<'_>>, name: &str) -> bool {
     while let Some(node) = stack.pop() {
         match node {
             Node::Target(target) if target.base.name == name => return true,
@@ -326,8 +336,21 @@ pub fn changed_in<'a>(e: &'a Expr, types: Option<&TypedProgram>) -> BTreeSet<&'a
 /// The [`place_root`] of every place that moves in `e`
 /// ([`TypedProgram::moves`]), closure bodies included, by name.
 pub fn moved_in<'a>(e: &'a Expr, types: &TypedProgram) -> BTreeSet<&'a str> {
+    moved(vec![Node::Expr(e)], types)
+}
+
+/// The names a run of statements moves, as [`moved_in`].
+pub fn moved_in_stmts<'a>(
+    stmts: &'a [ignite_syntax::ast::Stmt],
+    types: &TypedProgram,
+) -> BTreeSet<&'a str> {
+    let mut stack = Vec::new();
+    stmts_children(stmts, &mut stack);
+    moved(stack, types)
+}
+
+fn moved<'a>(mut stack: Vec<Node<'a>>, types: &TypedProgram) -> BTreeSet<&'a str> {
     let mut names = BTreeSet::new();
-    let mut stack = vec![Node::Expr(e)];
     while let Some(node) = stack.pop() {
         if let Node::Expr(e) = node {
             if types.moves(e) {

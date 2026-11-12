@@ -430,22 +430,22 @@
           "value": 7264448
         },
         "llvm/terminald/release": {
-          "value": 1394760
+          "value": 1394536
         },
         "llvm/todod/dev": {
           "value": 7969688
         },
         "llvm/todod/release": {
-          "value": 1968184
+          "value": 1967944
         },
         "rust/terminald/dev": {
-          "value": 6347480
+          "value": 6344576
         },
         "rust/terminald/release": {
-          "value": 744296
+          "value": 743384
         },
         "rust/todod/dev": {
-          "value": 7590064
+          "value": 7586840
         },
         "rust/todod/release": {
           "value": 1038712
@@ -467,7 +467,7 @@
           "value": 929
         },
         "llvm/terminal/rr-1": {
-          "value": 994
+          "value": 995
         },
         "llvm/terminal/rr-64": {
           "value": 1254
@@ -476,13 +476,13 @@
           "value": 1033
         },
         "llvm/todo/get-64": {
-          "value": 1282
+          "value": 1296
         },
         "llvm/todo/patch-16": {
           "value": 1203
         },
         "rust/terminal/connect-8": {
-          "value": 966
+          "value": 971
         },
         "rust/terminal/rr-1": {
           "value": 972
@@ -569,7 +569,7 @@
           "value": 984
         },
         "llvm/todo/get-64": {
-          "value": 500
+          "value": 494
         },
         "llvm/todo/patch-16": {
           "value": 566
@@ -587,7 +587,7 @@
           "value": 1011
         },
         "rust/todo/get-64": {
-          "value": 555
+          "value": 551
         },
         "rust/todo/patch-16": {
           "value": 740
@@ -615,7 +615,7 @@
           "value": 1171
         },
         "llvm/todo/get-1": {
-          "value": 741
+          "value": 740
         },
         "llvm/todo/get-64": {
           "value": 1083
@@ -624,7 +624,7 @@
           "value": 808
         },
         "rust/terminal/connect-8": {
-          "value": 923
+          "value": 912
         },
         "rust/terminal/rr-1": {
           "value": 1063
@@ -660,7 +660,7 @@
           "value": 706
         },
         "rust/terminal": {
-          "value": 1510
+          "value": 1507
         },
         "rust/todo": {
           "value": 839
