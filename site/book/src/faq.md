@@ -7,7 +7,7 @@ An intent-oriented language for specifying, building, deploying and operating sy
 
 ## Can I use it in production?
 
-No. Ignite is an early prototype, at v0.16.0, and runs systems on one machine only. See
+No. Ignite is an early prototype, at v0.16.1, and runs systems on one machine only. See
 [What works today](roadmap.md#what-works-today).
 
 ## How do I install it?

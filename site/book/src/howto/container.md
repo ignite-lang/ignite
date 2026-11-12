@@ -14,7 +14,7 @@ LLVM target writes its runtime archive:
 
 ```sh
 docker run --rm --user "$(id -u):$(id -g)" -e XDG_CACHE_HOME=/tmp -v "$PWD:/work" \
-  ghcr.io/ignite-lang/ignite-toolchain:0.16.0 ignite build hello.ignite
+  ghcr.io/ignite-lang/ignite-toolchain:0.16.1 ignite build hello.ignite
 ./target/ignite/hello/bin/hello
 ```
 
@@ -35,7 +35,7 @@ with no network:
 
 ```sh
 docker run --rm --network none --user "$(id -u):$(id -g)" -e XDG_CACHE_HOME=/tmp -v "$PWD:/work" \
-  ghcr.io/ignite-lang/ignite-toolchain:0.16.0 ignite build hello.ignite --target rust
+  ghcr.io/ignite-lang/ignite-toolchain:0.16.1 ignite build hello.ignite --target rust
 ```
 
 ```text
@@ -49,7 +49,7 @@ built target/ignite/hello/target/debug/hello
 
 ```sh
 docker run --rm --user "$(id -u):$(id -g)" -e XDG_CACHE_HOME=/tmp -v "$PWD:/work" \
-  ghcr.io/ignite-lang/ignite-toolchain:0.16.0 ignite test hello.ignite --target all
+  ghcr.io/ignite-lang/ignite-toolchain:0.16.1 ignite test hello.ignite --target all
 ```
 
 ```text
@@ -71,7 +71,7 @@ The first block is the LLVM target, the second the Rust target.
 
 ```sh
 docker run --rm --user "$(id -u):$(id -g)" -e XDG_CACHE_HOME=/tmp -v "$PWD:/work" \
-  ghcr.io/ignite-lang/ignite-toolchain:0.16.0 ignite build hello.ignite --static
+  ghcr.io/ignite-lang/ignite-toolchain:0.16.1 ignite build hello.ignite --static
 file target/ignite/hello/bin/hello
 ```
 
