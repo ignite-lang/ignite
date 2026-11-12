@@ -1,0 +1,12 @@
+package examples.terminal.command_schema
+
+// The command names the terminal offers, for tooling (design section
+// 11.3): the module `terminal.ignite` names with
+// `module("examples.terminal.command_schema")`, filling
+// `std.console.CommandSchema`.
+
+fn commands() -> List<Text> = ["help", "echo", "status", "quit"]
+
+test "the schema names the four commands" {
+  assert commands() == ["help", "echo", "status", "quit"]
+}

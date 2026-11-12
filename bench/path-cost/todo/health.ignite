@@ -1,0 +1,157 @@
+package examples.todo.health
+
+import std.net.{TcpStream, Endpoint}
+import std.io.IoError
+import std.control.{Machine, ProbeScheduler}
+import std.text.{contains, find, slice}
+
+// An HTTP health probe (`docs/slice.md` 22.6): one attempt is one
+// `GET <path>` to the server `target`, and its outcome is a
+// `HealthCheck`. A contract names `healthy` (or any predicate over
+// `HealthCheck`) in `good`; the driver decodes each printed line with the
+// element type of `checks` and classifies it through the contract's
+// `classify` hook (22.3). The request is written by hand (D13): a client
+// role of `std.protocol.http` is a protocol change outside this example.
+// `target` is the kind-erased `Ref`, because `examples.todo` imports this
+// module and this module may not import it back for its server's type
+// (E032); E122 still checks that it names exactly one listener.
+
+type IoResult<T> = Result<T, IoError>
+
+// One attempt: whether a status line arrived before the timeout, its
+// status code (0 when none arrived), and how long the attempt took.
+type HealthCheck {
+  answered: Bool
+  status: Int
+  latency: Duration
+}
+
+// The good outcome: the server answered 200.
+fn healthy(check: HealthCheck) -> Bool = check.answered && check.status == 200
+
+type HttpHealth {
+  target: Ref
+  path: Text = "/health"
+  interval: Duration = 10 seconds
+  timeout: Duration = 2 seconds
+  checks: Signal<HealthCheck>
+  executable: Text
+}
+
+// One attempt (16.8): resolve the target through the run's `--ref`
+// binding, connect, send the request, read the status line, print one line,
+// the model encoding of the `HealthCheck` (15.4). A refused connection, a
+// read past `timeout` and a status line that does not parse are
+// `answered = false, status = 0` and exit 0. No `--ref` binding exits 1, as
+// `TelnetPrompt.main`; the driver's deadline ends an attempt that hangs.
+fn HttpHealth.main(self: HttpHealth) -> IoResult<Unit> {
+  let started = Clock.monotonic()
+  let endpoint = Endpoint.of(self.target)?
+  let status = match TcpStream.connect(endpoint.address, endpoint.port) {
+    Err(_) => 0
+    Ok(stream) => {
+      stream.set_idle_timeout(self.timeout.to_ms())?
+      let found = match ask(stream, request_text(self.path, endpoint.address)) {
+        Ok(line) => status_of(line)
+        Err(_) => 0
+      }
+      _ = stream.close()
+      found
+    }
+  }
+  let check = HealthCheck { answered = status > 0, status, latency = Clock.monotonic() - started }
+  Stdout.write_all(encode_check(check).to_bytes())
+}
+
+// The scheduler of this probe (16.8): one attempt per `interval` from the
+// target's first readiness, each with a deadline of `timeout`.
+fn HttpHealth.machine(self: HttpHealth, id: Text) -> Machine = Machine.Schedule(ProbeScheduler {
+  id = "{id}.scheduler"
+  member = id
+  target = self.target.to_text()
+  signal = self.checks.to_text()
+  interval = self.interval
+  timeout = self.timeout
+})
+
+// The declaration rules of the probe (E120): a path the request line can
+// carry. The timing rules are the compiler's E123.
+fn HttpHealth.validate(self: HttpHealth) -> List<Text> = path_reasons(self.path)
+
+fn path_reasons(path: Text) -> List<Text> {
+  var reasons = []
+  if !path.starts_with("/") {
+    reasons.push("path must start with /, found {path}")
+  }
+  if path.contains(" ") {
+    reasons.push("path must not contain a space, found {path}")
+  }
+  reasons
+}
+
+// The request of one attempt; the server closes after its answer.
+fn request_text(path: Text, address: Text) -> Text =
+  "GET {path} HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n"
+
+// `request` written to `stream`, then the bytes up to the first CRLF.
+fn ask(stream: TcpStream, request: Text) -> IoResult<Text> {
+  stream.write_all(request.to_bytes())?
+  var head = Bytes.empty()
+  loop {
+    match stream.read(4096)? {
+      Eof => return Ok(head.to_text())
+      Data(bytes) => {
+        head.append(bytes)
+        let text = head.to_text()
+        match text.find("\r\n") {
+          Some(end) => return Ok(text.slice(0, end))
+          None => {}
+        }
+      }
+    }
+  }
+}
+
+// The status code of a status line `HTTP/1.1 <code> <reason>`, 0 when the
+// line does not have that form.
+fn status_of(line: Text) -> Int {
+  if !line.starts_with("HTTP/1.1 ") || line.len() < 12 {
+    return 0
+  }
+  if line.len() > 12 && line.slice(12, 13) != " " {
+    return 0
+  }
+  match Int.parse(line.slice(9, 12)) {
+    Some(code) => if code >= 100 && code <= 999 { code } else { 0 }
+    None => 0
+  }
+}
+
+// The model encoding (15.4) of a check, keys in byte order, one line: what
+// the driver decodes with the element type of `checks`.
+fn encode_check(check: HealthCheck) -> Text =
+  "{{\"fields\":{{\"answered\":{check.answered},\"latency\":{{\"ns\":{check.latency.to_ns()},\"type\":\"Duration\"}},\"status\":{check.status}}},\"type\":\"examples.todo.health.HealthCheck\"}}\n"
+
+test "a check line is the model encoding" {
+  let ok = HealthCheck { answered = true, status = 200, latency = 12 ms }
+  assert encode_check(ok) == "{{\"fields\":{{\"answered\":true,\"latency\":{{\"ns\":12000000,\"type\":\"Duration\"}},\"status\":200}},\"type\":\"examples.todo.health.HealthCheck\"}}\n"
+  assert healthy(ok)
+  assert !healthy(HealthCheck { status = 503, ..ok })
+  assert !healthy(HealthCheck { answered = false, ..ok })
+}
+
+test "the status is read from the status line" {
+  assert status_of("HTTP/1.1 200 OK") == 200
+  assert status_of("HTTP/1.1 503 Service Unavailable") == 503
+  assert status_of("HTTP/1.1 204") == 204
+  assert status_of("HTTP/1.0 200 OK") == 0
+  assert status_of("HTTP/1.1 2x0 OK") == 0
+  assert status_of("HTTP/1.1 2000 OK") == 0
+  assert status_of("") == 0
+}
+
+test "a path must start with a slash and hold no space" {
+  assert path_reasons("/health") == []
+  assert path_reasons("health") == ["path must start with /, found health"]
+  assert path_reasons("/a b") == ["path must not contain a space, found /a b"]
+}

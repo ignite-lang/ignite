@@ -6,6 +6,8 @@ pub mod bench;
 pub mod cli;
 pub mod cycle;
 pub mod json;
+pub mod path_cost;
+pub mod path_cost_run;
 pub mod perf;
 pub mod quality;
 pub mod readiness;
@@ -22,6 +24,8 @@ pub const HARNESS_SOURCE: &[(&str, &str)] = &[
     ("src/json.rs", include_str!("json.rs")),
     ("src/lib.rs", include_str!("lib.rs")),
     ("src/main.rs", include_str!("main.rs")),
+    ("src/path_cost.rs", include_str!("path_cost.rs")),
+    ("src/path_cost_run.rs", include_str!("path_cost_run.rs")),
     ("src/perf.rs", include_str!("perf.rs")),
     ("src/quality.rs", include_str!("quality.rs")),
     ("src/readiness.rs", include_str!("readiness.rs")),

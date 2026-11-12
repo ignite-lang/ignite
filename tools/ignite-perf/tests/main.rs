@@ -9,6 +9,7 @@ mod compare;
 mod cycle;
 mod export;
 mod json;
+mod path_cost;
 mod readiness;
 mod records;
 mod remote;

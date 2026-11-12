@@ -28,6 +28,13 @@ fn main() {
         Mode::QualityHost(args) => std::process::exit(readiness::exit_status(
             ignite_perf::remote::host_main(&args),
         )),
+        Mode::PathCost(args) => match ignite_perf::path_cost::main(&args) {
+            Ok(code) => std::process::exit(code),
+            Err(error) => {
+                eprintln!("{error}");
+                std::process::exit(1)
+            }
+        },
         Mode::Runtime(args) => {
             let target_dir = args.repo.join(&args.target_dir);
             std::process::exit(readiness::exit_status(

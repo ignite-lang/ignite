@@ -53,6 +53,8 @@ pub enum Mode {
     QualityHost(crate::remote::HostArgs),
     /// Build the LLVM target's release runtime archive as every release build of it is built; print its path
     Runtime(RuntimeArgs),
+    /// Count the instructions and system calls of the frozen scenarios (row 3.10) and judge them against the last release
+    PathCost(crate::path_cost::PathCostArgs),
 }
 
 #[derive(Args, Debug, Clone)]
