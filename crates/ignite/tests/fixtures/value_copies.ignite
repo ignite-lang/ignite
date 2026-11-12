@@ -1,0 +1,506 @@
+package value_copies
+
+// The synthetic workload of `docs/value-copies.md`: a read-only service turns
+// rows into an answer of nested records, lists and maps. Rows are dynamic
+// records (`Rec`, a list of named fields) of a few `Text` and `Int` fields and
+// a nested list `attrs` of depth `depth`; there are three tables, parents,
+// middles (each under one parent) and children (each under one middle).
+//
+// The answer is built as the first user of `std.protocol.mysql` (a read-only
+// HTTP service backed by MySQL 8 over TLS) builds its own:
+//
+// - Form 1, a filter that pushes the kept rows of a lent list. Its source is
+//   a table bound once per request and captured by the closure of an `each`
+//   over the parent rows, so every parent row filters the same live list
+//   again: by parent id (keeps about 3 %), and by a two-valued tag (keeps
+//   about 99 %) whose result is filtered again at once by middle id (keeps
+//   about 1 %) and dropped. The result is plucked, filtered again, taken
+//   first, iterated or counted, never stored as it is.
+// - Form 2, a lookup that returns a part of a lent row: about half the call
+//   sites only read the result (a null test, a comparison, a measure, a
+//   whole nested list only measured), half store it (one small field).
+// - Form 3, a lent parameter or a match payload returned whole (`rows_of`,
+//   `or_nil`).
+// - Form 4, an element handed to a by-value parameter: `put` in `renamed`, and
+//   the element passed to the fn value of `each`.
+// - The forms the Rust target already lends (`docs/slice.md` 20.3.7): a tuple
+//   pattern in a `for`, `l[i]` to a borrowed parameter, matched, iterated,
+//   measured and compared.
+//
+// `answer_lean` gives the same answer with the source forms of part 5 of the
+// note, which copy no row today.
+//
+// The inline tests are units of the differential corpus. The executables
+// that count one request are appended by `crates/ignite/tests/value_copies.rs`:
+// `s1` is 33 parents, 128 middles and 222 children, `s10` ten times that;
+// `r1` answers one request, `r2` two, so that `r2` less `r1` is one request
+// without building the tables; `lean-*` answer with `answer_lean`.
+
+enum Val {
+  Nil
+  Num(Int)
+  Txt(Text)
+  Seq(List<Val>)
+  Rec(List<(Text, Val)>)
+}
+
+type Sizes {
+  parents: Int
+  middles: Int
+  children: Int
+  fields: Int
+  depth: Int
+}
+
+type Db {
+  parents: List<Val>
+  middles: List<Val>
+  children: List<Val>
+}
+
+// Form 2: a lookup returns a copy of the value found.
+fn field(v: Val, k: Text) -> Option<Val> = match v {
+  Rec(fields) => {
+    for e in fields {
+      if e.0 == k {
+        return Some(e.1)
+      }
+    }
+    None
+  }
+  _ => None
+}
+
+// Form 2, stored: the value or `Nil`.
+fn get(v: Val, k: Text) -> Val = match field(v, k) {
+  Some(x) => x
+  None => Nil
+}
+
+// Form 2, only read: a null test.
+fn has(v: Val, k: Text) -> Bool = field(v, k) != None
+
+// Form 2, only read: a number compared or added.
+fn num_of(v: Val, k: Text) -> Int = match field(v, k) {
+  Some(Num(n)) => n
+  _ => 0
+}
+
+// Form 1: the kept rows of a lent list. The comparison is form 2, only read.
+fn keep(rows: List<Val>, k: Text, want: Val) -> List<Val> {
+  var out: List<Val> = []
+  for r in rows {
+    if field(r, k) == Some(want) {
+      out.push(r)
+    }
+  }
+  out
+}
+
+// Form 4: `f` takes each element by value.
+fn each(rows: List<Val>, f: fn(Val) -> Val) -> List<Val> {
+  var out: List<Val> = []
+  for r in rows {
+    out.push(f(r))
+  }
+  out
+}
+
+// One field of each row (pluck).
+fn pluck(rows: List<Val>, k: Text) -> List<Val> {
+  var out: List<Val> = []
+  for r in rows {
+    out.push(get(r, k))
+  }
+  out
+}
+
+// Form 3: a match payload returned whole.
+fn rows_of(v: Val) -> List<Val> = match v {
+  Seq(l) => l
+  _ => []
+}
+
+// Form 3: a lent parameter returned whole.
+fn or_nil(v: Val, ok: Bool) -> Val = if ok { v } else { Nil }
+
+// Form 4: each pair handed to a by-value parameter.
+fn put(fields: List<(Text, Val)>, k: Text, v: Val) -> List<(Text, Val)> {
+  var out = fields
+  out.push((k, v))
+  out
+}
+
+fn renamed(v: Val, prefix: Text) -> Val = match v {
+  Rec(fields) => {
+    var out: List<(Text, Val)> = []
+    for e in fields {
+      out = put(out, prefix + e.0, e.1)
+    }
+    Rec(out)
+  }
+  _ => v
+}
+
+// The size of a value; reads a lent element in place (`size(l[i])`).
+fn size(v: Val) -> Int = match v {
+  Seq(items) => items.len()
+  Rec(fields) => fields.len()
+  Txt(t) => t.len()
+  _ => 0
+}
+
+// The forms the Rust target already lends: a tuple pattern in a `for`, an
+// element to a borrowed parameter, matched, iterated, measured, compared.
+fn lent_reads(rows: List<Val>) -> Int {
+  var n = 0
+  var i = 0
+  while i < rows.len() {
+    n = n + size(rows[i])
+    match rows[i] {
+      Rec(fields) => {
+        for (k, x) in fields {
+          n = n + k.len()
+        }
+      }
+      _ => {
+        n = n + 1
+      }
+    }
+    if rows[i] == Nil {
+      n = n + 1
+    }
+    i = i + 1
+  }
+  n
+}
+
+// The answer's checksum: every node, every text's length, every number.
+fn mix(h: Int, x: Int) -> Int = (h * 31 + x) % 1000000007
+
+fn digest(v: Val) -> Int = match v {
+  Nil => 1
+  Num(n) => mix(2, n % 1000003)
+  Txt(t) => mix(3, t.len())
+  Seq(items) => {
+    var h = 4
+    for x in items {
+      h = mix(h, digest(x))
+    }
+    h
+  }
+  Rec(fields) => {
+    var h = 5
+    for (k, x) in fields {
+      h = mix(mix(h, k.len()), digest(x))
+    }
+    h
+  }
+}
+
+// The nested list of a row: `depth` levels.
+fn nest(depth: Int, seed: Int) -> Val =
+  if depth == 0 { Txt("leaf {seed}") } else { Seq([nest(depth - 1, seed), Num(seed), Txt("n{depth}")]) }
+
+fn row(id: Int, link: Text, to: Int, state: Text, sizes: Sizes) -> Val {
+  var fields: List<(Text, Val)> = [("id", Num(id)), (link, Num(to)), ("state", Txt(state)), ("name", Txt("row {id}"))]
+  var j = 4
+  while j < sizes.fields {
+    fields.push(("f{j}", Txt("value {id} {j}")))
+    j = j + 1
+  }
+  fields.push(("amount", Num(id * 7 % 101)))
+  fields.push(("attrs", nest(sizes.depth, id)))
+  Rec(fields)
+}
+
+fn db_of(sizes: Sizes) -> Db {
+  var parents: List<Val> = []
+  var middles: List<Val> = []
+  var children: List<Val> = []
+  var i = 0
+  while i < sizes.parents {
+    parents.push(row(i, "kind", i % 3, "on", sizes))
+    i = i + 1
+  }
+  i = 0
+  while i < sizes.middles {
+    middles.push(row(i, "parent", i % sizes.parents, if i % 5 == 0 { "off" } else { "on" }, sizes))
+    i = i + 1
+  }
+  i = 0
+  while i < sizes.children {
+    children.push(row(i, "middle", i % sizes.middles, if i % 100 == 7 { "off" } else { "on" }, sizes))
+    i = i + 1
+  }
+  Db { parents, middles, children }
+}
+
+// A child in the answer: stored lookups of small fields, read-only ones.
+fn child_node(c: Val) -> Val {
+  var fields: List<(Text, Val)> = [("id", get(c, "id")), ("name", get(c, "name"))]
+  if num_of(c, "amount") > 50 && has(c, "state") {
+    fields.push(("big", get(c, "amount")))
+  }
+  Rec(fields)
+}
+
+// A middle in the answer. `children` and `on` are captures of the closure
+// that calls it: the 99 % filter of a live list, filtered again at once.
+fn middle_node(m: Val, children: List<Val>, on: Val) -> Val {
+  let mid = get(m, "id")
+  let kids = keep(keep(children, "state", on), "middle", mid)
+  let names = pluck(kids, "name")
+  var fields: List<(Text, Val)> = [("id", mid), ("name", get(m, "name")), ("count", Num(kids.len()))]
+  fields.push(("names", Seq(names)))
+  fields.push(("children", Seq(each(kids, child_node))))
+  fields.push(("depth", Num(size(get(m, "attrs")))))
+  Rec(fields)
+}
+
+// The answer for one request. The closure reads the lent tables `db.middles`
+// and `db.children` once per parent row; neither ever moves.
+fn answer(db: Db) -> Val {
+  let on = Txt("on")
+  let nodes = each(db.parents, |p| {
+    let pid = get(p, "id")
+    let mine = keep(db.middles, "parent", pid)
+    let active = keep(mine, "state", on)
+    var groups: Map<Text, List<Val>> = Map.empty()
+    for m in mine {
+      let state = match get(m, "state") {
+        Txt(t) => t
+        _ => "none"
+      }
+      var group = match groups.get(state) {
+        Some(g) => g
+        None => []
+      }
+      group.push(get(m, "id"))
+      groups.put(state, group)
+    }
+    var counts: List<(Text, Val)> = []
+    for (state, group) in groups {
+      counts.push((state, Num(group.len())))
+    }
+    let first = if mine.is_empty() { Nil } else { mine[0] }
+    var fields: List<(Text, Val)> = [("id", pid), ("name", get(p, "name"))]
+    fields.push(("first", or_nil(get(first, "name"), has(first, "name"))))
+    fields.push(("middles", Seq(each(active, |m| middle_node(m, db.children, on)))))
+    fields.push(("groups", Rec(counts)))
+    fields.push(("attrs", Num(rows_of(get(p, "attrs")).len())))
+    fields.push(("seen", Num(lent_reads(mine))))
+    renamed(Rec(fields), "p.")
+  })
+  Seq(nodes)
+}
+
+fn run(sizes: Sizes, requests: Int) -> Int {
+  let db = db_of(sizes)
+  var h = 0
+  var i = 0
+  while i < requests {
+    h = mix(h, digest(answer(db)))
+    i = i + 1
+  }
+  h
+}
+
+// Source forms that copy nothing today (`docs/value-copies.md` part 5).
+
+// A presence test that returns `Bool` instead of the value.
+fn has_in_place(v: Val, k: Text) -> Bool = match v {
+  Rec(fields) => {
+    for e in fields {
+      if e.0 == k {
+        return true
+      }
+    }
+    false
+  }
+  _ => false
+}
+
+// A comparison made where the value lies.
+fn field_is(v: Val, k: Text, want: Val) -> Bool = match v {
+  Rec(fields) => {
+    for e in fields {
+      if e.0 == k {
+        return e.1 == want
+      }
+    }
+    false
+  }
+  _ => false
+}
+
+// A number read where it lies.
+fn num_in_place(v: Val, k: Text) -> Int = match v {
+  Rec(fields) => {
+    for e in fields {
+      if e.0 == k {
+        return match e.1 {
+          Num(n) => n
+          _ => 0
+        }
+      }
+    }
+    0
+  }
+  _ => 0
+}
+
+// A filter that keeps positions, not rows; a second filter narrows the
+// positions, reading each row in place through `rows[i]`.
+fn keep_at(rows: List<Val>, k: Text, want: Val) -> List<Int> {
+  var out: List<Int> = []
+  var i = 0
+  while i < rows.len() {
+    if field_is(rows[i], k, want) {
+      out.push(i)
+    }
+    i = i + 1
+  }
+  out
+}
+
+fn narrow(rows: List<Val>, at: List<Int>, k: Text, want: Val) -> List<Int> {
+  var out: List<Int> = []
+  for i in at {
+    if field_is(rows[i], k, want) {
+      out.push(i)
+    }
+  }
+  out
+}
+
+// The size of the nested list of a row, read where it lies.
+fn attrs_size(v: Val) -> Int = match v {
+  Rec(fields) => {
+    for (k, x) in fields {
+      if k == "attrs" {
+        return size(x)
+      }
+    }
+    0
+  }
+  _ => 0
+}
+
+fn lent_reads_at(rows: List<Val>, at: List<Int>) -> Int {
+  var n = 0
+  for i in at {
+    n = n + size(rows[i])
+    match rows[i] {
+      Rec(fields) => {
+        for (k, x) in fields {
+          n = n + k.len()
+        }
+      }
+      _ => {
+        n = n + 1
+      }
+    }
+    if rows[i] == Nil {
+      n = n + 1
+    }
+  }
+  n
+}
+
+// `middle_node` without a copy of a row: positions instead of rows, every
+// row passed lent, every lookup that is only read made in place.
+fn middle_lean(m: Val, children: List<Val>, on: Val) -> Val {
+  let mid = get(m, "id")
+  let kids = narrow(children, keep_at(children, "state", on), "middle", mid)
+  var names: List<Val> = []
+  var nodes: List<Val> = []
+  for i in kids {
+    names.push(get(children[i], "name"))
+    nodes.push(child_node(children[i]))
+  }
+  var fields: List<(Text, Val)> = [("id", mid), ("name", get(m, "name")), ("count", Num(kids.len()))]
+  fields.push(("names", Seq(names)))
+  fields.push(("children", Seq(nodes)))
+  fields.push(("depth", Num(attrs_size(m))))
+  Rec(fields)
+}
+
+// The same answer as `answer`, with the same filters per row, written with the
+// forms of part 5 only: positions instead of rows, a `for` over the lent
+// parents instead of `each`, counts instead of copied groups, the record
+// built with its final names instead of `renamed`.
+fn answer_lean(db: Db) -> Val {
+  let on = Txt("on")
+  var nodes: List<Val> = []
+  for p in db.parents {
+    let pid = get(p, "id")
+    let mine = keep_at(db.middles, "parent", pid)
+    let active = narrow(db.middles, mine, "state", on)
+    var groups: Map<Text, Int> = Map.empty()
+    for i in mine {
+      let state = match get(db.middles[i], "state") {
+        Txt(t) => t
+        _ => "none"
+      }
+      let n = match groups.get(state) {
+        Some(c) => c
+        None => 0
+      }
+      groups.put(state, n + 1)
+    }
+    var counts: List<(Text, Val)> = []
+    for (state, n) in groups {
+      counts.push((state, Num(n)))
+    }
+    let first_name = if mine.is_empty() { Nil } else { get(db.middles[mine[0]], "name") }
+    var middles: List<Val> = []
+    for i in active {
+      middles.push(middle_lean(db.middles[i], db.children, on))
+    }
+    var fields: List<(Text, Val)> = [("p.id", pid), ("p.name", get(p, "name")), ("p.first", first_name)]
+    fields.push(("p.middles", Seq(middles)))
+    fields.push(("p.groups", Rec(counts)))
+    fields.push(("p.attrs", Num(attrs_size(p))))
+    fields.push(("p.seen", Num(lent_reads_at(db.middles, mine))))
+    nodes.push(Rec(fields))
+  }
+  Seq(nodes)
+}
+
+fn run_lean(sizes: Sizes, requests: Int) -> Int {
+  let db = db_of(sizes)
+  var h = 0
+  var i = 0
+  while i < requests {
+    h = mix(h, digest(answer_lean(db)))
+    i = i + 1
+  }
+  h
+}
+
+test "the answer is the same on every consumer" {
+  let small = Sizes { parents = 3, middles = 8, children = 14, fields = 6, depth = 2 }
+  let db = db_of(small)
+  assert keep(db.children, "state", Txt("on")).len() == 13
+  assert keep(db.middles, "parent", Num(1)).len() == 3
+  assert size(answer(db)) == 3
+  assert digest(answer(db)) == 661581121
+  assert run(small, 2) == 170595725
+}
+
+test "the forms that copy nothing give the values of the forms that copy" {
+  let db = db_of(Sizes { parents = 3, middles = 8, children = 14, fields = 6, depth = 2 })
+  let c = db.children[3]
+  assert has_in_place(c, "state") == has(c, "state") && !has_in_place(c, "none")
+  assert field_is(c, "state", Txt("on")) == (field(c, "state") == Some(Txt("on")))
+  assert num_in_place(c, "amount") == num_of(c, "amount")
+  assert attrs_size(c) == size(get(c, "attrs"))
+  let on = keep_at(db.children, "state", Txt("on"))
+  assert on.len() == keep(db.children, "state", Txt("on")).len()
+  let mine = narrow(db.children, on, "middle", Num(5))
+  assert mine.len() == keep(keep(db.children, "state", Txt("on")), "middle", Num(5)).len()
+  assert mine == [5, 13]
+  assert digest(answer_lean(db)) == digest(answer(db))
+  assert run_lean(Sizes { parents = 3, middles = 8, children = 14, fields = 6, depth = 2 }, 2) == 170595725
+}

@@ -1,0 +1,297 @@
+package shared_lists
+
+// Unit `rust-shared-payload-lists` (`docs/value-copies.md` 3.4, `docs/slice.md`
+// section 6): on the Rust target a list that is the payload of an enum
+// variant or a field of a record shares its elements with the copies of the
+// value that holds it, and the first change through one holder copies them.
+// Each test changes a shared list through one of its holders, in every way
+// the language has (push, append, clear, an element assigned, a change
+// inside an element, a payload taken out and put back, a record update, a
+// `for` over the same list, a value sent to another task or given to one),
+// and checks that the other holder still sees the old value. The evaluator
+// and both targets run them. The executables that count allocations are
+// appended by `crates/ignite/tests/shared_lists.rs`.
+
+import std.json.{Json, encode}
+
+enum Val {
+  Nil
+  Txt(Text)
+  Seq(List<Val>)
+  Words(List<Text>)
+}
+
+type Shelf {
+  id: Int
+  words: List<Text>
+  rows: List<Val>
+}
+
+type Grid {
+  cells: List<List<Text>>
+  shelves: List<Shelf>
+}
+
+fn words(m: Int, tag: Text) -> List<Text> {
+  var out: List<Text> = []
+  var i = 0
+  while i < m {
+    out.push("{tag}{i}")
+    i = i + 1
+  }
+  out
+}
+
+fn rows(m: Int) -> List<Val> {
+  var out: List<Val> = []
+  var i = 0
+  while i < m {
+    out.push(Seq([Txt("r{i}")]))
+    i = i + 1
+  }
+  out
+}
+
+fn shelf(m: Int) -> Shelf = Shelf { id = 1, words = words(m, "w"), rows = rows(m) }
+
+fn size(v: Val) -> Int = match v {
+  Seq(items) => items.len()
+  Words(items) => items.len()
+  _ => 0
+}
+
+// A payload taken out into a list of its own.
+fn words_of(v: Val) -> List<Text> = match v {
+  Words(l) => l
+  _ => []
+}
+
+fn rows_of(v: Val) -> List<Val> = match v {
+  Seq(l) => l
+  _ => []
+}
+
+// A copy: the parameter is lent, its value returned.
+fn same_val(v: Val) -> Val = v
+
+fn same_shelf(s: Shelf) -> Shelf = s
+
+// A change through a payload binding: the list taken out, changed, put back.
+fn pushed(v: Val, t: Text) -> Val = match v {
+  Words(l) => {
+    var m = l
+    m.push(t)
+    Words(m)
+  }
+  _ => v
+}
+
+// The value itself, moved through.
+fn moved(v: Val) -> Val {
+  let w = v
+  w
+}
+
+// A change of a payload taken out of a value that nothing else holds: the
+// value moves into the fn and its payload out of it.
+fn grown(v: Val, t: Text) -> Val = match moved(v) {
+  Words(l) => {
+    var m = l
+    m.push(t)
+    Words(m)
+  }
+  other => other
+}
+
+// A change inside the first row of a list of rows.
+fn first_grown(v: Val) -> Val = match v {
+  Seq(items) => {
+    var out = items
+    out[0] = Seq([Txt("new"), Nil])
+    Seq(out)
+  }
+  _ => v
+}
+
+test fn hold(values: Receiver<Shelf>, back: Sender<Int>) -> Result<Unit, IoError> {
+  match values.receive() {
+    Some(s) => {
+      var t = s
+      t.words.push("task")
+      back.send(t.words.len() * 10 + s.words.len())
+    }
+    None => back.send(0 - 1)
+  }
+  Ok(())
+}
+
+test fn given(s: Shelf, back: Sender<Text>) -> Result<Unit, IoError> {
+  var t = s
+  t.words[0] = "changed"
+  back.send(t.words[0] + " " + s.words[0])
+  Ok(())
+}
+
+test "a push, an append and a clear through a field leave the other holder" {
+  var a = shelf(3)
+  let b = a
+  a.words.push("x")
+  a.rows.push(Nil)
+  assert b.words == ["w0", "w1", "w2"]
+  assert b.rows.len() == 3
+  assert a.words == ["w0", "w1", "w2", "x"]
+  assert a.rows.len() == 4
+  var c = a
+  c.words.append(["y", "z"])
+  assert a.words == ["w0", "w1", "w2", "x"]
+  assert c.words == ["w0", "w1", "w2", "x", "y", "z"]
+  var d = c
+  d.words.clear()
+  d.rows.clear()
+  assert d.words.is_empty() && d.rows.is_empty()
+  assert c.words.len() == 6 && c.rows.len() == 4
+  d.words.push("again")
+  assert d.words == ["again"] && c.words.len() == 6
+}
+
+test "an element assigned through a field leaves the other holder" {
+  var a = shelf(2)
+  let b = a
+  a.words[1] = "one"
+  a.rows[0] = Txt("zero")
+  assert a.words == ["w0", "one"] && b.words == ["w0", "w1"]
+  assert a.rows[0] == Txt("zero") && b.rows[0] == Seq([Txt("r0")])
+  var c = b
+  c.words.set(0, "first")
+  assert c.words == ["first", "w1"] && b.words == ["w0", "w1"]
+}
+
+test "a change inside an element leaves the other holder" {
+  var g = Grid { cells = [["a", "b"], ["c"]], shelves = [shelf(1), shelf(2)] }
+  let h = g
+  g.cells[1].push("d")
+  g.cells[0][0] = "z"
+  g.shelves[0].words.push("x")
+  g.shelves[1].rows[0] = Nil
+  assert g.cells == [["z", "b"], ["c", "d"]]
+  assert h.cells == [["a", "b"], ["c"]]
+  assert g.shelves[0].words == ["w0", "x"] && h.shelves[0].words == ["w0"]
+  assert g.shelves[1].rows[0] == Nil && h.shelves[1].rows[0] == Seq([Txt("r0")])
+  let s = h.shelves[1]
+  var k = h
+  k.shelves[1].words.clear()
+  assert s.words == ["w0", "w1"] && h.shelves[1].words == ["w0", "w1"]
+  assert k.shelves[1].words.is_empty()
+}
+
+test "a payload taken out, changed and put back leaves the other holder" {
+  let v = Words(words(2, "w"))
+  let u = pushed(v, "x")
+  assert size(v) == 2 && size(u) == 3
+  let g = grown(u, "z")
+  assert words_of(g) == ["w0", "w1", "x", "z"] && size(u) == 3
+  assert words_of(v) == ["w0", "w1"]
+  assert words_of(u) == ["w0", "w1", "x"]
+  let r = Seq(rows(2))
+  let q = first_grown(r)
+  assert rows_of(r) == [Seq([Txt("r0")]), Seq([Txt("r1")])]
+  assert rows_of(q) == [Seq([Txt("new"), Nil]), Seq([Txt("r1")])]
+  var l = words_of(u)
+  l.push("y")
+  assert words_of(u) == ["w0", "w1", "x"] && l.len() == 4
+  let w = match u {
+    Words(items) => {
+      var more = items
+      more.clear()
+      Words(more)
+    }
+    _ => u
+  }
+  assert size(w) == 0 && size(u) == 3
+}
+
+test "a record update and a field taken from another record leave the other holder" {
+  var a = shelf(2)
+  let b = Shelf { id = 2, ..a }
+  var c = Shelf { words = b.words, rows = [], ..b }
+  a.words.push("x")
+  c.words.push("y")
+  assert a.words == ["w0", "w1", "x"]
+  assert b.words == ["w0", "w1"] && b.id == 2
+  assert c.words == ["w0", "w1", "y"] && c.rows.is_empty()
+  var d = Shelf { id = 4, words = a.words, rows = b.rows }
+  d.rows.push(Nil)
+  d.words = ["only"]
+  assert a.words.len() == 3 && b.rows.len() == 2 && d.rows.len() == 3 && d.words == ["only"]
+}
+
+test "a for over a field that the body grows reads the list as it was" {
+  var a = shelf(2)
+  let b = a
+  for w in a.words {
+    a.words.push(w + "!")
+  }
+  assert a.words == ["w0", "w1", "w0!", "w1!"]
+  assert b.words == ["w0", "w1"]
+  var n = 0
+  for r in a.rows {
+    a.rows.push(r)
+    n = n + 1
+  }
+  assert n == 2 && a.rows.len() == 4 && b.rows.len() == 2
+}
+
+test "a value sent to a task or given to one is not changed by its holders" {
+  var a = shelf(2)
+  let (tx, rx) = Channel.bounded(1)
+  let (btx, brx) = Channel.bounded(1)
+  spawn hold(rx, btx)
+  assert tx.send(a)
+  a.words.push("x")
+  assert brx.receive() == Some(32)
+  assert a.words.len() == 3
+  let (ttx, trx) = Channel.bounded(1)
+  spawn given(a, ttx)
+  a.words[0] = "mine"
+  assert trx.receive() == Some("changed w0")
+  assert a.words == ["mine", "w1", "x"]
+}
+
+test "a map of values holding lists gives copies that do not change it" {
+  var m: Map<Text, Shelf> = Map.empty()
+  m.put("a", shelf(2))
+  var s = match m.get("a") {
+    Some(found) => found
+    None => shelf(0)
+  }
+  s.words.push("x")
+  let again = match m.get("a") {
+    Some(found) => found.words.len()
+    None => 0
+  }
+  assert again == 2 && s.words.len() == 3
+  var keys: Map<Text, Int> = Map.empty()
+  for w in s.words {
+    keys.put(w, w.len())
+  }
+  assert keys.keys() == ["w0", "w1", "x"]
+}
+
+test "equality, debug text and JSON of values holding shared lists are unchanged" {
+  let a = shelf(2)
+  var b = a
+  b.words.push("x")
+  b.words.clear()
+  b.words.append(["w0", "w1"])
+  assert a == b
+  assert Words([]) == Words(words(0, "w"))
+  var e = Words(["e"])
+  e = pushed(e, "f")
+  assert e != Words(["e"]) && e == Words(["e", "f"])
+  assert a.debug() == "Shelf {{ id: 1, words: [\"w0\", \"w1\"], rows: [Val.Seq([Val.Txt(\"r0\")]), Val.Seq([Val.Txt(\"r1\")])] }}"
+  assert Seq([Words(["x"]), Nil]).debug() == "Val.Seq([Val.Words([\"x\"]), Val.Nil])"
+  let doc = Object([("a", Array([Number(1), Str("t")])), ("b", Array([]))])
+  let copy = doc
+  assert encode(doc) == "{{\"a\":[1,\"t\"],\"b\":[]}}"
+  assert encode(copy) == encode(doc)
+}

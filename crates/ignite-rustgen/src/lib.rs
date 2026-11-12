@@ -2079,6 +2079,11 @@ struct Generator<'a> {
     /// `for` elements that are references (`&T`) in their body, with the
     /// index of the scope that binds them ([`Generator::borrowed_for`]).
     borrowed_elements: Vec<(usize, String)>,
+    /// Bindings of the native pattern being written that bind a shared
+    /// list payload ([`Generator::is_shared_payload`]), an
+    /// `ignite_io::List` in Rust; the arm reads each as the `Vec` behind
+    /// it ([`Generator::shared_lets`]).
+    shared_bindings: Vec<String>,
     /// The late moves ([`TypedProgram::moves_late`]) of the fn call being
     /// written, whose later arguments it binds first: only these move.
     late: BTreeSet<NodeId>,
@@ -2191,6 +2196,7 @@ impl<'a> Generator<'a> {
             renamed_uses: BTreeSet::new(),
             borrowed: BTreeSet::new(),
             borrowed_elements: Vec::new(),
+            shared_bindings: Vec::new(),
             late: BTreeSet::new(),
             fn_body: false,
             source,
@@ -2775,6 +2781,11 @@ impl<'a> Generator<'a> {
         if self.is_place(expr) && (reached || !copies) {
             return self.value(expr);
         }
+        if let ExprKind::Field { receiver, name } = &expr.kind
+            && self.is_shared_field(self.type_of(receiver), &name.name)
+        {
+            return self.value(expr);
+        }
         self.bare(expr)
     }
 
@@ -3011,6 +3022,31 @@ impl<'a> Generator<'a> {
         }
     }
 
+    /// The Rust type of a payload or field declared `written` (resolved
+    /// to the list type `declared`) that shares its storage
+    /// ([`shares_storage`]): `::ignite_io::List<T>`, the element as written
+    /// or, behind an alias, as resolved.
+    fn shared_list_type(
+        &mut self,
+        written: &Type,
+        declared: &Ty,
+        params: &BTreeSet<String>,
+    ) -> String {
+        if written.name.name == "List" && written.args.len() == 1 && !params.contains("List") {
+            return format!(
+                "::ignite_io::List<{}>",
+                rust_type_in(&written.args[0], params)
+            );
+        }
+        let Ty::List(item) = declared else {
+            unreachable!("a shared list");
+        };
+        let outer = std::mem::replace(&mut self.type_params, params.clone());
+        let item = self.rust_ty(item);
+        self.type_params = outer;
+        format!("::ignite_io::List<{item}>")
+    }
+
     /// `type A<T> = B` as `pub type A<T> = B;`: aliases stay names in the
     /// generated Rust, so importing one needs no expansion.
     fn alias(&mut self, w: &mut Writer, alias: &AliasDecl) {
@@ -3126,12 +3162,25 @@ impl<'a> Generator<'a> {
             ident(&record.name.name),
             bounded_params(&record.type_params)
         ));
+        let params = param_names(&record.type_params);
         for field in &record.fields {
             let boxed = match (self.types, &q) {
                 (Some(types), Some(q)) => types.boxed_field(q, &field.name.name),
                 _ => false,
             };
-            let ty = rust_type_in(&field.ty, &param_names(&record.type_params));
+            let declared = match (self.types, &q) {
+                (Some(types), Some(q)) => types
+                    .record_fields(q)
+                    .and_then(|fields| fields.iter().find(|(name, _)| *name == field.name.name))
+                    .map(|(_, ty)| ty.clone()),
+                _ => None,
+            };
+            let ty = match declared {
+                Some(declared) if shares_storage(&declared) => {
+                    self.shared_list_type(&field.ty, &declared, &params)
+                }
+                _ => rust_type_in(&field.ty, &params),
+            };
             let ty = if boxed { format!("Box<{ty}>") } else { ty };
             w.line(&format!("pub {}: {ty},", ident(&field.name.name)));
         }
@@ -3170,7 +3219,16 @@ impl<'a> Generator<'a> {
                             (Some(types), Some(q)) => types.boxed_payload(q, v, i),
                             _ => false,
                         };
-                        if boxed {
+                        let declared = q.as_ref().and_then(|q| {
+                            self.types
+                                .and_then(|types| types.enum_variants(q))
+                                .and_then(|variants| variants.get(v))
+                                .and_then(|(_, payload)| payload.get(i))
+                                .cloned()
+                        });
+                        if let Some(declared) = declared.filter(shares_storage) {
+                            self.shared_list_type(ty, &declared, &params)
+                        } else if boxed {
                             format!("Box<{}>", rust_type_in(ty, &params))
                         } else {
                             rust_type_in(ty, &params)
@@ -3778,8 +3836,14 @@ impl<'a> Generator<'a> {
                     place.push('.');
                     place.push_str(&ident(&field.name));
                 }
-                let value = self.value(value);
                 let owner = self.types.and_then(|types| types.place_owner(target));
+                if let Some(last) = target.fields.last()
+                    && self.is_shared_field(owner, &last.name)
+                {
+                    let value = self.shared_value(value);
+                    return format!("{place} = {value};");
+                }
+                let value = self.value(value);
                 match target.fields.last() {
                     Some(last) if self.is_boxed_field(owner, &last.name) => {
                         format!("{place} = Box::new({value});")
@@ -3922,6 +3986,8 @@ impl<'a> Generator<'a> {
                 );
                 if self.is_boxed_field(receiver_ty, &name.name) {
                     format!("(*{text})")
+                } else if self.is_shared_field(receiver_ty, &name.name) {
+                    format!("(*{text}.make_mut())")
                 } else {
                     text
                 }
@@ -3942,6 +4008,10 @@ impl<'a> Generator<'a> {
             return format!("String::from(\"{}\")", escape_str(&reference.text()));
         }
         if clone && self.is_place(expr) {
+            if self.moves(expr) && self.shared_field_place(expr) {
+                let list = self.shared_field_text(expr);
+                return format!("::ignite_io::List::into_vec({list})");
+            }
             if self.moves(expr) {
                 return self.bare(expr);
             }
@@ -4035,16 +4105,25 @@ impl<'a> Generator<'a> {
                     return variant_path(&self.unshadowed(owner), &name.name);
                 }
                 let receiver_ty = self.type_of(receiver);
+                let shared = self.is_shared_field(receiver_ty, &name.name);
                 if !self.is_boxed_field(receiver_ty, &name.name)
                     && let Some(call) = self.store_call_read(
                         receiver,
-                        &format!("|__v| __v.{}.clone()", ident(&name.name)),
+                        &if shared {
+                            format!("|__v| (*__v.{}).clone()", ident(&name.name))
+                        } else {
+                            format!("|__v| __v.{}.clone()", ident(&name.name))
+                        },
                     )
                 {
                     return call;
                 }
                 let text = format!("{}.{}", self.receiver(receiver), ident(&name.name));
-                if self.is_boxed_field(receiver_ty, &name.name) {
+                if shared && clone {
+                    // A field of a value no local holds (`f().items`): the
+                    // list moves out of its `List`, copied only if shared.
+                    format!("::ignite_io::List::into_vec({text})")
+                } else if shared || self.is_boxed_field(receiver_ty, &name.name) {
                     format!("(*{text})")
                 } else {
                     text
@@ -4379,6 +4458,10 @@ impl<'a> Generator<'a> {
         let mut texts: Vec<String> = fields
             .iter()
             .map(|f| {
+                if self.is_shared_field(ty, &f.name.name) {
+                    let value = self.shared_value(&f.value);
+                    return format!("{}: {value}", ident(&f.name.name));
+                }
                 let value = self.value(&f.value);
                 format!(
                     "{}: {}",
@@ -4392,7 +4475,12 @@ impl<'a> Generator<'a> {
             for field in declared {
                 if !fields.iter().any(|f| f.name.name == *field) {
                     let value = format!("{record}{instance}::{}()", default_fn(field));
-                    texts.push(format!("{}: {}", ident(field), boxed(self, field, value)));
+                    let value = if self.is_shared_field(ty, field) {
+                        format!("::ignite_io::List::from_vec({value})")
+                    } else {
+                        boxed(self, field, value)
+                    };
+                    texts.push(format!("{}: {value}", ident(field)));
                 }
             }
         }
@@ -4475,8 +4563,11 @@ impl<'a> Generator<'a> {
         let declared = self.fields_of(ty).unwrap_or_default();
         let mut texts: Vec<String> = Vec::new();
         for (name, value) in fields {
+            let shared = self.is_shared_field(Some(ty), name);
             let text = match fixed.get(name) {
+                Some(text) if shared => format!("::ignite_io::List::from_vec({text})"),
                 Some(text) => text.clone(),
+                None if shared => self.shared_value(value),
                 None => self.value(value),
             };
             let boxed = declared
@@ -4499,6 +4590,8 @@ impl<'a> Generator<'a> {
             };
             let text = if *boxed {
                 format!("Box::new({text})")
+            } else if self.is_shared_field(Some(ty), name) {
+                format!("::ignite_io::List::from_vec({text})")
             } else {
                 text
             };
@@ -4805,7 +4898,8 @@ impl<'a> Generator<'a> {
         let text = format!("{base}.{member}");
         match &expr.kind {
             ExprKind::Field { name, .. }
-                if self.is_boxed_field(self.type_of(receiver), &name.name) =>
+                if self.is_boxed_field(self.type_of(receiver), &name.name)
+                    || self.is_shared_field(self.type_of(receiver), &name.name) =>
             {
                 format!("(*{text})")
             }
@@ -5171,7 +5265,31 @@ impl<'a> Generator<'a> {
         args: &[Expr],
     ) -> String {
         let mut lets = Vec::new();
+        if let (Some(Callee::Builtin(Builtin::ListClear)), ExprKind::Field { receiver, name }) =
+            (self.callee(expr), &receiver.kind)
+            && self.is_shared_field(self.type_of(receiver), &name.name)
+        {
+            // `List::clear`: a shared list takes the empty storage instead
+            // of copying the elements it drops.
+            let owner = self.mutable_place(receiver, &mut lets);
+            return format!(
+                "{{ {} ::ignite_io::List::clear(&mut {owner}.{}) }}",
+                lets.join(" "),
+                ident(&name.name)
+            );
+        }
         let place = self.mutable_place(receiver, &mut lets);
+        if let ("append", [value]) = (name.name.as_str(), args)
+            && !self.indexed_place(receiver)
+            && self.is_place(value)
+            && place_root(value) != place_root(receiver)
+        {
+            let value = self.ref_arg(value);
+            return format!(
+                "{{ {} {place}.extend_from_slice({value}) }}",
+                lets.join(" ")
+            );
+        }
         let values = self.args(args);
         let temps: Vec<String> = values
             .iter()
@@ -5276,7 +5394,7 @@ impl<'a> Generator<'a> {
                 return self.indexed_mutation(expr, receiver, name, args);
             }
             _ if ownership::changes_value(expr, &name.name, self.types)
-                && self.indexed_place(receiver) =>
+                && (self.indexed_place(receiver) || self.through_shared(receiver)) =>
             {
                 return self.indexed_mutation(expr, receiver, name, args);
             }
@@ -5577,9 +5695,13 @@ impl<'a> Generator<'a> {
             guarded |= !native && !catch_all;
             ranged |= has_range(&arm.pattern);
             let lent_before = self.borrowed_elements.len();
+            let mut shared = String::new();
             let mut rebuilt = String::new();
+            let mut lent_reads = BTreeSet::new();
+            self.shared_bindings.clear();
             let pattern = if native {
                 let text = self.pattern(&arm.pattern, ty.as_ref());
+                shared = self.shared_lets(lent, &arm.body);
                 match &arm.pattern.kind {
                     // A binding of a lent tuple is a tuple of references: an
                     // arm that reads it gets the tuple of values it names.
@@ -5601,6 +5723,7 @@ impl<'a> Generator<'a> {
                 let subject = if lent { "__m" } else { "(&__m)" }.to_string();
                 let test = self.test(&arm.pattern, &subject, ty.as_ref());
                 self.extract(&arm.pattern, subject, ty.as_ref(), &mut bindings);
+                lent_reads = self.lent_shared_reads(&arm.body);
                 match test {
                     Some(test) => format!("__m if {test}"),
                     None => "__m".to_string(),
@@ -5612,14 +5735,18 @@ impl<'a> Generator<'a> {
             };
             self.borrowed_elements.truncate(lent_before);
             self.scopes.pop();
-            if !bindings.is_empty() || !rebuilt.is_empty() {
+            if !bindings.is_empty() || !shared.is_empty() || !rebuilt.is_empty() {
                 let lets: String = bindings
                     .iter()
                     .map(|(name, access)| {
-                        format!("let {} = {}; ", ident(name), binding_value(access))
+                        if lent_reads.contains(name) {
+                            format!("let {} = {access}; ", ident(name))
+                        } else {
+                            format!("let {} = {}; ", ident(name), binding_value(access))
+                        }
                     })
                     .collect();
-                body = format!("{{ {rebuilt}{lets}{body} }}");
+                body = format!("{{ {shared}{rebuilt}{lets}{body} }}");
             }
             out.push_str(&indentation(self.indent));
             let _ = writeln!(out, "{pattern} => {body},");
@@ -5739,6 +5866,65 @@ impl<'a> Generator<'a> {
                 out.push((id.name.clone(), ident(&id.name)));
             }
         }
+    }
+
+    /// The `let`s that start an arm whose native pattern bound shared list
+    /// payloads ([`Generator::shared_bindings`]), each read as the `Vec`
+    /// behind it: borrowed (`&**l`) when the arm matched a reference;
+    /// borrowed from the payload (`&*l`, read like a lent binding) when the
+    /// arm `body` neither changes nor moves it; else taken out of its
+    /// `ignite_io::List` (copied only when shared).
+    fn shared_lets(&mut self, lent: bool, body: &Expr) -> String {
+        let scope = self.scopes.len() - 1;
+        let touched = if lent {
+            BTreeSet::new()
+        } else {
+            self.touched_in(body)
+        };
+        let mut lets = String::new();
+        for name in std::mem::take(&mut self.shared_bindings) {
+            let text = ident(&name);
+            if lent {
+                let _ = write!(lets, "let {text} = &**{text}; ");
+            } else if self.types.is_some() && !touched.contains(name.as_str()) {
+                let _ = write!(lets, "let {text} = &*{text}; ");
+                self.borrowed_elements.push((scope, name));
+            } else {
+                let _ = write!(lets, "let {text} = ::ignite_io::List::into_vec({text}); ");
+            }
+        }
+        lets
+    }
+
+    /// The names an arm `body` changes in place or moves: every name when
+    /// the types are not known.
+    fn touched_in<'e>(&self, body: &'e Expr) -> BTreeSet<&'e str> {
+        let mut touched = ownership::changed_in(body, self.types);
+        if let Some(types) = self.types {
+            touched.extend(ownership::moved_in(body, types));
+        }
+        touched
+    }
+
+    /// The bindings of an arm whose pattern became a guard
+    /// ([`Generator::extract`]) that are shared list payloads the arm
+    /// `body` neither changes nor moves: each stays the `&Vec` it is read
+    /// out of `__m` as, read like a lent binding, instead of a copy.
+    fn lent_shared_reads(&mut self, body: &Expr) -> BTreeSet<String> {
+        let names = std::mem::take(&mut self.shared_bindings);
+        if self.types.is_none() {
+            return BTreeSet::new();
+        }
+        let touched = self.touched_in(body);
+        let scope = self.scopes.len() - 1;
+        let mut lent = BTreeSet::new();
+        for name in names {
+            if !touched.contains(name.as_str()) {
+                self.borrowed_elements.push((scope, name.clone()));
+                lent.insert(name);
+            }
+        }
+        lent
     }
 
     /// An `if`; `value` says whether it is in value position. Its branches
@@ -5936,7 +6122,16 @@ impl<'a> Generator<'a> {
                     let args: Vec<String> = args
                         .iter()
                         .enumerate()
-                        .map(|(i, p)| self.pattern(p, payload.get(i)))
+                        .map(|(i, p)| {
+                            let text = self.pattern(p, payload.get(i));
+                            if let PatternKind::Binding(id) = &p.kind
+                                && text == ident(&id.name)
+                                && self.is_shared_payload(ty, variant, i)
+                            {
+                                self.shared_bindings.push(id.name.clone());
+                            }
+                            text
+                        })
                         .collect();
                     format!("{head}({})", args.join(", "))
                 }
@@ -6058,7 +6253,9 @@ impl<'a> Generator<'a> {
                 let mut tests = Vec::new();
                 for (i, arg) in args.iter().enumerate() {
                     let name = self.fresh();
-                    let inner = if self.is_boxed_payload(ty, variant, i) {
+                    let inner = if self.is_boxed_payload(ty, variant, i)
+                        || self.is_shared_payload(ty, variant, i)
+                    {
                         format!("(&**{name})")
                     } else {
                         name.clone()
@@ -6144,7 +6341,9 @@ impl<'a> Generator<'a> {
                     let fields: Vec<&str> = (0..args.len())
                         .map(|j| if i == j { "__x" } else { "_" })
                         .collect();
-                    let deref = if self.is_boxed_payload(ty, variant, i) {
+                    let deref = if self.is_boxed_payload(ty, variant, i)
+                        || self.is_shared_payload(ty, variant, i)
+                    {
                         "&**"
                     } else {
                         ""
@@ -6153,6 +6352,11 @@ impl<'a> Generator<'a> {
                         "(match {subject} {{ {head}({}) => {deref}__x, _ => unreachable!() }})",
                         fields.join(", ")
                     );
+                    if let PatternKind::Binding(id) = &arg.kind
+                        && self.is_shared_payload(ty, variant, i)
+                    {
+                        self.shared_bindings.push(id.name.clone());
+                    }
                     self.extract(arg, access, payload.get(i), out);
                 }
             }
@@ -6237,6 +6441,96 @@ impl<'a> Generator<'a> {
             (Some(types), Some((q, _))) => types.boxed_field(q, field),
             _ => false,
         }
+    }
+
+    /// Whether field `field` of the record of type `ty` is a list whose
+    /// storage its copies share (`docs/slice.md` section 6): the field is
+    /// declared `List<T>`, `T` not `Byte`, and is an `ignite_io::List`.
+    fn is_shared_field(&self, ty: Option<&Ty>, field: &str) -> bool {
+        let (Some(types), Some((q, _))) = (self.types, ty.and_then(Self::nominal)) else {
+            return false;
+        };
+        types
+            .record_fields(q)
+            .and_then(|fields| fields.iter().find(|(name, _)| name == field))
+            .is_some_and(|(_, declared)| shares_storage(declared))
+    }
+
+    /// Whether payload `index` of variant `variant` of a value of type
+    /// `ty` is a shared list ([`Generator::is_shared_field`]).
+    fn is_shared_payload(&self, ty: Option<&Ty>, variant: &str, index: usize) -> bool {
+        let (Some(types), Some(ty)) = (self.types, ty) else {
+            return false;
+        };
+        let Some((q, _)) = Self::nominal(ty) else {
+            return false;
+        };
+        types
+            .variant(ty, variant)
+            .is_some_and(|(v, _)| self.shared_payload_of(q, v, index))
+    }
+
+    /// Whether payload `index` of variant number `variant` of enum `q` is
+    /// declared a shared list, for every instance of a generic enum.
+    fn shared_payload_of(&self, q: &QualName, variant: usize, index: usize) -> bool {
+        self.types
+            .and_then(|types| types.enum_variants(q))
+            .and_then(|variants| variants.get(variant))
+            .and_then(|(_, payload)| payload.get(index))
+            .is_some_and(shares_storage)
+    }
+
+    /// Whether `expr` is a place whose last step is a shared list field
+    /// ([`Generator::is_shared_field`]): `r.items`, `self.a.rows`.
+    fn shared_field_place(&self, expr: &Expr) -> bool {
+        match &expr.kind {
+            ExprKind::Field { receiver, name } => {
+                self.is_place(expr) && self.is_shared_field(self.type_of(receiver), &name.name)
+            }
+            _ => false,
+        }
+    }
+
+    /// Whether the place `expr`, changed in place, passes through a
+    /// shared list field (`r.items`, `r.items[i]`, `l[i].items`): the
+    /// change goes through [`Generator::mutable_place`], whose
+    /// `make_mut` copies the elements once when another copy shares them.
+    fn through_shared(&self, expr: &Expr) -> bool {
+        match &expr.kind {
+            ExprKind::Field { receiver, name } => {
+                self.assoc_callee(expr).is_none()
+                    && (self.is_shared_field(self.type_of(receiver), &name.name)
+                        || self.through_shared(receiver))
+            }
+            ExprKind::TupleField { receiver, .. } | ExprKind::Index { receiver, .. } => {
+                self.through_shared(receiver)
+            }
+            _ => false,
+        }
+    }
+
+    /// The value of a shared list field or payload: a shared list place
+    /// copied by its count (or moved where the moves analysis says so),
+    /// any other value, a `Vec`, wrapped without a copy.
+    fn shared_value(&mut self, expr: &Expr) -> String {
+        if self.shared_field_place(expr) {
+            let text = self.shared_field_text(expr);
+            if self.moves(expr) {
+                return text;
+            }
+            return format!("{text}.clone()");
+        }
+        let value = self.value(expr);
+        format!("::ignite_io::List::from_vec({value})")
+    }
+
+    /// The Rust place of a [`shared_field_place`](Self::shared_field_place)
+    /// as the `ignite_io::List` itself, not the `Vec` it reads as.
+    fn shared_field_text(&mut self, expr: &Expr) -> String {
+        let ExprKind::Field { receiver, name } = &expr.kind else {
+            unreachable!("a field place");
+        };
+        format!("{}.{}", self.receiver(receiver), ident(&name.name))
     }
 
     /// Whether payload `index` of variant `variant` of a value of type
@@ -6638,15 +6932,24 @@ impl<'a> Generator<'a> {
     /// Variant constructor arguments: values, a boxed payload in
     /// `Box::new`.
     fn variant_args(&mut self, expr: &Expr, args: &[Expr]) -> Vec<String> {
-        let boxed: Vec<bool> = match (self.types, self.callee(expr)) {
+        let (boxed, shared): (Vec<bool>, Vec<bool>) = match (self.types, self.callee(expr)) {
             (Some(types), Some(Callee::Variant { enum_, index })) => (0..args.len())
-                .map(|i| types.boxed_payload(enum_, *index, i))
-                .collect(),
-            _ => vec![false; args.len()],
+                .map(|i| {
+                    (
+                        types.boxed_payload(enum_, *index, i),
+                        self.shared_payload_of(enum_, *index, i),
+                    )
+                })
+                .unzip(),
+            _ => (vec![false; args.len()], vec![false; args.len()]),
         };
         args.iter()
             .zip(boxed)
-            .map(|(arg, boxed)| {
+            .zip(shared)
+            .map(|((arg, boxed), shared)| {
+                if shared {
+                    return self.shared_value(arg);
+                }
                 let value = self.value(arg);
                 if boxed {
                     format!("Box::new({value})")
@@ -6886,6 +7189,10 @@ impl<'a> Generator<'a> {
         let texts: Vec<String> = fields
             .iter()
             .map(|f| {
+                if self.is_shared_field(ty.as_ref(), &f.name.name) {
+                    let value = self.shared_value(&f.value);
+                    return format!("{}: {value}", ident(&f.name.name));
+                }
                 let value = self.value(&f.value);
                 let value = if self.is_boxed_field(ty.as_ref(), &f.name.name) {
                     format!("Box::new({value})")
@@ -7032,6 +7339,13 @@ fn binding_value(access: &str) -> String {
     }
 }
 
+/// Whether a payload or field declared `ty` keeps its elements in an
+/// `ignite_io::List`, shared by its copies (`docs/slice.md` section 6): a
+/// list whose elements are not `Byte` (`Bytes` stays a `Vec<u8>`).
+fn shares_storage(ty: &Ty) -> bool {
+    matches!(ty, Ty::List(item) if **item != Ty::Byte)
+}
+
 /// Whether a value of type `ty` can be read through a reference where
 /// the generated code reads a borrowed parameter: the types a `for` over
 /// a list place lends its elements as ([`Generator::borrowed_for`]).
@@ -7087,7 +7401,10 @@ const INVOCATION_FIELDS: [&str; 8] = [
 ];
 const CHILD_EXIT_FIELDS: [&str; 5] = ["ending", "code", "stdout", "stderr", "dropped"];
 /// The fields of `std.tls.TlsOptions`, which `ignite_io::TlsOptions` has
-/// under the same names.
+/// under the same names. A list field of the generated record (`alpn`,
+/// `arguments`, `environment`) is an `ignite_io::List` (`docs/slice.md`
+/// section 6) and becomes the substrate's `Vec` by `into()`, without a
+/// copy when nothing else shares it.
 const TLS_OPTIONS_FIELDS: [&str; 4] = ["alpn", "authorities", "verify", "handshake_timeout"];
 
 /// The `ignite_io::TlsOptions` of the generated `std.tls.TlsOptions`
@@ -7095,7 +7412,10 @@ const TLS_OPTIONS_FIELDS: [&str; 4] = ["alpn", "authorities", "verify", "handsha
 fn substrate_tls_options(value: &str) -> String {
     let fields: Vec<String> = TLS_OPTIONS_FIELDS
         .iter()
-        .map(|f| format!("{f}: o.{}", ident(f)))
+        .map(|f| match *f {
+            "alpn" => format!("{f}: o.{}.into()", ident(f)),
+            _ => format!("{f}: o.{}", ident(f)),
+        })
         .collect();
     format!(
         "{{ let o = {value}; ::ignite_io::TlsOptions {{ {} }} }}",
@@ -7108,7 +7428,10 @@ fn substrate_tls_options(value: &str) -> String {
 fn substrate_invocation(value: &str) -> String {
     let fields: Vec<String> = INVOCATION_FIELDS
         .iter()
-        .map(|f| format!("{f}: i.{}", ident(f)))
+        .map(|f| match *f {
+            "arguments" | "environment" => format!("{f}: i.{}.into()", ident(f)),
+            _ => format!("{f}: i.{}", ident(f)),
+        })
         .collect();
     format!(
         "{{ let i = {value}; ::ignite_io::Invocation {{ {} }} }}",

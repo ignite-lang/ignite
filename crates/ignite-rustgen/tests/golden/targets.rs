@@ -15,7 +15,7 @@ pub struct Box_ {
 
 #[derive(Clone)]
 pub struct Holder {
-    pub items: Vec<i64>,
+    pub items: ::ignite_io::List<i64>,
 }
 
 pub fn describe(e: &::ignite_io::Exposure) -> String {
@@ -43,8 +43,8 @@ pub fn pushed() -> Vec<Vec<i64>> {
 }
 
 pub fn held() -> Vec<Holder> {
-    let mut holders = vec![Holder { items: vec![] }];
-    { let __p5 = 0; let __p6 = 7; (*::ignite_io::checked::at_mut(&mut holders, __p5, "crates/ignite-rustgen/tests/golden/targets.ignite", 31, 3)).items.push(__p6) };
+    let mut holders = vec![Holder { items: ::ignite_io::List::from_vec(vec![]) }];
+    { let __p5 = 0; let __p6 = 7; (*(*::ignite_io::checked::at_mut(&mut holders, __p5, "crates/ignite-rustgen/tests/golden/targets.ignite", 31, 3)).items.make_mut()).push(__p6) };
     holders
 }
 

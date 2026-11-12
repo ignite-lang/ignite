@@ -1058,6 +1058,10 @@ pub use report::{
 // Slice 10 (`docs/slice.md` sections 14.1 and 14.8): the checked operations
 // and the quantity debug text, after the tests for the same reason.
 pub mod checked;
+// The shared storage of a list that is an enum payload or a record field
+// on the Rust target (`docs/slice.md` section 6).
+mod list;
+pub use list::List;
 mod quantity;
 pub use quantity::{Quantity, quantity_debug};
 #[cfg(feature = "runner")]

@@ -2,18 +2,18 @@
 
 #[derive(Clone)]
 pub struct State {
-    pub items: Vec<i64>,
+    pub items: ::ignite_io::List<i64>,
     pub count: i64,
 }
 
 pub fn fresh() -> State {
-    State { items: vec![], count: 0 }
+    State { items: ::ignite_io::List::from_vec(vec![]), count: 0 }
 }
 
 pub fn step(state: State, x: &i64) -> State {
     let mut x = x.clone();
     let mut next = state;
-    next.items.push(x.clone());
+    { let __p1 = x.clone(); (*next.items.make_mut()).push(__p1) };
     next.count = ::ignite_io::checked::add(next.count, 1, "crates/ignite-rustgen/tests/golden/slice16.ignite", 16, 16);
     next
 }
@@ -36,7 +36,7 @@ pub fn run_read_after() -> i64 {
 }
 
 pub fn total(state: &State) -> i64 {
-    ::ignite_io::checked::add(state.count, (state.items.len() as i64), "crates/ignite-rustgen/tests/golden/slice16.ignite", 36, 33)
+    ::ignite_io::checked::add(state.count, ((*state.items).len() as i64), "crates/ignite-rustgen/tests/golden/slice16.ignite", 36, 33)
 }
 
 pub fn ufcs() -> State {
@@ -48,8 +48,8 @@ pub struct Counter {}
 
 impl Counter {
     pub fn serve(mut stream: ::ignite_io::TcpStream, mut application: State) -> ::std::result::Result<(), ::ignite_io::IoError> {
-        application.items.push(1);
-        stream.write_all((application.items.len() as i64).to_string().into_bytes())
+        { let __p2 = 1; (*application.items.make_mut()).push(__p2) };
+        stream.write_all(((*application.items).len() as i64).to_string().into_bytes())
     }
 }
 
@@ -60,7 +60,7 @@ pub fn served(stream: &::ignite_io::TcpStream) -> ::std::result::Result<(), ::ig
 
 #[derive(Clone)]
 pub struct Out {
-    pub log: Vec<i64>,
+    pub log: ::ignite_io::List<i64>,
 }
 
 #[derive(Clone)]
@@ -71,7 +71,7 @@ pub struct Pair {
 
 pub fn publish(o: Out) -> Out {
     let mut p = o;
-    p.log.push(1);
+    { let __p3 = 1; (*p.log.make_mut()).push(__p3) };
     p
 }
 
