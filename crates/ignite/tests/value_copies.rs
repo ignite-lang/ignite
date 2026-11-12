@@ -20,10 +20,12 @@ use std::process::{Command, Stdio};
 use crate::common::Target;
 use crate::todo;
 
-/// The most allocations one request at s1 may make on the Rust target:
-/// the count at `1dfc2937`, before any change of the representation
+/// The most allocations one request at s1 may make on the Rust target
+/// since unit `rust-shared-payload-lists`: a row is a payload list shared
+/// by its copies (`docs/value-copies.md` 3.4, design D). The count at
+/// `1dfc2937`, before the change of representation, was 607,779
 /// (`docs/value-copies.md` 2.1).
-const MOST_PER_REQUEST: u64 = 607_779;
+const MOST_PER_REQUEST: u64 = 52_000;
 
 /// The executables appended to the fixture.
 const EXECUTABLES: &str = r#"

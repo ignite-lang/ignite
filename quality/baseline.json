@@ -218,13 +218,13 @@
       "area": "Semantics: one meaning across the three consumers",
       "bars": {
         "eval": {
-          "value": 779
+          "value": 788
         },
         "llvm": {
-          "value": 940
+          "value": 949
         },
         "rust": {
-          "value": 940
+          "value": 949
         }
       },
       "direction": "higher",

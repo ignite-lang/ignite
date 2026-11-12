@@ -5,12 +5,16 @@ Design note, 2026-11-12, at `1dfc2937` (stories `rust-target-shared-list-storage
 count (allocations and bytes from valgrind memcheck, instructions from callgrind, allocation sites
 from DHAT); nothing here is a timing.
 
+Status: design D is built (unit `rust-shared-payload-lists`, `docs/slice.md` section 6) with
+the two-block layout of the prototype. Its measured counts replace the prototype's in sections
+2 to 4 where they differ; the rows of the other designs are the prototypes'.
+
 ## Recommendation
 
 1. Share the list storage of enum payloads and record fields by reference count (design D below),
    then return lent results from lookups whose callers only read them (design C1).
-2. On the synthetic workload, D alone takes a request from 250.6 M to 18.1 M instructions and from
-   607,779 to 51,167 allocations; D with C1 to 8.2 M and 5,407. By-value parameters (B) make it
+2. On the synthetic workload, D alone takes a request from 250.6 M to 17.5 M instructions and from
+   607,779 to 51,172 allocations (measured, as built); D with C1 to 8.2 M and 5,407 (prototype). By-value parameters (B) make it
    worse (295.1 M), because the filtered lists are live.
 3. Order: the counting harness, D, C1; views (C2) and shared text only if the counts left after C1
    ask for them (section 4.3).
@@ -254,11 +258,21 @@ changing a field in place goes through `make_mut`. A row of the workload is a `R
 row is one increment, wherever the row goes. Paths that build lists in local variables and never
 put them into a value pay nothing, unlike A, which tests uniqueness on every `push`.
 
+As built: a payload taken out into a `Vec` position is `List::into_vec`, which takes the `Vec`
+without a copy when nothing else shares it and copies it otherwise; `Bytes` (`List<Byte>`)
+stays `Vec<u8>`. The layout is the prototype's, two blocks, with no `unsafe`
+(`docs/slice.md` section 6).
+
 Counted alone and with C1 and C (D+C1, D+C).
 
 ### 3.5 Counts
 
-Per request, Rust target (`*`: `r1` less ten times the s1 table build):
+Per request, Rust target (`*`: `r1` less ten times the s1 table build). The D rows are the
+built unit's release executables at `ef69b544` plus the unit, against `ef69b544`'s own 607,784
+allocations, 24,044,784 bytes and 250,639,812 instructions at s1, and 58,808,402,
+2,434,980,694 and 24,217,202,415 at s10 (memcheck moves a run by up to 5 allocations); the
+prototype counted 51,167 allocations and 18,104,987 instructions at s1, 1,608,110,309
+instructions at s10:
 
 | design | size | allocations | bytes | instructions | instructions against `1dfc2937` |
 |---|---|---|---|---|---|
@@ -267,7 +281,7 @@ Per request, Rust target (`*`: `r1` less ten times the s1 table build):
 | B | s1 | 703,420 | 28,672,785 | 295,062,959 | 117.7 % |
 | C (C1 and C2) | s1 | 15,101 | 1,082,521 | 9,527,185 | 3.8 % |
 | C1 | s1 | 560,909 | 23,902,005 | 244,408,221 | 97.5 % |
-| D | s1 | 51,167 | 1,597,792 | 18,104,987 | 7.2 % |
+| D (as built) | s1 | 51,172 | 1,598,045 | 17,498,837 | 7.0 % |
 | D+C1 | s1 | 5,407 | 1,503,386 | 8,199,497 | 3.3 % |
 | D+C | s1 | 5,407 | 663,642 | 7,632,276 | 3.0 % |
 | source forms of section 5 | s1 | 4,159 | 624,496 | 6,525,413 | 2.6 % |
@@ -275,7 +289,7 @@ Per request, Rust target (`*`: `r1` less ten times the s1 table build):
 | A | s10 | 4,611,204 | 212,964,478 | 1,700,565,484 | 7.0 % |
 | B | s10 | 69,379,038 `*` | 2,940,721,719 `*` | 28,728,364,862 `*` | 118.6 % |
 | C (C1 and C2) | s10 | 155,122 | 73,851,545 | 526,225,237 | 2.2 % |
-| D | s10 | 4,609,225 | 213,023,658 | 1,608,110,309 | 6.6 % |
+| D (as built) | s10 | 4,609,225 | 213,023,658 | 1,545,742,663 | 6.4 % |
 | D+C1 | s10 | 57,913 | 203,871,046 | 639,679,011 | 2.6 % |
 | D+C | s10 | 57,913 | 69,615,494 | 555,289,117 | 2.3 % |
 | source forms of section 5 | s10 | 45,241 | 69,176,210 | 491,937,415 | 2.0 % |
@@ -301,7 +315,7 @@ allocation):
 
 Instructions by form, from removing one at a time: C1 removes form 2 and the comparison
 operand, 6.2 M of 250.6 M (2.5 %); D removes forms 1, 3 and 4, 232.5 M (92.8 %); after D, C1
-removes 9.9 M of the 18.1 M left. A copy and drop of a row costs about 10,000 instructions at
+removes 9.9 M of the 18.1 M the D prototype left. A copy and drop of a row costs about 10,000 instructions at
 `1dfc2937` (24 allocations and frees). The reporter's pattern with a count instead: D+C1 and D+C
 differ only in what the filters return, shared rows or references to them, so their difference is
 what a count increment per kept row and its decrement at the drop of the list cost: 567,221
@@ -328,6 +342,18 @@ request round: 50 rounds to warm up, the counters zeroed, 200 rounds on one conn
 | `todod` (Rust, release) | `GET /todos/1` | 21,874, 21,453, 21,450 | 19,587, 19,590, 19,590 | -8.7 % to -10.5 % |
 | `terminald` (Rust, release) | `echo hello` (the `rr` workload) | 3,480, 3,480 | 3,612, 3,612 | +3.8 % |
 
+D as built, the same method, against `ef69b544` (the unit's base):
+
+| program | round | `ef69b544` | D (as built) | change |
+|---|---|---|---|---|
+| `todod` (Rust, release) | `GET /todos/1` | 21,875, 21,464 | 19,219, 19,219 | -10.5 % to -12.1 % |
+| `terminald` (Rust, release) | `echo hello` | 3,480, 3,480 | 3,602, 3,602 | +3.5 % |
+
+`terminald`'s rise per round under D: `Arc<Vec<String>>::drop_slow` +75, `free` +33, `malloc`
++30, the reply's construction +14, the telnet server's loop -30: the `Arc` block of
+`Reply.lines`, one `malloc` and one `free` more per reply. The release binaries grow by 1,240
+bytes (`todod`, 1,063,744) and 944 bytes (`terminald`, 744,360).
+
 `todod` shares where it copied: `Vec<(String, String)>::clone`, a request's header list, is
 3.35 % of its round at `1dfc2937` and an increment under A. `terminald` builds one `List<Text>` per
 round that it never copies: the prototype's second block (`boxed`, 59 instructions per round, and
@@ -335,10 +361,11 @@ its `free`) is most of the rise; the single-block layout would leave the uniquen
 the decrement, estimated at under 0.5 % (not measured). On the workload's table build, a path that
 only builds lists of rows and drops them, A and D cost 1,530 and 1,532 more allocations (one second
 block per non-empty list) and 17.5 and 16.5 % more instructions than `1dfc2937` (the table build
-of 383 rows and its drop, s1 `r1` less one request).
+of 383 rows and its drop, s1 `r1` less one request). D as built: 10,016 to 11,551 allocations
+(1,535 more) and 6,414,688 to 7,443,117 instructions (+16.0 %) against `ef69b544`.
 
-D was not prototyped on `todod` or `terminald`: it changes a subset of A's lists, but its wrap at
-construction is a conversion A does not have; not established. B, C1 and C2 change no
+D was not prototyped on `todod` or `terminald`; the built unit's counts are the second table
+above. B, C1 and C2 change no
 representation and cost nothing on a path that does not take their forms.
 
 ### 4.2 Each design
@@ -346,8 +373,8 @@ representation and cost nothing on a path that does not take their forms.
 | | A | B | C1 | C2 | D |
 |---|---|---|---|---|---|
 | removes, of forms 1 to 4 (s1) | rows of 1, 3, 4 (to increments); not the texts of 2 | 174 rows of form 1, 276 of form 4; adds 4,428 rows of form 1 | form 2 read only and the comparison operand | form 1 when the result is only read | as A |
-| instructions alone (s1) | 7.5 % | 117.7 % | 97.5 % | with C1: 3.8 % | 7.2 % |
-| never-sharing paths | uniqueness test per change, decrement per drop; `terminald` +3.8 % in the two-block prototype | none | none | none | wrap per payload or field built |
+| instructions alone (s1) | 7.5 % | 117.7 % | 97.5 % | with C1: 3.8 % | 7.0 % (as built) |
+| never-sharing paths | uniqueness test per change, decrement per drop; `terminald` +3.8 % in the two-block prototype | none | none | none | wrap per payload or field built: `terminald` +3.5 %, the table build +16.0 % (as built) |
 | `crates/ignite-rustgen/src/lib.rs` | `rust_type_in`, `rust_ty`, `annotation` (the type), `expr` (`vec!`), `method` and `static_call` (the builtin table: `push`, `append`, `clear`, `at`, `slice`, `map`, `List.empty`, `with_capacity`), `checked_at_call`, `indexed_mutation`, `lent_iterable_text`, `binding_value`, `eq_body`, `debug_body`, `record_from_substrate`, `spawn`, `store_with` | the consumed set and `for` lowering: `lent_iterable_text`, `borrowed_for`, `ref_args`, `call` | `fn_call`, `call`, `ref_args`, `compared`, `match_expr`, `match_by_ref`, `binding_value`, `lent_let`, the fn signature in `program_module`, `fn_value_of` (the owning wrapper), `structural_eq` | as C1, plus the instances of list fns over `&T` elements, lifetimes, and binding inner views (`block`) | type emission in `program_module` (enum payloads and record fields), `typed_variant`, `variant_args`, `record_literal`, `typed_record_literal`, `record_update`, `element_field`, `pattern`, `lend_bindings`, `extract`, `eq_body`, `debug_body` |
 | other crates | `ignite-io`: a new `List` type, `checked.rs` (`slice` returns it), `text.rs`, `store.rs`, `channel.rs`, `child.rs`, `args`; `docs/slice.md` section 6 | `ignite-types` `moves.rs` (`consumed` gains "elements leave") | `ignite-types`: a lent-result set per fn and the read-only use of call results (beside `called_only`, `lent_bytes`) | as C1 | `ignite-io`: the `List` type only; `docs/slice.md` section 6 |
 | LLVM target | unchanged: a counted block cannot live in an arena whose region release frees it under a live reference; it keeps its deep copies | follows the consumed set (an owned parameter) | a pointer to the element, as `Lower::read_root` already gives for a matched or iterated element; fits the arenas (the source lies below every mark the callee takes) | a list of pointers is a new layout and new glue; or it keeps copying | unchanged, as A |
@@ -381,6 +408,11 @@ less than the source forms of section 5 already reach.
    after a share copies once, a change of an unshared list copies nothing; `todod` `GET` and
    `terminald` `echo` instructions per round not above `1dfc2937`'s, counted by the same test on
    both builds; differential corpus and std inline tests green; `CODEGEN_REVISION` bumped.
+   Built with two blocks (the single block needs an `unsafe` site, which the ratchet refuses);
+   the harness counts 51,172 per request (bar 52,000) and `crates/ignite/tests/shared_lists.rs`
+   is the count test per kind. `todod` falls 10.5 to 12.1 %; `terminald` rises 3.5 % (4.1), and
+   that acceptance point is waived for the branch, whose merge waits on a measured run of the
+   service and the operator's decision.
 3. `lent-lookup-results` (design C1, both targets). Acceptance: the harness at most 6,000
    allocations per request at s1 with unit 2; a guard program per refusal (a lent result held
    across a change of its source, one stored, one through a fn value, one in a `Result` with an
@@ -412,10 +444,31 @@ rows, and every lookup written twice, once to read and once to store.
 
 ## Not established
 
-- The single-block layout's counts: A and D were counted with `Option<Arc<Vec<T>>>`, two blocks
-  and two indirections; the single-block numbers in this note are estimates.
-- What an atomic increment costs against a plain one: counts cannot show it.
-- D on `todod` and `terminald`; shared `Text` and `Map` anywhere.
+- The single-block layout (count, length, capacity and elements in one block): it needs an
+  allocation of its own layout, one `unsafe` site in `ignite-io`, which the ratchet
+  (`quality::unsafe_sites_are_no_more_than_at_v0_15_0`) refuses. A and D were counted with
+  `Option<Arc<Vec<T>>>`, two blocks and two indirections; the single-block numbers in this note
+  are estimates, and whether it takes `terminald` back to 3,480 is not counted.
+- A plain count against the atomic one: D as built counts atomically, since values cross
+  `spawn` and channels; a plain count would need the generator to prove a value never crosses a
+  task, and its cost against the atomic one cannot be shown by counts.
+- Shared `Text` and `Map` anywhere.
+- A design the unit did not try: wrap only the payload and field types that the program copies
+  somewhere, so that a type never copied (`terminald`'s `Reply.lines`, built per reply, read once
+  and dropped) stays a `Vec` and pays nothing. The information is in one run: `ignite build` and
+  `ignite emit` type the program, its siblings and every std module first, then lower the
+  program (`generate_package`) and then std (`generate_std_for`, which lowers every std item
+  again through `prepare_std_typed` and prunes by the names the program's text reaches); a test
+  build does the same with `generate_tests`. It is not at hand where it would be needed: the
+  generator decides a copy (a place in a value position that `TypedProgram::moves` does not
+  mark, emitted with `.clone()`) while it lowers a fn body, after the type declarations are
+  decided, and std is lowered without any input from the program (`PreparedStd` is meant to be
+  rendered for several programs). `Reply` is declared in `std.console`, built in the program and
+  read in `std.protocol.telnet`, so its layout would depend on copy sites in both crates, found
+  by a pass over every body before any type is emitted, and a copy of a type parameter in a
+  generic fn would count for every type it is instantiated with. The `ignite-std` crate's
+  version already hashes its `lib.rs`, so a per-program std layout builds as a separate
+  artifact, as a per-program pruning already does.
 - Copies by form on the LLVM target (symbols discarded in release); its counts under C1.
 - Whether the reporter's typed records (if any have text fields and no list field) gain from D:
   such a record's copy is its texts, which D does not share.

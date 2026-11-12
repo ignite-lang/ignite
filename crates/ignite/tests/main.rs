@@ -61,6 +61,7 @@ mod rollout_repeat;
 mod run;
 mod rust_memory;
 mod rust_memory_adversary;
+mod shared_lists;
 mod siblings;
 mod site;
 mod size_adversary;

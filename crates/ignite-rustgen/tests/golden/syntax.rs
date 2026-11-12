@@ -4,7 +4,7 @@ pub type IoResult<T> = ::std::result::Result<T, ::ignite_io::IoError>;
 
 #[derive(Clone)]
 pub struct Reply {
-    pub lines: Vec<String>,
+    pub lines: ::ignite_io::List<String>,
     pub action: Action,
     pub code: i64,
 }
@@ -191,7 +191,7 @@ impl Syntax {
         (show(&shout({ static TEXT: ::std::sync::LazyLock<String> = ::std::sync::LazyLock::new(|| String::from("hey")); &*TEXT })))?;
         let h = Handler { name: String::from("h"), respond: (::std::sync::Arc::new(|__a0: String| shout(&__a0)) as ::std::sync::Arc<dyn Fn(String) -> String + Send + Sync>) };
         (show(&(h.respond)(h.name)))?;
-        let r = Reply { lines: vec![String::from("l")], action: Reply::default_action(), code: Reply::default_code() };
+        let r = Reply { lines: ::ignite_io::List::from_vec(vec![String::from("l")]), action: Reply::default_action(), code: Reply::default_code() };
         (show(&(format!("code {}", r.code))))?;
         match &r.action {
             Action::Continue => (show({ static TEXT: ::std::sync::LazyLock<String> = ::std::sync::LazyLock::new(|| String::from("continue")); &*TEXT }))?,

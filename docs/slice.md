@@ -486,7 +486,7 @@ Every generated file starts with
 | `Int` | `i64` |
 | `Bool` | `bool` |
 | `Unit` (type) | `()` |
-| `List<T>` | `Vec<T>` |
+| `List<T>` | `Vec<T>`; an enum payload or record field: `::ignite_io::List<T>` (shared lists, below) |
 | `Option<T>`, `Result<T, E>` | `::std::option::Option<T>`, `::std::result::Result<T, E>`; the variants `Some`, `None`, `Ok`, `Err` bare |
 | `fn(A, B) -> R` | `::std::sync::Arc<dyn Fn(A, B) -> R + Send + Sync>` (13.3) |
 | `TcpListener`, `TcpStream`, `Stdin`, `Stdout`, `Input`, `IoError` | `::ignite_io::` same name |
@@ -605,6 +605,38 @@ start of its arm (`{ let n = (n).clone(); .. }`). An arm whose pattern becomes a
 `story:moves-for-pattern-bindings` a binding of a type parameter is a reference too (`&T`, read
 as a generic fn's reference parameter is), so it is copied once, where a value is taken, and
 not at the start of its arm and again there (20.3.1).
+
+**Shared lists in payloads and fields.** Unit `rust-shared-payload-lists` (design D of
+`docs/value-copies.md`). An enum payload or a record field declared `List<T>`, `T` not `Byte`
+(so `Bytes` stays `Vec<u8>`), is `::ignite_io::List<T>` on the Rust target: `None` for the
+empty list, else an `Arc<Vec<T>>`, with an atomic count (values cross `spawn` and channels), no
+`DerefMut` and no `unsafe`. The declared type decides, before type arguments are substituted,
+so every instance of a generic declaration has one layout. Construction wraps the `Vec`
+(`Val::Rec(::ignite_io::List::from_vec(fields))`, also in record updates, defaults and
+assignments to the field); a read derefs (`(*r.items)`, a payload binding
+`let l = &**l;`); a change goes through `make_mut` (`(*r.items.make_mut()).push(x)`, also
+under indexes); a field or payload that moves into a `Vec` position, and a field of a value
+no local holds (`f().items`), is `::ignite_io::List::into_vec(..)`, which takes the `Vec`
+when nothing else shares it and copies it otherwise. Substrate records with list fields
+(`Invocation`, `TlsOptions`) convert at the call with `.into()`. The LLVM target and the
+evaluator are unchanged.
+
+What a copy costs now: copying a value that holds such a list is one increment per list,
+whatever the list holds; the first change through one holder after a share copies the
+elements once (each element that is itself a shared list by an increment); a change of a
+list nothing else shares copies nothing. On the workload of `docs/value-copies.md`, one
+request at s1 goes from 607,784 allocations and 250,639,812 instructions to 51,172 and
+17,498,837 (release). Still copied: the elements of a shared payload or field taken out
+into a list of its own (`match v { Words(l) => l }` copies the texts once), lists in locals,
+parameters and results, `Text`, `Bytes`, `Map`, and every value on the LLVM target.
+
+What a path that never shares pays: each payload or field list built is a second block,
+one `malloc` and one `free` more than a `Vec`. `terminald`, whose `echo` reply builds one
+`Reply.lines` per round, goes from 3,480 to 3,602 instructions per round (+3.5 %, callgrind,
+200 rounds after 50); the workload's table build at s1 from 6,414,688 to 7,443,117
+instructions (+16.0 %) and from 10,016 to 11,551 allocations. `todod`'s `GET /todos/1`, which
+copies a header list, goes from 21,464 and 21,875 (two runs) to 19,219 instructions per
+round.
 
 **Builtin methods** are lowered by name; the receiver type is not known, so each name has one
 meaning. The generator emits exactly the Rust on the right.
