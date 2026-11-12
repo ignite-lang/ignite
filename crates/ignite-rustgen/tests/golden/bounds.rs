@@ -74,6 +74,6 @@ pub struct Server {
 pub fn Server__main(self_: &Server) -> IoResult<()> {
     loop {
         let stream = (self_.listener.accept())?;
-        { let __spawn_0 = stream; let __spawn_1 = self_.limit.clone(); ::ignite_io::spawn(move || { if let Err(error) = Relay::serve::<::ignite_io::TcpStream>(__spawn_0, __spawn_1) { ::ignite_io::log(&format!("task ended with error: {}", error)); } }); };
+        { let __spawn_0 = stream; let __spawn_1 = self_.limit; ::ignite_io::spawn(move || { if let Err(error) = Relay::serve::<::ignite_io::TcpStream>(__spawn_0, __spawn_1) { ::ignite_io::log(&format!("task ended with error: {}", error)); } }); };
     }
 }

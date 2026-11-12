@@ -546,7 +546,9 @@ the spawning function keeps its own copies; an argument the moves analysis marks
 **Ownership rule.** Rust moves what Ignite copies. A *place* (an identifier, or a place
 followed by `.field`) used in a value position is emitted with `.clone()`, except where
 `TypedProgram::moves` marks it (20.3): that place is dead after its move position, and it is
-emitted bare, so Rust moves it. Value positions:
+emitted bare, so Rust moves it. A field read (`p.field`, `p.0`) of type `Int`, `Byte`, `U32`,
+`Bool` or `Unit` is emitted bare as well: Rust copies such a value out through any reference
+(`Some(s) => s.x` for a matched constant). Value positions:
 call and method arguments, `let`/`var` initializers, assignment right-hand sides, `match`
 scrutinees, `return` operands, list elements, record field values, `for` iterables, and
 operands of `await`, `?`, `!` and `-`. Non-value positions: the receiver of a method call or

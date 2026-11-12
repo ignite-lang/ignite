@@ -73,7 +73,7 @@ pub fn show(n: &i64) -> String {
 
 pub fn generic_line() -> String {
     let pair = swap(Pair { first: 1, second: String::from("one") });
-    let labelled = Labelled { value: pair.second.clone(), label: Labelled::<i64>::default_label() };
+    let labelled = Labelled { value: pair.second, label: Labelled::<i64>::default_label() };
     let choice: Choice<String> = Choice::Two(String::from("a"), String::from("b"));
     let id: ::std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync> = (::std::sync::Arc::new(|__a0: i64| identity::<i64>(__a0)) as ::std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync>);
     format!("{} {} {} {} {}", pair.first, labelled.value, labelled.label, count(&choice), twice(&|__a0: i64| bump(&__a0), id(5)))

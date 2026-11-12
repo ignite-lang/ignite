@@ -4110,7 +4110,7 @@ impl<'a> Generator<'a> {
                 let list = self.shared_field_text(expr);
                 return format!("::ignite_io::List::into_vec({list})");
             }
-            if self.moves(expr) {
+            if self.moves(expr) || self.scalar_field(expr) {
                 return self.bare(expr);
             }
             return format!("{}.clone()", self.bare(expr));
@@ -4361,6 +4361,20 @@ impl<'a> Generator<'a> {
             ExprKind::If { .. } => self.if_expr(expr, true),
             ExprKind::Block(block) => self.block(block, true),
         }
+    }
+
+    /// Whether `expr` reads a field or a tuple field whose type is `Copy` in
+    /// Rust (`Int`, `Byte`, `U32`, `Bool`, `Unit`): the read copies the value
+    /// out through any reference, so no `.clone()` is written. A name is not
+    /// covered: a pattern binding of a lent place is a reference.
+    fn scalar_field(&self, expr: &Expr) -> bool {
+        matches!(
+            expr.kind,
+            ExprKind::Field { .. } | ExprKind::TupleField { .. }
+        ) && matches!(
+            self.type_of(expr),
+            Some(Ty::Int | Ty::Byte | Ty::U32 | Ty::Bool | Ty::Unit)
+        )
     }
 
     /// `.clone()` after an element read (`l[i]`, `l.at(i)`) whose type is

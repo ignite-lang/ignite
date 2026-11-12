@@ -240,7 +240,7 @@ pub struct Runner {
 
 #[allow(non_snake_case)]
 pub fn Runner__main(self_: &Runner) -> ::std::result::Result<(), ::ignite_io::IoError> {
-    let stream = match ::ignite_io::TcpStream::connect(self_.address.clone(), self_.port.clone()) {
+    let stream = match ::ignite_io::TcpStream::connect(self_.address.clone(), self_.port) {
         Ok(stream) => stream,
         Err(error) => return Err(error.clone().with_exit_code((3) as i32)),
     };

@@ -116,7 +116,7 @@ pub fn nickname_len() -> i64 {
 
 pub fn home_x() -> i64 {
     match HOME() {
-        Some(s) => s.x.clone(),
+        Some(s) => s.x,
         None => 0,
     }
 }
