@@ -37,6 +37,8 @@ use ignite_io::{
     Setting, TcpListener, TcpStream,
 };
 
+use ignite_io::fresh;
+
 use crate::{IgniteInput, IgniteIoError, IgniteList, arena, bytes, status};
 
 thread_local! {
@@ -57,7 +59,7 @@ const TOMBSTONE: i64 = 0;
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_tcp_own(handle: i64) {
     crate::entry(move || {
-        let _ = OWNED.try_with(|owned| owned.borrow_mut().push(handle));
+        let _ = fresh::try_with(&OWNED, |owned| owned.borrow_mut().push(handle));
     })
 }
 
@@ -65,8 +67,7 @@ pub extern "C" fn ignite_rt_tcp_own(handle: i64) {
 /// normal release path drops each handle from the list as it closes it, so
 /// this closes only those a failure skipped.
 pub(crate) fn release_task_handles() {
-    let owned = OWNED
-        .try_with(|owned| std::mem::take(&mut *owned.borrow_mut()))
+    let owned = fresh::try_with(&OWNED, |owned| std::mem::take(&mut *owned.borrow_mut()))
         .unwrap_or_default();
     for handle in owned {
         release_owner(handle, None);
@@ -78,11 +79,7 @@ pub(crate) fn release_task_handles() {
 /// its first owned stream binding (`docs/llvm.md` section 4).
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_own_mark() -> i64 {
-    crate::entry(move || {
-        OWNED
-            .try_with(|owned| owned.borrow().len() as i64)
-            .unwrap_or(0)
-    })
+    crate::entry(move || fresh::try_with(&OWNED, |owned| owned.borrow().len() as i64).unwrap_or(0))
 }
 
 /// `void own_release(i64 mark)`: release every handle the current task
@@ -92,13 +89,12 @@ pub extern "C" fn ignite_rt_own_mark() -> i64 {
 pub extern "C" fn ignite_rt_own_release(mark: i64) {
     crate::entry(move || {
         let mark = usize::try_from(mark).unwrap_or(0);
-        let above = OWNED
-            .try_with(|owned| {
-                let mut owned = owned.borrow_mut();
-                let at = mark.min(owned.len());
-                owned.split_off(at)
-            })
-            .unwrap_or_default();
+        let above = fresh::try_with(&OWNED, |owned| {
+            let mut owned = owned.borrow_mut();
+            let at = mark.min(owned.len());
+            owned.split_off(at)
+        })
+        .unwrap_or_default();
         for handle in above.into_iter().rev() {
             release_owner(handle, None);
         }
@@ -337,20 +333,21 @@ fn with_stream<R>(
     handle: i64,
     f: impl FnOnce(&TcpStream) -> Result<R, IoError>,
 ) -> Result<R, IoError> {
-    let cached = CACHED
-        .try_with(|cell| {
-            cell.try_borrow_mut()
-                .ok()
-                .and_then(|mut cached| cached.take())
-        })
-        .ok()
-        .flatten();
+    // Both looks through `fresh`: `f` may move the task to another worker
+    // (a first read), whose thread-locals hold the task's from then on.
+    let cached = fresh::try_with(&CACHED, |cell| {
+        cell.try_borrow_mut()
+            .ok()
+            .and_then(|mut cached| cached.take())
+    })
+    .ok()
+    .flatten();
     let found = match cached {
         Some((held, found)) if held == handle && is_live(handle) => found,
         _ => stream(handle)?,
     };
     let result = f(&found);
-    let _ = CACHED.try_with(|cell| {
+    let _ = fresh::try_with(&CACHED, |cell| {
         if let Ok(mut cached) = cell.try_borrow_mut() {
             *cached = Some((handle, found));
         }
@@ -376,7 +373,7 @@ impl TaskHandles {
 
 /// Drop this thread's cached clone of `handle`'s stream, if it holds one.
 fn forget(handle: i64) {
-    let _ = CACHED.try_with(|cell| {
+    let _ = fresh::try_with(&CACHED, |cell| {
         if let Ok(mut cached) = cell.try_borrow_mut()
             && matches!(&*cached, Some((held, _)) if *held == handle)
         {
@@ -389,12 +386,12 @@ fn forget(handle: i64) {
 /// kept read buffer go, so an idle worker holds neither a socket nor
 /// 64 KiB of buffer.
 pub(crate) fn task_ended() {
-    let _ = CACHED.try_with(|cell| {
+    let _ = fresh::try_with(&CACHED, |cell| {
         if let Ok(mut cached) = cell.try_borrow_mut() {
             *cached = None;
         }
     });
-    let _ = READ_BUFFER.try_with(|cell| {
+    let _ = fresh::try_with(&READ_BUFFER, |cell| {
         if let Ok(mut buffer) = cell.try_borrow_mut() {
             *buffer = Vec::new();
         }
@@ -661,41 +658,55 @@ pub(crate) fn read_into_arena<E>(
 }
 
 /// [`read_into_arena`] of `size` bytes that does not go in place: into the
-/// thread's read buffer, or a buffer of its own for a size over 64 KiB
-/// or while the thread's buffer is in use, then `count` bytes copied into
-/// the arena.
+/// thread's read buffer, or a buffer of its own for a size over 64 KiB,
+/// then `count` bytes copied into the arena.
+///
+/// The thread's buffer is taken out of the thread-local while `read_into`
+/// runs and put back after, not borrowed across it: the read may wait, and
+/// a task that waits holds no borrow of a thread-local, as another task of
+/// the worker uses it meanwhile, and the waiting task may move to another
+/// worker at its first read and come back on that worker's thread. A
+/// nested read meanwhile finds the thread's buffer empty and grows it.
 fn read_through_buffer<E>(
     size: usize,
     read_into: impl FnOnce(&mut [u8]) -> Result<usize, E>,
 ) -> Result<IgniteInput, E> {
-    let read = |buffer: &mut Vec<u8>| -> Result<IgniteInput, E> {
-        if buffer.len() < size {
-            buffer.resize(size, 0);
-        }
-        let count = read_into(&mut buffer[..size])?.min(size);
-        Ok(if count == 0 {
+    let kept = size <= KEPT_READ_BUFFER;
+    let mut buffer = if kept {
+        fresh::try_with(&READ_BUFFER, |cell| {
+            cell.try_borrow_mut()
+                .map(|mut buffer| std::mem::take(&mut *buffer))
+                .unwrap_or_default()
+        })
+        .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    if buffer.len() < size {
+        buffer.resize(size, 0);
+    }
+    let result = read_into(&mut buffer[..size]).map(|count| {
+        let count = count.min(size);
+        if count == 0 {
             IgniteInput::eof()
         } else {
             IgniteInput {
                 tag: 0,
                 data: IgniteList::from_bytes(&buffer[..count]),
             }
-        })
-    };
-    let mut read = Some(read);
-    if size <= KEPT_READ_BUFFER {
-        let kept = READ_BUFFER.try_with(|cell| {
-            let mut buffer = cell.try_borrow_mut().ok()?;
-            read.take().map(|read| read(&mut buffer))
-        });
-        if let Ok(Some(result)) = kept {
-            return result;
         }
+    });
+    if kept {
+        // Through `fresh`, as the take above: the thread of now.
+        let _ = fresh::try_with(&READ_BUFFER, |cell| {
+            if let Ok(mut kept) = cell.try_borrow_mut()
+                && kept.capacity() < buffer.capacity()
+            {
+                *kept = buffer;
+            }
+        });
     }
-    match read.take() {
-        Some(read) => read(&mut Vec::new()),
-        None => unreachable!("a read that ran returned its result above"),
-    }
+    result
 }
 
 /// `i32 tcp_write_all(i64 stream, List* bytes, IoError* err)`.
@@ -807,7 +818,7 @@ pub(crate) fn waited_child_id(handle: i64) -> Option<i64> {
 /// of the block that registered the handle, or with the task. Not even a
 /// tombstone at the end is dropped: an open block's mark may lie above it.
 fn release(handle: i64, waited_child: Option<i64>) {
-    let _ = OWNED.try_with(|owned| {
+    let _ = fresh::try_with(&OWNED, |owned| {
         let mut owned = owned.borrow_mut();
         if let Some(at) = owned.iter().rposition(|owned| *owned == handle) {
             owned[at] = TOMBSTONE;
@@ -1097,5 +1108,22 @@ mod tests {
             "a stale release left the new handle"
         );
         ignite_rt_tcp_release(second);
+    }
+
+    /// The thread's read buffer is not borrowed while a read through it
+    /// runs: the read may park, another task of the worker reads meanwhile,
+    /// and the parked task may move to another worker at its first read
+    /// (`ignite_io::fresh`). It is taken out and put back, and kept.
+    #[test]
+    fn a_read_through_the_buffer_holds_no_borrow_of_it() {
+        let input = read_through_buffer(16, |buffer: &mut [u8]| -> Result<usize, ()> {
+            let free = READ_BUFFER.with(|cell| cell.try_borrow_mut().is_ok());
+            assert!(free, "the thread's read buffer is borrowed across the read");
+            buffer[..2].copy_from_slice(b"hi");
+            Ok(2)
+        })
+        .unwrap();
+        assert_eq!((input.tag, input.data.len), (0, 2));
+        assert!(READ_BUFFER.with(|cell| cell.borrow().capacity()) >= 16);
     }
 }

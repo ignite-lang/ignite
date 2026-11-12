@@ -111,7 +111,7 @@ pub extern "C" fn ignite_rt_spawn(function: Option<TaskFn>, env: *mut c_void) ->
         let result = ignite_io::try_spawn(move || {
             let (env, transfer) = environment.into_parts();
             let kept = transfer.and_then(adopt);
-            READY.with(|slot| *slot.borrow_mut() = kept);
+            ignite_io::fresh::with(&READY, |slot| *slot.borrow_mut() = kept);
             function(env);
             spawn_ready();
             task_end();
@@ -136,8 +136,7 @@ pub extern "C" fn ignite_rt_spawn_ready() {
 /// task calls from Rust after the task's function returned (as
 /// `arena::task_end`).
 fn spawn_ready() {
-    let transfer = READY
-        .try_with(|slot| slot.borrow_mut().take())
+    let transfer = ignite_io::fresh::try_with(&READY, |slot| slot.borrow_mut().take())
         .ok()
         .flatten();
     drop(transfer);

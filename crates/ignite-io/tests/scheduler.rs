@@ -10,7 +10,8 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::{Command, Output};
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
 
 use ignite_io::{Channel, Input, TcpListener, TcpStream, spawn, wait_for_tasks};
@@ -2442,4 +2443,345 @@ fn child_interrupted_idle_timeout() {
     if !on_thread {
         wait_for_tasks();
     }
+}
+
+// ---- story:readiness-task-stealing, experiment `x-move` ---------------------
+//
+// A task's first park in a read goes to the shared reactor: the worker that
+// owns it gives it up on its own thread, and the worker whose wait returns
+// the readiness event adopts it (`sched.rs`, `docs/readiness-io.md` 4.1).
+
+/// How long the busy task of the scenes below holds its worker at most: what
+/// a read that did not move waits for.
+const BUSY: Duration = Duration::from_secs(3);
+
+/// Hold the calling task's worker, without parking, until `stop` is set or
+/// [`BUSY`] passed.
+fn spin(stop: &AtomicBool) {
+    let end = Instant::now() + BUSY;
+    while !stop.load(Ordering::Acquire) && Instant::now() < end {
+        std::hint::spin_loop();
+    }
+}
+
+fn thread_name() -> String {
+    format!("{:?}", std::thread::current().id())
+}
+
+/// Whether the child runs with the move switched off.
+fn steal_off() -> bool {
+    std::env::var("IGNITE_STEAL").as_deref() == Ok("0")
+}
+
+/// The scene of the moves, on two workers: `session` runs as a task on the
+/// first worker, beside a task it spawned that holds that worker busy until
+/// the session sets the flag it is given (or [`BUSY`] passed). The busy task
+/// runs once the session parked. Then the second worker makes its reactor (a
+/// task there waits alone for a read while as many tasks live as workers)
+/// and sleeps in it after that task ended. Returns the first worker's thread.
+fn beside_a_busy_task(session: impl FnOnce(Arc<AtomicBool>) + Send + 'static) -> String {
+    use std::io::Write;
+    let (told, home) = mpsc::channel::<String>();
+    spawn(move || {
+        let stop = Arc::new(AtomicBool::new(false));
+        let busy = Arc::clone(&stop);
+        spawn(move || {
+            told.send(thread_name()).unwrap();
+            spin(&busy);
+        });
+        session(stop);
+    });
+    let home = home.recv_timeout(LIMIT).expect("the busy task runs");
+    let (other, mut other_peer) = pair();
+    let (done, ended) = mpsc::channel::<String>();
+    spawn(move || {
+        let _ = other.read(16);
+        done.send(thread_name()).unwrap();
+    });
+    std::thread::sleep(Duration::from_millis(100));
+    other_peer.write_all(b"w").unwrap();
+    let second = ended
+        .recv_timeout(LIMIT)
+        .expect("the second worker's task ended");
+    assert_ne!(second, home, "the second task ran on the second worker");
+    std::thread::sleep(Duration::from_millis(100));
+    home
+}
+
+/// A task parked in its first read on a worker that another task holds
+/// busy returns from that read on the other worker, which sleeps, once the
+/// peer writes: the readiness event, waited for on the shared reactor, makes
+/// it runnable there, not a wake. From then on it waits on that worker, for
+/// its socket, a timer and a channel, and the read lock it held across the
+/// move is free. With `IGNITE_STEAL=0` the read returns on its own worker
+/// once the busy task let go of it, as before the move existed.
+#[test]
+fn a_first_read_beside_a_busy_task_is_resumed_by_the_idle_worker() {
+    passed(&child(
+        "scheduler::child_moved_read",
+        &[("IGNITE_WORKERS", "2"), ("IGNITE_STEAL", "1")],
+    ));
+}
+
+#[test]
+fn with_steal_off_a_first_read_stays_on_its_worker() {
+    passed(&child(
+        "scheduler::child_moved_read",
+        &[("IGNITE_WORKERS", "2"), ("IGNITE_STEAL", "0")],
+    ));
+}
+
+#[test]
+fn child_moved_read() {
+    use std::io::Write;
+    if !in_child() {
+        return;
+    }
+    let (stream, mut peer) = pair();
+    let kept = stream.clone();
+    let (report, reports) = mpsc::channel::<String>();
+    let (go, gone) = Channel::bounded::<bool>(1);
+    let home = beside_a_busy_task(move |busy| {
+        stream.set_idle_timeout(LIMIT.as_millis() as i64).unwrap();
+        let first = stream.read(16).unwrap();
+        let moved_to = thread_name();
+        busy.store(true, Ordering::Release);
+        report.send(format!("{first:?} {moved_to}")).unwrap();
+        let second = stream.read(16).unwrap();
+        let read_on = thread_name();
+        ignite_io::clock::sleep(50_000_000);
+        let slept_on = thread_name();
+        let received = gone.receive();
+        let received_on = thread_name();
+        report
+            .send(format!(
+                "{second:?} {received:?} {read_on} {slept_on} {received_on}"
+            ))
+            .unwrap();
+    });
+    let started = Instant::now();
+    peer.write_all(b"one").unwrap();
+    let first = reports
+        .recv_timeout(LIMIT)
+        .expect("the first read returned");
+    let waited = started.elapsed();
+    let (read, moved_to) = first.rsplit_once(' ').unwrap();
+    assert_eq!(read, "Data([111, 110, 101])");
+    if steal_off() {
+        assert_eq!(moved_to, home, "with the move off the read stays");
+        assert!(
+            waited >= BUSY / 2,
+            "with the move off the read waited for the busy task: {waited:?}"
+        );
+    } else {
+        assert_ne!(
+            moved_to, home,
+            "the first read returned on the busy worker after {waited:?}"
+        );
+        assert!(
+            waited < BUSY / 2,
+            "the first read returned after {waited:?}, the busy task holds its worker {BUSY:?}"
+        );
+    }
+    std::thread::sleep(Duration::from_millis(50));
+    peer.write_all(b"two").unwrap();
+    std::thread::sleep(Duration::from_millis(100));
+    go.send(true);
+    let later = reports
+        .recv_timeout(LIMIT)
+        .expect("the later waits returned");
+    assert_eq!(
+        later,
+        format!("Data([116, 119, 111]) Some(true) {moved_to} {moved_to} {moved_to}"),
+        "a moved task waits on the worker it moved to"
+    );
+    peer.write_all(b"three").unwrap();
+    assert_eq!(
+        kept.read(16).unwrap(),
+        Input::Data(b"three".to_vec()),
+        "the read lock the moved task held is free"
+    );
+    drop(peer);
+    wait_for_tasks();
+}
+
+/// A task that moved while its first read waits with an idle timeout still
+/// ends that read at the timeout, on the worker that took it, not after the
+/// busy task let go of its own worker.
+#[test]
+fn a_first_read_that_moved_still_ends_at_its_idle_timeout() {
+    passed(&child(
+        "scheduler::child_moved_read_times_out",
+        &[("IGNITE_WORKERS", "2"), ("IGNITE_STEAL", "1")],
+    ));
+}
+
+#[test]
+fn child_moved_read_times_out() {
+    if !in_child() {
+        return;
+    }
+    let (stream, peer) = pair();
+    let (report, reports) = mpsc::channel::<String>();
+    let home = beside_a_busy_task(move |busy| {
+        let started = Instant::now();
+        stream.set_idle_timeout(600).unwrap();
+        let read = stream.read(16).unwrap();
+        let line = format!(
+            "{read:?} {} {} {}",
+            stream.timed_out(),
+            started.elapsed().as_millis(),
+            thread_name()
+        );
+        busy.store(true, Ordering::Release);
+        report.send(line).unwrap();
+    });
+    let line = reports.recv_timeout(LIMIT).expect("the read ended");
+    let parts: Vec<&str> = line.split(' ').collect();
+    assert_eq!(parts[..2], ["Eof", "true"], "{line}");
+    let waited: u128 = parts[2].parse().unwrap();
+    assert!(
+        (590..BUSY.as_millis() / 2).contains(&waited),
+        "the read ended after {waited} ms: {line}"
+    );
+    assert_ne!(parts[3], home, "{line}");
+    drop(peer);
+    wait_for_tasks();
+}
+
+/// A `catch` that a task opened before its first read moved it still
+/// catches a panic after the move as a catch does: the report names the
+/// panic's place (the hook's record), and the panic hook prints nothing.
+/// The count of open catches is the task's, not its thread's
+/// (`report::swap_catching`): on the worker the task moved to, the count of
+/// that thread would say no catch is open.
+#[test]
+fn a_catch_open_across_a_move_reports_the_panic_with_its_place() {
+    let output = child(
+        "scheduler::child_moved_catch",
+        &[("IGNITE_WORKERS", "2"), ("IGNITE_STEAL", "1")],
+    );
+    passed(&output);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("after the move"),
+        "the panic hook printed a caught panic:\n{stderr}"
+    );
+}
+
+#[test]
+fn child_moved_catch() {
+    use std::io::Write;
+    if !in_child() {
+        return;
+    }
+    let (stream, mut peer) = pair();
+    let (report, reports) = mpsc::channel::<String>();
+    let home = beside_a_busy_task(move |busy| {
+        stream.set_idle_timeout(LIMIT.as_millis() as i64).unwrap();
+        let caught = ignite_io::catch(|| {
+            let _ = stream.read(16);
+            busy.store(true, Ordering::Release);
+            if !thread_name().is_empty() {
+                panic!("after the move");
+            }
+        });
+        let line = format!("{} {:?}", thread_name(), caught.err());
+        report.send(line).unwrap();
+    });
+    peer.write_all(b"one").unwrap();
+    let line = reports.recv_timeout(LIMIT).expect("the catch returned");
+    let (moved_to, caught) = line.split_once(' ').unwrap();
+    assert_ne!(moved_to, home, "the task moved: {line}");
+    assert!(
+        caught.starts_with("Some(\"panic at ") && caught.contains("after the move"),
+        "the caught report: {caught}"
+    );
+    drop(peer);
+    wait_for_tasks();
+}
+
+/// A task that moved takes a free slot of the worker it moved to, so its
+/// timers and its resumes there are its own: a task of that worker sleeping
+/// in the slot the moved task had on its first worker wakes at its own
+/// deadline, not at the moved task's, and the moved task wakes at its own.
+#[test]
+fn a_moved_task_and_a_sleeper_of_its_new_worker_each_wake_at_their_own_deadline() {
+    passed(&child(
+        "scheduler::child_moved_beside_a_sleeper",
+        &[("IGNITE_WORKERS", "2"), ("IGNITE_STEAL", "1")],
+    ));
+}
+
+#[test]
+fn child_moved_beside_a_sleeper() {
+    use std::io::Write;
+    if !in_child() {
+        return;
+    }
+    let (stream, mut peer) = pair();
+    let (report, reports) = mpsc::channel::<String>();
+    let session_report = report.clone();
+    let home = beside_a_busy_task(move |busy| {
+        stream.set_idle_timeout(LIMIT.as_millis() as i64).unwrap();
+        let _ = stream.read(16);
+        busy.store(true, Ordering::Release);
+        let started = Instant::now();
+        ignite_io::clock::sleep(100_000_000);
+        session_report
+            .send(format!(
+                "moved {} {}",
+                thread_name(),
+                started.elapsed().as_millis()
+            ))
+            .unwrap();
+    });
+    spawn(move || {
+        let started = Instant::now();
+        ignite_io::clock::sleep(600_000_000);
+        report
+            .send(format!(
+                "sleeper {} {}",
+                thread_name(),
+                started.elapsed().as_millis()
+            ))
+            .unwrap();
+    });
+    std::thread::sleep(Duration::from_millis(100));
+    peer.write_all(b"one").unwrap();
+    let mut lines: Vec<String> = (0..2)
+        .map(|_| reports.recv_timeout(LIMIT).expect("both tasks woke"))
+        .collect();
+    lines.sort();
+    let moved: Vec<&str> = lines[0].split(' ').collect();
+    let sleeper: Vec<&str> = lines[1].split(' ').collect();
+    assert_eq!((moved[0], sleeper[0]), ("moved", "sleeper"), "{lines:?}");
+    assert_ne!(moved[1], home, "the task moved: {lines:?}");
+    assert_eq!(moved[1], sleeper[1], "both on the second worker: {lines:?}");
+    let moved_ms: u128 = moved[2].parse().unwrap();
+    let sleeper_ms: u128 = sleeper[2].parse().unwrap();
+    assert!((95..500).contains(&moved_ms), "{lines:?}");
+    assert!((595..1500).contains(&sleeper_ms), "{lines:?}");
+    drop(peer);
+    wait_for_tasks();
+}
+
+/// A stream's read lock (`wait::Lock`) taken on one thread is released by
+/// its guard's drop on another, and is free after: a task holds the lock of
+/// its read across the park that may move it.
+#[test]
+fn a_lock_guard_dropped_on_another_thread_releases_the_lock() {
+    let lock = ignite_io::wait::Lock::new(1u32);
+    let guard = lock.lock();
+    assert!(lock.try_lock().is_none());
+    std::thread::scope(|scope| {
+        scope
+            .spawn(move || {
+                let mut guard = guard;
+                *guard += 1;
+            })
+            .join()
+            .unwrap();
+    });
+    assert_eq!(lock.try_lock().map(|guard| *guard), Some(2));
 }

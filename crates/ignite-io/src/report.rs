@@ -105,8 +105,16 @@ thread_local! {
     /// The report of the last Rust panic on this thread, written by the
     /// panic hook and taken by the catcher.
     static LAST_PANIC: RefCell<Option<String>> = const { RefCell::new(None) };
-    /// How many [`catch`] calls are open on this thread.
+    /// How many [`catch`] calls are open on this thread: the running
+    /// task's on a worker, which keeps its count while it does not run
+    /// ([`swap_catching`]), as a task may move to another worker.
     static CATCHING: Cell<usize> = const { Cell::new(0) };
+}
+
+/// Exchange the count of open [`catch`] calls of this thread with
+/// `saved`: a worker's, around each resume of a task (`crate::sched`).
+pub(crate) fn swap_catching(saved: &mut usize) {
+    CATCHING.with(|depth| *saved = depth.replace(*saved));
 }
 
 static HOOK: Once = Once::new();
@@ -174,19 +182,22 @@ pub fn report_of(payload: &(dyn Any + Send)) -> String {
     if let Some(failure) = payload.downcast_ref::<Failure>() {
         return failure.report.clone();
     }
-    LAST_PANIC
-        .try_with(|last| last.borrow_mut().take())
+    crate::fresh::try_with(&LAST_PANIC, |last| last.borrow_mut().take())
         .ok()
         .flatten()
         .unwrap_or_else(|| format!("panic: {}", panic_message(payload)))
 }
 
 /// Run `f` on this thread, catching a failure or panic as its report.
+/// The count of open catches is reached through [`crate::fresh`] on both
+/// sides of `f`: a task may move to another thread in `f`.
 pub fn catch<T>(f: impl FnOnce() -> T) -> Result<T, String> {
     install_hook();
-    let _ = CATCHING.try_with(|depth| depth.set(depth.get() + 1));
+    let _ = crate::fresh::try_with(&CATCHING, |depth| depth.set(depth.get() + 1));
     let result = std::panic::catch_unwind(AssertUnwindSafe(f));
-    let _ = CATCHING.try_with(|depth| depth.set(depth.get().saturating_sub(1)));
+    let _ = crate::fresh::try_with(&CATCHING, |depth| {
+        depth.set(depth.get().saturating_sub(1));
+    });
     result.map_err(|payload| report_of(&*payload))
 }
 

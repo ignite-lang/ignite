@@ -226,14 +226,15 @@ thread_local! {
 }
 
 fn heap_add(bytes: i64) {
-    let at = BLOCK
-        .try_with(|block| {
-            if block.get() == usize::MAX {
-                block.set(NEXT_BLOCK.fetch_add(1, Ordering::Relaxed) % BLOCKS);
-            }
-            block.get()
-        })
-        .unwrap_or(0);
+    // Through `fresh`: an allocation inlined into a task's frame must not
+    // reuse the thread-local's address of a thread the task left.
+    let at = crate::fresh::try_with(&BLOCK, |block| {
+        if block.get() == usize::MAX {
+            block.set(NEXT_BLOCK.fetch_add(1, Ordering::Relaxed) % BLOCKS);
+        }
+        block.get()
+    })
+    .unwrap_or(0);
     HEAP[at].0.fetch_add(bytes, Ordering::Relaxed);
 }
 

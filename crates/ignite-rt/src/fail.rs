@@ -88,7 +88,7 @@ impl TaskHandlers {
 }
 
 fn push(handler: Handler) {
-    let _ = HANDLERS.try_with(|handlers| handlers.borrow_mut().push(handler));
+    let _ = ignite_io::fresh::try_with(&HANDLERS, |handlers| handlers.borrow_mut().push(handler));
 }
 
 /// `void guard_push(ptr jb)`: register the jump buffer `jb` of a task-entry
@@ -119,7 +119,7 @@ pub extern "C" fn ignite_rt_guard_callback(jb: *mut c_void) {
 #[unsafe(no_mangle)]
 pub extern "C" fn ignite_rt_guard_pop() {
     crate::entry(move || {
-        let _ = HANDLERS.try_with(|handlers| handlers.borrow_mut().pop());
+        let _ = ignite_io::fresh::try_with(&HANDLERS, |handlers| handlers.borrow_mut().pop());
     })
 }
 
@@ -127,8 +127,7 @@ pub extern "C" fn ignite_rt_guard_pop() {
 /// stopped, once the runtime entry that called the callback has released
 /// what it held.
 pub(crate) fn resume() -> ! {
-    let report = PENDING
-        .try_with(|pending| pending.borrow_mut().take())
+    let report = ignite_io::fresh::try_with(&PENDING, |pending| pending.borrow_mut().take())
         .ok()
         .flatten()
         .unwrap_or_else(|| String::from("a callback failed without a report"));
@@ -146,12 +145,12 @@ fn text(value: *const IgniteList) -> String {
 /// [`FAILURE_EXIT_CODE`]. When the innermost guard is a callback guard,
 /// keep `report` for [`resume`] and jump back to the callback instead.
 pub(crate) fn fail(report: String) -> ! {
-    let handler = HANDLERS
-        .try_with(|handlers| handlers.borrow_mut().pop())
+    let handler = ignite_io::fresh::try_with(&HANDLERS, |handlers| handlers.borrow_mut().pop())
         .ok()
         .flatten();
     if let Some(guard @ Handler { callback: true, .. }) = handler {
-        let _ = PENDING.try_with(|pending| *pending.borrow_mut() = Some(report));
+        let _ =
+            ignite_io::fresh::try_with(&PENDING, |pending| *pending.borrow_mut() = Some(report));
         guard.jump()
     }
     net::release_task_handles();

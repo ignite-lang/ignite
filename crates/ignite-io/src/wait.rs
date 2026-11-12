@@ -136,8 +136,7 @@ impl Waiter {
         if let Some(task) = sched::running() {
             return task;
         }
-        CURRENT
-            .try_with(Waiter::clone)
+        crate::fresh::try_with(&CURRENT, Waiter::clone)
             .unwrap_or_else(|_| Waiter::for_thread(std::thread::current()))
     }
 
@@ -580,40 +579,46 @@ pub(crate) fn wait_within(
 /// its read lock, a send for room holding the write lock). Not poisoned
 /// by a panic.
 ///
-/// The value sits in a `std::sync::Mutex` that is only ever taken with
-/// `try_lock`, so no thread blocks in it; a guard is dropped on the thread
-/// that took it, because a task never moves to another worker.
+/// The value is taken out of the lock by the guard and put back by its
+/// drop, not reached through a `std::sync::MutexGuard`: a task that holds
+/// the lock across its first read's park may move to another worker
+/// (`crate::sched`) and release it there, and a `MutexGuard` must be
+/// dropped on the thread that took it. The `std::sync::Mutex` around the
+/// value is held only while the value is taken or put back, so no thread
+/// blocks in it longer.
 pub struct Lock<T> {
-    value: Mutex<T>,
+    /// The value while no guard is out; `None` while one is.
+    value: Mutex<Option<T>>,
     /// Waiters queued on `waiters`, so an unlock looks at the list only
     /// when someone waits.
     waiting: AtomicUsize,
     waiters: Mutex<WaitList>,
 }
 
-/// The holder of a [`Lock`]; dropping it releases the lock.
+/// The holder of a [`Lock`], with its value; dropping it puts the value
+/// back and releases the lock, on whichever thread.
 pub struct LockGuard<'a, T> {
-    guard: Option<MutexGuard<'a, T>>,
+    value: Option<T>,
     lock: &'a Lock<T>,
 }
 
 impl<T> Lock<T> {
     pub const fn new(value: T) -> Lock<T> {
         Lock {
-            value: Mutex::new(value),
+            value: Mutex::new(Some(value)),
             waiting: AtomicUsize::new(0),
             waiters: Mutex::new(WaitList::new()),
         }
     }
 
     fn acquire(&self) -> Option<LockGuard<'_, T>> {
-        let guard = match self.value.try_lock() {
-            Ok(guard) => guard,
-            Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
-            Err(TryLockError::WouldBlock) => return None,
-        };
+        let value = self
+            .value
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .take()?;
         Some(LockGuard {
-            guard: Some(guard),
+            value: Some(value),
             lock: self,
         })
     }
@@ -646,7 +651,11 @@ impl<T> Lock<T> {
 
     /// The value, through the exclusive borrow that proves no guard is out.
     pub fn get_mut(&mut self) -> &mut T {
-        self.value.get_mut().unwrap_or_else(PoisonError::into_inner)
+        self.value
+            .get_mut()
+            .unwrap_or_else(PoisonError::into_inner)
+            .as_mut()
+            .expect("no guard is out while the lock is borrowed exclusively")
     }
 }
 
@@ -658,11 +667,13 @@ impl<T: Default> Default for Lock<T> {
 
 impl<T: fmt::Debug> fmt::Debug for Lock<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let held = match self.value.try_lock() {
+            Ok(value) => value.is_none(),
+            Err(TryLockError::Poisoned(value)) => value.into_inner().is_none(),
+            Err(TryLockError::WouldBlock) => true,
+        };
         f.debug_struct("Lock")
-            .field(
-                "held",
-                &matches!(self.value.try_lock(), Err(TryLockError::WouldBlock)),
-            )
+            .field("held", &held)
             .finish_non_exhaustive()
     }
 }
@@ -670,21 +681,28 @@ impl<T: fmt::Debug> fmt::Debug for Lock<T> {
 impl<T> Deref for LockGuard<'_, T> {
     type Target = T;
     fn deref(&self) -> &T {
-        self.guard.as_deref().expect("a lock guard holds its lock")
+        self.value.as_ref().expect("a lock guard holds its value")
     }
 }
 
 impl<T> DerefMut for LockGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut T {
-        self.guard
-            .as_deref_mut()
-            .expect("a lock guard holds its lock")
+        self.value.as_mut().expect("a lock guard holds its value")
     }
 }
 
+/// The value goes back under the mutex, whose release and the next
+/// `acquire` order it: a waiter that counted itself in `waiting` before
+/// its `acquire` found nothing is seen by the `waiting` load below, as that
+/// `acquire` took the mutex before this put back.
 impl<T> Drop for LockGuard<'_, T> {
     fn drop(&mut self) {
-        drop(self.guard.take());
+        let value = self.value.take();
+        *self
+            .lock
+            .value
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = value;
         if self.lock.waiting.load(Ordering::SeqCst) > 0 {
             self.lock
                 .waiters

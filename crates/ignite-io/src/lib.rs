@@ -136,9 +136,7 @@ fn read_input<E>(
         buffer.truncate(count);
         return Ok(Input::Data(buffer));
     }
-    let mut buffer = READ_SCRATCH
-        .try_with(std::cell::Cell::take)
-        .unwrap_or_default();
+    let mut buffer = fresh::try_with(&READ_SCRATCH, std::cell::Cell::take).unwrap_or_default();
     if buffer.len() < size {
         buffer.resize(size, 0);
     }
@@ -146,7 +144,9 @@ fn read_input<E>(
         0 => Input::Eof,
         count => Input::Data(buffer[..count].to_vec()),
     });
-    let _ = READ_SCRATCH.try_with(|scratch| scratch.set(buffer));
+    // Through `fresh`, as the take above: the read may have moved the
+    // task to another thread, whose buffer this becomes.
+    let _ = fresh::try_with(&READ_SCRATCH, |scratch| scratch.set(buffer));
     read
 }
 
@@ -1140,6 +1140,9 @@ pub mod wait;
 // `docs/readiness-io.md` 4.1, 4.3 to 4.6 (phase R1): stackful tasks on
 // epoll workers, the IO mode `readiness`.
 mod sched;
+// Thread-locals read through calls that are never inlined, as a task may
+// move to another worker (`story:readiness-task-stealing`).
+pub mod fresh;
 // The one place a signal's disposition is changed.
 pub mod signal;
 pub use sched::{
@@ -1165,8 +1168,13 @@ pub fn at_exit(hook: fn()) {
 }
 
 /// Run and forget every hook [`at_exit`] registered; a later call runs
-/// only hooks registered since.
+/// only hooks registered since. With `IGNITE_SCHEDULER_COUNTS` set, the
+/// [`scheduler_counts`] go to standard error first: the moves of a server
+/// that a run ended (`story:readiness-task-stealing`), as counts.
 pub fn run_exit_hooks() {
+    if std::env::var_os("IGNITE_SCHEDULER_COUNTS").is_some() {
+        log(&format!("scheduler counts: {:?}", scheduler_counts()));
+    }
     let hooks = std::mem::take(
         &mut *EXIT_HOOKS
             .lock()

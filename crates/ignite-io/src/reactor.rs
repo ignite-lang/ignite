@@ -424,7 +424,7 @@ fn another_descriptor() -> io::Error {
 const WAKE: u64 = 0;
 
 /// Events [`EpollReactor::wait`] takes from the kernel per call.
-const BATCH: usize = 64;
+pub(crate) const BATCH: usize = 64;
 
 /// epoll plus an `eventfd` for wakes (`docs/readiness-io.md` 4.3). Every
 /// descriptor is registered edge-triggered for its interest, so a
@@ -517,15 +517,117 @@ impl EpollReactor {
         descriptor: BorrowedFd<'_>,
         interest: Interest,
     ) -> io::Result<()> {
+        self.modify(token, descriptor, interest, EpollFlags::EPOLLET)
+    }
+
+    fn modify(
+        &self,
+        token: Token,
+        descriptor: BorrowedFd<'_>,
+        interest: Interest,
+        mode: EpollFlags,
+    ) -> io::Result<()> {
         let mut entries = lock(&self.entries);
         let Some(entry) = entries.get_mut(token.0) else {
             return Ok(());
         };
-        let flags = interest.epoll() | EpollFlags::EPOLLET;
+        let flags = interest.epoll() | mode;
         self.epoll
             .modify(descriptor, &mut EpollEvent::new(flags, token.0))?;
         entry.interest = interest;
         Ok(())
+    }
+
+    /// The epoll instance, to register it with another reactor: that one
+    /// reports an event of its own while this one has events to take
+    /// (`crate::sched`, the shared reactor of a task's first read).
+    pub(crate) fn as_fd(&self) -> BorrowedFd<'_> {
+        self.epoll.0.as_fd()
+    }
+
+    /// [`Reactor::register`] for one event: the kernel reports the first
+    /// and then nothing until [`EpollReactor::rearm_once`]
+    /// (`EPOLLONESHOT`), so a registration that is done with needs no
+    /// `EPOLL_CTL_DEL`; the close of the descriptor takes it out.
+    pub(crate) fn register_once(
+        &self,
+        descriptor: BorrowedFd<'_>,
+        interest: Interest,
+        waiter: Waiter,
+    ) -> io::Result<Token> {
+        self.add(
+            descriptor,
+            interest,
+            waiter,
+            EpollFlags::EPOLLET | EpollFlags::EPOLLONESHOT,
+        )
+    }
+
+    /// [`EpollReactor::rearm`] of a registration made with
+    /// [`EpollReactor::register_once`], for one more event.
+    pub(crate) fn rearm_once(
+        &self,
+        token: Token,
+        descriptor: BorrowedFd<'_>,
+        interest: Interest,
+    ) -> io::Result<()> {
+        self.modify(
+            token,
+            descriptor,
+            interest,
+            EpollFlags::EPOLLET | EpollFlags::EPOLLONESHOT,
+        )
+    }
+
+    /// [`Reactor::wait`] that does not wait: the events ready now; how
+    /// many the kernel returned, wakes included, so a caller that got
+    /// [`BATCH`] knows to look again.
+    pub(crate) fn poll_now(&self, events: &mut Vec<Event>) -> io::Result<usize> {
+        self.take(PollTimeout::ZERO, events)
+    }
+
+    fn add(
+        &self,
+        descriptor: BorrowedFd<'_>,
+        interest: Interest,
+        waiter: Waiter,
+        mode: EpollFlags,
+    ) -> io::Result<Token> {
+        let mut entries = lock(&self.entries);
+        let token = entries.insert(Entry {
+            descriptor: descriptor.as_raw_fd(),
+            interest,
+            waiter,
+        });
+        let flags = interest.epoll() | mode;
+        if let Err(error) = self.epoll.add(descriptor, EpollEvent::new(flags, token)) {
+            entries.remove(token);
+            return Err(error.into());
+        }
+        Ok(Token(token))
+    }
+
+    fn take(&self, timeout: PollTimeout, events: &mut Vec<Event>) -> io::Result<usize> {
+        let mut ready = [EpollEvent::empty(); BATCH];
+        let count = match self.epoll.wait(&mut ready, timeout) {
+            Ok(count) => count,
+            Err(Errno::EINTR) => return Ok(0),
+            Err(error) => return Err(error.into()),
+        };
+        let entries = lock(&self.entries);
+        for event in &ready[..count] {
+            if event.data() == WAKE {
+                continue;
+            }
+            if let Some(entry) = entries.get(event.data()) {
+                events.push(Event {
+                    token: Token(event.data()),
+                    waiter: entry.waiter.clone(),
+                    ready: Interest::of_epoll(event.events()),
+                });
+            }
+        }
+        Ok(count)
     }
 }
 
@@ -544,18 +646,7 @@ impl Reactor for EpollReactor {
         interest: Interest,
         waiter: Waiter,
     ) -> io::Result<Token> {
-        let mut entries = lock(&self.entries);
-        let token = entries.insert(Entry {
-            descriptor: descriptor.as_raw_fd(),
-            interest,
-            waiter,
-        });
-        let flags = interest.epoll() | EpollFlags::EPOLLET;
-        if let Err(error) = self.epoll.add(descriptor, EpollEvent::new(flags, token)) {
-            entries.remove(token);
-            return Err(error.into());
-        }
-        Ok(Token(token))
+        self.add(descriptor, interest, waiter, EpollFlags::EPOLLET)
     }
 
     fn deregister(&self, token: Token, descriptor: BorrowedFd<'_>) -> io::Result<()> {
@@ -572,26 +663,7 @@ impl Reactor for EpollReactor {
     }
 
     fn wait(&self, deadline: Option<Instant>, events: &mut Vec<Event>) -> io::Result<()> {
-        let mut ready = [EpollEvent::empty(); BATCH];
-        let count = match self.epoll.wait(&mut ready, timeout(deadline)) {
-            Ok(count) => count,
-            Err(Errno::EINTR) => return Ok(()),
-            Err(error) => return Err(error.into()),
-        };
-        let entries = lock(&self.entries);
-        for event in &ready[..count] {
-            if event.data() == WAKE {
-                continue;
-            }
-            if let Some(entry) = entries.get(event.data()) {
-                events.push(Event {
-                    token: Token(event.data()),
-                    waiter: entry.waiter.clone(),
-                    ready: Interest::of_epoll(event.events()),
-                });
-            }
-        }
-        Ok(())
+        self.take(timeout(deadline), events).map(|_| ())
     }
 
     fn wake(&self) -> io::Result<()> {

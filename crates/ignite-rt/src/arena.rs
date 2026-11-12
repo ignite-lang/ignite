@@ -44,7 +44,7 @@
 //! 30.6k page faults against 1.0k for plain Rust, 2026-11-08).
 
 use std::alloc::Layout;
-use std::cell::{RefCell, UnsafeCell};
+use std::cell::{Cell, RefCell, UnsafeCell};
 use std::ffi::c_void;
 use std::num::NonZeroUsize;
 use std::ptr::NonNull;
@@ -595,22 +595,39 @@ pub(crate) fn transfer_end() -> Option<Transfer> {
 thread_local! {
     static TASK: RefCell<Task> = const { RefCell::new(Task::new()) };
     static STATE: UnsafeCell<State> = const { UnsafeCell::new(State::EMPTY) };
+    /// The bump state of the task running on this worker, null for the
+    /// thread's own ([`TaskArena::swap`]).
+    static CURRENT: Cell<*mut State> = const { Cell::new(std::ptr::null_mut()) };
 }
 
+/// The bump state of the running task: on a worker the task's own, which
+/// stays at one address wherever the task runs, else the thread's.
+///
+/// Never inlined: it reads the thread-locals of the thread it runs on. A
+/// task may move to another worker at its first read
+/// (`ignite_io::fresh`), and a caller that inlined it could reuse the
+/// thread-locals' addresses of the thread the task left.
+#[inline(never)]
 fn state() -> *mut State {
-    STATE.with(UnsafeCell::get)
+    let current = CURRENT.with(Cell::get);
+    if current.is_null() {
+        STATE.with(UnsafeCell::get)
+    } else {
+        current
+    }
 }
 
 /// Chunks a worker thread keeps between its tasks (IO mode `readiness`),
 /// for the arenas of the tasks it starts next.
 const SPARE_PER_WORKER: usize = 4;
 
-/// A task's arenas and bump state while another task runs on its worker
-/// (`ignite_io::TaskLocals`, IO mode `readiness`): [`TaskArena::swap`]
-/// exchanges them with this thread's, so `TASK` and `STATE` always hold
-/// the running task's. The address of `STATE` stays the thread's, which
-/// generated code may keep for the life of a function: a task never moves
-/// to another worker, and its state is back in `STATE` whenever it runs.
+/// A task's arenas and bump state (`ignite_io::TaskLocals`, IO mode
+/// `readiness`): [`TaskArena::swap`] exchanges its arenas with this
+/// thread's `TASK`, so `TASK` holds the running task's, and points
+/// `CURRENT` at its bump state while it runs. The bump state stays in the
+/// task, at one address, which generated code may keep for the life of a
+/// function ([`ignite_rt_arena_state`]): a task may move to another worker
+/// at its first read, and the address it kept is its own there too.
 pub(crate) struct TaskArena {
     task: Task,
     state: State,
@@ -633,7 +650,10 @@ impl TaskArena {
         }
     }
 
-    /// Exchange the saved arenas and bump state with this thread's.
+    /// Exchange the saved arenas with this thread's, and make the task's
+    /// bump state the current one, or the thread's again if it was. Runs
+    /// on the worker, where the `TaskArena` stays at one address while the
+    /// task lives (in its locals' box).
     pub(crate) fn swap(&mut self) {
         TASK.with(|task| {
             let mut task = task
@@ -641,7 +661,14 @@ impl TaskArena {
                 .unwrap_or_else(|_| crate::process::die("a task switch inside the arena"));
             std::mem::swap(&mut *task, &mut self.task);
         });
-        with_state(|state| std::mem::swap(state, &mut self.state));
+        let mine: *mut State = &raw mut self.state;
+        CURRENT.with(|current| {
+            current.set(if current.get() == mine {
+                std::ptr::null_mut()
+            } else {
+                mine
+            });
+        });
     }
 }
 
@@ -683,7 +710,9 @@ fn with_state<R>(f: impl FnOnce(&mut State) -> R) -> R {
 /// state: the cursor is taken into the current arena before and the state
 /// republished after. `None` once the thread's task storage is gone.
 fn with_task<R>(f: impl FnOnce(&mut Task) -> R) -> Option<R> {
-    TASK.try_with(|task| {
+    // Through `fresh`: generic, so inlined into its callers, and a task may
+    // move to another thread between two of them (`state`).
+    ignite_io::fresh::try_with(&TASK, |task| {
         let mut task = task.borrow_mut();
         // SAFETY: the state is this thread's, and generated code does not
         // run while the runtime holds this reference.
@@ -762,8 +791,9 @@ pub fn arena_reserved() -> usize {
     with_task(|task| task.arena.reserved + task.scratch.reserved).unwrap_or(0)
 }
 
-/// `ptr arena_state()`: this thread's [`State`]. The address is fixed for
-/// the life of the thread; generated code may read it once per function.
+/// `ptr arena_state()`: the running task's [`State`] ([`state`]). The
+/// address is fixed for the life of the task (of the thread, off a
+/// worker); generated code may read it once per function.
 ///
 /// Not guarded (`crate::contain`): it cannot panic. `STATE` is a `const`
 /// thread-local whose type needs no drop, so it registers no destructor,
@@ -1168,5 +1198,27 @@ mod tests {
         ignite_rt_task_end();
         assert_eq!(ignite_rt_arena_mark(), 0);
         assert_eq!(position(state), 0);
+    }
+
+    /// The bump state generated code reaches through `arena_state`, and may
+    /// keep for the life of a function, is the running task's own: two
+    /// tasks on one thread have two, each in the task's arenas, so the
+    /// address stays the task's when it moves to another worker at its
+    /// first read; off a task it is the thread's.
+    #[test]
+    fn the_arena_state_is_the_tasks_own() {
+        let mut one = Box::new(TaskArena::new());
+        let mut two = Box::new(TaskArena::new());
+        let own = ignite_rt_arena_state();
+        one.swap();
+        let first = ignite_rt_arena_state();
+        one.swap();
+        two.swap();
+        let second = ignite_rt_arena_state();
+        two.swap();
+        assert_eq!(ignite_rt_arena_state(), own);
+        assert_ne!(first, second, "two tasks on one thread share a bump state");
+        assert_eq!(first, &raw mut one.state, "the state is not the task's own");
+        assert_eq!(second, &raw mut two.state);
     }
 }

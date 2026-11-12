@@ -295,25 +295,26 @@ thread_local! {
 /// task's list in place when it resumes the task and takes it back when
 /// the task parks or ends (`crate::sched`).
 pub(crate) fn swap_pending(list: &mut Pending) {
-    let _ = PENDING.try_with(|pending| std::mem::swap(&mut *pending.borrow_mut(), list));
+    let _ = crate::fresh::try_with(&PENDING, |pending| {
+        std::mem::swap(&mut *pending.borrow_mut(), list);
+    });
 }
 
 /// Register `stream` with the current task's pending list, once. `false`
 /// when the thread's list is already gone (the thread is ending): the
 /// caller sends at once.
 pub(crate) fn register<T: Buffered + 'static>(stream: &Arc<T>) -> bool {
-    PENDING
-        .try_with(|pending| {
-            let pending = &mut pending.borrow_mut().0;
-            if !pending
-                .iter()
-                .any(|known| std::ptr::addr_eq(Weak::as_ptr(known), Arc::as_ptr(stream)))
-            {
-                let weak: Weak<T> = Arc::downgrade(stream);
-                pending.push(weak);
-            }
-        })
-        .is_ok()
+    crate::fresh::try_with(&PENDING, |pending| {
+        let pending = &mut pending.borrow_mut().0;
+        if !pending
+            .iter()
+            .any(|known| std::ptr::addr_eq(Weak::as_ptr(known), Arc::as_ptr(stream)))
+        {
+            let weak: Weak<T> = Arc::downgrade(stream);
+            pending.push(weak);
+        }
+    })
+    .is_ok()
 }
 
 /// How long [`flush_at_exit`] waits in all, across every stream, for write
@@ -328,9 +329,10 @@ pub(crate) const EXIT_FLUSH: Duration = Duration::from_millis(100);
 /// rest is lost with the process.
 pub(crate) fn flush_at_exit() {
     let deadline = Instant::now() + EXIT_FLUSH;
-    let pending = PENDING
-        .try_with(|pending| std::mem::take(&mut pending.borrow_mut().0))
-        .unwrap_or_default();
+    let pending = crate::fresh::try_with(&PENDING, |pending| {
+        std::mem::take(&mut pending.borrow_mut().0)
+    })
+    .unwrap_or_default();
     for stream in pending.into_iter().filter_map(|weak| weak.upgrade()) {
         stream.flush_at_exit(deadline);
     }
@@ -368,13 +370,14 @@ const KEPT_PENDING: usize = 8;
 /// does not allocate a list again (an allocation per server's reply,
 /// counted by `reply_cost::a_get_reply_allocates_no_more_than_at_v0_15_0`).
 pub fn flush() {
-    let mut pending = PENDING
-        .try_with(|pending| std::mem::take(&mut pending.borrow_mut().0))
-        .unwrap_or_default();
+    let mut pending = crate::fresh::try_with(&PENDING, |pending| {
+        std::mem::take(&mut pending.borrow_mut().0)
+    })
+    .unwrap_or_default();
     for stream in pending.drain(..).filter_map(|weak| weak.upgrade()) {
         stream.flush_kept();
     }
-    let _ = PENDING.try_with(|list| {
+    let _ = crate::fresh::try_with(&PENDING, |list| {
         let mut list = list.borrow_mut();
         if list.0.is_empty() && pending.capacity() <= KEPT_PENDING {
             std::mem::swap(&mut list.0, &mut pending);
@@ -952,7 +955,7 @@ impl TcpStream {
         let mut wait = || {
             self.inner
                 .readiness
-                .wait(socket.as_fd(), Interest::READ, mark, limit)
+                .wait_to_read(socket.as_fd(), mark, limit)
         };
         let waited = if self.inner.kept {
             crate::task::idle_on_kept(wait)

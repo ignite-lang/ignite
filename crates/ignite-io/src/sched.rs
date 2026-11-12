@@ -31,11 +31,24 @@
 //! that worker is at most one task busier than the least loaded one;
 //! otherwise a spawn goes to a worker without tasks, else to a new worker
 //! while there are fewer than the limit, else to the worker with the
-//! fewest tasks. A task never moves to another
-//! worker (no stealing in R1), so the thread-local state a task keeps
-//! across a park stays on its thread; per-task thread-locals of another
-//! crate (the LLVM runtime's arena, failure handlers and owned handles)
-//! are exchanged whenever a different task resumes, through [`TaskLocals`].
+//! fewest tasks. Per-task thread-locals of another crate (the LLVM
+//! runtime's arena, failure handlers and owned handles) and of this one
+//! (the pending writes, the open `catch`es) are exchanged whenever a
+//! different task resumes, through [`TaskLocals`].
+//!
+//! The move (`story:readiness-task-stealing`, experiment; `IGNITE_STEAL=0`
+//! switches it off): a task that waits in its first read while its worker
+//! has another task waits for that read on the shared reactor
+//! ([`shared`]) instead of its worker's. Its worker gives it up on its own
+//! thread once the task parked ([`Worker::give_up`]: its locals swapped
+//! out, its timer forgotten, its slot freed, its coroutine put into the
+//! task; it counts among that worker's tasks until it is adopted), and
+//! the worker whose wait returns the
+//! readiness event, a timer of the task's deadline or a wake adopts it
+//! ([`Worker::adopt`]). A task moves at most once; its later parks are on
+//! the worker that adopted it. No thread reaches into another worker's
+//! slots, timers or thread-locals. How sleeping workers wait on the shared
+//! instance is [`watch_shared`].
 //!
 //! Stack overflow: a task's guard page is recognised by the `SIGSEGV`
 //! handler (`crate::signal`) installed with the first worker, which runs
@@ -66,6 +79,7 @@ use corosensei::stack::{DefaultStack, Stack};
 use corosensei::{Coroutine, CoroutineResult, Yielder};
 use nix::sys::eventfd::EventFd;
 
+use crate::fresh;
 use crate::reactor::{EpollReactor, Event, Interest, Reactor, Token};
 use crate::wait::{DescriptorWait, Limit, WaitList, Waiter, Woken, wake_ready};
 
@@ -92,6 +106,13 @@ pub fn io_mode() -> IoMode {
 /// Whether tasks run on workers.
 pub(crate) fn readiness() -> bool {
     io_mode() == IoMode::Readiness
+}
+
+/// Whether a task may move at its first read (module docs): not with
+/// `IGNITE_STEAL=0` when the process starts.
+pub(crate) fn steal() -> bool {
+    static STEAL: OnceLock<bool> = OnceLock::new();
+    *STEAL.get_or_init(|| std::env::var("IGNITE_STEAL").as_deref() != Ok("0"))
 }
 
 /// The most workers the process starts: `IGNITE_WORKERS` when it is a
@@ -185,6 +206,15 @@ pub struct SchedulerCounts {
     /// stream that waits alone on its thread makes none for its idle
     /// timeout (`crate::wait::Limit`). Counted in both IO modes.
     pub clock_reads: u64,
+    /// Tasks a worker gave up at their first read (module docs).
+    pub tasks_given_up: u64,
+    /// Tasks given up that a worker adopted, and of those, the ones a
+    /// worker other than the one that gave them up adopted.
+    pub tasks_adopted: u64,
+    pub tasks_moved: u64,
+    /// Waits of a worker on the shared reactor ([`watch_shared`]) that
+    /// found no event.
+    pub shared_polls_empty: u64,
 }
 
 /// The counts behind [`scheduler_counts`].
@@ -200,6 +230,10 @@ struct Counters {
     notifies_sent: AtomicU64,
     accept_waits: AtomicU64,
     clock_reads: AtomicU64,
+    tasks_given_up: AtomicU64,
+    tasks_adopted: AtomicU64,
+    tasks_moved: AtomicU64,
+    shared_polls_empty: AtomicU64,
 }
 
 static COUNTERS: Counters = Counters {
@@ -214,6 +248,10 @@ static COUNTERS: Counters = Counters {
     notifies_sent: AtomicU64::new(0),
     accept_waits: AtomicU64::new(0),
     clock_reads: AtomicU64::new(0),
+    tasks_given_up: AtomicU64::new(0),
+    tasks_adopted: AtomicU64::new(0),
+    tasks_moved: AtomicU64::new(0),
+    shared_polls_empty: AtomicU64::new(0),
 };
 
 fn count(counter: &AtomicU64) {
@@ -253,6 +291,10 @@ pub fn scheduler_counts() -> SchedulerCounts {
         notifies_sent: read(&c.notifies_sent),
         accept_waits: read(&c.accept_waits),
         clock_reads: read(&c.clock_reads),
+        tasks_given_up: read(&c.tasks_given_up),
+        tasks_adopted: read(&c.tasks_adopted),
+        tasks_moved: read(&c.tasks_moved),
+        shared_polls_empty: read(&c.shared_polls_empty),
     }
 }
 
@@ -281,17 +323,80 @@ const PARKED: u8 = 1;
 const QUEUED: u8 = 2;
 const DONE: u8 = 3;
 
+/// Where a task is (module docs): on the worker it was placed on, being
+/// given up by it (set by the task before the park that gives it up, read
+/// by the worker after it), given up and not adopted, or adopted.
+const HOME: u8 = 0;
+const LEAVING: u8 = 1;
+const ADRIFT: u8 = 2;
+const MOVED: u8 = 3;
+
 /// The scheduler's part of a task's [`Waiter`].
 pub(crate) struct Task {
-    worker: Arc<Shared>,
+    /// The worker the task was placed on.
+    first: Arc<Shared>,
+    /// The worker that adopted it, once it was given up: set once, as a
+    /// task moves at most once.
+    moved: OnceLock<Arc<Shared>>,
     state: AtomicU8,
     /// Readiness bits of the events since the task's last descriptor wait.
     ready: AtomicU8,
-    /// The task's place in its worker's table.
-    slot: usize,
+    /// The task's place in its worker's table; set again by the worker
+    /// that adopts it, before it runs the task.
+    slot: AtomicUsize,
+    /// [`HOME`], [`LEAVING`], [`ADRIFT`] or [`MOVED`].
+    phase: AtomicU8,
+    /// The task has not begun its first read's wait: the one wait that
+    /// may move it.
+    first_read: AtomicBool,
+    /// The task while it is adrift: its coroutine and locals, put here by
+    /// the worker that gave it up and taken by the one that adopts it.
+    carried: Mutex<Carried>,
 }
 
+/// A task between two workers ([`Task::carried`]).
+struct Carried {
+    local: Option<Local>,
+    /// The deadline of the park it is given up in, set by the task before
+    /// that park, kept in [`DRIFTING`] while it is adrift.
+    deadline: Option<Instant>,
+}
+
+// SAFETY: a `Carried` holds a task that is parked and not running: its
+// coroutine (`!Send` because it may hold thread-bound values on its stack),
+// the yielder pointer into that stack, its `TaskLocals` and pending writes.
+// One worker puts it into `Task::carried` after the coroutine yielded on
+// that worker (`Worker::give_up`), and exactly one worker takes it out
+// (`Worker::adopt`): the one whose `enqueue` follows the one successful
+// PARKED to QUEUED exchange of the task's state (`Task::queue`), so no two
+// threads hold it, and none resumes it while another does. What the
+// stack keeps across that park is safe on another thread: the thread-locals
+// the task uses were swapped out into its locals before (`restore_locals`,
+// `swap_pending`, `crate::report::swap_catching`) and are swapped into the
+// adopting worker's before it resumes the task; the substrate's and the LLVM
+// runtime's code reach their thread-locals only through
+// `crate::fresh`, so no frame on the stack holds a thread-local's address
+// from the thread it left; the locks it holds are `wait::Lock`s, which
+// hold no thread-bound guard; and the coroutine's stack and its guard page
+// are memory of the process. The frames that can be on the stack at that
+// park, and why each is safe, are listed in the module docs of
+// `crate::fresh`.
+unsafe impl Send for Carried {}
+
 impl Task {
+    /// The worker the task runs on, or ran on last.
+    fn worker(&self) -> &Arc<Shared> {
+        self.moved.get().unwrap_or(&self.first)
+    }
+
+    /// The task's slot on [`Task::worker`].
+    fn slot(&self) -> usize {
+        // Relaxed: changed only by the adopting worker before it resumes
+        // the task, which then reads it on that worker; a waker acts on the
+        // task only after the SeqCst exchange of `state` that follows.
+        self.slot.load(Ordering::Relaxed)
+    }
+
     /// A readiness event named this task (`wait::wake_ready`).
     pub(crate) fn note_ready(&self, ready: Interest) {
         self.ready.fetch_or(ready.bits(), Ordering::SeqCst);
@@ -324,12 +429,16 @@ struct Shared {
     /// The worker's only task is in a blocking read ([`block_alone`]): a
     /// spawn goes elsewhere.
     blocked: AtomicBool,
-    /// Tasks placed on the worker and not ended.
+    /// Tasks placed on the worker and not ended, and those it gave up that
+    /// no worker adopted yet ([`Worker::give_up`]).
     tasks: AtomicUsize,
     /// Stacks its tasks left ([`WORKER_STACK_CACHE`]): pushed by the
     /// worker when a task ends, taken by the spawn that places the next
     /// task here, so the lock is rarely contended.
     stacks: Mutex<Vec<DefaultStack>>,
+    /// The token of the shared reactor in this worker's reactor, 0 while
+    /// it is not registered there ([`watch_shared`]).
+    watch: AtomicU64,
 }
 
 /// What other threads hand a worker.
@@ -360,6 +469,7 @@ impl Shared {
             blocked: AtomicBool::new(false),
             tasks: AtomicUsize::new(0),
             stacks: Mutex::new(Vec::new()),
+            watch: AtomicU64::new(0),
         }
     }
 
@@ -392,11 +502,19 @@ impl Shared {
     }
 
     /// The worker's reactor, created on first use; called on the worker.
+    /// While the move is on, a new reactor watches the shared one
+    /// ([`watch_shared`]).
     fn reactor(&self) -> io::Result<&EpollReactor> {
         if let Some(reactor) = self.reactor.get() {
             return Ok(reactor);
         }
-        let _ = self.reactor.set(EpollReactor::new()?);
+        let reactor = EpollReactor::new()?;
+        if let Some(token) = watch_shared(&reactor) {
+            // Relaxed: set before the reactor is published below, and read
+            // only by this worker's loop.
+            self.watch.store(token.0, Ordering::Relaxed);
+        }
+        let _ = self.reactor.set(reactor);
         Ok(self.reactor.get().expect("the reactor was just set"))
     }
 
@@ -435,6 +553,9 @@ thread_local! {
     static YIELDER: Cell<*const Yielder<(), ()>> = const { Cell::new(std::ptr::null()) };
     /// Tasks runnable on this worker.
     static RUN: RefCell<VecDeque<Waiter>> = const { RefCell::new(VecDeque::new()) };
+    /// Tasks adrift that were made runnable on this worker's thread, for
+    /// this worker to adopt ([`Worker::adopt`]).
+    static ADOPT: RefCell<Vec<Waiter>> = const { RefCell::new(Vec::new()) };
     /// Deadlines of parked tasks, with a sequence number that keeps the
     /// keys apart, and the timer of each task slot ([`SlotTimer`]).
     static TIMERS: RefCell<Timers> = const { RefCell::new(Timers::new()) };
@@ -443,10 +564,16 @@ thread_local! {
     static GUARD: Cell<(usize, usize)> = const { Cell::new((0, 0)) };
 }
 
+/// The worker this thread runs, null off a worker. Like every access of
+/// this module's thread-locals from a task, through [`fresh`]: a task may
+/// move to another thread ([`crate::fresh`]).
+fn here() -> *const Shared {
+    fresh::with(&HERE, Cell::get)
+}
+
 /// The waiter of the running task; `None` off a worker or between tasks.
 pub(crate) fn running() -> Option<Waiter> {
-    RUNNING_TASK
-        .try_with(|running| running.borrow().clone())
+    fresh::try_with(&RUNNING_TASK, |running| running.borrow().clone())
         .ok()
         .flatten()
 }
@@ -459,14 +586,36 @@ pub(crate) fn schedule(waiter: &Waiter, task: &Task) {
 }
 
 fn enqueue(waiter: &Waiter, task: &Task) {
-    if HERE.with(Cell::get) == Arc::as_ptr(&task.worker) {
-        RUN.with(|run| run.borrow_mut().push_back(waiter.clone()));
+    // SeqCst: after the exchange that queued the task (`Task::queue`); the
+    // worker that gave the task up stored ADRIFT before PARKED.
+    if task.phase.load(Ordering::SeqCst) == ADRIFT {
+        enqueue_adrift(waiter);
+        return;
+    }
+    let worker = task.worker();
+    if here() == Arc::as_ptr(worker) {
+        fresh::with(&RUN, |run| run.borrow_mut().push_back(waiter.clone()));
         return;
     }
     count(&COUNTERS.wakes_across);
-    task.worker
-        .hand_over(|incoming| incoming.woken.push(waiter.clone()));
-    task.worker.notify();
+    worker.hand_over(|incoming| incoming.woken.push(waiter.clone()));
+    worker.notify();
+}
+
+/// [`enqueue`] of a task adrift, which the caller queued: the worker of
+/// this thread adopts it; off a worker, the next worker that looks at the
+/// shared reactor ([`look_at_shared`]), which the shared reactor's wake
+/// brings to it.
+#[cold]
+fn enqueue_adrift(waiter: &Waiter) {
+    if !here().is_null() {
+        fresh::with(&ADOPT, |adopt| adopt.borrow_mut().push(waiter.clone()));
+        return;
+    }
+    lock(&STRAYS).push(waiter.clone());
+    if let Some(shared) = shared() {
+        let _ = shared.wake();
+    }
 }
 
 /// Park the running `task` (`wait::park`): switch to the worker's loop
@@ -477,7 +626,8 @@ pub(crate) fn park(waiter: &Waiter, task: &Task, deadline: Option<Instant>) -> W
 
 /// [`park`] where `now`, if given, is the instant `deadline` was just
 /// computed from: the first turn compares against it instead of reading
-/// the clock.
+/// the clock. The task's slot is read again after every suspend: the task
+/// may have moved there (in [`park_leaving`]'s call of this function).
 fn park_from(
     waiter: &Waiter,
     task: &Task,
@@ -485,7 +635,7 @@ fn park_from(
     mut now: Option<Instant>,
 ) -> Woken {
     debug_assert!(
-        HERE.with(Cell::get) == Arc::as_ptr(&task.worker),
+        here() == Arc::as_ptr(task.worker()),
         "a task parks on its own worker"
     );
     loop {
@@ -496,13 +646,43 @@ fn park_from(
             if now.take().unwrap_or_else(read_clock) >= deadline {
                 return Woken::Deadline;
             }
-            arm(task.slot, deadline, waiter);
+            arm(task.slot(), deadline, waiter);
         }
         suspend();
         if deadline.is_some() {
-            with_timer(task.slot, |timer| timer.wanted = None);
+            with_timer(task.slot(), |timer| timer.wanted = None);
         }
     }
+}
+
+/// The park of a task's first read that gives the task up
+/// ([`Readiness::wait_to_read`], module docs): the worker gives it up once it
+/// yielded ([`Worker::give_up`]), and it returns on the worker that adopted
+/// it, which goes on as [`park_from`] there. No timer is armed on this
+/// worker: the deadline waits in [`DRIFTING`] while the task is adrift. A
+/// wake already given ends the park before the task leaves.
+#[inline(never)]
+fn park_leaving(
+    waiter: &Waiter,
+    task: &Task,
+    deadline: Option<Instant>,
+    now: Option<Instant>,
+) -> Woken {
+    if waiter.take_wake() {
+        return Woken::Notified;
+    }
+    if let Some(deadline) = deadline
+        && now.unwrap_or_else(read_clock) >= deadline
+    {
+        return Woken::Deadline;
+    }
+    lock(&task.carried).deadline = deadline;
+    // Relaxed: read by this worker after the yield below.
+    task.phase.store(LEAVING, Ordering::Relaxed);
+    suspend();
+    // On the worker that adopted the task; a wake or the deadline made it
+    // runnable, which `park_from` tells apart.
+    park_from(waiter, task, deadline, None)
 }
 
 /// A worker's timers: a binary heap of entries keyed by deadline and
@@ -705,12 +885,12 @@ impl Timers {
 }
 
 fn with_timer<T>(slot: usize, f: impl FnOnce(&mut SlotTimer) -> T) -> T {
-    TIMERS.with(|timers| f(timers.borrow_mut().slot(slot)))
+    fresh::with(&TIMERS, |timers| f(timers.borrow_mut().slot(slot)))
 }
 
 /// The task in `slot` parks until `deadline` at the latest.
 fn arm(slot: usize, deadline: Instant, waiter: &Waiter) {
-    TIMERS.with(|timers| {
+    fresh::with(&TIMERS, |timers| {
         let mut timers = timers.borrow_mut();
         let timer = timers.slot(slot);
         timer.wanted = Some(deadline);
@@ -723,7 +903,7 @@ fn arm(slot: usize, deadline: Instant, waiter: &Waiter) {
 
 /// The task in `slot` ended: remove its entry.
 fn forget_timer(slot: usize) {
-    TIMERS.with(|timers| {
+    fresh::with(&TIMERS, |timers| {
         let mut timers = timers.borrow_mut();
         timers.slot(slot).wanted = None;
         timers.remove(slot);
@@ -732,7 +912,7 @@ fn forget_timer(slot: usize) {
 
 /// Switch from the running task to its worker's loop.
 fn suspend() {
-    let yielder = YIELDER.with(Cell::get);
+    let yielder = fresh::with(&YIELDER, Cell::get);
     assert!(!yielder.is_null(), "a park outside a task");
     // SAFETY: `YIELDER` is set by the worker before each resume to the
     // yielder of the task it resumes, which lives as long as that task's
@@ -750,7 +930,7 @@ pub(crate) fn wait_descriptor(
     interest: Interest,
     deadline: Option<Instant>,
 ) -> io::Result<DescriptorWait> {
-    let reactor = task.worker.reactor()?;
+    let reactor = task.worker().reactor()?;
     let token = reactor.register(descriptor, interest, waiter.clone())?;
     // Relaxed: set and read on this worker only (its dispatch).
     task.ready.store(0, Ordering::Relaxed);
@@ -771,7 +951,7 @@ pub(crate) fn wait_descriptor(
 /// already counted live (`crate::task`).
 pub(crate) fn spawn(job: Job) -> io::Result<()> {
     crate::signal::install_overflow_handler();
-    let here = HERE.with(Cell::get);
+    let here = here();
     // A stack mapped while `WORKERS` was not held, because no free one
     // was found under it; the next look places the task with it.
     let mut spare: Option<DefaultStack> = None;
@@ -1012,6 +1192,9 @@ struct Local {
     /// The streams the task wrote to and has not flushed, while it does
     /// not run ([`crate::net::swap_pending`]).
     pending: crate::net::Pending,
+    /// The `catch`es the task has open, while it does not run
+    /// ([`crate::report::swap_catching`]).
+    catching: usize,
     guard: (usize, usize),
 }
 
@@ -1053,24 +1236,36 @@ impl Worker {
         }
     }
 
+    /// A free slot of this worker's table.
+    fn free_slot(&mut self) -> usize {
+        self.free.pop().unwrap_or_else(|| {
+            self.slots.push(None);
+            self.slots.len() - 1
+        })
+    }
+
     fn start(&mut self, job: Job, stack: DefaultStack) {
         // A new task's locals are made from the worker's thread-locals
         // (the LLVM runtime's spare arena chunks).
         self.restore_locals();
-        let slot = self.free.pop().unwrap_or_else(|| {
-            self.slots.push(None);
-            self.slots.len() - 1
-        });
+        let slot = self.free_slot();
         let start = stack.limit().get();
         let guard = (start, start + page_size());
         let waiter = Waiter::for_task(Task {
-            worker: Arc::clone(&self.shared),
+            first: Arc::clone(&self.shared),
+            moved: OnceLock::new(),
             state: AtomicU8::new(QUEUED),
             ready: AtomicU8::new(0),
-            slot,
+            slot: AtomicUsize::new(slot),
+            phase: AtomicU8::new(HOME),
+            first_read: AtomicBool::new(true),
+            carried: Mutex::new(Carried {
+                local: None,
+                deadline: None,
+            }),
         });
         let coroutine = Coroutine::with_stack(stack, move |yielder: &Yielder<(), ()>, ()| {
-            YIELDER.with(|cell| cell.set(yielder));
+            fresh::with(&YIELDER, |cell| cell.set(yielder));
             if let Err(report) = crate::report::catch(job) {
                 crate::report::task_failed(&report);
             }
@@ -1081,6 +1276,7 @@ impl Worker {
             yielder: std::ptr::null(),
             locals: LOCALS.get().map(|make| make()),
             pending: crate::net::Pending::default(),
+            catching: 0,
             guard,
         });
         self.live += 1;
@@ -1092,7 +1288,11 @@ impl Worker {
         let Some(task) = waiter.task() else {
             return;
         };
-        let slot = task.slot;
+        if !Arc::ptr_eq(task.worker(), &self.shared) {
+            debug_assert!(false, "a task resumed by a worker it is not on");
+            return;
+        }
+        let slot = task.slot();
         if self
             .slots
             .get(slot)
@@ -1119,15 +1319,23 @@ impl Worker {
         YIELDER.with(|cell| cell.set(local.yielder));
         GUARD.with(|cell| cell.set(local.guard));
         crate::net::swap_pending(&mut local.pending);
+        crate::report::swap_catching(&mut local.catching);
         RUNNING_TASK.with(|running| *running.borrow_mut() = Some(waiter.clone()));
         let result = coroutine.resume(());
         RUNNING_TASK.with(|running| *running.borrow_mut() = None);
         GUARD.with(|cell| cell.set((0, 0)));
         let local = self.slots[slot].as_mut().expect("the resumed task's slot");
         crate::net::swap_pending(&mut local.pending);
+        crate::report::swap_catching(&mut local.catching);
         local.yielder = YIELDER.with(|cell| cell.replace(std::ptr::null()));
         match result {
             CoroutineResult::Yield(()) => {
+                // Relaxed: stored by the task on this thread before it
+                // yielded (`park_leaving`).
+                if task.phase.load(Ordering::Relaxed) == LEAVING {
+                    self.give_up(slot, &waiter, task, coroutine);
+                    return;
+                }
                 local.coroutine = Some(coroutine);
                 // SeqCst: this store, then the `has_wake` load, against a
                 // waker's NOTIFIED set, then its QUEUED exchange: one sees
@@ -1155,12 +1363,109 @@ impl Worker {
         }
     }
 
+    /// Give up the task in `slot`, which yielded in [`park_leaving`]: its
+    /// locals back out of the thread-locals, its timer forgotten, its slot
+    /// freed, its coroutine and locals put into the task. It is adrift from
+    /// then on: the worker that makes it runnable adopts it ([`enqueue`]),
+    /// this one included. It still counts among this worker's tasks
+    /// ([`Shared::tasks`]) until then, so that spawns place tasks as if it
+    /// were here: a task adrift belongs to no worker, and a burst of
+    /// sessions that wait in their first read would otherwise all be placed
+    /// on the one worker that keeps giving them up.
+    #[cold]
+    fn give_up(
+        &mut self,
+        slot: usize,
+        waiter: &Waiter,
+        task: &Task,
+        coroutine: Coroutine<(), (), (), DefaultStack>,
+    ) {
+        if self.in_tls == Some(slot) {
+            self.restore_locals();
+        }
+        forget_timer(slot);
+        let mut local = self.slots[slot].take().expect("the given-up task's slot");
+        local.coroutine = Some(coroutine);
+        self.free.push(slot);
+        self.live -= 1;
+        let deadline = {
+            let mut carried = lock(&task.carried);
+            let deadline = carried.deadline;
+            carried.local = Some(local);
+            deadline
+        };
+        ADRIFT_TASKS.fetch_add(1, Ordering::SeqCst);
+        if let Some(deadline) = deadline {
+            drift_until(deadline, waiter);
+        }
+        count(&COUNTERS.tasks_given_up);
+        // SeqCst (both): a waker that queues the task after the PARKED
+        // store sees ADRIFT and the task carried ([`enqueue`]).
+        task.phase.store(ADRIFT, Ordering::SeqCst);
+        task.state.store(PARKED, Ordering::SeqCst);
+        // A wake, or a deadline that passed, before the PARKED store found
+        // the task running: the wake left its mark, and a worker that found
+        // the deadline passed took it out of `DRIFTING` without queueing
+        // the task ([`fire_drift`]). Either is seen here.
+        let due = deadline.is_some_and(|deadline| read_clock() >= deadline);
+        if (waiter.has_wake() || due) && task.queue() {
+            enqueue_adrift(waiter);
+        }
+    }
+
+    /// Adopt the tasks adrift made runnable on this thread ([`ADOPT`]).
+    fn adopt_waiting(&mut self) {
+        let adopted = ADOPT.with(|adopt| std::mem::take(&mut *adopt.borrow_mut()));
+        for waiter in adopted {
+            self.adopt(waiter);
+        }
+    }
+
+    /// Adopt the task of `waiter`, adrift and queued by this thread: a slot
+    /// here, this worker as its own, its counts here; it runs next.
+    fn adopt(&mut self, waiter: Waiter) {
+        let Some(task) = waiter.task() else {
+            return;
+        };
+        let (local, deadline) = {
+            let mut carried = lock(&task.carried);
+            (carried.local.take(), carried.deadline.take())
+        };
+        let Some(local) = local else {
+            debug_assert!(false, "an adopted task carries its coroutine");
+            return;
+        };
+        if deadline.is_some() {
+            drift_ended(&waiter);
+        }
+        let slot = self.free_slot();
+        self.slots[slot] = Some(local);
+        // Relaxed: read by this worker, and by wakers only after the SeqCst
+        // PARKED store this worker makes once the task parked again.
+        task.slot.store(slot, Ordering::Relaxed);
+        let _ = task.moved.set(Arc::clone(&self.shared));
+        task.phase.store(MOVED, Ordering::SeqCst);
+        self.live += 1;
+        // SeqCst (both), as every change of `tasks`: counted here before
+        // it leaves the worker that gave it up ([`Worker::give_up`]).
+        self.shared.tasks.fetch_add(1, Ordering::SeqCst);
+        task.first.tasks.fetch_sub(1, Ordering::SeqCst);
+        ADRIFT_TASKS.fetch_sub(1, Ordering::SeqCst);
+        count(&COUNTERS.tasks_adopted);
+        if !Arc::ptr_eq(&task.first, &self.shared) {
+            count(&COUNTERS.tasks_moved);
+        }
+        RUN.with(|run| run.borrow_mut().push_back(waiter));
+    }
+
     /// Queue the tasks whose deadline passed, arm again those that want a
     /// later one by now ([`SlotTimer`]); the next deadline. Reads the clock
-    /// only when there is a timer.
+    /// only when there is a timer. Tasks adrift whose deadline passed are
+    /// queued for this worker to adopt ([`DRIFTING`]).
     fn fire_timers(&self) -> Option<Instant> {
+        let drifting = fire_drift();
         if TIMERS.with(|timers| timers.borrow().is_empty()) {
-            return None;
+            return drifting;
         }
         let now = read_clock();
         loop {
@@ -1185,19 +1490,22 @@ impl Worker {
                     }
                 }
                 Ok(None) => {}
-                Err(next) => return next,
+                Err(next) => return earlier(next, drifting),
             }
         }
     }
 
-    /// End the worker if no task was placed on it meanwhile; whether it
-    /// ended.
+    /// End the worker if no task was placed on it meanwhile and none is
+    /// adrift (a worker with a reactor watches the shared one for it);
+    /// whether it ended.
     fn retire(&self) -> bool {
         let mut workers = lock(&WORKERS);
         // Under `WORKERS`, which every spawn holds while it counts a task:
         // a spawn that chose this worker counted its task before it lets
         // go of the lock and hands the task over, so the count is not 0.
-        if self.shared.tasks.load(Ordering::Relaxed) != 0 || !lock(&self.shared.incoming).is_empty()
+        if self.shared.tasks.load(Ordering::Relaxed) != 0
+            || !lock(&self.shared.incoming).is_empty()
+            || adrift()
         {
             return false;
         }
@@ -1211,17 +1519,177 @@ impl Worker {
     }
 }
 
+/// Whether this worker has a task to run or to adopt. Called by tasks too
+/// ([`wait_alone`], [`block_alone`]).
 fn runnable() -> bool {
-    RUN.with(|run| !run.borrow().is_empty())
+    fresh::with(&RUN, |run| !run.borrow().is_empty())
+        || fresh::with(&ADOPT, |adopt| !adopt.borrow().is_empty())
 }
 
 fn next_runnable() -> Option<Waiter> {
     RUN.with(|run| run.borrow_mut().pop_front())
 }
 
-fn dispatch(events: &mut Vec<Event>) {
+/// Wake the waiters of `events`, which `shared`'s reactor returned; its
+/// registration of the shared reactor means: look at that one.
+fn dispatch(events: &mut Vec<Event>, shared: &Shared) {
+    // Relaxed: stored by this worker ([`Shared::reactor`]).
+    let watch = shared.watch.load(Ordering::Relaxed);
+    let mut look = false;
     for event in events.drain(..) {
+        if watch != 0 && event.token.0 == watch {
+            look = true;
+            continue;
+        }
         wake_ready(&event.waiter, event.ready);
+    }
+    if look {
+        look_at_shared(events);
+    }
+}
+
+/// The shared reactor (module docs): one epoll instance and its eventfd,
+/// made with the first worker reactor while the move is on; `None` when
+/// it could not be made, and no task moves then.
+static SHARED: OnceLock<Option<EpollReactor>> = OnceLock::new();
+
+/// [`SHARED`], made on first use.
+fn shared() -> Option<&'static EpollReactor> {
+    SHARED.get_or_init(|| EpollReactor::new().ok()).as_ref()
+}
+
+/// Tasks given up and not adopted yet. While there are any, no worker
+/// retires, and no task waits alone on its worker's thread or blocks it,
+/// so the worker that gave a task up sleeps in its reactor, which watches
+/// the shared one, whenever its other tasks wait.
+static ADRIFT_TASKS: AtomicUsize = AtomicUsize::new(0);
+
+fn adrift() -> bool {
+    ADRIFT_TASKS.load(Ordering::SeqCst) != 0
+}
+
+/// The deadlines of the tasks adrift, from the parks they were given up
+/// in: every worker sleeps until the earliest at the latest, and the first
+/// that finds it passed adopts the task ([`fire_drift`]).
+static DRIFTING: Mutex<Vec<(Instant, Waiter)>> = Mutex::new(Vec::new());
+
+/// Tasks adrift made runnable off a worker ([`enqueue_adrift`]), for the
+/// next worker that looks at the shared reactor.
+static STRAYS: Mutex<Vec<Waiter>> = Mutex::new(Vec::new());
+
+/// The task of `waiter`, given up in a park until `deadline`, is adrift.
+fn drift_until(deadline: Instant, waiter: &Waiter) {
+    lock(&DRIFTING).push((deadline, waiter.clone()));
+}
+
+/// The task of `waiter` was adopted before its deadline.
+fn drift_ended(waiter: &Waiter) {
+    lock(&DRIFTING).retain(|(_, drifting)| !drifting.same(waiter));
+}
+
+/// Queue the tasks adrift whose deadline passed for this worker to adopt;
+/// the earliest deadline left. Takes no lock while no task is adrift.
+fn fire_drift() -> Option<Instant> {
+    if !adrift() {
+        return None;
+    }
+    let mut drifting = lock(&DRIFTING);
+    if drifting.is_empty() {
+        return None;
+    }
+    let now = read_clock();
+    let mut next: Option<Instant> = None;
+    drifting.retain(|(at, waiter)| {
+        if *at > now {
+            next = Some(next.map_or(*at, |next| next.min(*at)));
+            return true;
+        }
+        if let Some(task) = waiter.task()
+            && task.queue()
+        {
+            ADOPT.with(|adopt| adopt.borrow_mut().push(waiter.clone()));
+        }
+        // Taken out either way: a task a waker queued first is adopted
+        // by that waker's worker, which finds no entry ([`drift_ended`]);
+        // a task not parked yet is queued by the worker that gives it up,
+        // which reads the clock after it parked it ([`Worker::give_up`]).
+        false
+    });
+    next
+}
+
+/// How a worker waits on the shared reactor, the open design point of the
+/// move (`story:readiness-task-stealing`), in this one function: called
+/// when a worker makes its own reactor, it returns the token under which
+/// that reactor reports the shared one, if it does.
+///
+/// Chosen: the shared epoll instance is registered in every worker's
+/// epoll instance, edge-triggered, when the worker makes it: one
+/// `epoll_ctl` per worker and none per session, and a worker that sleeps
+/// in its own `epoll_wait` wakes for an event of the shared one, which it
+/// takes with one `epoll_wait` of the shared instance that does not wait
+/// ([`look_at_shared`]). A session alone on its worker never waits on the
+/// shared instance and makes no call more. The cost: the kernel wakes
+/// every worker that sleeps for each event of the shared instance
+/// (`EPOLLEXCLUSIVE` is refused for an epoll descriptor), and all but one
+/// of them find nothing ([`SchedulerCounts::shared_polls_empty`]): with 4
+/// workers up to 3 wakes and 6 calls per moved session more.
+///
+/// The alternative, for a second host run: one watcher. Only one sleeping
+/// worker has the shared instance registered; a worker that wakes for its
+/// own work while it is the watcher takes the registration out
+/// (`EPOLL_CTL_DEL`) and hands the watch to another sleeping worker, which
+/// registers it (`EPOLL_CTL_ADD`) before it sleeps. One wake per event, two
+/// calls and a hand-over per change of watcher, and a worker that turns
+/// busy while it watches delays the events until the hand-over.
+fn watch_shared(reactor: &EpollReactor) -> Option<Token> {
+    if !steal() {
+        return None;
+    }
+    let shared = shared()?;
+    reactor
+        .register(
+            shared.as_fd(),
+            Interest::READ,
+            Waiter::for_descriptor(Descriptor::new()),
+        )
+        .ok()
+}
+
+/// Take the events of the shared reactor without waiting and wake their
+/// waiters: a task adrift that one makes runnable is adopted by this
+/// worker ([`enqueue_adrift`]); so are those woken off a worker
+/// ([`STRAYS`]), whose wake ended the wait. `events` is empty and left so.
+#[cold]
+fn look_at_shared(events: &mut Vec<Event>) {
+    let Some(reactor) = shared() else {
+        return;
+    };
+    let mut found = false;
+    while let Ok(taken) = reactor.poll_now(events) {
+        for event in events.drain(..) {
+            found = true;
+            wake_ready(&event.waiter, event.ready);
+        }
+        if taken < crate::reactor::BATCH {
+            break;
+        }
+    }
+    let strays = std::mem::take(&mut *lock(&STRAYS));
+    for waiter in strays {
+        found = true;
+        ADOPT.with(|adopt| adopt.borrow_mut().push(waiter));
+    }
+    if !found {
+        count(&COUNTERS.shared_polls_empty);
+    }
+}
+
+/// The earlier of two deadlines, `None` being none.
+fn earlier(one: Option<Instant>, other: Option<Instant>) -> Option<Instant> {
+    match (one, other) {
+        (Some(one), Some(other)) => Some(one.min(other)),
+        (one, other) => one.or(other),
     }
 }
 
@@ -1243,6 +1711,7 @@ fn work(shared: Arc<Shared>) {
     let mut idle_since: Option<Instant> = None;
     loop {
         worker.take_incoming();
+        worker.adopt_waiting();
         let mut ran = 0;
         while ran < BUDGET {
             let Some(waiter) = next_runnable() else {
@@ -1263,11 +1732,14 @@ fn work(shared: Arc<Shared>) {
                 && let Some(reactor) = worker.shared.reactor.get()
             {
                 let _ = reactor.wait(Some(read_clock()), &mut events);
-                dispatch(&mut events);
+                dispatch(&mut events, &worker.shared);
             }
             continue;
         }
-        let deadline = if worker.live == 0 {
+        // No linger while a task is adrift: no worker retires then
+        // ([`Worker::retire`]), and a worker whose tasks all moved away or
+        // wait adrift sleeps until a timer, an event or a wake.
+        let deadline = if worker.live == 0 && !adrift() {
             let now = read_clock();
             let since = *idle_since.get_or_insert(now);
             let end = since + crate::LINGER;
@@ -1279,7 +1751,7 @@ fn work(shared: Arc<Shared>) {
                 idle_since = None;
                 continue;
             }
-            Some(next_timer.map_or(end, |timer| timer.min(end)))
+            earlier(next_timer, Some(end))
         } else {
             idle_since = None;
             next_timer
@@ -1305,7 +1777,7 @@ fn work(shared: Arc<Shared>) {
         }
         // Relaxed: as above; a late waker's wake only ends a later sleep.
         worker.shared.sleeping.store(false, Ordering::Relaxed);
-        dispatch(&mut events);
+        dispatch(&mut events, &worker.shared);
     }
 }
 
@@ -1369,6 +1841,10 @@ pub(crate) struct Descriptor {
     /// `registered` keeps that worker's address from being reused until
     /// the descriptor is deregistered, which clears this first.
     home: AtomicPtr<Shared>,
+    /// The token of its registration with the shared reactor, 0 for none:
+    /// made by the first read of a task that may move, for one event
+    /// ([`Readiness::wait_to_read`]). Changed only under `registered`.
+    shared_token: AtomicU64,
 }
 
 #[derive(Default)]
@@ -1405,6 +1881,19 @@ fn writes(ready: Interest) -> bool {
 }
 
 impl Descriptor {
+    pub(crate) fn new() -> Descriptor {
+        Descriptor {
+            read_events: AtomicU64::new(0),
+            write_events: AtomicU64::new(0),
+            lasting: AtomicU8::new(0),
+            waiting: Mutex::new(Waiting::default()),
+            registered: Mutex::new(Vec::new()),
+            write_armed: AtomicBool::new(false),
+            home: AtomicPtr::new(std::ptr::null_mut()),
+            shared_token: AtomicU64::new(0),
+        }
+    }
+
     /// A readiness event (`wait::wake_ready`): count it and wake the
     /// tasks waiting for its direction.
     pub(crate) fn ready(&self, ready: Interest) {
@@ -1442,15 +1931,7 @@ impl Descriptor {
 impl Readiness {
     pub(crate) fn new() -> Readiness {
         Readiness {
-            waiter: Waiter::for_descriptor(Descriptor {
-                read_events: AtomicU64::new(0),
-                write_events: AtomicU64::new(0),
-                lasting: AtomicU8::new(0),
-                waiting: Mutex::new(Waiting::default()),
-                registered: Mutex::new(Vec::new()),
-                write_armed: AtomicBool::new(false),
-                home: AtomicPtr::new(std::ptr::null_mut()),
-            }),
+            waiter: Waiter::for_descriptor(Descriptor::new()),
         }
     }
 
@@ -1501,15 +1982,56 @@ impl Readiness {
         mark: u64,
         limit: &mut Limit,
     ) -> io::Result<DescriptorWait> {
+        self.wait_in(descriptor, interest, mark, limit, false)
+    }
+
+    /// [`Readiness::wait`] of a stream's read for input, which may move
+    /// the task (module docs): the first such wait of a task, if it parks
+    /// on a worker that runs another task and the process may start more
+    /// than one worker, parks through the shared reactor and gives the task
+    /// up ([`Readiness::wait_adrift`]).
+    pub(crate) fn wait_to_read(
+        &self,
+        descriptor: BorrowedFd<'_>,
+        mark: u64,
+        limit: &mut Limit,
+    ) -> io::Result<DescriptorWait> {
+        self.wait_in(descriptor, Interest::READ, mark, limit, true)
+    }
+
+    fn wait_in(
+        &self,
+        descriptor: BorrowedFd<'_>,
+        interest: Interest,
+        mark: u64,
+        limit: &mut Limit,
+        may_move: bool,
+    ) -> io::Result<DescriptorWait> {
         let me = Waiter::current();
         let Some(task) = me.task() else {
             return crate::wait::wait_within(descriptor, interest, limit);
         };
+        // Relaxed: only the task itself reads and clears it.
+        let first = may_move && task.first_read.load(Ordering::Relaxed);
+        if first {
+            task.first_read.store(false, Ordering::Relaxed);
+        }
         let state = self.descriptor();
         if let Some(waited) = wait_alone(task, state, descriptor, interest, mark, limit)? {
             return Ok(waited);
         }
-        let here = Arc::as_ptr(&task.worker).cast_mut();
+        // Relaxed (both): a hint; the move is right as long as the task
+        // ends up adopted, by whichever worker.
+        if first
+            && steal()
+            && worker_limit() > 1
+            && task.phase.load(Ordering::Relaxed) == HOME
+            && task.worker().tasks.load(Ordering::Relaxed) > 1
+            && let Some(waited) = self.wait_adrift(&me, task, descriptor, mark, limit)
+        {
+            return waited;
+        }
+        let here = Arc::as_ptr(task.worker()).cast_mut();
         // Relaxed: a first look; it is read again under `registered`.
         let arm =
             interest.intersects(Interest::WRITE) && !state.write_armed.load(Ordering::Relaxed);
@@ -1526,16 +2048,16 @@ impl Readiness {
             }
             if !registered
                 .iter()
-                .any(|(shared, _)| Arc::ptr_eq(shared, &task.worker))
+                .any(|(shared, _)| Arc::ptr_eq(shared, task.worker()))
             {
-                let Ok(reactor) = task.worker.reactor() else {
+                let Ok(reactor) = task.worker().reactor() else {
                     drop(registered);
                     let (deadline, _) = limit.deadline();
                     return without_reactor(&me, descriptor, interest, deadline);
                 };
                 let sides = sides(state.write_armed.load(Ordering::Relaxed));
                 let token = reactor.register(descriptor, sides, self.waiter.clone())?;
-                registered.push((Arc::clone(&task.worker), token));
+                registered.push((Arc::clone(task.worker()), token));
                 if registered.len() == 1 {
                     state.home.store(here, Ordering::Release);
                 }
@@ -1556,6 +2078,64 @@ impl Readiness {
         } else {
             DescriptorWait::Ready(interest)
         })
+    }
+
+    /// The park of [`Readiness::wait_to_read`] that moves the task: the
+    /// descriptor is registered with the shared reactor for one event, the
+    /// task waits for input as any reader does, and its worker gives it up
+    /// ([`park_leaving`]); the worker that makes it runnable adopts it: the
+    /// one whose look at the shared reactor finds the event, or this one if
+    /// a registration of its own or a wake comes first. `None` when it
+    /// cannot: no shared reactor, or the worker does not watch it.
+    #[cold]
+    #[inline(never)]
+    fn wait_adrift(
+        &self,
+        me: &Waiter,
+        task: &Task,
+        descriptor: BorrowedFd<'_>,
+        mark: u64,
+        limit: &mut Limit,
+    ) -> Option<io::Result<DescriptorWait>> {
+        let shared = shared()?;
+        let worker = task.worker();
+        // Its reactor is made first, which registers the shared one in it,
+        // so this worker wakes for the event too ([`watch_shared`]).
+        // Relaxed: stored by this thread when it made the reactor.
+        if worker.reactor().is_err() || worker.watch.load(Ordering::Relaxed) == 0 {
+            return None;
+        }
+        let state = self.descriptor();
+        {
+            let _registered = lock(&state.registered);
+            // Relaxed (both): changed only under `registered`.
+            let token = state.shared_token.load(Ordering::Relaxed);
+            let armed = if token == 0 {
+                shared
+                    .register_once(descriptor, sides(false), self.waiter.clone())
+                    .map(|token| state.shared_token.store(token.0, Ordering::Relaxed))
+            } else {
+                shared.rearm_once(Token(token), descriptor, sides(false))
+            };
+            if armed.is_err() {
+                return None;
+            }
+        }
+        {
+            let mut waiting = lock(&state.waiting);
+            if state.events(Interest::READ).load(Ordering::SeqCst) != mark {
+                return Some(Ok(DescriptorWait::Woken));
+            }
+            waiting.readers.push(me.clone());
+        }
+        let (deadline, now) = limit.deadline();
+        let woken = park_leaving(me, task, deadline, now);
+        let still_queued = lock(&state.waiting).readers.remove(me);
+        Some(Ok(if still_queued && woken == Woken::Deadline {
+            DescriptorWait::Deadline
+        } else {
+            DescriptorWait::Ready(Interest::READ)
+        }))
     }
 }
 
@@ -1580,10 +2160,12 @@ fn wait_alone(
     mark: u64,
     limit: &mut Limit,
 ) -> io::Result<Option<DescriptorWait>> {
-    let shared = &task.worker;
+    let shared = task.worker();
     // Relaxed: a hint; a spawn that raises it after this also hands over,
-    // which the `pending` check below sees.
-    if shared.tasks.load(Ordering::Relaxed) != 1 || runnable() {
+    // which the `pending` check below sees. While a task is adrift, a task
+    // parks instead, so that its worker watches the shared reactor
+    // ([`ADRIFT_TASKS`]).
+    if shared.tasks.load(Ordering::Relaxed) != 1 || runnable() || adrift() {
         return Ok(None);
     }
     if shared.reactor.get().is_none()
@@ -1744,12 +2326,13 @@ impl Drop for Blocking {
 pub(crate) fn block_alone() -> Option<Blocking> {
     let me = Waiter::current();
     let task = me.task()?;
-    let shared = &task.worker;
+    let shared = task.worker();
     // Relaxed: a first look; the SeqCst pair below decides.
     if shared.tasks.load(Ordering::Relaxed) != 1
         || runnable()
         || shared.has_pending()
         || LIVE.load(Ordering::Relaxed) >= worker_limit()
+        || adrift()
     {
         return None;
     }
@@ -1813,13 +2396,25 @@ impl Readiness {
     /// owner closes it right after, and the close takes it out of their
     /// epoll instances without an `epoll_ctl` each.
     fn release(&self, delete: Option<BorrowedFd<'_>>) {
-        let registered = {
+        let (registered, shared_token) = {
             let mut registered = lock(&self.descriptor().registered);
             self.descriptor()
                 .home
                 .store(std::ptr::null_mut(), Ordering::Release);
-            std::mem::take(&mut *registered)
+            // Relaxed: changed only under `registered`.
+            let shared_token = self.descriptor().shared_token.swap(0, Ordering::Relaxed);
+            (std::mem::take(&mut *registered), shared_token)
         };
+        if shared_token != 0
+            && let Some(reactor) = shared()
+        {
+            match delete {
+                Some(descriptor) => {
+                    let _ = reactor.deregister(Token(shared_token), descriptor);
+                }
+                None => reactor.forget(Token(shared_token)),
+            }
+        }
         for (shared, token) in registered {
             if let Some(reactor) = shared.reactor.get() {
                 match delete {
