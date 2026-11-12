@@ -18,6 +18,7 @@ mod borrowed_reads;
 mod borrowed_reads_adversary;
 mod build_cache;
 mod call_moves_adversary;
+mod call_moves_adversary_pass2;
 mod channels;
 mod check_json;
 mod clauses;
