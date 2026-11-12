@@ -6,7 +6,7 @@ status: draft
 title: A list on the Rust target is copied by reference count and copied in full only when it changes
 relations:
 - informed_by: story:rust-target-read-only-forms-borrow
-revision: 1
+revision: 2
 ---
 # Story: a list on the Rust target is copied by reference count and copied in full only when it changes
 
@@ -33,3 +33,13 @@ Where the ownership analysis cannot lend or move a `List`, `Map`, `Text` or `Byt
 ## Scope
 
 - `crates/ignite-rustgen/src/`, the Rust target's runtime types in `crates/ignite-rt/` and `crates/ignite-io/src/checked.rs`, `docs/slice.md` section 6. Inferred.
+
+## After the borrow fix
+
+Measured by the same user on 2026-11-12 with the borrow fix (`4bcda2ab`, unit `mysql-cost`) on a service that had already rewritten its hot functions to read lists in place:
+
+- Instructions per request for its largest answer: 218 M before the fix, 216 M with it (about 1 %). The fix removes copies the service no longer made.
+- The profile with the fix: dropping values 11.1 % of samples, copying record fields 9.9 %, the allocator 14.6 % in its two top frames and about 61 % of all samples in libc.
+- What is left is the copy of a value that is stored, returned or read out of a record field or a `Map`: the forms this story is about, and the `Map` lookup and `let` forms the borrow fix left (`docs/slice.md`, "Still copied").
+
+So the count of copies that remain after the borrow fix, by form, is the first thing the design note establishes, from a synthetic program that builds an answer of nested records, lists and maps out of rows.
