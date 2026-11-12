@@ -2,11 +2,14 @@
 format: aep.planning-md/3
 id: story:rust-target-handle-method-keeps-parameter-lent
 kind: story
-status: draft
+status: active
 title: A record used only through its handles is lent on the Rust target
 relations:
 - informed_by: story:rust-target-read-only-forms-borrow
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-12T20:27:00Z", actor: "human:timo", revision: 2, executor: "agent:claude-coordinator", correlation: "accepted-2026-11-12"}
+- {from: "proposed", to: "active", at: "2026-11-12T20:27:00Z", actor: "human:timo", revision: 3, executor: "agent:claude-coordinator", correlation: "accepted-2026-11-12"}
 ---
 # Story: a record used only through its handles is lent on the Rust target
 

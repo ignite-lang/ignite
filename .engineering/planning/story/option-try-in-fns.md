@@ -2,9 +2,12 @@
 format: aep.planning-md/3
 id: story:option-try-in-fns
 kind: story
-status: draft
+status: active
 title: '? on an Option in a fn that returns an Option'
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-12T20:26:59Z", actor: "human:timo", revision: 2, executor: "agent:claude-coordinator", correlation: "accepted-2026-11-12"}
+- {from: "proposed", to: "active", at: "2026-11-12T20:26:59Z", actor: "human:timo", revision: 3, executor: "agent:claude-coordinator", correlation: "accepted-2026-11-12"}
 ---
 # Story: `?` on an Option in a fn that returns an Option
 

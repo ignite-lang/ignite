@@ -2,11 +2,14 @@
 format: aep.planning-md/3
 id: story:list-contains-and-filter
 kind: story
-status: draft
+status: active
 title: A List has contains, any, all, find and filter
 relations:
 - informed_by: story:list-sort
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-12T20:26:59Z", actor: "human:timo", revision: 2, executor: "agent:claude-coordinator", correlation: "accepted-2026-11-12"}
+- {from: "proposed", to: "active", at: "2026-11-12T20:26:59Z", actor: "human:timo", revision: 3, executor: "agent:claude-coordinator", correlation: "accepted-2026-11-12"}
 ---
 # Story: a List has contains, any, all, find and filter
 

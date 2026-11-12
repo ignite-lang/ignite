@@ -2,9 +2,12 @@
 format: aep.planning-md/3
 id: story:list-sort
 kind: story
-status: draft
+status: active
 title: A List is sorted with sort and sort_by
-revision: 1
+revision: 3
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-12T20:26:59Z", actor: "human:timo", revision: 2, executor: "agent:claude-coordinator", correlation: "accepted-2026-11-12"}
+- {from: "proposed", to: "active", at: "2026-11-12T20:26:59Z", actor: "human:timo", revision: 3, executor: "agent:claude-coordinator", correlation: "accepted-2026-11-12"}
 ---
 # Story: a List is sorted with sort and sort_by
 
