@@ -14,6 +14,7 @@ mod apply_way_out;
 mod binary_size;
 mod binary_size_adversary;
 mod bitwise;
+mod borrowed_reads;
 mod build_cache;
 mod channels;
 mod check_json;

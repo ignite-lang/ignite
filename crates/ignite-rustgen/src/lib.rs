@@ -2491,13 +2491,6 @@ impl<'a> Generator<'a> {
     /// nor the variable `iter` is rooted at. The element is then a
     /// reference in `body`, read like a borrowed parameter.
     fn borrowed_for(&self, name: &str, iter: &Expr, body: &Block) -> bool {
-        let place = if self.is_place(iter) {
-            iter
-        } else if let Some(list) = self.sliced_place(iter) {
-            list
-        } else {
-            return false;
-        };
         let Some(Ty::List(element)) = self.type_of(iter) else {
             return false;
         };
@@ -2516,9 +2509,74 @@ impl<'a> Generator<'a> {
         ) {
             return false;
         }
-        let mut mutated = BTreeSet::new();
-        mutated.extend(ownership::changed_in_block(body, self.types));
-        !mutated.contains(name) && place_root(place).is_some_and(|root| !mutated.contains(root))
+        let mutated = ownership::changed_in_block(body, self.types);
+        !mutated.contains(name) && self.lent_iterable(iter, &mutated)
+    }
+
+    /// Whether the list `iter` of a `for` can be iterated by reference: a
+    /// place, a [`sliced_place`](Self::sliced_place), a
+    /// [`lent_element`](Self::lent_element) or a
+    /// [`field_of_element`](Self::field_of_element), whose root variable is
+    /// not in `mutated`, the names the loop's body changes.
+    fn lent_iterable(&self, iter: &Expr, mutated: &BTreeSet<&str>) -> bool {
+        let root = if self.is_place(iter) {
+            place_root(iter)
+        } else if let Some(list) = self.sliced_place(iter) {
+            place_root(list)
+        } else if self.lent_element(iter) || self.field_of_element(iter) {
+            self.element_root(iter)
+        } else {
+            return false;
+        };
+        root.is_some_and(|root| !mutated.contains(root))
+    }
+
+    /// The text of the list a [`lent_iterable`](Self::lent_iterable) `for`
+    /// iterates by reference.
+    fn lent_iterable_text(&mut self, iter: &Expr) -> String {
+        if self.is_place(iter) {
+            self.bare(iter)
+        } else if self.lent_element(iter) {
+            self.element_at(iter)
+        } else if self.field_of_element(iter) {
+            format!("&{}", self.element_field(iter))
+        } else {
+            self.checked_slice_ref(iter).expect("a borrowed slice")
+        }
+    }
+
+    /// Whether `for name in iter { body }` over a list whose elements are
+    /// `Copy` in Rust (`List<Int>`, `Bytes`) can read them out of the list
+    /// in place (`.iter().copied()`) instead of iterating a copy of it: the
+    /// list is a [`lent_iterable`](Self::lent_iterable).
+    fn copied_for(&self, iter: &Expr, body: &Block) -> bool {
+        let Some(Ty::List(element)) = self.type_of(iter) else {
+            return false;
+        };
+        rust_copy(element)
+            && self.lent_iterable(iter, &ownership::changed_in_block(body, self.types))
+    }
+
+    /// Whether `for pattern in iter { body }` can iterate `iter` by
+    /// reference: the list is a [`lent_iterable`](Self::lent_iterable), the
+    /// pattern is one Rust matches against a reference (a tuple or a
+    /// variant of bindings and wildcards, [`is_native`](Self::is_native)),
+    /// and the body changes none of its bindings. Each binding is then a
+    /// reference into the element, as in a `match` on a borrowed place
+    /// ([`lend_bindings`](Self::lend_bindings)).
+    fn borrowed_for_pattern(&self, pattern: &Pattern, iter: &Expr, body: &Block) -> bool {
+        let Some(Ty::List(element)) = self.type_of(iter) else {
+            return false;
+        };
+        if !self.is_native(pattern, Some(element)) {
+            return false;
+        }
+        let mutated = ownership::changed_in_block(body, self.types);
+        pattern
+            .bindings()
+            .iter()
+            .all(|id| !mutated.contains(id.name.as_str()))
+            && self.lent_iterable(iter, &mutated)
     }
 
     /// The list place `l` of `l.slice(i, j)` whose bounds change nothing,
@@ -2588,7 +2646,7 @@ impl<'a> Generator<'a> {
                     place_root(list)
                 } else if self.is_place(arg) {
                     place_root(arg)
-                } else if self.field_of_element(arg) {
+                } else if self.lent_element(arg) || self.field_of_element(arg) {
                     self.element_root(arg)
                 } else {
                     None
@@ -2618,6 +2676,9 @@ impl<'a> Generator<'a> {
         }
         if let Some((list, index, site)) = self.borrowed_at(arg) {
             return self.checked_at_call(list, index, site);
+        }
+        if self.lent_element(arg) {
+            return self.element_at(arg);
         }
         if self.field_of_element(arg) {
             return format!("&{}", self.element_field(arg));
@@ -3586,6 +3647,35 @@ impl<'a> Generator<'a> {
                 pattern,
                 iter,
                 body,
+            } if self.borrowed_for_pattern(pattern, iter, body) => {
+                let element = match self.type_of(iter) {
+                    Some(Ty::List(element)) => Some((**element).clone()),
+                    _ => None,
+                };
+                let iter = self.lent_iterable_text(iter);
+                self.scopes.push(Vec::new());
+                let lent_before = self.borrowed_elements.len();
+                let text = self.pattern(pattern, element.as_ref());
+                let mut bindings = Vec::new();
+                self.lend_bindings(pattern, &mut bindings);
+                let mut body = self.block(body, false);
+                self.borrowed_elements.truncate(lent_before);
+                self.scopes.pop();
+                if !bindings.is_empty() {
+                    let lets: String = bindings
+                        .iter()
+                        .map(|(name, access)| {
+                            format!("let {} = {}; ", ident(name), binding_value(access))
+                        })
+                        .collect();
+                    body = format!("{{ {lets}{body} }}");
+                }
+                format!("for {text} in ({iter}).iter() {body}")
+            }
+            StmtKind::ForPattern {
+                pattern,
+                iter,
+                body,
             } => {
                 let iter = self.value(iter);
                 self.scopes.push(Vec::new());
@@ -3673,10 +3763,7 @@ impl<'a> Generator<'a> {
             }
             StmtKind::Loop { body } => format!("loop {}", self.block(body, false)),
             StmtKind::For { name, iter, body } if self.borrowed_for(&name.name, iter, body) => {
-                let iter = match self.is_place(iter) {
-                    true => self.bare(iter),
-                    false => self.checked_slice_ref(iter).expect("a borrowed slice"),
-                };
+                let iter = self.lent_iterable_text(iter);
                 let scope = self.scopes.len();
                 self.scopes.push(vec![name.name.clone()]);
                 self.borrowed_elements.push((scope, name.name.clone()));
@@ -3684,6 +3771,16 @@ impl<'a> Generator<'a> {
                 self.borrowed_elements.pop();
                 self.scopes.pop();
                 format!("for {} in ({iter}).iter() {body}", ident(&name.name))
+            }
+            StmtKind::For { name, iter, body } if self.copied_for(iter, body) => {
+                let iter = self.lent_iterable_text(iter);
+                self.scopes.push(vec![name.name.clone()]);
+                let body = self.block(body, false);
+                self.scopes.pop();
+                format!(
+                    "for {} in ({iter}).iter().copied() {body}",
+                    ident(&name.name)
+                )
             }
             StmtKind::For { name, iter, body }
                 if let Some(text) = self.text_bytes_place(iter)
@@ -4527,6 +4624,42 @@ impl<'a> Generator<'a> {
             .then_some((list, index))
     }
 
+    /// Whether `expr` is an [`element_read`](Self::element_read) (`l[i]`,
+    /// `l[i][j]`, `l.at(i)`) that changes no variable, so it can be read
+    /// through the `&T` [`element_at`](Self::element_at) gives instead of a
+    /// copy: an argument by reference, a `match` scrutinee, a `for`
+    /// iterable, a receiver of a builtin that only reads it, an operand of
+    /// a comparison (`docs/slice.md` 20.3.7).
+    fn lent_element(&self, expr: &Expr) -> bool {
+        self.element_read(expr).is_some() && ownership::changed_in(expr, self.types).is_empty()
+    }
+
+    /// Whether the builtin method `name` on `receiver` reads a
+    /// [`lent_element`](Self::lent_element) of a type that is not `Copy`
+    /// in place (`(*checked::at(..)).len()`) instead of a copy of it: the
+    /// method only reads its receiver and no argument changes the list.
+    fn reads_element_in_place(&self, receiver: &Expr, name: &Ident, args: &[Expr]) -> bool {
+        const READS: &[&str] = &[
+            "len",
+            "is_empty",
+            "trim",
+            "starts_with",
+            "strip_prefix",
+            "to_text",
+            "to_bytes",
+            "join",
+            "map",
+        ];
+        READS.contains(&name.name.as_str())
+            && !self.element_clone(receiver).is_empty()
+            && self.lent_element(receiver)
+            && self.element_root(receiver).is_none_or(|root| {
+                !args
+                    .iter()
+                    .any(|arg| ownership::changed_in(arg, self.types).contains(root))
+            })
+    }
+
     /// Whether `expr` is a field (or tuple field) of an
     /// [`element_read`](Self::element_read), directly or through further
     /// fields (`l[i].f`, `l.at(i).f.g`, `l[i].f[j].g`): a place inside the
@@ -4626,11 +4759,12 @@ impl<'a> Generator<'a> {
             return self.element_field(expr);
         }
         if !self.element_clone(expr).is_empty()
-            && let Some((list, index, site)) = self.borrowed_at(expr)
-            && place_root(list).is_none_or(|root| !changed.contains(root))
-            && ownership::changed_in(index, self.types).is_empty()
+            && self.lent_element(expr)
+            && self
+                .element_root(expr)
+                .is_none_or(|root| !changed.contains(root))
         {
-            return format!("(*{})", self.checked_at_call(list, index, site));
+            return format!("(*{})", self.element_at(expr));
         }
         self.operand(expr)
     }
@@ -5236,7 +5370,11 @@ impl<'a> Generator<'a> {
             let r = self.receiver(receiver);
             return format!("{r}.extend_from_slice({})", self.ref_arg(value));
         }
-        let r = self.receiver(receiver);
+        let r = if self.reads_element_in_place(receiver, name, args) {
+            format!("(*{})", self.element_at(receiver))
+        } else {
+            self.receiver(receiver)
+        };
         if matches!(self.callee(expr), Some(Callee::Builtin(Builtin::ListMap)))
             && let [arg] = args
         {
@@ -5407,7 +5545,7 @@ impl<'a> Generator<'a> {
     ) -> bool {
         let root = if self.is_place(scrutinee) {
             place_root(scrutinee)
-        } else if self.field_of_element(scrutinee) {
+        } else if self.field_of_element(scrutinee) || self.lent_element(scrutinee) {
             self.element_root(scrutinee)
         } else {
             None

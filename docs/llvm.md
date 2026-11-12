@@ -411,6 +411,10 @@ position, even with no buffer.
   - an argument to a borrowed parameter (section 3);
   - the scrutinee of a `match` whose arms do not modify the place's root variable;
   - the list of a `for` whose body does not modify the list's root variable;
+  - for both, also an element of a place reached through fields, tuple fields and indexes
+    that change no variable (`match l[i]`, `for x in l[i]`, `Lower::read_root`): the
+    element is the pointer into the list that indexing gives (story `std-mysql-client`,
+    unit `mysql-cost`; before, a copy);
   - the receiver of `to_bytes`: the result is the receiver itself, owned or borrowed as the
     receiver is;
   - the argument of `append` when the element type holds no buffer: its elements are
