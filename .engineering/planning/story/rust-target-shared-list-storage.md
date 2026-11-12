@@ -6,7 +6,7 @@ status: draft
 title: A list on the Rust target is copied by reference count and copied in full only when it changes
 relations:
 - informed_by: story:rust-target-read-only-forms-borrow
-revision: 2
+revision: 3
 ---
 # Story: a list on the Rust target is copied by reference count and copied in full only when it changes
 
@@ -36,10 +36,16 @@ Where the ownership analysis cannot lend or move a `List`, `Map`, `Text` or `Byt
 
 ## After the borrow fix
 
-Measured by the same user on 2026-11-12 with the borrow fix (`4bcda2ab`, unit `mysql-cost`) on a service that had already rewritten its hot functions to read lists in place:
+Measured by the same user on 2026-11-12, three steps, on a service that had already rewritten its hot functions to read lists in place (instructions per request for its largest answer, one request at a time):
 
-- Instructions per request for its largest answer: 218 M before the fix, 216 M with it (about 1 %). The fix removes copies the service no longer made.
-- The profile with the fix: dropping values 11.1 % of samples, copying record fields 9.9 %, the allocator 14.6 % in its two top frames and about 61 % of all samples in libc.
-- What is left is the copy of a value that is stored, returned or read out of a record field or a `Map`: the forms this story is about, and the `Map` lookup and `let` forms the borrow fix left (`docs/slice.md`, "Still copied").
+- The borrow fix (`4bcda2ab`, unit `mysql-cost`): 218 M → 216 M (about 1 %). The fix removes copies the service no longer made.
+- Binding the read before a record update, in the service's own source (`let b = read_in(r, "b")?` then `r = set_in(r, "a", b)`, which moves `r`; 842 emitted `r.clone()` sites → 0): 217.9–219.0 M → 216.9–218.0 M (0.5 %). The record is small when those copies happen.
+- The profile after both: 74 % of instructions in libc (memcpy, malloc, free); the copy of a record's field list (`<(String, Value)>::to_vec`) 32 % inclusive; the drop of values 36 % inclusive; a lookup that returns a field's value 9 %; a filter that pushes kept elements into a new list 4 % self.
 
-So the count of copies that remain after the borrow fix, by form, is the first thing the design note establishes, from a synthetic program that builds an answer of nested records, lists and maps out of rows.
+So what is left is the copy of a value taken out of a lent list: `out.push(r)` in a loop over a lent list, and `return Some(e.1)` from a lookup (the reporter's reproducer `top.ignite`, forms 1 and 2; synthetic). Neither is a copy the backend makes by mistake: under value semantics the list keeps its element and the result needs one. A lookup whose result is only compared (`field(r, k) != None`) copies the whole value to answer yes or no.
+
+The design note's first step: count, on a synthetic program that builds an answer of nested records, lists and maps out of rows, the copies by form, and for forms 1 and 2 compare at least three designs by count:
+
+- reference-counted list (and text) storage, copied in full only at the first change after a share;
+- a parameter taken by value when its elements leave the function, with the caller moving a list that is dead after the call and copying one that is not (a filter that keeps few rows of a live list then copies more than today);
+- a lookup that returns a lent value where every caller only reads it.
