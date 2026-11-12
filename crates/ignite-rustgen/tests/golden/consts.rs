@@ -12,13 +12,23 @@ pub fn DOUBLE_LIMIT() -> i64 {
 }
 
 #[allow(non_snake_case)]
-pub fn GREETING() -> String {
-    format!("{}{}", String::from("hello"), SUFFIX())
+pub fn GREETING() -> &'static String {
+    static VALUE: ::std::sync::OnceLock<String> = ::std::sync::OnceLock::new();
+    if let Some(value) = VALUE.get() { return value; }
+    let value = {
+        format!("{}{}", String::from("hello"), SUFFIX())
+    };
+    VALUE.get_or_init(|| value)
 }
 
 #[allow(non_snake_case)]
-pub fn LOUD() -> Mode {
-    Mode::Loud
+pub fn LOUD() -> &'static Mode {
+    static VALUE: ::std::sync::OnceLock<Mode> = ::std::sync::OnceLock::new();
+    if let Some(value) = VALUE.get() { return value; }
+    let value = {
+        Mode::Loud
+    };
+    VALUE.get_or_init(|| value)
 }
 
 #[derive(Clone)]
@@ -39,7 +49,7 @@ pub fn describe(verdict: &Verdict, mode: &Mode) -> String {
     match verdict {
         Verdict::Accept(room) => { let room = (room).clone(); {
             match mode {
-                Mode::Loud => shout(&GREETING()),
+                Mode::Loud => shout(GREETING()),
                 Mode::Quiet => room.clone().to_string(),
             }
         } },
@@ -63,5 +73,5 @@ pub fn or_limit(value: &::std::option::Option<i64>) -> i64 {
 }
 
 pub fn default_mode() -> Mode {
-    return LOUD();
+    return LOUD().clone();
 }

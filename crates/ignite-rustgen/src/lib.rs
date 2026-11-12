@@ -38,7 +38,10 @@
 //! known from `Symbols::protocols` or from the module's own `protocol`
 //! declarations; a constant from `Symbols::constants` or the module's own
 //! `const` declarations. A constant is a zero-argument fn, so a non-local
-//! name that is a constant is emitted as `N()` and is never a place.
+//! name that is a constant is emitted as `N()`. A constant whose type is
+//! `Copy` in Rust returns its value and is never a place; any other is
+//! built once and returns a `&'static T`, a place read like a borrowed
+//! parameter (`docs/slice.md` section 6, "Constants").
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Write as _;
@@ -2059,6 +2062,15 @@ struct Generator<'a> {
     protocols: BTreeSet<String>,
     /// Constant names in scope: from `symbols` and the module's own decls.
     constants: BTreeSet<String>,
+    /// The [`constants`](Self::constants) built once and read through a
+    /// reference (`docs/slice.md` section 6, "Constants"): those whose type
+    /// is known and not `Copy` in Rust. Each is a fn returning
+    /// `&'static T`, read like a borrowed parameter.
+    statics: BTreeSet<String>,
+    /// The static constant an in-place change is written on: inside that
+    /// call it is read as before, a copy that the change goes to and
+    /// nothing reads after ([`Generator::method`]).
+    changed_constant: Option<String>,
     scopes: Vec<Vec<String>>,
     indent: usize,
     /// The module's types, when the caller has them.
@@ -2183,10 +2195,25 @@ impl<'a> Generator<'a> {
                 _ => {}
             }
         }
+        let statics = match types {
+            Some(types) => constants
+                .iter()
+                .filter(|name| {
+                    let module = symbols.imported.get(*name).unwrap_or(&types.module);
+                    types
+                        .const_type(&QualName::new(module.clone(), (*name).clone()))
+                        .is_some_and(|ty| !rust_copy(ty))
+                })
+                .cloned()
+                .collect(),
+            None => BTreeSet::new(),
+        };
         Generator {
             symbols,
             protocols,
             constants,
+            statics,
+            changed_constant: None,
             scopes: Vec::new(),
             indent: 0,
             types,
@@ -2480,9 +2507,21 @@ impl<'a> Generator<'a> {
         }
     }
 
+    /// Whether `name`, not shadowed by a local, is a constant built once
+    /// ([`statics`](Self::statics)): `N()` is a `&'static T`.
+    fn is_static_const(&self, name: &str) -> bool {
+        self.statics.contains(name)
+            && !self.is_local(name)
+            && self.changed_constant.as_deref() != Some(name)
+    }
+
     /// Whether local `name` is a parameter passed by reference or a `for`
-    /// element bound by reference, not shadowed.
+    /// element bound by reference, not shadowed; or a constant built once,
+    /// which is read the same way.
     fn is_borrowed(&self, name: &str) -> bool {
+        if self.is_static_const(name) {
+            return true;
+        }
         if self.borrowed.contains(name) && self.is_outermost(name) {
             return true;
         }
@@ -3114,19 +3153,42 @@ impl<'a> Generator<'a> {
     }
 
     /// `const N: T = e` as `pub fn N() -> T { e }`; every use is `N()`.
+    /// A constant whose type is not `Copy` in Rust ([`statics`](Self::statics))
+    /// is built once per process instead: `N()` returns a `&'static T` into
+    /// a `OnceLock`, built by the first use that finds it empty, outside the
+    /// cell, so an initialiser that reaches its own constant through a fn
+    /// recurses as before instead of waiting on itself; a task that loses a
+    /// race drops its value and reads the winner's.
     fn constant(&mut self, w: &mut Writer, decl: &ConstDecl) {
         self.scopes = vec![Vec::new()];
         self.indent = w.indent + 1;
+        let built_once = self.statics.contains(&decl.name.name);
+        if built_once {
+            self.indent += 1;
+        }
         let value = self.value(&decl.value);
         self.scopes.clear();
+        let ty = rust_type(&decl.ty);
         w.line("");
         w.line("#[allow(non_snake_case)]");
+        if !built_once {
+            w.open(&format!("pub fn {}() -> {ty} {{", ident(&decl.name.name)));
+            w.line(&value);
+            w.close("}");
+            return;
+        }
         w.open(&format!(
-            "pub fn {}() -> {} {{",
-            ident(&decl.name.name),
-            rust_type(&decl.ty)
+            "pub fn {}() -> &'static {ty} {{",
+            ident(&decl.name.name)
         ));
+        w.line(&format!(
+            "static VALUE: ::std::sync::OnceLock<{ty}> = ::std::sync::OnceLock::new();"
+        ));
+        w.line("if let Some(value) = VALUE.get() { return value; }");
+        w.open("let value = {");
         w.line(&value);
+        w.close("};");
+        w.line("VALUE.get_or_init(|| value)");
         w.close("}");
     }
 
@@ -3558,7 +3620,7 @@ impl<'a> Generator<'a> {
 
     fn is_place(&self, expr: &Expr) -> bool {
         match &expr.kind {
-            ExprKind::Name(id) => self.is_local(&id.name),
+            ExprKind::Name(id) => self.is_local(&id.name) || self.is_static_const(&id.name),
             ExprKind::Field { receiver, .. } | ExprKind::TupleField { receiver, .. } => {
                 self.assoc_callee(expr).is_none() && self.is_place(receiver)
             }
@@ -4432,6 +4494,9 @@ impl<'a> Generator<'a> {
         }
         if id.name == "Unit" {
             return "()".to_string();
+        }
+        if self.changed_constant.as_deref() == Some(id.name.as_str()) {
+            return format!("{}().clone()", ident(&id.name));
         }
         if self.constants.contains(&id.name) {
             return format!("{}()", ident(&id.name));
@@ -5332,6 +5397,22 @@ impl<'a> Generator<'a> {
     }
 
     fn method(&mut self, expr: &Expr, receiver: &Expr, name: &Ident, args: &[Expr]) -> String {
+        // A change in place of a constant built once (`C.push(x)`,
+        // `C[i] = x`, `C.f.clear()`; the checker refuses only assignments
+        // to a constant's fields, E006) changes a copy, as before the
+        // constant was built once and as on the other consumers: inside
+        // the call the constant is the copy `N().clone()`, not a place.
+        if let Some(root) = place_root(receiver)
+            && self.is_static_const(root)
+            && (ownership::changes_value(expr, &name.name, self.types)
+                || matches!(self.callee(expr), Some(Callee::Builtin(b)) if ownership::mutates(*b)))
+        {
+            let root = root.to_string();
+            let outer = self.changed_constant.replace(root);
+            let text = self.method(expr, receiver, name, args);
+            self.changed_constant = outer;
+            return text;
+        }
         match self.callee(expr) {
             Some(Callee::Fn(q)) if q.name.contains('.') => {
                 return self.assoc_call(expr, q, args);
@@ -5626,6 +5707,11 @@ impl<'a> Generator<'a> {
             ("starts_with", 1) => format!("{r}.starts_with({})", arg(0, &a)),
             ("strip_prefix", 1) => {
                 format!("{r}.strip_prefix({}).map(|s| s.to_string())", arg(0, &a))
+            }
+            // `format!` borrows its arguments: a place, a constant built
+            // once among them, is read where it is, not copied first.
+            ("concat", 1) if self.is_place(&args[0]) => {
+                format!("format!(\"{{}}{{}}\", {r}, {})", self.bare(&args[0]))
             }
             ("concat", 1) => format!("format!(\"{{}}{{}}\", {r}, {})", a[0]),
             ("to_bytes", 0) if self.fresh_text(receiver) => format!("{r}.into_bytes()"),
@@ -5957,12 +6043,17 @@ impl<'a> Generator<'a> {
         out
     }
 
-    /// The constant a pattern compares with, as the Rust call `N()`.
+    /// The constant a pattern compares with, as the Rust call `N()`, or
+    /// `(*N())` for a constant built once.
     fn pattern_const(&self, pattern: &Pattern) -> Option<String> {
         if let Some(types) = self.types {
-            return types
-                .pattern_const(pattern)
-                .map(|q| format!("{}()", ident(&q.name)));
+            return types.pattern_const(pattern).map(|q| {
+                if self.statics.contains(&q.name) {
+                    format!("(*{}())", ident(&q.name))
+                } else {
+                    format!("{}()", ident(&q.name))
+                }
+            });
         }
         let name = match &pattern.kind {
             PatternKind::Variant { path, args } if path.len() == 1 && args.is_empty() => {

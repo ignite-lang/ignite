@@ -708,8 +708,9 @@ the same whitespace rule (ASCII space, tab, CR, LF, FF, VT).
 
 | Ignite | Rust |
 |---|---|
-| `const N: T = e` | `#[allow(non_snake_case)] pub fn N() -> T { e }` |
-| `N` (a constant, own or imported) in any expression | `N()` |
+| `const N: T = e`, `T` `Copy` in Rust | `#[allow(non_snake_case)] pub fn N() -> T { e }` |
+| `const N: T = e`, any other `T` (built once, "Constants" below) | `#[allow(non_snake_case)] pub fn N() -> &'static T { static VALUE: ::std::sync::OnceLock<T> = ::std::sync::OnceLock::new(); if let Some(value) = VALUE.get() { return value; } let value = { e }; VALUE.get_or_init(\|\| value) }` |
+| `N` (a constant, own or imported) in any expression | `N()`; a value position of a constant built once `N().clone()` |
 | `IoError.new(m)` | `::ignite_io::IoError::new(m)` |
 | `Enum.Variant(p)` pattern | `Enum::Variant(p)` |
 | `x.to_text()` on `Int`, `Byte`, `Bool` | `x.to_string()` |
@@ -719,10 +720,66 @@ the same whitespace rule (ASCII space, tab, CR, LF, FF, VT).
 list pattern, and a constant is not a Rust pattern. An arm whose pattern contains a text,
 list or constant pattern anywhere becomes `__m if <test> => { let a = (<access>).clone(); ...
 body }`: `<test>` evaluates the whole pattern against `&__m` (`*s == N()` for a constant,
+`*s == (*N())` for one built once,
 `*s == "x"` for text, `s.len() == 2 && ...` for a list, a `match` with `_ => false` for a
 variant payload), and each binding is read out of `&__m` by its path (`&s.0`, `&s[1]`,
 `match s { E::V(_, __x) => __x, _ => unreachable!() }`) and cloned. Every other arm is a
 Rust pattern as written.
+
+**Constants.** Story `rust-target-constants-built-once`. A constant whose type is `Copy` in
+Rust (`Int`, `Byte`, `U32`, `Bool`, `Unit`, a quantity, an `Option`, `Result` or tuple of
+these) stays a fn that returns its value. Every other constant (`Text`, `Bytes`, a list, a
+map, a record, an enum, a fn value) is built once per process: `N()` returns a `&'static T`
+into a `OnceLock` (the row above). The type is the one the type checker gives the constant
+(`TypedProgram::const_type`, aliases resolved), so the declaring module and every importer,
+`std` or a sibling, agree on the form; without types every constant stays a fn.
+
+- A use reads it as a reference parameter is read (Parameters, above): passed as it is to a
+  reference parameter, `(*N())` as an operand, the receiver of a builtin (`N().len()`,
+  `N().as_bytes()` for a `to_bytes` the 20.3.7 forms lend), an element or field read in
+  place (`checked::at(N(), i, ..)`, `N().f`), `for x in (N()).iter()`, a `match` on `N()`
+  with its bindings lent, and `format!` arguments. Such a read allocates nothing.
+- A value position (a by-value argument, a `let` or `var` initialiser, a `return` operand
+  or result, a list element, a record field, a `send`, a `spawn` argument) writes
+  `N().clone()`: one copy, which no other use reads, so a later change of it is seen by no
+  other use. A closure captures nothing for it: `N()` names a `'static`.
+- A change in place of a constant (`C.push(x)`, `C[i] = x`, `C.f.clear()`, `C.put(k, v)`:
+  the checker accepts these and refuses only an assignment to a field, E006) is written on
+  the copy `N().clone()` and is lost, as before, as on the LLVM target (`docs/llvm.md`
+  section 2) and in the evaluator.
+- The generated code has no `unsafe`. Inside the `ignite-std` crate and the program crate
+  each constant has one cell, so it is built once per process, where the LLVM target builds
+  an aggregate constant once per process and IR module.
+
+The order of effects. A constant's value is pure (E010, 4.3) but may call pure fns, and a
+pure fn may `log` (not an effect) or fail (an overflow, an index out of range, no arm). Such an
+initialiser exists. The first use that finds the cell empty evaluates the value outside the
+cell, then publishes it; every later use reads the published value. So a `log` in it prints
+once per process, at the first use, where it printed at every use before the story (the LLVM
+target printed it once already); two tasks at the first use at once both evaluate it and both
+log, and the one that publishes second drops its value and reads the first one's. A failure
+publishes nothing: each later use evaluates it again and fails as every use did before. An
+initialiser that reaches its own constant through a fn body (E015 follows only direct
+references) recurses until the stack overflows, as before, since it is evaluated outside the
+cell and no use waits for it (a `LazyLock`, or `OnceLock::get_or_init` around the
+evaluation, would deadlock or panic there instead).
+
+What it costs, counted by `constants::` (memcheck's `total heap usage`, 1,001 rounds less 1,
+per round): reading a 16-byte `Text`, a 12-byte `Bytes`, a list of nine pairs of texts and a
+record with a text and a list of two texts went from 3, 3, 38 and 16 allocations per round
+(48, 36, 976 and 289 bytes) to 0 on the Rust target. The LLVM target, unchanged, makes 0
+`malloc` calls per round for all four, in the same count (under 0.002 per round and 0.2
+bytes; its first mention copies the constant to the heap once, `docs/llvm.md` section 2; what
+a task's arena takes is not a `malloc` and is not in this count), so no story follows there
+from this count. The form costs 6 lines of generated Rust per constant built once; the release
+`todod` stripped grew from 878,064 to 878,752 bytes and `terminald` stayed at 600,176 (row 3.9's
+method: `ignite build --target rust --release`, then `strip`); one `GET /todos/1` of `todod`,
+`valgrind --tool=callgrind` over 200 replies after 50, went from 125,363 to 125,367
+instructions (dev) and from 19,757 to 19,760 (release), its allocations stay 36 (`reply_cost::`'s
+count): that path reads no constant built once. A form that is cheaper still, a `&'static
+str` or `&'static [u8]` Rust builds at compile time, was not taken: every reference parameter
+is a `&String` or `&Vec<u8>`, so such a constant would need a second calling convention or a
+copy at each use that passes it on.
 
 The generator reads types (`generate_typed`, `generate_std_typed`) for UFCS, fn-field calls,
 `to_text`, `+` on `Text`, constant patterns and variants resolved by expected type; without

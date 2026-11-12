@@ -50,8 +50,13 @@ pub fn BASE() -> i64 {
 }
 
 #[allow(non_snake_case)]
-pub fn QUIT() -> String {
-    String::from("quit")
+pub fn QUIT() -> &'static String {
+    static VALUE: ::std::sync::OnceLock<String> = ::std::sync::OnceLock::new();
+    if let Some(value) = VALUE.get() { return value; }
+    let value = {
+        String::from("quit")
+    };
+    VALUE.get_or_init(|| value)
 }
 
 #[allow(non_snake_case)]
@@ -99,7 +104,7 @@ pub fn classify(words: &Vec<String>) -> String {
     match words {
         __m if (__m.len() == 0) => String::from("none"),
         __m if (__m.len() == 1) => { let w = ((&__m[0])).clone(); format!("one {}", w) },
-        __m if (__m.len() == 2 && { let __p2 = &__m[0]; (*__p2 == QUIT()) }) => String::from("quit with argument"),
+        __m if (__m.len() == 2 && { let __p2 = &__m[0]; (*__p2 == (*QUIT())) }) => String::from("quit with argument"),
         __m if (__m.len() == 2) => { let a = ((&__m[0])).clone(); let b = ((&__m[1])).clone(); format!("two {}{}", a, b) },
         _ => String::from("many"),
     }
