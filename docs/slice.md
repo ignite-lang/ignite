@@ -7327,7 +7327,14 @@ The Rust target (20.3.4 otherwise):
   lent tuple, which the analysis tracks as owned: a tuple literal is a fresh value) is
   passed as the copy `Generator::moves` keeps for it, after the same bindings. A parameter
   whose only move is a late one (`fn renamed(r: Ctx) -> Ctx = set_in(r, "k",
-  Num(r.count))`) is consumed: taken by value and moved on, not borrowed and copied.
+  Num(r.count))`) is consumed: taken by value and moved on, not borrowed and copied. The
+  analysis runs on every check and plan, for every fn call in every round of its fixpoint:
+  `Walk::late_moves` allocates nothing for a call with no late move (an empty result) and
+  tests, in this order, an operand after the place, a place, a later operand that names its
+  variable (on a reused stack), then liveness, pins and holds. Under callgrind (debug build)
+  it takes 0.12 % of the instructions of `ignite check examples/todo/todo.ignite` and 0.16 %
+  of `examples/terminal/terminal.ignite`, `ignite plan` alike (0.44 % and 0.59 % with the
+  order of the unit's first commit, which allocated per call).
 - A `match` whose scrutinee is a tuple of two or more places, each of a type that is `Copy`
   here (passed as a value) or not (passed by reference, at least one; a binding of a type that
   is not lendable, a fn value, is copied out of its reference at the start of the arm, as the

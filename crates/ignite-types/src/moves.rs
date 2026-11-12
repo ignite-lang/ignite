@@ -1111,6 +1111,8 @@ struct Walk<'a> {
     /// Parameters some path moves, from the settled round of every loop.
     any_move: BTreeSet<usize>,
     marks: Option<NodeMap<(bool, bool)>>,
+    /// The stack [`Walk::names`] reuses, so the test allocates nothing.
+    stack: Vec<Node<'a>>,
 }
 
 /// An operand of an enclosing call that the call holds while a later
@@ -1147,6 +1149,7 @@ fn walk<'a>(
         loops: Vec::new(),
         any_move: BTreeSet::new(),
         marks: record.then(NodeMap::default),
+        stack: Vec::new(),
     };
     let entry = match body.root {
         Root::Block(block) => w.block(block, body.used, State::exit()),
@@ -1722,10 +1725,12 @@ impl<'a> Walk<'a> {
         // Only a fn call binds its later arguments first (the Rust target's
         // `fn_call`, the evaluator's `late_args`); a `spawn` has no
         // `Operand::Move` left to move late.
-        let late = if !matches!(callee, Some(Callee::Fn(_))) {
-            vec![false; operands.len()]
-        } else {
+        // Empty for a call with no late move, the common case: no
+        // allocation, every operand read as not late.
+        let late = if matches!(callee, Some(Callee::Fn(_))) {
             self.late_moves(&operands, &st)
+        } else {
+            Vec::new()
         };
         // A late move happens at the call, after every later operand ran,
         // so a `?` in one of them leaves the parameter unmoved.
@@ -1749,7 +1754,7 @@ impl<'a> Walk<'a> {
             let depth = self.held.len();
             for (j, (other, other_kind)) in operands[..i].iter().copied().enumerate() {
                 let field = match other_kind {
-                    Operand::Move if late[j] => None,
+                    Operand::Move if !late.is_empty() && late[j] => None,
                     Operand::Move => continue,
                     Operand::Read | Operand::Spawned => None,
                     Operand::Field(name) => Some(name),
@@ -1762,7 +1767,7 @@ impl<'a> Walk<'a> {
             }
             st = match kind {
                 Operand::Read => self.expr(operand, st),
-                Operand::Move if late[i] => self.take_late(operand, st),
+                Operand::Move if !late.is_empty() && late[i] => self.take_late(operand, st),
                 Operand::Move | Operand::Spawned => {
                     let inner = match &operand.kind {
                         ExprKind::NamedArg { value, .. } => &**value,
@@ -1857,21 +1862,37 @@ impl<'a> Walk<'a> {
     /// [`crate::ownership::changed_in`] counts) and none passed by
     /// reference [`lends`](Self::lends) from it. The place then moves into
     /// the call once the later operands have run: they read it as it was,
-    /// and it is held while they run, so none of them moves it.
+    /// and it is held while they run, so none of them moves it. Empty when
+    /// no operand moves late. The walk runs this for every fn call in every
+    /// round of every check, so the tests that allocate nothing come first,
+    /// the most selective before the rest: an operand after it, a place,
+    /// whose variable a later operand names ([`names`](Self::names)), then
+    /// dead after the call and not pinned.
     fn late_moves(&mut self, operands: &[(&'a Expr, Operand<'a>)], after: &State) -> Vec<bool> {
-        let mut late = vec![false; operands.len()];
-        for (i, &(operand, kind)) in operands.iter().enumerate() {
+        let mut late = Vec::new();
+        for i in 0..operands.len().saturating_sub(1) {
+            let (operand, kind) = operands[i];
             if !matches!(kind, Operand::Move) {
                 continue;
             }
             let inner = unnamed(operand);
-            let Some(place) = self.movable(inner).filter(|_| self.aggregate_expr(inner)) else {
-                continue;
-            };
             let Some(root) = crate::ownership::place_root(inner) else {
                 continue;
             };
-            if !after.live.dead(&place) || self.pinned(&place) || self.held_overlaps(&place) {
+            if !operands[i + 1..]
+                .iter()
+                .any(|&(other, _)| self.names(other, root))
+            {
+                continue;
+            }
+            let Some(place) = self.movable(inner) else {
+                continue;
+            };
+            if !after.live.dead(&place)
+                || self.pinned(&place)
+                || !self.aggregate_expr(inner)
+                || self.held_overlaps(&place)
+            {
                 continue;
             }
             let mentions = |w: &Self, (other, kind): &(&Expr, Operand<'_>)| {
@@ -1889,12 +1910,42 @@ impl<'a> Walk<'a> {
             {
                 continue;
             }
-            late[i] = later.iter().all(|&(other, kind)| {
+            if later.iter().all(|&(other, kind)| {
                 !crate::ownership::changed_in(other, Some(self.types)).contains(root)
                     && (matches!(kind, Operand::Move) || !self.lends(other, &place))
-            });
+            }) {
+                if late.is_empty() {
+                    late = vec![false; operands.len()];
+                }
+                late[i] = true;
+            }
         }
         late
+    }
+
+    /// Whether `e` names `root` anywhere, as [`crate::ownership::mentions`]
+    /// does, on the reused [`Walk::stack`].
+    fn names(&mut self, e: &'a Expr, root: &str) -> bool {
+        let mut stack = std::mem::take(&mut self.stack);
+        stack.push(Node::Expr(e));
+        let mut found = false;
+        while let Some(node) = stack.pop() {
+            match node {
+                Node::Target(target) => found = target.base.name == root,
+                Node::Expr(e) => {
+                    found = matches!(&e.kind, ExprKind::Name(id) if id.name == root);
+                    if !found {
+                        expr_children(e, &mut stack);
+                    }
+                }
+            }
+            if found {
+                break;
+            }
+        }
+        stack.clear();
+        self.stack = stack;
+        found
     }
 
     /// Whether the value of `operand`, passed by reference, may borrow from
