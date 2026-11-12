@@ -619,7 +619,7 @@ under indexes); a field or payload that moves into a `Vec` position, and a field
 no local holds (`f().items`), is `::ignite_io::List::into_vec(..)`, which takes the `Vec`
 when nothing else shares it and copies it otherwise. Substrate records with list fields
 (`Invocation`, `TlsOptions`) convert at the call with `.into()`. The LLVM target and the
-evaluator are unchanged.
+evaluator are unchanged. `CODEGEN_REVISION` is `ignite-codegen/0.1.0-53` since this unit.
 
 What a copy costs now: copying a value that holds such a list is one increment per list,
 whatever the list holds; the first change through one holder after a share copies the
