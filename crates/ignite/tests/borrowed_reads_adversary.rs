@@ -300,3 +300,168 @@ fn adversary_an_index_of_an_element_that_replaces_the_list() {
         1,
     );
 }
+
+/// The same receiver as [`RECEIVER_THEN_ARGUMENT`] one field further in:
+/// `l[0].items.slice(0, j)` whose bound replaces `l`. `ref_arg` lent a
+/// field of an element (`&checked::at(&l, 0, ..).items`) before the
+/// change too, so the Rust target refuses this one (E0506) at the base
+/// commit as well.
+const FIELD_RECEIVER_THEN_ARGUMENT: &str = r#"package field_receiver_then_argument
+
+type R {
+  items: List<Int>
+}
+
+fn slice_of_field() -> Int {
+  var l = [R { items = [1, 2, 3] }]
+  let s = l[0].items.slice(0, if true {
+    l = [R { items = [7] }]
+    2
+  } else {
+    2
+  })
+  s.len() * 10 + l.len()
+}
+
+test "a slice of a field of an element is taken before its bound replaces the list" {
+  assert slice_of_field() == 21
+}
+"#;
+
+#[test]
+fn adversary_a_field_receiver_of_a_builtin_whose_argument_changes_the_list() {
+    agree(
+        "field_receiver_then_argument",
+        FIELD_RECEIVER_THEN_ARGUMENT,
+        1,
+    );
+}
+
+/// One program per guard of the change, each where the guard decides:
+/// the body, arm, argument or operand changes the list the element or the
+/// `for` would borrow from. Green now; with one guard switched off it goes
+/// red, which no other test of `ignite-rustgen`, `ignite-llvm`,
+/// `borrowed_reads::` or the differential corpus did for four of them
+/// (adversary pass on 4bcda2ab): `reads_element_in_place`'s argument
+/// check (`receiver_changed`), `ref_args`' check of a lent element
+/// against later arguments (`argument_changed`), `compared`'s check of the
+/// later operand (`operand_changed`), and on LLVM `unchanged_in` for a
+/// `match` on `l[i]` (`scrutinee_changed`). The other three (`for` over a
+/// list, over integers, over an element) were covered already.
+const GUARDS: &str = r#"package guards
+
+enum V {
+  N
+  S(Text)
+}
+
+fn weigh(a: Text, b: Text) -> Int = a.len() * 10 + b.len()
+
+fn pairs_changed() -> Int {
+  var r = [("a", 1), ("bb", 2)]
+  var n = 0
+  for (t, k) in r {
+    r[1] = ("zzzz", 10)
+    n = n + t.len() + k
+  }
+  n
+}
+
+fn ints_changed() -> Int {
+  var l = [1, 2, 3]
+  var n = 0
+  for x in l {
+    l.push(x * 10)
+    n = n + x
+  }
+  n + l.len() * 100
+}
+
+fn element_changed() -> Int {
+  var l = [["a", "bb"], ["c"]]
+  var n = 0
+  for t in l[0] {
+    l[0] = ["zzzzz"]
+    n = n + t.len()
+  }
+  n
+}
+
+fn scrutinee_changed() -> Int {
+  var l = [S("abc"), N]
+  match l[0] {
+    S(t) => {
+      l[0] = S("zzzzz")
+      t.len()
+    }
+    N => 0
+  }
+}
+
+fn receiver_changed() -> Int {
+  var l = ["ab", "c"]
+  if l[0].starts_with(if true {
+    l = ["x"]
+    "a"
+  } else {
+    ""
+  }) {
+    1
+  } else {
+    2
+  }
+}
+
+fn argument_changed() -> Int {
+  var l = ["ab", "c"]
+  weigh(l[0], if true {
+    l[0] = "xyz"
+    "q"
+  } else {
+    ""
+  })
+}
+
+fn operand_changed() -> Bool {
+  var l = ["a", "b"]
+  l[0] == if true {
+    l[0] = "b"
+    l[0]
+  } else {
+    ""
+  }
+}
+
+test "a tuple-pattern for over a list its body changes iterates the list as it was" {
+  assert pairs_changed() == 6
+}
+
+test "a for over integers whose body pushes onto the list iterates the list as it was" {
+  assert ints_changed() == 606
+}
+
+test "a for over an element its body replaces iterates the element as it was" {
+  assert element_changed() == 3
+}
+
+test "a match on an element its arm replaces binds the element as it was" {
+  assert scrutinee_changed() == 3
+}
+
+test "a read-only method on an element reads it before its argument replaces the list" {
+  assert receiver_changed() == 1
+}
+
+test "an element argument is read before a later argument changes the list" {
+  assert argument_changed() == 21
+}
+
+test "an element operand is read before the other operand changes the list" {
+  assert !operand_changed()
+}
+"#;
+
+#[test]
+fn adversary_each_guard_of_a_lent_element_decides_one_program() {
+    agree("guards", GUARDS, 7);
+}
