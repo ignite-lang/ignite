@@ -958,10 +958,7 @@ impl Verdict {
             out.push_str(&format!("{note}\n"));
         }
         if !self.refused.is_empty() {
-            out.push_str(&format!(
-                "{METRIC}: {} refused, above the last release by more than the noise band:\n",
-                self.refused.len()
-            ));
+            out.push_str(&format!("{METRIC}: {} refused:\n", self.refused.len()));
             for refusal in &self.refused {
                 out.push_str(refusal);
             }

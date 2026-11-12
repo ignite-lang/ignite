@@ -9,8 +9,11 @@
 //! [`static_metrics_hold_the_bar`]), `differential` (the runner of
 //! `differential.rs`), `conformance` ([`conformance_claims_hold_the_bar`],
 //! the claim lines of `ignite conformance`), `perf` (`ignite-perf
-//! quality`, timing and sizes, measured by `task quality` only) or `bench`
-//! (the native benchmark of `ignite-perf quality-remote`, [`BENCH`]). Each value
+//! quality`, timing and sizes, measured by `task quality` only), `bench`
+//! (the native benchmark of `ignite-perf quality-remote`, [`BENCH`]) or
+//! `path-cost` (row 3.10, judged in `task gate` by `ignite-perf path-cost`
+//! against the counts of the last release, whose cells
+//! [`the_path_cost_bars_are_the_recorded_counts`] holds the bars to). Each value
 //! is held against its bar as the UI ratchet (`site::ux`) does: a value
 //! worse than the bar beyond the metric's tolerance, a bar the run did not
 //! measure, a measured value without a bar and an improvement not written
@@ -212,7 +215,14 @@ fn optional(fields: &BTreeMap<String, Json>, key: &str) -> Option<String> {
 }
 
 const KINDS: [&str; 3] = ["gate", "ratchet", "hill-climb"];
-const SOURCES: [&str; 5] = ["static", "differential", "conformance", "perf", "bench"];
+const SOURCES: [&str; 6] = [
+    "static",
+    "differential",
+    "conformance",
+    "perf",
+    "bench",
+    "path-cost",
+];
 const CONSUMERS: [&str; 4] = ["rust", "llvm", "eval", "all"];
 
 pub fn read_baseline(json: &Json) -> Result<Baseline, String> {
@@ -2820,7 +2830,12 @@ pub fn run_records(
 fn record() {
     let dir = quality_dir();
     let mut values = Vec::new();
-    for source in SOURCES.iter().filter(|s| **s != "bench") {
+    // The path cost (3.10) is judged in `task gate` by `ignite-perf
+    // path-cost` against the counts of the last release, not recorded here.
+    for source in SOURCES
+        .iter()
+        .filter(|s| !matches!(**s, "bench" | "path-cost"))
+    {
         values.extend(read_measured(&dir.join(format!("{source}-metrics.json"))));
     }
     let perf: Measured = values
@@ -3001,6 +3016,105 @@ fn trend_and_docs_are_generated_from_quality() {
         splice_docs(&docs, &render_docs_table(&baseline)).as_deref(),
         Some(docs.as_str()),
         "docs/quality.md's table is not generated from quality/baseline.json (IGNITE_BLESS=1)"
+    );
+}
+
+/// The path-cost row (`source: path-cost`, `docs/quality.md` "The path
+/// cost at every merge"), the only one.
+const PATH_COST: &str = "3.10";
+
+/// The cells of the count files under `bench/path-cost/counts/` that
+/// `ignite-perf path-cost --record` writes, by bar key
+/// `<target>/<scenario>/<op>/<unit>`: the value each cell had at the
+/// release the file names (or its first value, for a scenario added after
+/// the freeze). Read here, not through `ignite-perf`: the gate and the tool
+/// share no crate.
+fn recorded_path_costs() -> Result<BTreeMap<String, i64>, String> {
+    let dir = workspace().join("bench/path-cost/counts");
+    let mut files: Vec<PathBuf> = std::fs::read_dir(&dir)
+        .map_err(|e| format!("{}: {e}", dir.display()))?
+        .filter_map(|entry| entry.ok().map(|e| e.path()))
+        .filter(|path| path.extension().is_some_and(|e| e == "counts"))
+        .collect();
+    files.sort();
+    let mut cells = BTreeMap::new();
+    for file in files {
+        let text =
+            std::fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+        let (mut scenario, mut target, mut op) = (None, None, None);
+        for line in text.lines() {
+            let (word, rest) = line.split_once(' ').unwrap_or((line, ""));
+            match word {
+                "scenario" => scenario = Some(rest.to_string()),
+                "target" => target = Some(rest.to_string()),
+                "op" => op = Some(rest.to_string()),
+                "instructions" | "syscalls" => {
+                    let (Some(scenario), Some(target), Some(op)) = (&scenario, &target, &op) else {
+                        return Err(format!("{}: {line:?} before its op", file.display()));
+                    };
+                    let value = rest
+                        .split(' ')
+                        .next()
+                        .and_then(|v| v.parse::<i64>().ok())
+                        .ok_or_else(|| format!("{}: {line:?}", file.display()))?;
+                    cells.insert(format!("{target}/{scenario}/{op}/{word}"), value);
+                }
+                _ => {}
+            }
+        }
+    }
+    Ok(cells)
+}
+
+/// Row 3.10's bars are the counts `bench/path-cost/counts/` records, cell
+/// for cell, so the table of `docs/quality.md` shows what a merge is
+/// judged against. `IGNITE_BLESS=1` writes them into the baseline (after
+/// `ignite-perf path-cost --record`) and regenerates the pages; a bar's
+/// `decision` stays.
+#[test]
+fn the_path_cost_bars_are_the_recorded_counts() {
+    let recorded = recorded_path_costs().unwrap();
+    assert!(
+        !recorded.is_empty(),
+        "no counts under bench/path-cost/counts"
+    );
+    let mut baseline = load_baseline();
+    let rows: Vec<&String> = baseline
+        .metrics
+        .iter()
+        .filter(|(_, m)| m.source.as_deref() == Some("path-cost"))
+        .map(|(id, _)| id)
+        .collect();
+    assert_eq!(
+        rows,
+        vec![PATH_COST],
+        "the path cost is row {PATH_COST}, the one row of source `path-cost`"
+    );
+    if blessing() {
+        let metric = baseline.metrics.get_mut(PATH_COST).unwrap();
+        let mut bars = BTreeMap::new();
+        for (target, value) in &recorded {
+            let decision = metric.bars.get(target).and_then(|b| b.decision.clone());
+            bars.insert(
+                target.clone(),
+                Bar {
+                    value: *value,
+                    decision,
+                },
+            );
+        }
+        metric.bars = bars;
+        save_baseline(&baseline);
+        write_pages(&baseline, &read_history());
+    }
+    let bars: BTreeMap<String, i64> = baseline.metrics[PATH_COST]
+        .bars
+        .iter()
+        .map(|(target, bar)| (target.clone(), bar.value))
+        .collect();
+    assert_eq!(
+        bars, recorded,
+        "the bars of {PATH_COST} are not the counts of bench/path-cost/counts (IGNITE_BLESS=1)"
     );
 }
 

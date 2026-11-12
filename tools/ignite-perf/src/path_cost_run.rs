@@ -559,9 +559,15 @@ fn trace_at_rest(path: &Path) -> R<String> {
 }
 
 /// Dump the callgrind run `pid` (`vgdb dump`, which zeroes its counters) and read the part,
-/// the `n`th file after `out`.
+/// the `n`th file after `out`. `vgdb` runs with the server's empty environment: valgrind names
+/// its shared memory file after the host in `HOST`, and both sides must name the same file.
 fn dump_part(prefix: &Path, pid: u32, out: &Path, n: usize) -> R<Profile> {
-    let output = Command::new("vgdb")
+    let mut vgdb = Command::new("vgdb");
+    vgdb.env_clear();
+    if let Some(path) = std::env::var_os("PATH") {
+        vgdb.env("PATH", path);
+    }
+    let output = vgdb
         .arg(format!("--vgdb-prefix={}", prefix.display()))
         .arg(format!("--pid={pid}"))
         .arg("dump")
@@ -652,15 +658,32 @@ impl Session {
         let count = self.executed.get(&op.name).copied().unwrap_or(0);
         match &op.action {
             Action::Http(request) => self.send(request, count)?,
-            Action::Connect => {
-                let stream =
-                    TcpStream::connect(("127.0.0.1", self.port)).map_err(io_err("connect"))?;
-                drop(stream);
-            }
+            Action::Connect => closed_connection(self.port)?,
             Action::Telnet(line) => telnet(self.port, line)?,
         }
         self.executed.insert(op.name.clone(), count + 1);
         Ok(())
+    }
+}
+
+/// A connection opened and closed: this end's write half shut, then read until the server has
+/// closed its end too, so that the server accepted, saw the end and closed before the next
+/// one. Dropped at once instead, the server would see the connection sometimes before and
+/// sometimes after its end, and the count of a batch would vary by run.
+fn closed_connection(port: u16) -> R<()> {
+    let mut stream = TcpStream::connect(("127.0.0.1", port)).map_err(io_err("connect"))?;
+    stream
+        .set_read_timeout(Some(LIMIT))
+        .map_err(io_err("timeout"))?;
+    stream
+        .shutdown(std::net::Shutdown::Write)
+        .map_err(io_err("shutdown"))?;
+    let mut chunk = [0u8; 4096];
+    loop {
+        let n = stream.read(&mut chunk).map_err(io_err("read to the end"))?;
+        if n == 0 {
+            return Ok(());
+        }
     }
 }
 

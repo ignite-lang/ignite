@@ -40,6 +40,7 @@ Each measured metric has one source:
 | `conformance` | `quality::conformance_claims_hold_the_bar` | every merge and `task quality` |
 | `perf` | `ignite-perf quality` (`tools/ignite-perf/src/quality.rs`), each value with the 1-minute load at its start | `task quality` only. The sizes (3.2, bytes) are deterministic and held against their bars like any count. The timing rows (ms: 5.3, 6.1, 6.2, a fixed list in `quality::TIMING`, not read from the labels) are recorded as `host: local` and gate nothing, because timing on the shared workstation is not comparable between runs. Their bars are the first assessment's local values, kept as a reference. `task quality-remote` measures these rows on a single-tenant EC2 host (`host: ec2:<type>`, section "The dedicated timing host"); a release is refused there on a timing row worse than the last release. |
 | `bench` | the native benchmark of `ignite-perf quality-remote` (`tools/ignite-perf/src/bench.rs`, section "Against plain Rust") | `task quality-remote` only. The rows 3.3, 3.7, 3.8 and 3.9 (a fixed list in `quality::BENCH`), ratios in permille. `quality::trend_and_docs_are_generated_from_quality` refuses a target of the latest run without a bar and an improvement not written into the bar; a release is refused in the run on a ratio worse than BASE's. |
+| `path-cost` | `ignite-perf path-cost` (`tools/ignite-perf/src/path_cost.rs`, section "The path cost at every merge") | every merge: `task path-cost`, a step of `task gate`; not `task quality`. Row 3.10, counts of instructions and system calls, judged against the counts of the last release in `bench/path-cost/counts/`; `quality::the_path_cost_bars_are_the_recorded_counts` holds the bars to those counts. |
 
 The per-merge tests refuse, as the UI ratchet (`ux/baseline.json`, `site::ux::ratchet`) does: a
 value worse than its bar beyond the tolerance, a bar the run did not measure, a measured value
@@ -304,6 +305,83 @@ behaviour (`bench/native/`, rows 3.3, 3.7, 3.8 and 3.9), after the timing rows
   tolerance. An earlier run over 3 passes, with a plain-Rust terminal that started a thread per
   connection, was replaced; one p99 row differed 17.9 % there.
 
+## The path cost at every merge
+
+Row 3.10 (`story:path-cost-counted-at-every-merge`): every merge counts, in instructions and
+system calls, a fixed set of scenarios whose programs are frozen at a release, and is refused
+when one of them costs more than at the last release. A scenario frozen at release N cannot use
+a feature added after N, so a count that rises on it is cost added to a path that already
+existed; a new feature's cost shows in its own scenario. Counts are deterministic enough to
+judge one run on the shared workstation, need no load generator and use at most two cores; time
+stays the judge of a release, on the dedicated host.
+
+- **Scenarios.** One directory per scenario under `bench/path-cost/`: its program files and its
+  script `scenario` (`tools/ignite-perf/src/path_cost.rs`, `parse_scenario`). `frozen <tag>`
+  names the release whose files they are, and each `file <name> <path>` the file's path in that
+  tag's tree. A server scenario names its source, executable, targets, `warm`, `repeat`, set-up
+  requests and operations (an HTTP request with the status its answer must have, a connection
+  opened and closed, a Telnet session); a CLI scenario names `ignite` commands, each counting
+  the `ignite` process alone (`driver`) or with every process it starts (`tree`). The first set,
+  frozen at v0.16.2: `todo` (start of `todod`, one GET, PATCH and DELETE of a todo, one
+  connection), `terminal` (start of `terminald`, one session: the prompt, `quit`), both on the
+  LLVM and the Rust target, built `--release`; `design` (`ignite check` and `ignite plan` of the
+  design file, `all`; its dev build on LLVM with clang and the link, and on Rust the driver
+  alone: cargo and rustc run in parallel and their work depends on cargo's cache, so they are
+  not counted).
+- **Cells.** `<target>/<scenario>/<op>/<unit>`, the unit `instructions` or `syscalls`. A
+  server's `start` is from the exec to the first rest after it listens; an operation's cell is
+  one batch of `repeat` executions (`todo` 20, `terminal` 10) after `warm` unmeasured ones (10,
+  5) and the set-up, on the keep-alive connection the run opened for HTTP. A CLI cell is one run
+  of the command after one unmeasured run that fills the caches.
+- **Instrument.** `ignite-perf path-cost` (`task path-cost`, run by `task gate` after the
+  tests). It pins itself to two of its CPUs, so a server's workers are as many on every machine,
+  and runs a server with an empty environment in a fresh directory. Instructions: one run under
+  callgrind, dumped with `vgdb` at each rest, each dump holding what ran since the one before
+  (self instructions per function); system calls: one run under `strace -f`, the lines its
+  trace gained between the same points. A run is at rest when the valgrind process used no CPU,
+  or the trace gained no line, for 1.5 s, longer than the second after which an idle worker
+  ends, so a batch holds that end.
+- **Counts of the last release.** `bench/path-cost/counts/<scenario>-<target>.counts`, written
+  by `task path-cost RECORD=vX.Y.Z` (`--record vX.Y.Z --runs 5`): per cell the median of five
+  runs, each run's value, and of the median run the functions with at least a ten-thousandth of
+  the cell and every system call. `IGNITE_BLESS=1 cargo test -p ignite --test main
+  quality::the_path_cost_bars_are_the_recorded_counts` then writes them into the bars of 3.10.
+- **Refusal.** A merge measures each cell once. A cell above its recorded value by more than
+  the noise band is refused, and the refusal prints the functions whose self instructions grew
+  and those that are new (or under the listed tenth-thousandth at the release), or the system
+  calls that grew or are new, each with both values, largest growth first, at most 15 per cell.
+  The noise band is 1 % of the recorded value for instructions and 1 %, at least one call, for
+  system calls. A cell whose five recorded runs spread further than its band is printed with
+  every run's value and not judged. A scenario, target or operation without a recorded value
+  is refused, and so is a recorded operation the run did not measure.
+- **Frozen.** Before it measures, the mode compares the scenarios with their tags
+  (`path_cost::frozen_differences`; also `path_cost::the_scenarios_of_the_repository_are_the_files_of_their_tags`
+  in `tools/ignite-perf/tests/`). A scenario the last release holds is compared whole: every
+  file of its directory is the release's. One no release holds yet is compared by its program
+  files, each the file of its `frozen` tag at its path; a tag that is not in the repository
+  fails, and the failure says so and names `git fetch --tags`. A file the script does not list
+  fails either way.
+- **A scenario added after the freeze** has no `frozen` line and names its files without a
+  path. `ignite-perf path-cost --record first --scenario <name> --runs 5` records its first
+  value (`first <commit>`), which a merge shows and does not judge; the next release's
+  `RECORD` writes it as that release's, and from then on it is judged like every other.
+- **At v0.16.2** (the first recording, 5 runs, `bench/path-cost/counts/`): the start of both
+  servers spreads 0 to 2 instructions and at most one system call; check and plan under
+  0.03 % of instructions and no system call; the judged cells closest to their band are
+  `llvm/terminal/session` (instructions 2,180 within 2,693; system calls 164 to 165),
+  `rust/todo/get/instructions` (2,167 within 3,024), `rust/design/build/syscalls` (73 to 74)
+  and `llvm/design/build/syscalls` (110 within 149). Not judged, their runs spreading beyond
+  the band: `llvm/todo/connection` (instructions
+  and system calls) and `rust/todo/connection/syscalls` (when the server accepts against when
+  the client's end arrives), and `rust/terminal/session` (instructions in two groups about
+  25,000 apart, system calls 158 to 161). Each is printed with its runs on every merge.
+- **Cost in the gate.** One pass starts 24 processes: 8 under callgrind, 8 under `strace`, 4
+  native warm-up runs of the `ignite` commands and 4 release builds of the servers (`todo`
+  and `terminal` per target; the design file's two dev builds run three times each as the
+  commands of their cells). It runs about 5.1 billion instructions under valgrind, 99 % of
+  them the four `ignite` commands of `design`. Its wall time is measured on the dedicated host,
+  not here.
+
 ## Hill-climbing
 
 The `target` column names the target of a metric where one is set. A wave that moves a metric
@@ -344,6 +422,7 @@ release.
 | # | metric | kind | better | instrument | bar | target |
 |---|---|---|---|---|---|---|
 | 3.1 | copies in the generated code of the golden corpus | ratchet | lower | `quality::static_metrics_hold_the_bar`: `.clone()` in the Rust generator's goldens, calls of `copy.*` in the LLVM goldens | llvm 90, rust 163 |  |
+| 3.10 | cost of a frozen path: instructions and system calls | ratchet | lower | `ignite-perf path-cost` (task gate, every merge): instructions (callgrind, self per function) and system calls (`strace -f`) of the frozen scenarios of `bench/path-cost/` per target, scenario and operation (a server's start, a batch of `repeat` operations, an `ignite` command), against their counts at the last release in `bench/path-cost/counts/`; noise band 1 %, at least one system call | all/design/check/instructions 854081033, all/design/check/syscalls 74, all/design/plan/instructions 859946117, all/design/plan/syscalls 75, llvm/design/build/instructions 2236546057, llvm/design/build/syscalls 14919, llvm/terminal/session/instructions 269366, llvm/terminal/session/syscalls 164, llvm/terminal/start/instructions 320573, llvm/terminal/start/syscalls 101, llvm/todo/connection/instructions 454193, llvm/todo/connection/syscalls 186, llvm/todo/delete/instructions 636697, llvm/todo/delete/syscalls 380, llvm/todo/get/instructions 450252, llvm/todo/get/syscalls 39, llvm/todo/patch/instructions 930548, llvm/todo/patch/syscalls 380, llvm/todo/start/instructions 337866, llvm/todo/start/syscalls 105, rust/design/build/instructions 1156447677, rust/design/build/syscalls 73, rust/terminal/session/instructions 159954, rust/terminal/session/syscalls 158, rust/terminal/start/instructions 385192, rust/terminal/start/syscalls 125, rust/todo/connection/instructions 208357, rust/todo/connection/syscalls 166, rust/todo/delete/instructions 541888, rust/todo/delete/syscalls 300, rust/todo/get/instructions 302424, rust/todo/get/syscalls 39, rust/todo/patch/instructions 800543, rust/todo/patch/syscalls 300, rust/todo/start/instructions 405205, rust/todo/start/syscalls 129 |  |
 | 3.2 | binary size | ratchet | lower | `ignite-perf quality` (task quality): size of `todod` and `terminald` per target and profile | llvm/terminald/dev 7264152 B, llvm/terminald/release 1394536 B, llvm/todod/dev 7969480 B, llvm/todod/release 1967944 B, rust/terminald/dev 6344576 B, rust/terminald/release 743384 B, rust/todod/dev 7586840 B, rust/todod/release 1038712 B |  |
 | 3.3 | throughput against plain Rust | ratchet | higher | `ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): replies per second of todod and terminald over the plain-Rust implementation's, per cell | llvm/terminal/connect-8 0.929×, llvm/terminal/rr-1 0.995×, llvm/terminal/rr-64 1.254×, llvm/todo/get-1 1.033×, llvm/todo/get-64 1.299×, llvm/todo/patch-16 1.203×, rust/terminal/connect-8 0.971×, rust/terminal/rr-1 0.972×, rust/terminal/rr-64 1.235×, rust/todo/get-1 0.990×, rust/todo/get-64 1.176×, rust/todo/patch-16 1.193× |  |
 | 3.4 | peak RSS, leaked handles and threads after a load run | gate | lower | `llvm_memory::` and `terminal::idle_terminald_runs_one_thread` (every merge) | unmeasured: no number: the named tests gate it in task gate |  |
