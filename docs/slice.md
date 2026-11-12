@@ -7271,6 +7271,24 @@ The Rust target (20.3.4 otherwise):
 - The `for` over a list place of section 6 that iterates by reference also takes
   `l.slice(i, j)` of a list place whose bounds change nothing: it iterates
   `(checked::slice_ref(&l, i, j, <site>)).iter()`, with no copy of the slice.
+- Element reads are lent (story `std-mysql-client`, unit `mysql-cost`): an element read
+  `l[i]`, `l[i][j]` or `l.at(i)` of a list that is a place, whose indexes change no variable,
+  is `checked::at(..)`, a `&T` into the list, where it is only read: an argument to a
+  parameter passed by reference, a `match` scrutinee whose arms do not change the list's
+  variable, the list of a `for` whose body does not change it, the receiver of `len`,
+  `is_empty`, `trim`, `starts_with`, `strip_prefix`, `to_text`, `to_bytes`, `join` and `map`,
+  and an operand of a comparison (`(*checked::at(..)) == k`). A `for` iterates by reference
+  also over such an element and over a field of one, and a `for` with a tuple or variant
+  pattern (`for (name, v) in l`) iterates `(l).iter()` as one with a single binding does when
+  the body changes neither the list's variable nor a binding: each binding is a reference
+  read like a borrowed parameter, and one of a `Copy` type is copied out at the start of the
+  body. A `for` over a list of `Copy` elements (`List<Int>`, `Bytes`) that can be iterated
+  by reference reads them out of it, `(l).iter().copied()`. Each of these copied the list or
+  the element before (`borrowed_reads::` in `crates/ignite-rustgen`; in `crates/ignite`,
+  `borrowed_reads::a_lookup_that_only_reads_allocates_nothing_on_the_rust_target`, 132.5
+  allocations per lookup before, none after). Still copied: `let v = l[i]` whose `v` is only
+  read, an element returned from a borrowed list (`return e.1`, one copy of the value, never
+  of the list).
 
 The LLVM target and the evaluator read none of this.
 

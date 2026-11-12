@@ -21,7 +21,7 @@ pub fn clamp(x: &i64, low: &i64, high: &i64) -> i64 {
 
 pub fn sum(values: &Vec<i64>) -> i64 {
     let mut total = 0;
-    for v in (values.clone()) {
+    for v in (values).iter().copied() {
         total = ::ignite_io::checked::add(total, v, "crates/ignite-rustgen/tests/golden/pure.ignite", 16, 13);
     }
     return total.clone();

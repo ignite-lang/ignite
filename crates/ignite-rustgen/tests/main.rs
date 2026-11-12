@@ -4,6 +4,7 @@
 //! `<file>::<test>`.
 
 mod allocations;
+mod borrowed_reads;
 mod common;
 mod compiles;
 mod golden;
