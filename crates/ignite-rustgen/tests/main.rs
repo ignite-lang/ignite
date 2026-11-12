@@ -5,6 +5,7 @@
 
 mod allocations;
 mod borrowed_reads;
+mod call_moves_adversary;
 mod common;
 mod compiles;
 mod golden;
