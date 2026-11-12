@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-12T12:37:02Z",
+  "actor": "human:timo",
+  "artifact": "story:rust-target-shared-list-storage",
+  "kind": "story",
+  "revision": 5,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "release v0.16.2 (tag on merge commit d2af9e8d, tree of 593fe893): task gate on 593fe893 exit 0, 3077 passed, 0 failed, 23 ignored; task ux 389 passed; dedicated-host run iq-20261112t092750z-a6f0 against v0.16.1 exit 0, four Rust-target rows worse and tracked (3.7 todo/patch-16 0.745 to 0.778, 6.2 4103 to 4128 ms, 3.9 terminal 1.507 to 1.509 and todo 0.839 to 0.840), story shared-list-costs-back"
+  }
+}

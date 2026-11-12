@@ -2,13 +2,15 @@
 format: aep.planning-md/3
 id: story:rust-target-read-only-forms-borrow
 kind: story
-status: proposed
+status: implemented
 title: Read-only forms over a list borrow on the Rust target
 relations:
 - informed_by: story:std-mysql-client
-revision: 2
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-12T03:05:43Z", actor: "human:timo", revision: 2, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
+- {from: "proposed", to: "active", at: "2026-11-12T12:37:10Z", actor: "human:timo", revision: 3, decided_on: {"recorded":{"test_result":4,"review_outcome":3}}, executor: "agent:claude-coordinator", correlation: "audit-2026-11-12"}
+- {from: "active", to: "implemented", at: "2026-11-12T12:37:10Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":4,"review_outcome":3}}, executor: "agent:claude-coordinator", correlation: "audit-2026-11-12"}
 ---
 # Story: read-only forms over a list borrow on the Rust target
 

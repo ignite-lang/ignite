@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:infer-channel-ends
 kind: story
-status: active
+status: implemented
 title: Channel ends from a Store lookup or a returned record need no annotation
 summary: 'Case study G32: E042 for inferred channel-end receivers'
 relations:
@@ -18,10 +18,11 @@ scope:
   path: docs/slice.md
 - confidence: inferred
   path: std/sync.ignite
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T15:00:48Z", actor: "human:timo", revision: 3}
 - {from: "proposed", to: "active", at: "2026-11-08T21:40:02Z", actor: "human:timo", revision: 4}
+- {from: "active", to: "implemented", at: "2026-11-12T12:37:07Z", actor: "human:timo", revision: 5, decided_on: {"recorded":{"test_result":1}}, executor: "agent:claude-coordinator", correlation: "audit-2026-11-12"}
 ---
 # Story: infer-channel-ends
 

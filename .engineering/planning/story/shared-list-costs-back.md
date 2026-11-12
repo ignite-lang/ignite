@@ -2,11 +2,14 @@
 format: aep.planning-md/3
 id: story:shared-list-costs-back
 kind: story
-status: draft
+status: active
 title: A shared list costs nothing in a program that never shares one
 relations:
 - informed_by: story:rust-target-shared-list-storage
-revision: 1
+revision: 4
+transitions:
+- {from: "draft", to: "proposed", at: "2026-11-12T12:37:04Z", actor: "human:timo", revision: 3, executor: "agent:claude-coordinator", correlation: "after-v0.16.2"}
+- {from: "proposed", to: "active", at: "2026-11-12T12:37:04Z", actor: "human:timo", revision: 4, executor: "agent:claude-coordinator", correlation: "after-v0.16.2"}
 ---
 # Story: a shared list costs nothing in a program that never shares one
 
@@ -38,3 +41,15 @@ Tried on 2026-11-12, not merged: building the block in one function that is not 
 ## Scope
 
 - `crates/ignite-io/src/list.rs` (the block, how it is built and released), `crates/ignite-rustgen/src/lib.rs` (list literals of a shared field: an empty literal as `List::new()`, one constructor call per literal). Inferred.
+
+## The release run of v0.16.2 (2026-11-12)
+
+The dedicated-host run of the release (BASE v0.16.1 against HEAD `20cfcbe6`, 5 ABBA passes, run `iq-20261112t092750z-a6f0`) lists four rows as worse than v0.16.1, all on the Rust target. v0.16.1 holds neither the shared lists nor the call moves; the run of the call moves alone (`w13-moves-3`) read 0.752 in both columns of the first row below, so the row is the shared lists'.
+
+- 3.7 p99 of todo/patch-16: 0.745× → 0.778× of plain Rust, every pass above every pass of the base (base 726, 753, 745, 731, 746; head 770, 769, 778, 798, 804). The run of the unit (`26c9c7e2` against `d6f308f1`) read 0.756× → 0.776× with overlapping passes (base 756, 767, 783, 748, 754; head 776, 778, 791, 752, 773). The LLVM row is 0.586× in both columns. This row is not in the Outcome above and belongs to it: back at or below 0.752×.
+- 6.2 todo dev build on the Rust target: 4103 → 4128 ms, every pass above every pass of the base.
+- 3.9 stripped size against plain Rust: terminal 1.507× → 1.509×, todo 0.839× → 0.840×, as in the run of the unit.
+
+The local release check lists row 3.2 on the Rust target: todod release 1,062,560 → 1,063,856 B and dev 7,586,840 → 7,616,952 B; terminald release 743,384 → 744,360 B and dev 6,344,576 → 6,349,688 B.
+
+The release was cut with these rows tracked and not refused (the rule of 2026-11-11).

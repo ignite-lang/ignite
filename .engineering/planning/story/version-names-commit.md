@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:version-names-commit
 kind: story
-status: active
+status: implemented
 title: ignite --version names the commit of a source build
 scope:
 - confidence: inferred
@@ -29,10 +29,11 @@ scope:
   path: site/book/src/guide/install.md
 - confidence: inferred
   path: site/book/src/reference/cli.md
-revision: 15
+revision: 16
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T03:32:55Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-08T21:40:02Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-12T12:37:09Z", actor: "human:timo", revision: 16, decided_on: {"recorded":{"test_result":1}}, executor: "agent:claude-coordinator", correlation: "audit-2026-11-12"}
 ---
 # Story: version-names-commit
 

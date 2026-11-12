@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:json-duplicate-keys
 kind: story
-status: active
+status: implemented
 title: std.json get returns the last duplicated member
 scope:
 - confidence: inferred
@@ -15,10 +15,11 @@ scope:
   path: site/book/src/reference/std/json.md
 - confidence: cited
   path: std/json.ignite
-revision: 8
+revision: 9
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T03:32:56Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-08T21:40:02Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-12T12:37:08Z", actor: "human:timo", revision: 9, decided_on: {"recorded":{"test_result":1}}, executor: "agent:claude-coordinator", correlation: "audit-2026-11-12"}
 ---
 # Story: json-duplicate-keys
 

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:task-thread-bound
 kind: story
-status: draft
+status: archived
 title: Bound the OS threads of tasks
 summary: A program bounds its task threads or waits on several streams from one task, so N connections stop costing N OS threads
 scope:
@@ -12,7 +12,9 @@ scope:
   path: crates/ignite-rt/src
 - confidence: inferred
   path: std
-revision: 2
+revision: 3
+transitions:
+- {from: "draft", to: "archived", at: "2026-11-12T12:37:11Z", actor: "human:timo", revision: 3, executor: "agent:claude-coordinator", correlation: "audit-2026-11-12"}
 ---
 # Story: task-thread-bound
 

@@ -2,7 +2,7 @@
 format: aep.planning-md/3
 id: story:llvm-release-all-handles
 kind: story
-status: active
+status: implemented
 title: LLVM releases listener, directory and capability handles
 relations:
 - decomposes: epic:leak-guard
@@ -31,10 +31,11 @@ scope:
   path: docs/slice.md
 - confidence: inferred
   path: std/runtime.ignite
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-08T17:01:38Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-08T21:40:02Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-12T12:37:07Z", actor: "human:timo", revision: 6, decided_on: {"recorded":{"test_result":1}}, executor: "agent:claude-coordinator", correlation: "audit-2026-11-12"}
 ---
 # Story: llvm-release-all-handles
 
