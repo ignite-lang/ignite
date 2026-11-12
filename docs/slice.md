@@ -7288,7 +7288,7 @@ The Rust target (20.3.4 otherwise):
   `borrowed_reads::a_lookup_that_only_reads_allocates_nothing_on_the_rust_target`, 132.5
   allocations per lookup before, none after). Still copied: `let v = l[i]` whose `v` is only
   read, an element returned from a borrowed list (`return e.1`, one copy of the value, never
-  of the list).
+  of the list). `CODEGEN_REVISION` is `ignite-codegen/0.1.0-51` (one bump for both targets).
 
 The LLVM target and the evaluator read none of this.
 
