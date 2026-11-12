@@ -954,16 +954,37 @@ fn first_session_calls(target: Target) -> (usize, String) {
 /// files, the overflow handler, the eventfd of the lone waits), a `poll`
 /// came before each `accept4`, and a worker of the LLVM target asked for
 /// its alternate stack before it was given one.
+///
+/// The count of one session is the path's calls plus calls that depend on
+/// the run and not on the code: the allocator trims the mapping of a new
+/// thread's arena with zero, one or two `munmap` by where the kernel put
+/// it, and a read that comes before the request has arrived is answered
+/// with a `poll`, a second `recvfrom` and a `setsockopt`. Twelve counts of
+/// one build at a load average over 30 gave 25 once and 26 eleven times
+/// on the LLVM target, and 29 nine times, 32 twice and 33 once on the
+/// Rust target. So the path's cost is the smallest of up to three counts;
+/// a target fails only when every one of them is above its bound, and the
+/// failure prints all three.
 #[test]
 fn the_first_session_costs_at_most_one_system_call_more_than_at_v0_15_0() {
+    const COUNTS: usize = 3;
     let mut failures = Vec::new();
     for (target, v0_15_0, bound) in [(Target::Rust, 30, 30), (Target::Llvm, 25, 26)] {
-        let (total, table) = first_session_calls(target);
-        println!("{target:?}: {total} calls, v0.15.0 made {v0_15_0}: {table}");
-        if total > bound {
+        let mut above = Vec::new();
+        for _ in 0..COUNTS {
+            let (total, table) = first_session_calls(target);
+            println!("{target:?}: {total} calls, v0.15.0 made {v0_15_0}: {table}");
+            if total <= bound {
+                above.clear();
+                break;
+            }
+            above.push(format!("{total} calls: {table}"));
+        }
+        if !above.is_empty() {
             failures.push(format!(
-                "{target:?}: {total} calls, at most {bound} expected (v0.15.0 made \
-                 {v0_15_0}): {table}"
+                "{target:?}: every one of {COUNTS} counts is above {bound} (v0.15.0 made \
+                 {v0_15_0}):\n  {}",
+                above.join("\n  ")
             ));
         }
     }
