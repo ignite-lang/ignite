@@ -5682,6 +5682,29 @@ impl<'a> Generator<'a> {
                     "{{ let (address, port) = {r}.local(); {endpoint} {{ address, port }} }}"
                 );
             }
+            // A new list; the standard library's sort is stable. The order
+            // of every type with one (`ignite_types::ordered`) is its Rust
+            // `Ord`: payload-free enums derive it in declaration order.
+            Some(Callee::Builtin(Builtin::ListSort)) => {
+                let r = self.receiver(receiver);
+                let sorted = self.fresh();
+                return format!("{{ let mut {sorted} = {r}.to_vec(); {sorted}.sort(); {sorted} }}");
+            }
+            // The keys in element order, then the positions sorted stably
+            // by key.
+            Some(Callee::Builtin(Builtin::ListSortBy)) if args.len() == 1 => {
+                let r = self.receiver(receiver);
+                let a = self.args(args);
+                let f = wrap(&args[0], a[0].clone());
+                let (list, keys, order) = (self.fresh(), self.fresh(), self.fresh());
+                return format!(
+                    "{{ let {list} = &{r}; \
+                     let {keys}: Vec<_> = {list}.iter().cloned().map(&*{f}).collect(); \
+                     let mut {order}: Vec<usize> = (0..{keys}.len()).collect(); \
+                     {order}.sort_by(|a, b| {keys}[*a].cmp(&{keys}[*b])); \
+                     {order}.into_iter().map(|i| {list}[i].clone()).collect::<Vec<_>>() }}"
+                );
+            }
             _ => {}
         }
         if let Some(owner) = self.qualifier(receiver)

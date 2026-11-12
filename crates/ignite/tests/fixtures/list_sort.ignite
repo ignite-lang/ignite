@@ -1,0 +1,182 @@
+package list_sort
+
+// Story list-sort (docs/slice.md, "A List is sorted with sort and sort_by"):
+// every fn without parameters below is evaluated by ignite-eval and printed
+// by the compiled program on both targets (`list_sort::` in
+// crates/ignite/tests/list_sort.rs); the three debug texts must be the ones
+// that file pins. The printer's main lists the fns in declaration order.
+
+// Declared in an order that is not the alphabetical one: `sort` follows
+// the declaration.
+enum Level { Low, Middle, High }
+
+type Entry {
+  name: Text
+  level: Level
+  score: Int
+}
+
+fn word(n: Int) -> U32 = n.wrap_u32()
+
+fn names(xs: List<Entry>) -> List<Text> = xs.map(|e| e.name)
+
+fn score_of(e: Entry) -> Int = e.score
+
+fn reversed(n: Int) -> List<Int> {
+  var xs: List<Int> = List.with_capacity(n)
+  var i = n
+  while i > 0 {
+    xs.push(i)
+    i = i - 1
+  }
+  xs
+}
+
+fn ascending(xs: List<Int>) -> Bool {
+  var i = 1
+  while i < xs.len() {
+    if xs[i - 1] > xs[i] {
+      return false
+    }
+    i = i + 1
+  }
+  true
+}
+
+fn ints() -> List<Int> = [3, -1, 2, 9223372036854775807, -9223372036854775807 - 1, 0, 2].sort()
+
+fn bytes_sorted() -> Bytes = b"\xffzA\x00a".sort()
+
+fn words() -> List<U32> = [word(4000000000), word(7), word(0), word(2147483648)].sort()
+
+fn bools() -> List<Bool> = [true, false, true, false].sort()
+
+fn texts() -> List<Text> = ["b", "a", "", "é", "z", "Z", "ab", "a "].sort()
+
+fn byte_strings() -> List<Bytes> = [b"\xff", b"", b"ab", b"\x00", b"a"].sort()
+
+fn levels() -> List<Level> = [High, Low, Middle, High, Low].sort()
+
+fn pairs() -> List<(Int, Text)> = [(2, "b"), (1, "z"), (2, "a"), (1, "a"), (-1, "q")].sort()
+
+fn nested() -> List<(Level, (Bool, Bytes))> = [(High, (false, b"b")), (Low, (true, b"")), (High, (false, b"a")), (Low, (false, b"z"))].sort()
+
+fn empty_and_one() -> (List<Int>, List<Text>) {
+  let none: List<Int> = []
+  (none.sort(), ["only"].sort())
+}
+
+fn entries() -> List<Entry> = [
+  Entry { name = "ann", level = Middle, score = 3 },
+  Entry { name = "bob", level = Low, score = 5 },
+  Entry { name = "cid", level = High, score = 3 },
+  Entry { name = "dee", level = Low, score = 1 },
+  Entry { name = "eve", level = Middle, score = 5 },
+  Entry { name = "fay", level = High, score = 1 }
+]
+
+fn by_score() -> List<Text> = names(entries().sort_by(|e| e.score))
+
+fn by_level() -> List<Text> = names(entries().sort_by(|e| e.level))
+
+fn by_level_then_score_down() -> List<Text> = names(entries().sort_by(|e| (e.level, 0 - e.score)))
+
+fn by_named_fn() -> List<Text> = names(entries().sort_by(score_of))
+
+fn by_text_key() -> List<Int> = [4, 33, 2, 10].sort_by(|n| n.to_text())
+
+fn receiver_unchanged() -> (List<Int>, List<Int>) {
+  var xs = [3, 1, 2]
+  let ys = xs.sort()
+  xs.push(0)
+  (xs, ys)
+}
+
+fn sort_by_receiver_unchanged() -> (List<Text>, List<Text>) {
+  let xs = ["bb", "a", "ccc"]
+  let ys = xs.sort_by(|t| 0 - t.len())
+  (xs, ys)
+}
+
+fn thousand() -> (Int, Int, Int, Bool) {
+  let ys = reversed(1000).sort()
+  (ys.len(), ys[0], ys[999], ascending(ys))
+}
+
+fn stable_long() -> (Int, Bool) {
+  var xs: List<(Int, Int)> = List.empty()
+  var i = 0
+  while i < 300 {
+    xs.push((i % 3, i))
+    i = i + 1
+  }
+  let ys = xs.sort_by(|p| p.0)
+  var kept = true
+  var j = 1
+  while j < ys.len() {
+    let a = ys[j - 1]
+    let b = ys[j]
+    if a.0 > b.0 || (a.0 == b.0 && a.1 > b.1) {
+      kept = false
+    }
+    j = j + 1
+  }
+  (ys.len(), kept)
+}
+
+test "sort orders every type with an order" {
+  assert ints() == [-9223372036854775807 - 1, -1, 0, 2, 2, 3, 9223372036854775807]
+  assert bools() == [false, false, true, true]
+  assert texts() == ["", "Z", "a", "a ", "ab", "b", "z", "é"]
+  assert levels() == [Low, Low, Middle, High, High]
+  assert pairs() == [(-1, "q"), (1, "a"), (1, "z"), (2, "a"), (2, "b")]
+}
+
+test "sort_by keeps equal keys in their order" {
+  assert by_level() == ["bob", "dee", "ann", "eve", "cid", "fay"]
+  assert by_score() == ["dee", "fay", "ann", "cid", "bob", "eve"]
+  assert stable_long() == (300, true)
+}
+
+test "sort and sort_by leave the receiver as it was" {
+  assert receiver_unchanged() == ([3, 1, 2, 0], [1, 2, 3])
+  assert sort_by_receiver_unchanged() == (["bb", "a", "ccc"], ["ccc", "bb", "a"])
+}
+
+fn show(text: Text) -> Result<Unit, IoError> requires [stdout.write] {
+  var bytes = text.to_bytes()
+  bytes.push(10)
+  return Stdout.write_all(bytes)
+}
+
+type Printer {
+  executable: Text
+}
+
+fn Printer.main(self: Printer) -> Result<Unit, IoError> {
+  show(ints().debug())?
+  show(bytes_sorted().debug())?
+  show(words().debug())?
+  show(bools().debug())?
+  show(texts().debug())?
+  show(byte_strings().debug())?
+  show(levels().debug())?
+  show(pairs().debug())?
+  show(nested().debug())?
+  show(empty_and_one().debug())?
+  show(entries().debug())?
+  show(by_score().debug())?
+  show(by_level().debug())?
+  show(by_level_then_score_down().debug())?
+  show(by_named_fn().debug())?
+  show(by_text_key().debug())?
+  show(receiver_unchanged().debug())?
+  show(sort_by_receiver_unchanged().debug())?
+  show(thousand().debug())?
+  show(stable_long().debug())?
+  return Ok(Unit)
+}
+
+system ListSort {
+  component sortprint: Printer { executable = "sortprint" }
+}

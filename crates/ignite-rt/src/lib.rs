@@ -27,6 +27,7 @@ mod arena;
 mod census;
 mod clock;
 mod fail;
+mod list;
 mod net;
 mod process;
 mod stdio;
@@ -46,6 +47,7 @@ pub use fail::{
     ignite_rt_fail_neg, ignite_rt_fail_slice, ignite_rt_guard_callback, ignite_rt_guard_pop,
     ignite_rt_guard_push, ignite_rt_try_failed,
 };
+pub use list::ignite_rt_list_sort;
 pub use net::{
     ignite_rt_handle_release, ignite_rt_own_mark, ignite_rt_own_release, ignite_rt_tcp_accept,
     ignite_rt_tcp_bind, ignite_rt_tcp_bind_kept, ignite_rt_tcp_close, ignite_rt_tcp_connect,

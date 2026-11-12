@@ -63,9 +63,9 @@ fn trim(text: &[u8]) -> &[u8] {
     }
 }
 
-/// A fresh `Text` of `len` bytes in the task's arena, written by `fill`
+/// A fresh `Text` (or byte buffer) of `len` bytes in the task's arena, written by `fill`
 /// (which must write all of them).
-fn fresh(len: usize, fill: impl FnOnce(&mut [u8])) -> IgniteList {
+pub(crate) fn fresh(len: usize, fill: impl FnOnce(&mut [u8])) -> IgniteList {
     let ptr = crate::arena::alloc(len, 1);
     // SAFETY: `ptr` is a fresh arena block of `len` bytes (a dangling,
     // non-null pointer when `len` is 0); arena memory is initialized.

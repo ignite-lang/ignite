@@ -136,6 +136,8 @@ pub fn change(builtin: Builtin) -> Option<Change> {
         | ListJoin
         | ListLen
         | ListMap
+        | ListSort
+        | ListSortBy
         | ListSlice
         | Log
         | MapContains

@@ -5308,6 +5308,8 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 self.rt_out("io_error_new", &Ty::IoError, &[format!("ptr {message}")])
             }
             ListMap => self.list_map(receiver.expect("receiver"), &args[0]),
+            ListSort => self.list_sort(receiver.expect("receiver"), None),
+            ListSortBy => self.list_sort(receiver.expect("receiver"), Some(&args[0])),
             IntParse => {
                 let text = match &args[0].kind {
                     ExprKind::Method { receiver, .. }
@@ -5643,13 +5645,20 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             return Val::Never;
         }
         let list = self.ptr(&r);
+        let (buf, len) = self.mapped(&list, &element, f, &out);
+        self.list_of(&out, &buf, &len)
+    }
+
+    /// `f` applied to each element of the `List<element>` at `list`, in
+    /// order, into a new buffer of `out` values: the buffer and the length.
+    fn mapped(&mut self, list: &str, element: &Ty, f: &Expr, out: &Ty) -> (String, String) {
         let fv = self.expr(f, true);
         let borrow = self.known_borrows(f).first().copied().unwrap_or(false);
         let fp = self.ptr(&fv);
         let parts = self.fn_parts(&fp);
-        let len = self.list_len(&list);
-        let in_size = self.layout(&element).size;
-        let out_layout = self.layout(&out);
+        let len = self.list_len(list);
+        let in_size = self.layout(element).size;
+        let out_layout = self.layout(out);
         let bytes = self
             .f
             .val(format!("mul i64 {len}, {}", out_layout.size.max(1)));
@@ -5670,30 +5679,142 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         let src = self
             .f
             .val(format!("getelementptr inbounds i8, ptr {data}, i64 {at}"));
-        let operand = if is_aggregate(&element) && borrow {
+        let operand = if is_aggregate(element) && borrow {
             Some(format!("ptr {src}"))
         } else {
-            let item = self.at(&element, src, false);
-            self.arg(&element, item)
+            let item = self.at(element, src, false);
+            self.arg(element, item)
         };
-        let result = self.call_value(&parts, &out, vec![operand]);
+        let result = self.call_value(&parts, out, vec![operand]);
         let to = self.f.val(format!("mul i64 {i}, {}", out_layout.size));
         let dst = self
             .f
             .val(format!("getelementptr inbounds i8, ptr {buf}, i64 {to}"));
-        self.store_value(&out, &dst, result);
+        self.store_value(out, &dst, result);
         let next = self.f.val(format!("add i64 {i}, 1"));
         self.f
             .ins(format!("store i64 {next}, ptr {counter}, align 8"));
         self.f.br(&head);
         self.f.place(&exit);
-        let t = self.temp(&Ty::List(Box::new(out)));
+        (buf, len)
+    }
+
+    /// A `List<element>` temporary over `buf` holding `len` elements.
+    fn list_of(&mut self, element: &Ty, buf: &str, len: &str) -> Val {
+        let t = self.temp(&Ty::List(Box::new(element.clone())));
         self.f.ins(format!("store ptr {buf}, ptr {t}, align 8"));
         let lenp = self.gep(&t, 8);
         self.f.ins(format!("store i64 {len}, ptr {lenp}, align 8"));
         let capp = self.gep(&t, 16);
         self.f.ins(format!("store i64 {len}, ptr {capp}, align 8"));
         Val::Ptr(t, true)
+    }
+
+    /// `list.sort()` (`key` `None`) or `list.sort_by(key)`: the keys (the
+    /// elements, or `key` applied to each in order), the positions sorted
+    /// stably by them in the runtime (`ignite_rt_list_sort`, which reads
+    /// the keys as one byte list and returns the positions as native `i64`
+    /// in arena memory aligned to 1), then a new list of a copy of each
+    /// element in that order.
+    fn list_sort(&mut self, receiver: &Expr, key: Option<&Expr>) -> Val {
+        let element = match self.ty(receiver) {
+            Ty::List(t) => *t,
+            other => panic!("sort on {other:?}"),
+        };
+        let r = self.expr(receiver, true);
+        if r == Val::Never {
+            return Val::Never;
+        }
+        let list = self.ptr(&r);
+        let (keys, len, key_ty) = match key {
+            None => {
+                let len = self.list_len(&list);
+                let data = self.f.val(format!("load ptr, ptr {list}, align 8"));
+                (data, len, element.clone())
+            }
+            Some(f) => {
+                let key_ty = match self.ty(f) {
+                    Ty::Fn(_, ret) | Ty::EffectFn(_, ret, _) => *ret,
+                    other => panic!("sort_by with a {other:?}"),
+                };
+                let (buf, len) = self.mapped(&list, &element, f, &key_ty);
+                (buf, len, key_ty)
+            }
+        };
+        let compare = self.sort_compare(&key_ty);
+        let key_size = self.layout(&key_ty).size.max(1);
+        let key_bytes = self.f.val(format!("mul i64 {len}, {key_size}"));
+        let keys_list = self.temp(&Ty::Text);
+        self.f
+            .ins(format!("store ptr {keys}, ptr {keys_list}, align 8"));
+        let lenp = self.gep(&keys_list, 8);
+        self.f
+            .ins(format!("store i64 {key_bytes}, ptr {lenp}, align 8"));
+        let capp = self.gep(&keys_list, 16);
+        self.f
+            .ins(format!("store i64 {key_bytes}, ptr {capp}, align 8"));
+        let positions = self.temp(&Ty::Text);
+        self.m.declare_raw(
+            "ignite_rt_list_sort",
+            "declare void @ignite_rt_list_sort(ptr, ptr, i64, ptr)",
+        );
+        self.f.ins(format!(
+            "call void @ignite_rt_list_sort(ptr {positions}, ptr {keys_list}, i64 {key_size}, ptr {compare})"
+        ));
+        let order = self.f.val(format!("load ptr, ptr {positions}, align 8"));
+        let layout = self.layout(&element);
+        let bytes = self.f.val(format!("mul i64 {len}, {}", layout.size.max(1)));
+        let buf = self.f.val(format!(
+            "call ptr @ignite.alloc(i64 {bytes}, i64 {})",
+            layout.align.max(1)
+        ));
+        let data = self.f.val(format!("load ptr, ptr {list}, align 8"));
+        let counter = self.f.alloca(Layout::scalar(8));
+        self.f.ins(format!("store i64 0, ptr {counter}, align 8"));
+        let (head, body, exit) = (self.f.label(), self.f.label(), self.f.label());
+        self.f.place(&head);
+        let i = self.f.val(format!("load i64, ptr {counter}, align 8"));
+        let more = self.f.val(format!("icmp slt i64 {i}, {len}"));
+        self.f.cond_br(&more, &body, &exit);
+        self.f.place(&body);
+        let slot = self
+            .f
+            .val(format!("getelementptr inbounds i64, ptr {order}, i64 {i}"));
+        let position = self.f.val(format!("load i64, ptr {slot}, align 1"));
+        let from = self.f.val(format!("mul i64 {position}, {}", layout.size));
+        let src = self
+            .f
+            .val(format!("getelementptr inbounds i8, ptr {data}, i64 {from}"));
+        let item = self.at(&element, src, false);
+        let to = self.f.val(format!("mul i64 {i}, {}", layout.size));
+        let dst = self
+            .f
+            .val(format!("getelementptr inbounds i8, ptr {buf}, i64 {to}"));
+        self.store_value(&element, &dst, item);
+        let next = self.f.val(format!("add i64 {i}, 1"));
+        self.f
+            .ins(format!("store i64 {next}, ptr {counter}, align 8"));
+        self.f.br(&head);
+        self.f.place(&exit);
+        self.list_of(&element, &buf, &len)
+    }
+
+    /// `i32 sort.cmp.<K>(ptr a, ptr b)`, defined once per module: the order
+    /// of two keys of type `key` ([`crate::glue::compare`]), passed to
+    /// `ignite_rt_list_sort`.
+    fn sort_compare(&mut self, key: &Ty) -> String {
+        let symbol = format!("sort.cmp.{}", crate::layout::mangle(key));
+        if !self.m.has(&symbol) {
+            let mut f = Func::new(format!(
+                "define internal i32 {}(ptr %a, ptr %b)",
+                global(&symbol)
+            ));
+            let order = crate::glue::compare(self.m, &mut f, key, "%a", "%b");
+            f.term(format!("ret i32 {order}"));
+            let text = f.finish("unreachable");
+            self.m.helper(&symbol, &text);
+        }
+        global(&symbol)
     }
 
     fn strip_prefix(&mut self, receiver: &Expr, prefix: &Expr) -> Val {

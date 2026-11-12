@@ -311,7 +311,23 @@ pub fn builtin_std_modules() -> BTreeMap<&'static str, std::collections::BTreeSe
 /// covered. `ignite_check::builtin_applies` must agree by type name
 /// (`builtin_tables::` in this crate's tests).
 pub fn is_builtin_method(receiver: &Ty, name: &str) -> bool {
-    builtins::method(receiver, name).is_some() || (matches!(receiver, Ty::List(_)) && name == "map")
+    builtins::method(receiver, name).is_some()
+        || (matches!(receiver, Ty::List(_)) && matches!(name, "map" | "sort_by"))
+}
+
+/// Whether values of `ty` have the order `sort` and `sort_by` use: `Int`,
+/// `Byte` and `U32` by value, `Bool` with `false` first, `Text` and `Bytes`
+/// by bytes, an enum without payloads by declaration order and a tuple of
+/// such types element by element. `enum_payload_free` says whether a
+/// declared enum has no payloads.
+pub fn ordered(ty: &Ty, enum_payload_free: &dyn Fn(&QualName) -> bool) -> bool {
+    match ty {
+        Ty::Int | Ty::Byte | Ty::U32 | Ty::Bool | Ty::Text | Ty::Never => true,
+        Ty::List(element) => **element == Ty::Byte,
+        Ty::Enum(q) => !q.module.is_empty() && enum_payload_free(q),
+        Ty::Tuple(items) => items.iter().all(|item| ordered(item, enum_payload_free)),
+        _ => false,
+    }
 }
 
 /// The standard-library modules that the builtin methods of the
@@ -687,6 +703,12 @@ pub enum Builtin {
     TextToText,
     /// `l.map(f)`: `f: fn(T) -> U` pure, result `List<U>`.
     ListMap,
+    /// `l.sort() -> List<T>`: a new list in ascending order, stable, `T` a
+    /// type with an order ([`ordered`]).
+    ListSort,
+    /// `l.sort_by(f) -> List<T>`: a new list ordered by the key `f` gives
+    /// each element, stable; `f: fn(T) -> K`, `K` a type with an order.
+    ListSortBy,
     /// `Int.parse(t) -> Option<Int>`: decimal, optional leading `-`.
     IntParse,
     /// `b.to_int() -> Int`.

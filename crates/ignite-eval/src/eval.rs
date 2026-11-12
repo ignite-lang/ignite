@@ -1297,6 +1297,26 @@ impl<'p> Evaluator<'p> {
                 self.alloc(out.len() as u64 + 1)?;
                 Ok(Value::List(out))
             }
+            // The keys in element order, as both targets compute them, then
+            // a stable sort by key.
+            Builtin::ListSortBy => {
+                let list = self.expr(cx, receiver)?;
+                let f = self.expr(cx, &args[0])?;
+                let Value::List(items) = list else {
+                    return Err(internal("sort_by of a non-list"));
+                };
+                let mut keyed = Vec::with_capacity(items.len());
+                for item in items {
+                    let key = self.apply(f.clone(), vec![item.clone()])?;
+                    keyed.push((key, item));
+                }
+                let modules = self.modules;
+                keyed.sort_by(|a, b| key_cmp(modules, &a.0, &b.0));
+                self.alloc(keyed.len() as u64 + 1)?;
+                Ok(Value::List(
+                    keyed.into_iter().map(|(_, item)| item).collect(),
+                ))
+            }
             Builtin::Debug => {
                 let text = self.with_receiver(cx, receiver, |_, v| Ok(v.debug_text()))?;
                 self.alloc(text.len() as u64 / 64)?;
@@ -1520,6 +1540,12 @@ impl<'p> Evaluator<'p> {
                         &format!("slice {from}..{to} out of range for length {}", items.len()),
                     )),
                 }
+            }
+            (Builtin::ListSort, Value::List(items)) => {
+                let mut sorted = items.clone();
+                sorted.sort_by(|a, b| key_cmp(self.modules, a, b));
+                let nodes = sorted.len() as u64 + 1;
+                Ok((Value::List(sorted), nodes))
             }
             (Builtin::ListJoin, Value::List(items)) => {
                 let separator = text(&next()?)?;
@@ -2705,12 +2731,21 @@ fn map_put(modules: &Modules<'_>, entries: &mut Vec<(Value, Value)>, key: Value,
 }
 
 /// The order of map keys (14.3): `Int`, `Byte` and `Bool` by value, `Text`
-/// and references by bytes, enums without payload by declaration order.
+/// and references by bytes, enums without payload by declaration order;
+/// also the order of `sort` and `sort_by`, which adds `U32` by value and
+/// lists (`Bytes`) and tuples element by element.
 fn key_cmp(modules: &Modules<'_>, a: &Value, b: &Value) -> Ordering {
     match (a, b) {
         (Value::Int(x), Value::Int(y)) => x.cmp(y),
         (Value::Byte(x), Value::Byte(y)) => x.cmp(y),
+        (Value::U32(x), Value::U32(y)) => x.cmp(y),
         (Value::Bool(x), Value::Bool(y)) => x.cmp(y),
+        (Value::List(x), Value::List(y)) | (Value::Tuple(x), Value::Tuple(y)) => x
+            .iter()
+            .zip(y)
+            .map(|(x, y)| key_cmp(modules, x, y))
+            .find(|order| order.is_ne())
+            .unwrap_or_else(|| x.len().cmp(&y.len())),
         (Value::Text(x), Value::Text(y)) => x.as_bytes().cmp(y.as_bytes()),
         (Value::Reference(x), Value::Reference(y)) => x.text().cmp(&y.text()),
         (Value::Quantity(_, x), Value::Quantity(_, y)) => x.cmp(y),

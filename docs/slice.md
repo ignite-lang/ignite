@@ -685,6 +685,8 @@ meaning. The generator emits exactly the Rust on the right.
 | `t.pieces(s) -> List<Text>` | `::ignite_io::text::pieces(&t, &s)`: the texts between the separators, empty pieces kept, `[t]` for an empty `s`; no piece is checked for UTF-8 again, since valid text cut at a valid separator stays valid. `std.text.split` is this builtin. The LLVM runtime's `text_pieces` uses the same search. Story `text-fast-search` | Text |
 | `b.at(i)` | `b[(i) as usize]`, then `.clone()` when the element is not `Int`, `Byte` or `Bool` (also `l[i]`) | Bytes, List |
 | `l.map(f)` | `l.iter().cloned().map(f).collect::<Vec<_>>()` | List; `l.iter().map(..)` without the copy in the cases of 20.3.7 |
+| `l.sort()` | `{ let mut s = l.to_vec(); s.sort(); s }` | List, Bytes; section NN |
+| `l.sort_by(f)` | `{ let l = &l; let keys: Vec<_> = l.iter().cloned().map(f).collect(); let mut order: Vec<usize> = (0..keys.len()).collect(); order.sort_by(\|a, b\| keys[*a].cmp(&keys[*b])); order.into_iter().map(\|i\| l[i].clone()).collect::<Vec<_>>() }` | List, Bytes; section NN |
 | `b.to_int()` | `(b as i64)` | Byte |
 | `i.to_byte()` | `u8::try_from(i).ok()` | Int |
 | `Int.parse(t)` | `::ignite_io::parse_int(&t)`: decimal digits with an optional leading `-`, `None` for a leading `+` and for anything `str::parse::<i64>` rejects; the LLVM runtime's `int_parse` calls the same function | static |
@@ -1192,7 +1194,7 @@ Codes of the syntax and name stages (`ignite-syntax`, `ignite-check`):
 | E014 | retired in slice 6 (was: constant used as a pattern; constant patterns are allowed, section 4.3) |
 | E015 | constant cycle |
 | E016 | effect missing from `requires` (section 5.1); a closure's effects not on its own parameters are charged where it is created (section 13.3) |
-| E017 | effectful function used as a value where no effectful fn type covering its effects is expected (section 4.5); reported by the type checker since slice 7; also a fn passed to `List.map` with an effect on its parameter or one the caller's `requires` does not cover (20.4.3) |
+| E017 | effectful function used as a value where no effectful fn type covering its effects is expected (section 4.5); reported by the type checker since slice 7; also a fn passed to `List.map` or `List.sort_by` with an effect on its parameter or one the caller's `requires` does not cover (20.4.3) |
 | E020 | unsupported or malformed resource, component, contract, policy or assembly (also: a kind that is no record type, two components with one executable name, a `system` in a std module); reported by the type checker since slice 10. The Rust backend keeps E020 for a malformed resource and, when it runs without the typed program, for every component (a component is executable only through the type checker) |
 | E021 | reserved (unused since slice 1) |
 | E030 | protocol role missing or malformed, a role without `requires`, a call to a role the protocol lacks (the component rules of slices 1 to 9, `Client` without `connect` and `Service` without `serve`, retired with those kinds in slice 10: a kind's `main` calls the role, and a missing role is this E030 at the call); since slice 14 a `serve` role takes 2 parameters `(stream, application)` or 3 `(stream, limits, application)` (section 18.6) |
@@ -1221,7 +1223,7 @@ E041 unknown method or field for the receiver type (also an ambiguous or inappli
 be inferred (also a type parameter neither the expected type nor later uses in the body decide, a closure parameter without type, and an effectful operation
 whose effects `ignite-check` could not check, section 11.7), E043 wrong number of arguments (also a range pattern whose start is above its end), E044 integer literal out of range for `Byte` or `U32` (32.2),
 E045 operator not defined for the operand type (also `==` on a type that is not comparable, section 13.5, a constant pattern of a type without
-`==`, and a range bound that is no literal or constant with a literal value), E046 `match` not exhaustive (ranges split `Int` and `Byte` into intervals, section 13.7), E047 record literal with a missing (and not defaulted),
+`==`, a range bound that is no literal or constant with a literal value, and `sort` on a list of elements without an order or `sort_by` with a key without one, section NN), E046 `match` not exhaustive (ranges split `Int` and `Byte` into intervals, section 13.7), E047 record literal with a missing (and not defaulted),
 unknown or duplicate field, E048 unknown type name, wrong number of type arguments or an
 alias that refers to itself, E052 `assert` condition not `Bool` (section 12.3). Since slice 14 also E096: a use instantiates a `ByteStream`-bounded type
 parameter with a type that does not implement `ByteStream` (section 18.7).
@@ -11995,3 +11997,78 @@ nothing.
   TLS requests and 40 pools of three leave no descriptor on the Rust target and keep one each
   on the LLVM target, which the test pins exactly (42.2).
 - `layering::`, with `mysql` in the protocol names it reads from std.
+
+## NN A List is sorted with sort and sort_by
+
+Story `list-sort`, asked for by a command-line tool written in Ignite: at v0.16.2 neither the
+builtin methods of `List` nor `std` had a sort, and a `Map` orders only by a unique key.
+
+### NN.1 The forms
+
+- `xs.sort() -> List<T>`: the elements in ascending order.
+- `xs.sort_by(f) -> List<T>`, `f: fn(T) -> K`: the elements in ascending order of the key `f`
+  gives each. `f` is called once per element, in the order of the list, on the evaluator and
+  both targets alike.
+- Both return a new list. The list they are called on is a value and stays as it was
+  (`let ys = xs.sort()` leaves `xs` alone; there is no sort in place).
+- Both are stable: elements whose keys are equal keep the order they had.
+- Both are builtin methods of every `List`, `Bytes` included (section 4.8 rule 1: a user fn
+  named `sort` or `sort_by` is no longer reached by UFCS on a list).
+- The types with an order (`ignite_types::ordered`): `Int`, `Byte` and `U32` by value, `Bool`
+  with `false` first, `Text` and `Bytes` by their bytes (shorter first when one is a prefix of
+  the other), an enum without payloads in the declaration order of its variants, and a tuple of
+  these, element by element. `<` is defined on `Int`, `Byte`, `U32` and `Text` (25.1) and the
+  sort follows it there; `Bool`, `Bytes`, enums and tuples have no `<`, and their order is the
+  one stated here, the order a `Map` keeps the same key types in (14.3).
+- E045 refuses `sort` on a list of any other element type, once, at the call; the message
+  names the element type and `sort_by`. E045 refuses a key of any other type, once, at `f`,
+  naming the key's type. A generic `T` has no order.
+- `f` may perform effects exactly where `map`'s may (20.4.3): E017 and E042 read as for `map`,
+  naming `sort_by`.
+- Not in the language: a sort with a comparison fn `fn(T, T) -> ..`; a descending sort. Several
+  keys are one tuple key (`sort_by(|e| (e.level, e.name))`); an `Int` key sorts descending by
+  its negation.
+- No floating-point type exists, so the story's `Float`, and where NaN sorts, has nothing to
+  apply to here. A float type will have to state its order, NaN included, when it lands.
+
+### NN.2 Lowering
+
+- Evaluator: the order of map keys (`key_cmp`), extended by `U32`, lists and tuples; a stable
+  `sort_by` of the values, or of the pairs of key and value for `sort_by`.
+- Rust target: section 6's rows. `sort` is the standard library's stable `slice::sort` on a
+  copy; `sort_by` computes the keys, sorts the positions stably by key and copies each element
+  once. Payload-free enums already derive `Ord` in declaration order (14.3).
+- LLVM target: the keys are the elements themselves for `sort` and, for `sort_by`, a buffer of
+  `f`'s results built as `map` builds its list. The runtime entry `ignite_rt_list_sort(out,
+  keys, size, compare)` (`crates/ignite-rt/src/list.rs`, `docs/llvm.md` section 5) sorts the
+  positions `0..n` by a bottom-up merge sort that keeps equal keys in order, comparing two keys
+  through the module's `sort.cmp.<K>` (the order of `glue::compare`, which map keys use,
+  extended by `U32`, `Bytes` and a `cmp.<tuple>` per tuple type); the generated code then
+  copies the elements into a new list in that order. The positions and the merge's scratch are
+  one arena block of `2 * n` `i64`, so the sort makes no heap allocation, and the entry adds
+  no `unsafe` site (row 3.6): it reads the keys as a byte list and writes the positions through
+  the arena helper `text_concat` and `text_join` use. A module declares the entry only when it
+  sorts, so the generated code of a program that does not sort is what it was.
+- The LLVM target's allocations for a sort of 1,000 `Int` (`sort-cost sort 1000` against
+  `sort-cost build 1000`, the program of `list_sort::`): none. Memcheck counts 32 `malloc`
+  calls with the sort and 32 without, and `strace -c` 15 `mmap` calls each: the 16,000 bytes of
+  positions and the 8,000 of the new list fit the arena's first 64 KiB chunk.
+- Instructions of a sort of reversed `Int`s, callgrind, the list's construction taken off, dev
+  builds: 773,047 at 10,000 and 7,657,964 at 100,000 on the Rust target (ratio 9.91: the
+  standard library finds the one descending run), 64,783,442 and 791,052,051 on the LLVM
+  target with the dev runtime (ratio 12.21; n log2 n gives 12.5, n² 100).
+
+### NN.3 Tests
+
+- `list_sort::` in `crates/ignite/tests/list_sort.rs` over `fixtures/list_sort.ignite`: every
+  type with an order, records by `Int`, enum, tuple and `Text` keys, a named fn as key, an empty
+  and a one-element list, 1,000 reversed `Int`s and 300 pairs of repeating keys, printed by the
+  evaluator and both targets and pinned line by line; stability alone; one E045 naming
+  `sort_by` for a record and for an `Option`, one naming the key for a record key; E017 for a
+  key fn whose effect the caller's `requires` does not cover and for one with an effect on its
+  parameter, none for a covered one; the growth
+  of the instruction count from 10,000 to 100,000 elements at most 20 on both targets; the
+  LLVM allocation count of a sort of 1,000. The fixture's three inline tests are units of the
+  differential corpus.
+- `list::tests::merge_sort_is_stable_and_ascending` in `crates/ignite-rt`: every length up to
+  69 with repeating keys.

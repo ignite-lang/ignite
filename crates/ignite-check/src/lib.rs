@@ -232,6 +232,8 @@ pub const BUILTIN_METHODS: &[&str] = &[
     "bind",
     "connect",
     "map",
+    "sort",
+    "sort_by",
     "to_int",
     "to_byte",
     "to_u32",
@@ -2330,7 +2332,7 @@ impl Checker {
         match name.name.as_str() {
             "copy" | "at" | "slice" => return self.roots(receiver),
             "concat" => return self.arg_roots(std::iter::once(receiver).chain(args)),
-            "map" if self.builtin_method(receiver, name) => {
+            "map" | "sort" | "sort_by" if self.builtin_method(receiver, name) => {
                 return self
                     .roots(receiver)
                     .into_iter()
@@ -2901,7 +2903,7 @@ impl Checker {
             return;
         }
         self.expr(receiver);
-        let list_map = name.name == "map"
+        let list_map = matches!(name.name.as_str(), "map" | "sort_by")
             && self.builtin_method(receiver, name)
             && self
                 .static_type(receiver)
@@ -4493,13 +4495,25 @@ pub fn builtin_applies(ty: &Type, method: &str) -> bool {
                 | "append"
                 | "clear"
                 | "map"
+                | "sort"
+                | "sort_by"
                 | "to_text"
                 | "index_of"
         ),
         "List" => {
             matches!(
                 method,
-                "len" | "is_empty" | "at" | "slice" | "push" | "set" | "append" | "clear" | "map"
+                "len"
+                    | "is_empty"
+                    | "at"
+                    | "slice"
+                    | "push"
+                    | "set"
+                    | "append"
+                    | "clear"
+                    | "map"
+                    | "sort"
+                    | "sort_by"
             ) || (method == "join" && text)
                 || (matches!(method, "to_text" | "index_of") && byte)
         }
