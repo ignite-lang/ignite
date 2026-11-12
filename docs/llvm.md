@@ -422,9 +422,29 @@ position, even with no buffer.
     unit `mysql-cost`; before, a copy);
   - the places of a `match` scrutinee `(a, b, ..)` that is a tuple of places whose
     variables no arm changes or moves (`ownership::changed_in`, `ownership::moved_in`) and
-    that holds no handle: the tuple is built from shallow `memcpy`s of the places'
-    representations and read like a borrowed place (`Lower::lent_tuple`; story
-    `std-mysql-client`, unit `call-moves`; before, each place deep-copied);
+    whose arms move none of the names their patterns bind: the tuple is built from shallow
+    `memcpy`s of the places' representations and read like a borrowed place
+    (`Lower::lent_tuple`; story `std-mysql-client`, unit `call-moves`; before, each place
+    deep-copied). The analysis takes a tuple literal for a fresh value,
+    so it may move a binding of it into a callee; out of this tuple that would hand the
+    callee the place's own buffers (`o.rows[0] = ..` in the callee wrote the place:
+    `borrowed_reads::each_guard_of_the_correction_round_gives_the_evaluator_value_on_both_targets`,
+    4143 for 4123), so such a `match` builds the tuple of copies. An arm that binds the
+    whole tuple to one name (`pair => pair_size(pair)`) binds the borrowed tuple and passes
+    its pointer to a borrowed parameter; one that moves it is one of those. A tuple that
+    holds a handle is lent too (the unit's first commit excluded it; the correction round
+    removed the exclusion): a tuple literal is never an owned match (`own::owned_scrutinee`
+    wants a scrutinee that makes a value no one else owns), so the lent tuple is not
+    released and its handles need no owner of their own; a handle-holding place moved into
+    the tuple is never released, lent or not (the gap below).
+    Read after the `match`, returned from it as a binding, or a channel end on its own, it
+    gives the evaluator's values
+    (`borrowed_reads::each_guard_of_the_correction_round_gives_the_evaluator_value_on_both_targets`);
+  - known gap (at 1dfc2937 as now): a place that holds a handle moved into a `match`
+    scrutinee tuple is never released, so a channel whose last sender it holds stays open
+    after the `match` (`rx.closed()` false where the evaluator and the Rust target say
+    true; `borrowed_reads::a_record_holding_a_sender_moved_into_a_tuple_match_is_dropped_with_it`
+    holds both forms);
   - the receiver of `to_bytes`: the result is the receiver itself, owned or borrowed as the
     receiver is;
   - the argument of `append` when the element type holds no buffer: its elements are

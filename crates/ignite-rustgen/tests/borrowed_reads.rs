@@ -310,6 +310,15 @@ fn tuple_assigned(m: Int) -> Int {
   }
   n + kind_of(a).len() + kind_of(b).len()
 }
+
+fn renamed(r: Ctx) -> Ctx = set_in(r, \"k\", Num(r.count))
+
+fn renamed_twice(r0: Ctx) -> Ctx {
+  var r = r0
+  r = renamed(r)
+  r = renamed(r)
+  r
+}
 ";
 
 fn moves_lib() -> String {
@@ -351,5 +360,31 @@ fn a_tuple_of_places_is_matched_by_reference() {
     assert!(
         text.contains("a.clone()"),
         "tuple_assigned lost its copy: {text}"
+    );
+}
+
+/// A parameter whose only move is a late one (`set_in(r, "k",
+/// Num(r.count))`) is consumed: the fn takes it by value and moves it on,
+/// and a caller that updates its record with the fn moves the record in.
+/// Were the late move not counted as a move of the parameter, the fn would
+/// borrow it and copy it into `set_in` on every call.
+#[test]
+fn a_parameter_moved_late_is_taken_by_value() {
+    let lib = moves_lib();
+    let text = section(&lib, "pub fn renamed(");
+    assert!(
+        text.starts_with("pub fn renamed(r: Ctx)"),
+        "renamed: {text}"
+    );
+    assert_eq!(
+        text.matches("r.clone()").count(),
+        0,
+        "renamed copies: {text}"
+    );
+    let text = section(&lib, "pub fn renamed_twice(");
+    assert_eq!(
+        text.matches("r.clone()").count() + text.matches("r0.clone()").count(),
+        0,
+        "renamed_twice copies: {text}"
     );
 }

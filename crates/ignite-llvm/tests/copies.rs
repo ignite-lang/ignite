@@ -149,6 +149,17 @@ fn an_update_read_by_a_later_argument_and_a_tuple_match_copy_no_record() {
     }
 }
 
+/// A parameter whose only move is a late one (`set_in(r, "k",
+/// Num(r.rows.len()))`) is consumed, so the callee moves it on instead of
+/// copying a borrowed record into `set_in`.
+#[test]
+fn a_parameter_moved_late_is_not_copied() {
+    let (generated, _) = lower_with("copies", true);
+    let body = function(&generated.program, "tests.copies.renamed");
+    let glue = "call void @\"copy.tests.copies.Ctx";
+    assert_eq!(body.matches(glue).count(), 0, "{body}");
+}
+
 #[test]
 fn every_copies_test_runs() {
     let (generated, tests) = lower_with("copies", true);

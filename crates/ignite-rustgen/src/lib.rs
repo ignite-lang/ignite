@@ -3626,8 +3626,10 @@ impl<'a> Generator<'a> {
     /// `let b = t.to_bytes()` as `let b: &[u8] = t.as_bytes();` when `t`
     /// is a `Text` place and `rest`, the statements after it in its block,
     /// read `b` only as a slice (`docs/slice.md` 20.3.7), neither change
-    /// the variable of `t` nor bind `b` again: `b` is then read like a
-    /// borrowed parameter, and the text is not copied.
+    /// the variable of `t` nor bind `b` again, and move that variable
+    /// ([`TypedProgram::moves`], a late move included) in no statement
+    /// that reads `b` or comes before one that does: `b` is then read like
+    /// a borrowed parameter, and the text is not copied.
     fn lent_let(&mut self, stmt: &Stmt, rest: &[Stmt]) -> Option<String> {
         let StmtKind::Let {
             name,
@@ -3648,6 +3650,15 @@ impl<'a> Generator<'a> {
         let root = place_root(text)?;
         let changed = ownership::changed_in_stmts(rest, Some(types)).contains(root);
         if rebinds || changed || !types.reads_as_slice(rest, &name.name) {
+            return None;
+        }
+        let mut read = false;
+        let moved_while_read = rest.iter().rev().any(|stmt| {
+            let stmt = std::slice::from_ref(stmt);
+            read |= ownership::mentions_in_stmts(stmt, &name.name);
+            read && ownership::moved_in_stmts(stmt, types).contains(root)
+        });
+        if moved_while_read {
             return None;
         }
         let text = self.receiver(text);
@@ -4576,16 +4587,14 @@ impl<'a> Generator<'a> {
             .map(<[usize]>::to_vec);
         let callee = self.callee(call);
         // Late moves (unit `call-moves`): a place a later argument reads
-        // moves once every other argument is bound, in source order.
+        // moves once every other argument is bound, in source order. One
+        // rooted at a borrowed or captured variable would be passed as the
+        // copy `moves` keeps for it, after the same bindings.
         let late: Vec<NodeId> = receiver
             .into_iter()
             .chain(args)
             .map(unnamed)
-            .filter(|arg| {
-                self.types.is_some_and(|t| t.moves_late(arg))
-                    && place_root(arg)
-                        .is_some_and(|root| !self.is_borrowed(root) && !self.is_captured(root))
-            })
+            .filter(|arg| self.types.is_some_and(|t| t.moves_late(arg)))
             .map(|arg| arg.id)
             .collect();
         let Some(order) = order else {
@@ -5529,6 +5538,7 @@ impl<'a> Generator<'a> {
             .unwrap_or_else(|| "unreachable!()".to_string());
         let ty = self.type_of(scrutinee).cloned();
         let tuple = self.lent_tuple(scrutinee, ty.as_ref(), arms);
+        let whole = tuple.as_ref().map_or(0, Vec::len);
         let lent = tuple.is_some() || self.match_by_ref(scrutinee, ty.as_ref(), arms);
         let mut scrutinee_text = if let Some(items) = tuple {
             let texts: Vec<String> = items
@@ -5567,10 +5577,25 @@ impl<'a> Generator<'a> {
             guarded |= !native && !catch_all;
             ranged |= has_range(&arm.pattern);
             let lent_before = self.borrowed_elements.len();
+            let mut rebuilt = String::new();
             let pattern = if native {
                 let text = self.pattern(&arm.pattern, ty.as_ref());
-                if lent {
-                    self.lend_bindings(&arm.pattern, &mut bindings);
+                match &arm.pattern.kind {
+                    // A binding of a lent tuple is a tuple of references: an
+                    // arm that reads it gets the tuple of values it names.
+                    PatternKind::Binding(id)
+                        if whole > 0
+                            && self.scopes.last().is_some_and(|s| s.contains(&id.name)) =>
+                    {
+                        if ownership::mentions(&arm.body, &id.name) {
+                            let name = ident(&id.name);
+                            let items: Vec<String> =
+                                (0..whole).map(|i| format!("{name}.{i}.clone()")).collect();
+                            rebuilt = format!("let {name} = ({}); ", items.join(", "));
+                        }
+                    }
+                    _ if lent => self.lend_bindings(&arm.pattern, &mut bindings),
+                    _ => {}
                 }
                 text
             } else {
@@ -5588,14 +5613,14 @@ impl<'a> Generator<'a> {
             };
             self.borrowed_elements.truncate(lent_before);
             self.scopes.pop();
-            if !bindings.is_empty() {
+            if !bindings.is_empty() || !rebuilt.is_empty() {
                 let lets: String = bindings
                     .iter()
                     .map(|(name, access)| {
                         format!("let {} = {}; ", ident(name), binding_value(access))
                     })
                     .collect();
-                body = format!("{{ {lets}{body} }}");
+                body = format!("{{ {rebuilt}{lets}{body} }}");
             }
             out.push_str(&indentation(self.indent));
             let _ = writeln!(out, "{pattern} => {body},");
@@ -5646,11 +5671,19 @@ impl<'a> Generator<'a> {
     /// The items of a `match` scrutinee that is a tuple of places to match
     /// by reference instead of a tuple of copies (unit `call-moves`): two
     /// or more places, each of a type that is `Copy` in Rust (`true`, read
-    /// as a value) or lendable ([`lendable`], read by reference, at least
-    /// one), whose variables no arm changes or moves, and every arm's
-    /// pattern [`is_native`](Self::is_native). Rust matches each pattern of
+    /// as a value) or not (read by reference, at least one), whose
+    /// variables no arm changes or moves, every arm's pattern
+    /// [`is_native`](Self::is_native), and no handle in the tuple
+    /// ([`TypedProgram::holds_handles`]: an item the analysis moves into
+    /// the tuple is dropped with it at the end of the `match`, which a
+    /// borrowed one is not). Rust matches each pattern of
     /// the tuple against its reference, and the bindings are lent as for a
-    /// single place ([`lend_bindings`](Self::lend_bindings)).
+    /// single place ([`lend_bindings`](Self::lend_bindings)): a binding of
+    /// a type that is not [`lendable`] (a fn value) is copied out of its
+    /// reference at the start of the arm, as the tuple copied it. An arm whose
+    /// pattern is one name binds a tuple of references: when its body
+    /// reads the name, the arm starts with a copy of each item
+    /// ([`match_expr`](Self::match_expr)), the copy every arm made before.
     fn lent_tuple<'e>(
         &self,
         scrutinee: &'e Expr,
@@ -5665,6 +5698,7 @@ impl<'a> Generator<'a> {
         if items.len() < 2
             || items.len() != elements.len()
             || !arms.iter().all(|arm| self.is_native(&arm.pattern, ty))
+            || ty.is_some_and(|ty| types.holds_handles(ty))
         {
             return None;
         }
@@ -5676,7 +5710,7 @@ impl<'a> Generator<'a> {
         let mut lent = Vec::new();
         for (item, element) in items.iter().zip(elements) {
             let root = place_root(item).filter(|_| self.is_place(item))?;
-            if touched.contains(root) || !(rust_copy(element) || lendable(element)) {
+            if touched.contains(root) {
                 return None;
             }
             lent.push((item, rust_copy(element)));

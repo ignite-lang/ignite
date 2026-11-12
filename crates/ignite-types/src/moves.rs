@@ -1719,7 +1719,10 @@ impl<'a> Walk<'a> {
                 }
             }
         }
-        let late = if spawned || !matches!(callee, Some(Callee::Fn(_))) {
+        // Only a fn call binds its later arguments first (the Rust target's
+        // `fn_call`, the evaluator's `late_args`); a `spawn` has no
+        // `Operand::Move` left to move late.
+        let late = if !matches!(callee, Some(Callee::Fn(_))) {
             vec![false; operands.len()]
         } else {
             self.late_moves(&operands, &st)
