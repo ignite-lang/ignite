@@ -1582,6 +1582,10 @@ pub struct TypedProgram {
     /// Places in move positions that take their value, by expression id
     /// (`docs/slice.md` 20.3).
     moves: NodeMap<()>,
+    /// The places of `moves` that a later argument of their call reads, so
+    /// that they move only once every later argument is evaluated (unit
+    /// `call-moves`).
+    late_moves: NodeMap<()>,
     /// The consumed parameters of every closure literal inside a body, by
     /// the closure's id (`docs/slice.md` 20.3.1).
     closure_consumed: NodeMap<Vec<bool>>,
@@ -1852,6 +1856,17 @@ impl TypedProgram {
     /// (`docs/slice.md` 20.3). False for every other expression.
     pub fn moves(&self, expr: &Expr) -> bool {
         self.moves.contains_key(&key(expr))
+    }
+
+    /// Whether `expr`, an argument of a fn call that [`moves`](Self::moves),
+    /// is read by a later argument of the same call, which neither changes
+    /// its variable nor keeps a borrow of it: the place moves into the call
+    /// once the later arguments have run (unit `call-moves`). The LLVM
+    /// target passes the place's pointer and evaluates the later arguments
+    /// before the call, as for any move; the Rust target evaluates them into
+    /// temporaries first and then moves the place.
+    pub fn moves_late(&self, expr: &Expr) -> bool {
+        self.late_moves.contains_key(&key(expr))
     }
 
     /// Whether the callee consumes its parameter `index` (UFCS receiver = 0). Defined for a
@@ -2195,10 +2210,12 @@ pub fn type_module(
         assemblies: typed.system.assemblies,
         effects: typed.system.effects,
         moves: NodeMap::default(),
+        late_moves: NodeMap::default(),
         closure_consumed: NodeMap::default(),
     };
     let found = moves::analyse(program, &program_types, modules);
     program_types.moves = found.moves;
+    program_types.late_moves = found.late;
     program_types.closure_consumed = found.closures;
     if let Some(own) = program_types.modules.get_mut(&program_types.module) {
         own.consumed = found.consumed.clone();

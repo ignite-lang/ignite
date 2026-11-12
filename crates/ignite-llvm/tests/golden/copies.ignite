@@ -530,3 +530,61 @@ test "an element matched or iterated in place keeps its value, one the body chan
   }
   assert grown == 1 && lists[1] == [1]
 }
+
+test enum Val {
+  Nil
+  Num(Int)
+  Txt(Text)
+  Rec(List<(Text, Val)>)
+}
+
+test type Ctx {
+  label: Text
+  inputs: List<(Text, Val)>
+  rows: List<Text>
+}
+
+test fn set_in(r: Ctx, name: Text, v: Val) -> Ctx {
+  var o = r
+  o.inputs.push((name, v))
+  o
+}
+
+test fn read_in(r: Ctx, name: Text) -> Result<Val, Text> {
+  for e in r.inputs {
+    if e.0 == name {
+      return Ok(e.1)
+    }
+  }
+  Err("no input {name}")
+}
+
+test fn attach(r0: Ctx) -> Result<Ctx, Text> {
+  var r = r0
+  r = set_in(r, "a", read_in(r, "b")?)
+  Ok(r)
+}
+
+test fn kind_of(v: Val) -> Text = match v {
+  Nil => "nil"
+  Num(_) => "num"
+  Txt(_) => "txt"
+  Rec(_) => "rec"
+}
+
+test fn same_kind(a: Val, b: Val) -> Result<Bool, Text> {
+  match (a, b) {
+    (Txt(x), Txt(y)) => Ok(x == y)
+    (Num(x), Num(y)) => Ok(x == y)
+    _ => Err("cannot compare {kind_of(a)} and {kind_of(b)}")
+  }
+}
+
+test "a record read by a later argument is moved after it, a tuple of places is matched in place" {
+  let c = Ctx { label = "c", inputs = [("b", Num(7))], rows = ["x", "y"] }
+  let attached = attach(c)?
+  assert attached.inputs == [("b", Num(7)), ("a", Num(7))] && attached.rows == c.rows
+  assert c.inputs.len() == 1
+  assert same_kind(Txt("a"), Txt("a")) == Ok(true)
+  assert same_kind(Num(1), Txt("b")) == Err("cannot compare num and txt")
+}

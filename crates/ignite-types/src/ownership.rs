@@ -323,6 +323,22 @@ pub fn changed_in<'a>(e: &'a Expr, types: Option<&TypedProgram>) -> BTreeSet<&'a
     changed(vec![Node::Expr(e)], types)
 }
 
+/// The [`place_root`] of every place that moves in `e`
+/// ([`TypedProgram::moves`]), closure bodies included, by name.
+pub fn moved_in<'a>(e: &'a Expr, types: &TypedProgram) -> BTreeSet<&'a str> {
+    let mut names = BTreeSet::new();
+    let mut stack = vec![Node::Expr(e)];
+    while let Some(node) = stack.pop() {
+        if let Node::Expr(e) = node {
+            if types.moves(e) {
+                names.extend(place_root(e));
+            }
+            expr_children(e, &mut stack);
+        }
+    }
+    names
+}
+
 fn changed<'a>(mut stack: Vec<Node<'a>>, types: Option<&TypedProgram>) -> BTreeSet<&'a str> {
     let mut names = BTreeSet::new();
     while let Some(node) = stack.pop() {

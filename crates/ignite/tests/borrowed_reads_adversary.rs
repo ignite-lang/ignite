@@ -95,7 +95,7 @@ pub(crate) fn target_failure(file: &Path, target: &str, count: usize) -> Option<
 
 /// Every inline test of `program` passes on the evaluator, the Rust target
 /// and the LLVM target.
-fn agree(name: &str, program: &str, count: usize) {
+pub(crate) fn agree(name: &str, program: &str, count: usize) {
     let file = source(name, program);
     let mut failures = evaluator_failures(&file);
     for target in ["rust", "llvm"] {

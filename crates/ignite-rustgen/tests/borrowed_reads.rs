@@ -178,3 +178,178 @@ fn an_indexed_element_matched_iterated_measured_or_compared_is_read_in_place() {
         assert!(copies(text).is_empty(), "{name} copies: {text}");
     }
 }
+
+/// Unit `call-moves`: a variable passed by value whose only later reads
+/// are in later arguments of the same call (form 9 of the reporter's
+/// program), and a `match` on a tuple of two places (form 7). The guards
+/// keep their copy: a later argument that assigns the variable or changes
+/// it in place, one whose value borrows from it, an arm that assigns a
+/// place of the tuple. `crates/ignite/tests/fixtures/call_moves.ignite`
+/// runs each of them on the evaluator and both targets.
+const MOVES: &str = "enum Val {
+  Nil
+  Num(Int)
+  Txt(Text)
+  Rec(List<(Text, Val)>)
+}
+
+type Ctx {
+  label: Text
+  inputs: List<(Text, Val)>
+  rows: List<Text>
+  count: Int
+}
+
+fn put(fields: List<(Text, Val)>, k: Text, v: Val) -> List<(Text, Val)> {
+  var out = fields
+  out.push((k, v))
+  out
+}
+
+fn set_in(r: Ctx, name: Text, v: Val) -> Ctx {
+  var o = r
+  o.inputs = put(o.inputs, name, v)
+  o
+}
+
+fn read_in(r: Ctx, name: Text) -> Result<Val, Text> {
+  for e in r.inputs {
+    if e.0 == name {
+      return Ok(e.1)
+    }
+  }
+  Err(\"no input {name}\")
+}
+
+fn attach_inline(r0: Ctx) -> Result<Ctx, Text> {
+  var r = r0
+  r = set_in(r, \"a\", read_in(r, \"b\")?)
+  r = set_in(r, \"c\", read_in(r, \"a\")?)
+  Ok(r)
+}
+
+fn attach_receiver(r0: Ctx) -> Result<Ctx, Text> {
+  var r = r0
+  r = r.set_in(\"a\", r.read_in(\"b\")?)
+  Ok(r)
+}
+
+fn attach_named(r0: Ctx) -> Result<Ctx, Text> {
+  var r = r0
+  r = set_in(r = r, v = read_in(r, \"b\")?, name = \"a\")
+  Ok(r)
+}
+
+fn later_assigns(r0: Ctx) -> Ctx {
+  var r = r0
+  r = set_in(r, \"a\", if true {
+    r = r0
+    Num(1)
+  } else {
+    Nil
+  })
+  r
+}
+
+fn later_pushes(r0: Ctx) -> Ctx {
+  var r = r0
+  r = set_in(r, \"a\", if true {
+    r.rows.push(\"x\")
+    Num(1)
+  } else {
+    Nil
+  })
+  r
+}
+
+fn grown(r: Ctx, rows: List<Text>) -> Int {
+  var o = r
+  o.rows.push(\"x\")
+  o.rows.len() + rows.len()
+}
+
+fn later_borrows(r0: Ctx) -> Int {
+  let r = r0
+  grown(r, r.rows)
+}
+
+fn kind_of(v: Val) -> Text = match v {
+  Nil => \"nil\"
+  Num(_) => \"num\"
+  Txt(_) => \"txt\"
+  Rec(_) => \"rec\"
+}
+
+fn same_kind(a: Val, b: Val) -> Result<Bool, Text> {
+  match (a, b) {
+    (Txt(x), Txt(y)) => Ok(x == y)
+    (Num(x), Num(y)) => Ok(x == y)
+    _ => Err(\"cannot compare {kind_of(a)} and {kind_of(b)}\")
+  }
+}
+
+fn same_local(m: Int) -> Int {
+  let a = Txt(\"{m}\")
+  let b = Num(m)
+  let n = match (a, b) {
+    (Txt(x), Num(y)) => x.len() + y
+    _ => 0
+  }
+  n + kind_of(a).len() + kind_of(b).len()
+}
+
+fn tuple_assigned(m: Int) -> Int {
+  var a = Txt(\"ab\")
+  let b = Num(m)
+  let n = match (a, b) {
+    (Txt(x), Num(y)) => {
+      a = Nil
+      x.len() + y
+    }
+    _ => 0
+  }
+  n + kind_of(a).len() + kind_of(b).len()
+}
+";
+
+fn moves_lib() -> String {
+    common::generate_source(MOVES, &common::repository_std())
+        .unwrap_or_else(|d| panic!("{d:?}"))
+        .lib_rs
+}
+
+#[test]
+fn a_variable_read_by_a_later_argument_is_moved_after_it() {
+    let lib = moves_lib();
+    for name in ["attach_inline", "attach_receiver", "attach_named"] {
+        let text = section(&lib, &format!("pub fn {name}("));
+        assert!(!text.contains("r.clone()"), "{name} copies r: {text}");
+        assert!(
+            text.contains("read_in(&r,") || text.contains("read_in(r,"),
+            "{name} does not read r in place: {text}"
+        );
+    }
+}
+
+#[test]
+fn a_later_argument_that_changes_or_borrows_the_variable_keeps_the_copy() {
+    let lib = moves_lib();
+    for name in ["later_assigns", "later_pushes", "later_borrows"] {
+        let text = section(&lib, &format!("pub fn {name}("));
+        assert!(text.contains("r.clone()"), "{name} lost its copy: {text}");
+    }
+}
+
+#[test]
+fn a_tuple_of_places_is_matched_by_reference() {
+    let lib = moves_lib();
+    let text = section(&lib, "pub fn same_kind(");
+    assert!(text.contains("match (a, b) {"), "same_kind: {text}");
+    let text = section(&lib, "pub fn same_local(");
+    assert!(text.contains("match (&a, &b) {"), "same_local: {text}");
+    let text = section(&lib, "pub fn tuple_assigned(");
+    assert!(
+        text.contains("a.clone()"),
+        "tuple_assigned lost its copy: {text}"
+    );
+}
