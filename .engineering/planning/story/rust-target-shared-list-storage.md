@@ -6,7 +6,7 @@ status: draft
 title: A list on the Rust target is copied by reference count and copied in full only when it changes
 relations:
 - informed_by: story:rust-target-read-only-forms-borrow
-revision: 3
+revision: 4
 ---
 # Story: a list on the Rust target is copied by reference count and copied in full only when it changes
 
@@ -49,3 +49,21 @@ The design note's first step: count, on a synthetic program that builds an answe
 - reference-counted list (and text) storage, copied in full only at the first change after a share;
 - a parameter taken by value when its elements leave the function, with the caller moving a list that is dead after the call and copying one that is not (a filter that keeps few rows of a live list then copies more than today);
 - a lookup that returns a lent value where every caller only reads it.
+
+## Measured 2026-11-12: the branch on the first user's service
+
+The first user of `std.protocol.mysql` (a read-only HTTP service backed by MySQL 8 over TLS) built its unchanged source on the Rust target, release, at v0.16.0 and at `3de42165` (branch `wave/14-shared-lists`: the copies fix, unit `call-moves` and the shared lists), and counted one request at a time:
+
+- Largest answer: allocations −32 %, instructions −17 %.
+- Small answer: allocations −35 %, instructions −34 %.
+- The bodies are byte-identical; the service's own conformance run passes as before; no compile error and no new compiler warning.
+
+The synthetic workload of `docs/value-copies.md` predicted −93 % instructions for the same change. It models a filter over a live captured list whose result is filtered again; the service's largest answer spends most of its allocations elsewhere. Its remaining allocations by site, same build, one request:
+
+- 34 %: `push` onto fresh lists of `Int` in the service's own arbitrary-precision arithmetic (source-level; the language has no decimal or big integer in std).
+- 23 %: copies of `Text` (fields and bindings; the forms are not reduced yet).
+- 12.5 %: text literals and constants turned into owned texts, of which about 9 % of all allocations are two module constants rebuilt on every use (`story:rust-target-constants-built-once`).
+- 6.8 %: copies of byte slices charged to the HTTP head parser; the count does not fit one head per request and is being checked.
+- No copy of a whole list is among the top 15 sites.
+
+What this changes: the shared lists remove what they were built to remove, and the next units on this path are the constants and the `Text` copies, in that order, each after its forms are reduced from the service's source to synthetic programs.
