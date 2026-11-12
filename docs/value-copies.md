@@ -22,12 +22,12 @@ the two-block layout of the prototype. Its measured counts replace the prototype
 ## 0 What is being copied
 
 The first user of `std.protocol.mysql` (a read-only HTTP service backed by MySQL 8 over TLS)
-measured, after every copy a borrow or a move removes was gone: 74 % of instructions in libc
-(memcpy, malloc, free); 66 % in one pattern, a filter over a live list captured by a closure (each
-parent row filters the same list again), keeping about 99 % of its rows, whose result is at once
-filtered again (about 1 % kept) and dropped; about 10 % in lookups whose result is only read. Of 95
-filter call sites 71 have a live source. Of the lookup sites about half only read the result
-(sometimes a whole row set), half store one small field.
+measured, after every copy a borrow or a move removes was gone: most instructions in libc
+(memcpy, malloc, free); the largest share in one pattern, a filter over a live list captured by a
+closure (each parent row filters the same list again), keeping nearly all of its rows, whose result
+is at once filtered again (a small part kept) and dropped; a smaller share in lookups whose
+result is only read. Most of its filter call sites have a live source. Of the lookup sites about
+half only read the result (sometimes a whole row set), half store one small field.
 
 The forms (numbering of the reporter's reproducer):
 
@@ -55,7 +55,7 @@ request at s1 on the Rust target with memcheck on every merge.
   `id`, a link (`kind`, `parent` or `middle`), a two-valued `state`, a `name`, text fields `f4` to
   `f7` (fields F = 8), an `amount` and `attrs`, a nested list of depth D = 3. One row copy is 24
   allocations (the field list, 10 names, 6 texts, 7 for `attrs`).
-- Sizes: s1 = 33 parents, 128 middles, 222 children (the reporter's largest answer); s10 = ten
+- Sizes: s1 = 33 parents, 128 middles, 222 children; s10 = ten
   times each. Rows R, fields F and depth D are parameters (`Sizes`).
 - The answer (`answer`): `each(db.parents, |p| ..)` builds one record per parent. Its closure
   reads the lent tables `db.middles` and `db.children`, so every parent filters the same live
@@ -107,7 +107,7 @@ does.
 The work grows with parents × middles and middles × children, so s10 is about 97 times s1.
 
 Where the Rust target's instructions go (callgrind, inclusive, s1): `free` 37.3 %, `malloc`
-35.3 %, `memcpy` 3.3 %: 75.9 % in the allocator and `memcpy`, the reporter's 74 %.
+35.3 %, `memcpy` 3.3 %: 75.9 % in the allocator and `memcpy`, close to the reporter's share.
 
 ### 2.2 By form, Rust, s1, per request
 
@@ -385,13 +385,13 @@ representation and cost nothing on a path that does not take their forms.
 
 ### 4.3 Decision
 
-D, then C1. D removes the reporter's 66 % and its own counts' 92.8 %: the rows are payload lists,
+D, then C1. D removes the reporter's largest share and its own counts' 92.8 %: the rows are payload lists,
 and a copy of one becomes an increment, live source or not, whichever form carries it (1, 3 and
 4). It does it with a representation change in one place, the variant and field types and their
 construction, and pays nothing where lists are built in locals. A removes the same here and
 more in `todod`, but tests uniqueness on every list change in every program and reaches every
 FFI signature of `ignite-io`. C1 then removes what D leaves, the copies of a looked-up value that
-is only compared or measured (the reporter's 10 %, 55 % of D's remaining instructions here),
+is only compared or measured (the reporter's lookup share, 55 % of D's remaining instructions here),
 and it is the one design the LLVM target can share. B is refused: its own count is worse on the
 pattern it was meant for. C2 and shared `Text` wait for the counts after C1: on the workload
 they would take D+C1's 8.2 M to 7.6 M (C2) and remove the 644 stored text copies (shared text),

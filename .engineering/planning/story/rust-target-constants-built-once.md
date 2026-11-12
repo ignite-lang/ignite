@@ -6,7 +6,7 @@ status: active
 title: A module constant is built once on the Rust target
 relations:
 - informed_by: story:rust-target-shared-list-storage
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-12T12:37:03Z", actor: "human:timo", revision: 2, executor: "agent:claude-coordinator", correlation: "after-v0.16.2"}
 - {from: "proposed", to: "active", at: "2026-11-12T12:37:03Z", actor: "human:timo", revision: 3, executor: "agent:claude-coordinator", correlation: "after-v0.16.2"}
@@ -19,7 +19,7 @@ A module constant whose type is not `Copy` (`Text`, `Bytes`, a list, a record, a
 
 ## Why
 
-Reported on 2026-11-12 from an allocation profile of the first user of `std.protocol.mysql` (a read-only HTTP service backed by MySQL 8 over TLS, Rust target, release): about 9 % of the allocations of one request were charged to two module constants, a 16-byte text used as a digit table and a list of nine pairs of texts used as a lookup table.
+Reported on 2026-11-12 from an allocation profile of the first user of `std.protocol.mysql` (a read-only HTTP service backed by MySQL 8 over TLS, Rust target, release): two module constants were among the largest allocating sites of one request, a 16-byte text used as a digit table and a list of nine pairs of texts used as a lookup table.
 
 The generator emits such a constant as a function that builds the value on every use, and the use copies the result again:
 

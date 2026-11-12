@@ -6,7 +6,7 @@ status: draft
 title: A list on the Rust target is copied by reference count and copied in full only when it changes
 relations:
 - informed_by: story:rust-target-read-only-forms-borrow
-revision: 5
+revision: 6
 ---
 # Story: a list on the Rust target is copied by reference count and copied in full only when it changes
 
@@ -16,7 +16,7 @@ Where the ownership analysis cannot lend or move a `List`, `Map`, `Text` or `Byt
 
 ## Why
 
-`story:rust-target-read-only-forms-borrow` removes copies the backend makes where a borrow is enough. A value that is stored, returned or captured is still copied element by element (`Vec::clone`). The first user of `std.protocol.mysql` (a read-only HTTP service backed by MySQL 8 over TLS, Rust target, release, v0.16.0) measured 55 ms of CPU per request for its largest answer after reading its lists in place, against 5.3 ms for the same service in Rust, whose values are shared by reference count; malloc and free were 62 % of the samples before that change. The reporter asks for shared storage as the general remedy.
+`story:rust-target-read-only-forms-borrow` removes copies the backend makes where a borrow is enough. A value that is stored, returned or captured is still copied element by element (`Vec::clone`). The first user of `std.protocol.mysql` (a read-only HTTP service backed by MySQL 8 over TLS, Rust target, release, v0.16.0) measured, after reading its lists in place, several times the CPU per request of the same service in Rust for its largest answer; the Rust service's values are shared by reference count. malloc and free were the largest group of samples before that change. The reporter asks for shared storage as the general remedy.
 
 ## Acceptance
 
@@ -38,9 +38,9 @@ Where the ownership analysis cannot lend or move a `List`, `Map`, `Text` or `Byt
 
 Measured by the same user on 2026-11-12, three steps, on a service that had already rewritten its hot functions to read lists in place (instructions per request for its largest answer, one request at a time):
 
-- The borrow fix (`4bcda2ab`, unit `mysql-cost`): 218 M → 216 M (about 1 %). The fix removes copies the service no longer made.
-- Binding the read before a record update, in the service's own source (`let b = read_in(r, "b")?` then `r = set_in(r, "a", b)`, which moves `r`; 842 emitted `r.clone()` sites → 0): 217.9–219.0 M → 216.9–218.0 M (0.5 %). The record is small when those copies happen.
-- The profile after both: 74 % of instructions in libc (memcpy, malloc, free); the copy of a record's field list (`<(String, Value)>::to_vec`) 32 % inclusive; the drop of values 36 % inclusive; a lookup that returns a field's value 9 %; a filter that pushes kept elements into a new list 4 % self.
+- The borrow fix (`4bcda2ab`, unit `mysql-cost`): next to no change. The fix removes copies the service no longer made.
+- Binding the read before a record update, in the service's own source (`let b = read_in(r, "b")?` then `r = set_in(r, "a", b)`, which moves `r`; every emitted `r.clone()` site of that form gone): next to no change. The record is small when those copies happen.
+- The profile after both: most instructions in libc (memcpy, malloc, free). By inclusive share: the drop of values first, the copy of a record's field list (`<(String, Value)>::to_vec`) second, a lookup that returns a field's value third, a filter that pushes kept elements into a new list fourth.
 
 So what is left is the copy of a value taken out of a lent list: `out.push(r)` in a loop over a lent list, and `return Some(e.1)` from a lookup (the reporter's reproducer `top.ignite`, forms 1 and 2; synthetic). Neither is a copy the backend makes by mistake: under value semantics the list keeps its element and the result needs one. A lookup whose result is only compared (`field(r, k) != None`) copies the whole value to answer yes or no.
 
@@ -54,17 +54,18 @@ The design note's first step: count, on a synthetic program that builds an answe
 
 The first user of `std.protocol.mysql` (a read-only HTTP service backed by MySQL 8 over TLS) built its unchanged source on the Rust target, release, at v0.16.0 and at `3de42165` (branch `wave/14-shared-lists`: the copies fix, unit `call-moves` and the shared lists), and counted one request at a time:
 
-- Largest answer: allocations −32 %, instructions −17 %.
-- Small answer: allocations −35 %, instructions −34 %.
+- Largest answer: fewer allocations and fewer instructions; the allocations fall further than the instructions.
+- Small answer: fewer of both, and a larger gain in instructions than the largest answer shows.
 - The bodies are byte-identical; the service's own conformance run passes as before; no compile error and no new compiler warning.
 
-The synthetic workload of `docs/value-copies.md` predicted −93 % instructions for the same change. It models a filter over a live captured list whose result is filtered again; the service's largest answer spends most of its allocations elsewhere. Its remaining allocations by site, same build, one request:
+The synthetic workload of `docs/value-copies.md` predicted −93 % instructions for the same change; the service gains a fraction of that. The workload models a filter over a live captured list whose result is filtered again; the service's largest answer spends most of its allocations elsewhere. Its remaining allocations by site, same build, one request, largest first:
 
-- 34 %: `push` onto fresh lists of `Int` in the service's own arbitrary-precision arithmetic (source-level; the language has no decimal or big integer in std).
-- 23 %: copies of `Text` (fields and bindings; the forms are not reduced yet).
-- 12.5 %: text literals and constants turned into owned texts, of which about 9 % of all allocations are two module constants rebuilt on every use (`story:rust-target-constants-built-once`).
-- 6.8 %: copies of byte slices charged to the HTTP head parser; the count does not fit one head per request and is being checked.
-- No copy of a whole list is among the top 15 sites.
+1. `push` onto fresh lists of `Int` in the service's own arbitrary-precision arithmetic (source-level; the language has no decimal or big integer in std).
+2. Copies of `Text` (fields and bindings; the forms are not reduced yet).
+3. Text literals and constants turned into owned texts, most of it two module constants rebuilt on every use (`story:rust-target-constants-built-once`).
+4. Copies of byte slices charged to the HTTP head parser; the count does not fit one head per request and is being checked.
+
+No copy of a whole list is among the largest sites.
 
 What this changes: the shared lists remove what they were built to remove, and the next units on this path are the constants and the `Text` copies, in that order, each after its forms are reduced from the service's source to synthetic programs.
 
@@ -72,10 +73,10 @@ What this changes: the shared lists remove what they were built to remove, and t
 
 The same service, with its own source changed since the first measurement (digits from byte arithmetic, an integer fast path in its arithmetic), built at v0.16.0 and at `3673bee8` (branch `wave/14-shared-lists` after the adversary pass: a matched payload that is only read is read in place, `clear` of a shared list copies nothing). One request at a time, the second request of each answer:
 
-- Largest answer: allocations −29.6 %, instructions −12 %.
-- Small answer: allocations −39.8 %, instructions −36 %.
-- The bodies are byte-identical on all ten requests; the service's own conformance run passes as before; no compile error and the same three compiler warnings as at v0.16.0.
+- Largest answer: fewer allocations and fewer instructions, as in the first measurement.
+- Small answer: fewer of both, and again the larger gain.
+- The bodies are byte-identical on every request; the service's own conformance run passes as before; no compile error and the same compiler warnings as at v0.16.0.
 
-By site at `3673bee8`, one request of the largest answer (frame names, an estimate): 46 % of the allocations are copies and 54 % build values. The ten largest sites hold 81 %; eight of them are the service's own functions (row decoding 27 %, a generated route function 13 %, the cells of the result rows 12 %). Two are std's: `take_bytes` 2.9 % and `string_value` 2.6 % in `std.protocol.mysql`, the second of which is one avoidable copy per text cell (`story:rust-target-text-reads-borrow`).
+By site at `3673bee8`, one request of the largest answer (frame names, an estimate): somewhat fewer than half of the allocations are copies, the rest build values. The ten largest sites hold most of them; eight are the service's own functions (row decoding first, a generated route function second, the cells of the result rows third). Two are std's: `take_bytes` and `string_value` in `std.protocol.mysql`, the second of which is one avoidable copy per text cell (`story:rust-target-text-reads-borrow`).
 
 What this changes: nothing in the order of the next units. The copies that remain in the service's functions are the text forms of `story:rust-target-text-reads-borrow`, reduced by the user to a synthetic program.

@@ -6,7 +6,7 @@ status: implemented
 title: Read-only forms over a list borrow on the Rust target
 relations:
 - informed_by: story:std-mysql-client
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-12T03:05:43Z", actor: "human:timo", revision: 2, decided_on: {"recorded":{"test_result":1,"review_outcome":1}}}
 - {from: "proposed", to: "active", at: "2026-11-12T12:37:10Z", actor: "human:timo", revision: 3, decided_on: {"recorded":{"test_result":4,"review_outcome":3}}, executor: "agent:claude-coordinator", correlation: "audit-2026-11-12"}
@@ -20,7 +20,7 @@ On the Rust target a `for` with a tuple, record or enum pattern over a list that
 
 ## Why
 
-Reported on 2026-11-11 by the first user of `std.protocol.mysql` (a read-only HTTP service backed by MySQL 8 over TLS, Rust target, release, v0.16.0): about 24 times the CPU per request of the same service in Rust. Its profile: 95 % of samples in the service's own code walking lists of values, `Vec::clone` 15 %, the drop of those copies 12 %, malloc and free 62 % in total; the MySQL client under 1 %, TLS about 1.5 %. Reading lists in place on the service's side took its largest answer from 319 ms to 55 ms of CPU per request (the Rust service: 5.3 ms).
+Reported on 2026-11-11 by the first user of `std.protocol.mysql` (a read-only HTTP service backed by MySQL 8 over TLS, Rust target, release, v0.16.0): many times the CPU per request of the same service in Rust. Its profile: nearly all samples in the service's own code walking lists of values; malloc and free together first, then `Vec::clone`, then the drop of those copies; the MySQL client and TLS far below each of them. Reading lists in place on the service's side removed most of the CPU per request of its largest answer and left it still several times the Rust service.
 
 The emitted Rust at v0.16.0, from the reporter's reproducer `copies.ignite` (synthetic):
 
