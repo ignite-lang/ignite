@@ -1,0 +1,128 @@
+package borrowed_reads
+
+// Story `std-mysql-client`, unit `mysql-cost`: lookups that only read the
+// elements of lists, each form a service walking the rows of a result set
+// uses. tests/borrowed_reads.rs appends two executables to this file,
+// `lookups-1000` and `lookups-2000`, which make 1,000 and 2,000 lookups over
+// the same table; the allocations one makes more than the other are those
+// of 1,000 lookups, and a lookup that only reads allocates nothing. They are
+// not part of this file, which the differential corpus runs on the evaluator.
+
+enum V {
+  N
+  S(Text)
+  L(List<V>)
+}
+
+type Table {
+  pairs: List<(Text, V)>
+  values: List<V>
+  groups: List<List<V>>
+  names: List<Text>
+  weights: List<Int>
+}
+
+fn size(v: V) -> Int = match v {
+  L(items) => items.len()
+  S(text) => text.len()
+  N => 0
+}
+
+// A tuple pattern in a `for` over a list.
+fn find_pair(l: List<(Text, V)>, k: Text) -> Int {
+  for (name, v) in l {
+    if name == k {
+      return size(v)
+    }
+  }
+  0
+}
+
+// An indexed element passed to a borrowed parameter.
+fn nth(l: List<V>, i: Int) -> Int = size(l[i])
+
+// An element of an element.
+fn nested(l: List<List<V>>, i: Int, j: Int) -> Int = size(l[i][j])
+
+// A `match` on an indexed element.
+fn kind_at(l: List<V>, i: Int) -> Int = match l[i] {
+  L(items) => items.len()
+  S(_) => 1
+  N => 0
+}
+
+// A `for` over an indexed element.
+fn count_in(l: List<List<V>>, i: Int) -> Int {
+  var n = 0
+  for v in l[i] {
+    n = n + size(v)
+  }
+  n
+}
+
+// A builtin read and a comparison of an indexed element.
+fn len_at(l: List<Text>, i: Int) -> Int = l[i].len()
+
+fn same_at(l: List<Text>, i: Int, k: Text) -> Bool = l[i] == k
+
+// A `for` over a list of integers.
+fn total(l: List<Int>) -> Int {
+  var n = 0
+  for x in l {
+    n = n + x
+  }
+  n
+}
+
+fn table(m: Int) -> Table {
+  var pairs: List<(Text, V)> = []
+  var values: List<V> = []
+  var groups: List<List<V>> = []
+  var names: List<Text> = []
+  var weights: List<Int> = []
+  var i = 0
+  while i < m {
+    let name = "column {i}"
+    let value = if i % 3 == 0 { N } else if i % 3 == 1 { S("value {i}") } else { L([S("a"), N, S("bc")]) }
+    pairs.push((name, value))
+    values.push(value)
+    groups.push([value, S("{i}"), L([N])])
+    names.push(name)
+    weights.push(i % 7)
+    i = i + 1
+  }
+  Table { pairs, values, groups, names, weights }
+}
+
+// One lookup of each form at `i`.
+fn lookup(t: Table, i: Int) -> Int {
+  var n = find_pair(t.pairs, t.names[i])
+  n = n + nth(t.values, i) + nested(t.groups, i, 0) + kind_at(t.values, i)
+  n = n + count_in(t.groups, i) + len_at(t.names, i) + total(t.weights)
+  if same_at(t.names, i, t.names[i]) {
+    n = n + 1
+  }
+  n
+}
+
+fn lookups(t: Table, count: Int) -> Int {
+  var n = 0
+  var i = 0
+  while i < count {
+    n = n + lookup(t, i % t.names.len())
+    i = i + 1
+  }
+  n
+}
+
+test "each read-only form gives the element's value" {
+  let t = table(6)
+  assert find_pair(t.pairs, "column 1") == 7
+  assert find_pair(t.pairs, "column 2") == 3
+  assert find_pair(t.pairs, "none") == 0
+  assert nth(t.values, 4) == 7 && nested(t.groups, 2, 0) == 3
+  assert kind_at(t.values, 0) == 0 && kind_at(t.values, 1) == 1 && kind_at(t.values, 2) == 3
+  assert count_in(t.groups, 2) == 5 && len_at(t.names, 5) == 8 && total(t.weights) == 15
+  assert same_at(t.names, 3, "column 3") && !same_at(t.names, 3, "column 4")
+  assert lookups(t, 12) == 2 * (lookup(t, 0) + lookup(t, 1) + lookup(t, 2) + lookup(t, 3) + lookup(t, 4) + lookup(t, 5))
+}

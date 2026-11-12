@@ -6,7 +6,7 @@ status: draft
 title: A pooled MySQL connection keeps its prepared statements
 relations:
 - informed_by: story:std-mysql-client
-revision: 1
+revision: 2
 ---
 # Story: a pooled MySQL connection keeps its prepared statements
 
@@ -32,3 +32,12 @@ The first user of `std.protocol.mysql` (a read-only HTTP service backed by MySQL
 ## Scope
 
 - `std/protocol/mysql.ignite` (pool, prepared statements), `docs/slice.md` 42. Inferred.
+
+## Pitfalls a cache has to handle
+
+From the first user's own per-connection cache (reported 2026-11-12), each a case the implementation and its tests cover:
+
+- Statement ids belong to the connection: a reconnect starts with an empty cache and new ids, and a statement never moves to another connection of the pool.
+- The bound: the reporter holds 32 statements per connection and closes the oldest on eviction. A server's `max_prepared_stmt_count` (16382 by default) is shared by every client, so the limit times the pool's size is stated in the documentation.
+- A refused prepare caches nothing. A failed execute drops the statement from the cache, so error 1243 (unknown statement) is not met a second time.
+- SQL text built with a list parameter (`IN (?, ?, …)`) gives one text per list length and turns the cache over: the bound and the eviction test use such texts.

@@ -1157,11 +1157,19 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
         self.call(&callee, &sig.ret, operands)
     }
 
-    /// The variable a place expression (`x`, `x.a.b`) is rooted at.
-    fn root(e: &Expr) -> Option<&str> {
+    /// The variable a `match` scrutinee or a `for` list read in place is
+    /// rooted at: a place (`x`, `x.a.b`), or an element of one reached
+    /// through fields, tuple fields and indexes (`l[i]`, `l[i][j]`,
+    /// `l[i].f`), which `list_at` gives as a pointer into the list
+    /// (`docs/llvm.md` section 4). An index that changes a variable needs
+    /// no exclusion: it has run when the value is kept or copied, so only
+    /// the arms or the body decide.
+    fn read_root(e: &Expr) -> Option<&str> {
         match &e.kind {
             ExprKind::Name(id) => Some(&id.name),
-            ExprKind::Field { receiver, .. } => Self::root(receiver),
+            ExprKind::Field { receiver, .. }
+            | ExprKind::TupleField { receiver, .. }
+            | ExprKind::Index { receiver, .. } => Self::read_root(receiver),
             _ => None,
         }
     }
@@ -1169,7 +1177,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     /// Whether `place` is a place none of `bodies` modifies, so that a
     /// borrowed value of it stays valid and unchanged while they run.
     fn unchanged_in<'x>(&self, place: &Expr, bodies: impl Iterator<Item = &'x Expr>) -> bool {
-        let Some(root) = Self::root(place) else {
+        let Some(root) = Self::read_root(place) else {
             return false;
         };
         let mut bodies = bodies;
@@ -1435,7 +1443,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             self.own_value(&list_ty, &v);
         }
         let names = ownership::changed_in_block(body, Some(self.cx.types));
-        let keep = Self::root(iter).is_some_and(|root| !names.contains(root));
+        let keep = Self::read_root(iter).is_some_and(|root| !names.contains(root));
         let v = if keep { v } else { self.owned(&list_ty, v) };
         let list = self.ptr(&v);
         let counter = self.f.alloca(Layout::scalar(8));
