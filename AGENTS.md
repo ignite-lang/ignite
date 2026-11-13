@@ -5,6 +5,9 @@ Intent-oriented language for specifying, building, deploying and operating syste
 `docs/slice.md`. This repository holds the compiler (Rust), the standard library (Ignite) and
 the IO substrate (Rust) that compiled programs link.
 
+A session that takes this repository up reads `.engineering/waves/handoff-2026-11-13.md` first:
+what is released, what is open and with whom, and what to start with.
+
 ## Layout
 
 | path | role |
@@ -595,6 +598,19 @@ was open for three days; a coordinator does this instead of what cost them:
   the account. Commit the regenerated files with the release; the release notes carry the
   release's row of `quality/trend.md`, its dedicated-host row and the run's cost (`machine` of
   its records).
+- Path cost (row 3.10, `docs/quality.md` "The path cost at every merge"): on the release
+  commit, run `task path-cost` against the counts of the last release first. At a release a
+  cell it prints above its band is tracked and not refused, like the rows of `task quality`
+  above: it goes into the release notes with both values and the id of its story (a cell
+  without a story gets a draft before the release is cut). At a merge the row is unchanged: a
+  cell above its band refuses the merge. Then run `task path-cost RECORD=vX.Y.Z` (5 runs,
+  writes `bench/path-cost/counts/`) and `IGNITE_BLESS=1 cargo test -p ignite --test main --
+  --test-threads=1 --exact quality::the_path_cost_bars_are_the_recorded_counts
+  quality::trend_and_docs_are_generated_from_quality site::quality_page_is_generated` (one
+  after the other: the first writes the bars the second reads), update the paragraph "At
+  vX.Y.Z" of `docs/quality.md`, and commit the counts, the bars and the regenerated pages with
+  the release, so `task gate` on the release head judges against the release's own counts.
+  v0.16.3 was cut this way (3 of 36 cells above v0.16.2, `story:path-cost-cells-above-v0-16-2`).
 - Every release aims to be better than the release before it on every row (Timo, 2026-11-10:
   "every release should be an improvement in quality"), and the numbers are tracked, not a
   block (Timo, 2026-11-11: "the general idea is to get better every time, but the metrics, of
