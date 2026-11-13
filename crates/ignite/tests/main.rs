@@ -70,6 +70,7 @@ mod rollout_repeat;
 mod run;
 mod rust_memory;
 mod rust_memory_adversary;
+mod shared_list_costs;
 mod shared_lists;
 mod shared_lists_adversary;
 mod siblings;
