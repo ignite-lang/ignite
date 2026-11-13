@@ -33,7 +33,7 @@ run lists every such cell. Without that decision, or with one the release before
 the cell is listed as worse. A merge holds these rows to their bars like any other, and bytes are
 never bought with time.
 
-Current values: run `v0.16.2` on 2026-11-12, commit `20cfcbe6`.
+Current values: run `v0.16.3` on 2026-11-13, commit `ed39b372`.
 
 ## 1 Semantics: one meaning across the three consumers
 
@@ -41,15 +41,15 @@ Current values: run `v0.16.2` on 2026-11-12, commit `20cfcbe6`.
 |---|---|---|---|---|---|---|
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | eval | 2 | 2 | = |
 | 1.1 | programs whose result differs between Rust, LLVM and the evaluator | gate | llvm | 0 | 0 | = |
-| 1.2 | differential corpus size | ratchet | eval | 788 | 788 | +17 better |
-| 1.2 | differential corpus size | ratchet | llvm | 949 | 949 | +17 better |
-| 1.2 | differential corpus size | ratchet | rust | 949 | 949 | +17 better |
-| 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/builtins | 112 | 124 | = |
+| 1.2 | differential corpus size | ratchet | eval | 792 | 792 | +4 better |
+| 1.2 | differential corpus size | ratchet | llvm | 953 | 953 | +4 better |
+| 1.2 | differential corpus size | ratchet | rust | 953 | 953 | +4 better |
+| 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/builtins | 112 | 126 | +2 worse |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | eval/patterns | 13 | 13 | = |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | llvm/builtins | 12 | 13 | = |
 | 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | llvm/patterns | 30 | 23 | = |
-| 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | rust/builtins | 43 | 54 | +1 worse |
-| 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | rust/patterns | 71 | 68 | +3 worse |
+| 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | rust/builtins | 43 | 56 | +2 worse |
+| 1.3 | rules implemented more than once (patterns, builtins) | hill-climb | rust/patterns | 71 | 68 | = |
 | 1.4 | generated-code goldens changed without a `CODEGEN_REVISION` bump | gate | all | 0 | 0 | = |
 | 1.5 | random programs on which the consumers disagree | gate | | unmeasured: no program generator yet (out of scope of story:quality-ratchet) | | |
 | 1.6 | corpus units the evaluator cannot run | ratchet | eval | 161 | 161 | = |
@@ -72,7 +72,7 @@ Current values: run `v0.16.2` on 2026-11-12, commit `20cfcbe6`.
 | # | metric | kind | target | bar | current | trend |
 |---|---|---|---|---|---|---|
 | 3.1 | copies in the generated code of the golden corpus | ratchet | llvm | 90 | 90 | = |
-| 3.1 | copies in the generated code of the golden corpus | ratchet | rust | 156 | 163 | = |
+| 3.1 | copies in the generated code of the golden corpus | ratchet | rust | 156 | 156 | −7 better |
 | 3.10 | cost of a frozen path: instructions and system calls | ratchet | all/design/check/instructions | 854153551 |  |  |
 | 3.10 | cost of a frozen path: instructions and system calls | ratchet | all/design/check/syscalls | 75 |  |  |
 | 3.10 | cost of a frozen path: instructions and system calls | ratchet | all/design/plan/instructions | 859996322 |  |  |
@@ -109,14 +109,14 @@ Current values: run `v0.16.2` on 2026-11-12, commit `20cfcbe6`.
 | 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/todo/patch/syscalls | 300 |  |  |
 | 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/todo/start/instructions | 388903 |  |  |
 | 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/todo/start/syscalls | 104 |  |  |
-| 3.2 | binary size | ratchet | llvm/terminald/dev | 7264152 B | 7264152 B | −304 better |
-| 3.2 | binary size | ratchet | llvm/terminald/release | 1394536 B | 1394864 B | +328 |
-| 3.2 | binary size | ratchet | llvm/todod/dev | 7969480 B | 7969480 B | −280 better |
-| 3.2 | binary size | ratchet | llvm/todod/release | 1967944 B | 1968272 B | +328 |
-| 3.2 | binary size | ratchet | rust/terminald/dev | 6344576 B | 6349688 B | +5112 |
-| 3.2 | binary size | ratchet | rust/terminald/release | 743384 B | 744360 B | +976 |
-| 3.2 | binary size | ratchet | rust/todod/dev | 7586840 B | 7616952 B | +30112 |
-| 3.2 | binary size | ratchet | rust/todod/release | 1038712 B | 1063856 B | +1296 |
+| 3.2 | binary size | ratchet | llvm/terminald/dev | 7264152 B | 7270200 B | +6048 |
+| 3.2 | binary size | ratchet | llvm/terminald/release | 1394448 B | 1394448 B | −416 better |
+| 3.2 | binary size | ratchet | llvm/todod/dev | 7969480 B | 7975704 B | +6224 |
+| 3.2 | binary size | ratchet | llvm/todod/release | 1967384 B | 1967384 B | −888 better |
+| 3.2 | binary size | ratchet | rust/terminald/dev | 6344576 B | 6355512 B | +5824 |
+| 3.2 | binary size | ratchet | rust/terminald/release | 743384 B | 744392 B | +32 |
+| 3.2 | binary size | ratchet | rust/todod/dev | 7586840 B | 7632016 B | +15064 |
+| 3.2 | binary size | ratchet | rust/todod/release | 1038712 B | 1066480 B | +2624 |
 | 3.3 | throughput against plain Rust | ratchet | llvm/terminal/connect-8 | 0.929× | 0.918× | ec2:c7i.metal-24xl, +5 better |
 | 3.3 | throughput against plain Rust | ratchet | llvm/terminal/rr-1 | 0.995× | 0.980× | ec2:c7i.metal-24xl, −15 |
 | 3.3 | throughput against plain Rust | ratchet | llvm/terminal/rr-64 | 1.254× | 1.251× | ec2:c7i.metal-24xl, +7 better |

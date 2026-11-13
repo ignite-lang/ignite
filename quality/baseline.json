@@ -218,13 +218,13 @@
       "area": "Semantics: one meaning across the three consumers",
       "bars": {
         "eval": {
-          "value": 788
+          "value": 792
         },
         "llvm": {
-          "value": 949
+          "value": 953
         },
         "rust": {
-          "value": 949
+          "value": 953
         }
       },
       "direction": "higher",
@@ -550,13 +550,13 @@
           "value": 7264152
         },
         "llvm/terminald/release": {
-          "value": 1394536
+          "value": 1394448
         },
         "llvm/todod/dev": {
           "value": 7969480
         },
         "llvm/todod/release": {
-          "value": 1967944
+          "value": 1967384
         },
         "rust/terminald/dev": {
           "value": 6344576
