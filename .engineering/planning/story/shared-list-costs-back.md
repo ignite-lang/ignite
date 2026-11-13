@@ -6,7 +6,7 @@ status: active
 title: A shared list costs nothing in a program that never shares one
 relations:
 - informed_by: story:rust-target-shared-list-storage
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-12T12:37:04Z", actor: "human:timo", revision: 3, executor: "agent:claude-coordinator", correlation: "after-v0.16.2"}
 - {from: "proposed", to: "active", at: "2026-11-12T12:37:04Z", actor: "human:timo", revision: 4, executor: "agent:claude-coordinator", correlation: "after-v0.16.2"}
@@ -53,3 +53,27 @@ The dedicated-host run of the release (BASE v0.16.1 against HEAD `20cfcbe6`, 5 A
 The local release check lists row 3.2 on the Rust target: todod release 1,062,560 → 1,063,856 B and dev 7,586,840 → 7,616,952 B; terminald release 743,384 → 744,360 B and dev 6,344,576 → 6,349,688 B.
 
 The release was cut with these rows tracked and not refused (the rule of 2026-11-11).
+
+## The unit of 2026-11-13
+
+One unit worked on this story on 2026-11-13 and is not merged: branch `wave/15-shared-list-costs`, head `eeb127a8` (on top of the first unit of `story:rust-target-text-reads-borrow`). The story stays open. This section holds what the unit measured, so that the next unit does not repeat it.
+
+What the unit changed, without an `unsafe` site: the empty literal and an empty default of a shared field are `List::new()`; every other literal is `List::of(vec![..])`; the block of the count is built in one function per element type that is not inlined (`ignite_io::list::block`).
+
+Counted, the unit's base against its head (release builds of the two examples on the Rust target; instructions by callgrind over 200 rounds after 50, with the unit's own client, not the frozen scenarios of row 3.10):
+
+- stripped `terminald` 600,192 to 600,048 B: 144 of the 752 B this story names are back. Stripped `todod` 878,864 to 878,272 B.
+- the terminal server's echo 3,602 to 3,621 instructions per round (+0.53 %); one `GET /todos/1` of the todo server 15,178 to 15,219 (+0.27 %); the table build 7,436,884 to 7,462,310 instructions, 11,561 allocations in both. Row 3.10 refuses a cell above a thousandth, so this head would likely not pass `task path-cost`; it was not run.
+- a list literal in a record field, in a default, in a payload, and a list built in a local and moved into a field: 2 allocations per value in each of the four forms, where a `Vec` made 1 (`shared_list_costs::` in `crates/ignite/tests/shared_list_costs.rs` on the branch; 2 of its 4 cases are red with the bar at 1). The empty forms make 0, as before the unit.
+- allocations per reply: terminal server 12, todo server 36, both unchanged. Row 3.1 (`.clone()` in the goldens) 155, unchanged. Row 3.6 (`unsafe` sites of the Rust substrate) 12 at a bar of 12, unchanged.
+
+Variants weighed, stripped bytes of `terminald` and `todod`:
+
+- the generator change alone, the constructor inlined: 600,192 and 878,880 (no gain);
+- the block built out of line (kept on the branch): 600,048 and 878,272;
+- an empty block filled through `Arc::get_mut`: 600,128 and 878,496;
+- the same with a `Drop` of the list through `Arc::into_inner`: 600,112 and 883,200.
+
+What stays after the unit: the second block of a non-empty list (one `malloc` and one `free` more than a `Vec`), `Arc<Vec<T>>::drop_slow` (409 B for `String`) and the unwind glue of the block (321 B) per element type.
+
+What meeting the Acceptance needs, as far as the unit found: the count, the length, the capacity and the elements in one block. That is an allocation of a layout of its own, one more `unsafe` site in the substrate (row 3.6 is at its bar), and a changed read path in generated code: a `Vec` cannot point into a block it did not allocate, so a lent list parameter would be read as `&[T]` instead of `&Vec<T>`, and a change of a list would go through an interface of the list instead of `make_mut` returning `&mut Vec<T>`. That is a design step of its own, put up for a decision before any code; it is not started.
