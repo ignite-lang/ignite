@@ -1542,6 +1542,61 @@ test "owned scrutinees and iterables give up their buffers" {
 }
 "#;
 
+/// Group 2: a `to_text` or `to_bytes` inside a `for` over the buffer that
+/// leaves the loop after it, and inside a `match` on the buffer whose arm
+/// binding is read after it: the loop and the binding still borrow it.
+const PINNED: &str = r#"package text_reads_adversary_pinned
+
+fn for_break() -> Text {
+  let b = b"ab"
+  var out = ""
+  for c in b {
+    out = b.to_text()
+    break
+  }
+  out
+}
+
+fn for_return() -> Text {
+  let b = b"cd"
+  for c in b {
+    if c == 99 {
+      return b.to_text()
+    }
+  }
+  "none"
+}
+
+fn match_binding() -> Int {
+  let b = b"xyz"
+  match b {
+    x => {
+      let t = b.to_text()
+      x.len() * 10 + t.len()
+    }
+  }
+}
+
+fn match_text_binding(k: Int) -> Int {
+  let s = "q{k}"
+  match s {
+    "q0" => 0
+    other => {
+      let u = s.to_bytes()
+      other.len() * 10 + u.len()
+    }
+  }
+}
+
+test "a buffer a for or a match holds is not taken inside it" {
+  assert for_break() == "ab"
+  assert for_return() == "cd"
+  assert match_binding() == 33
+  assert match_text_binding(0) == 0
+  assert match_text_binding(12) == 33
+}
+"#;
+
 #[test]
 fn lent_bytes_and_taken_buffers_keep_the_evaluator_value_on_both_targets() {
     agree("text_reads_adversary_liveness", LIVENESS, 17);
@@ -1565,4 +1620,9 @@ fn taken_buffers_beside_operands_that_hold_them_agree_on_both_targets() {
 #[test]
 fn buffers_of_owned_scrutinees_and_iterables_agree_on_both_targets() {
     agree("text_reads_adversary_owned", OWNED, 1);
+}
+
+#[test]
+fn buffers_a_for_or_a_match_holds_agree_on_both_targets() {
+    agree("text_reads_adversary_pinned", PINNED, 1);
 }
