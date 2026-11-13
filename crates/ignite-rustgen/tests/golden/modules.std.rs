@@ -27,7 +27,7 @@ pub mod protocol {
                         },
                         ::ignite_io::Input::Data(bytes) => {
                             let reply = apply(String::from_utf8_lossy(&bytes).into_owned());
-                            (stream.write_all(reply.clone().into_bytes()))?
+                            (stream.write_all(reply.into_bytes()))?
                         },
                     };
                 }

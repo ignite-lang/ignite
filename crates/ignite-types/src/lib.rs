@@ -1610,6 +1610,9 @@ pub struct TypedProgram {
     /// that they move only once every later argument is evaluated (unit
     /// `call-moves`).
     late_moves: NodeMap<()>,
+    /// The receivers of `to_text` and `to_bytes` that are a last use of
+    /// an owned variable, whose buffer the call may take.
+    taken: NodeMap<()>,
     /// The consumed parameters of every closure literal inside a body, by
     /// the closure's id (`docs/slice.md` 20.3.1).
     closure_consumed: NodeMap<Vec<bool>>,
@@ -1956,6 +1959,18 @@ impl TypedProgram {
         self.late_moves.contains_key(&key(expr))
     }
 
+    /// Whether `expr`, the receiver of a `to_text` of `Bytes` or a
+    /// `to_bytes` of `Text`, is a variable read for the last time there: a
+    /// local or a consumed parameter, dead after the call, neither the
+    /// scrutinee of an enclosing `match` or `for` nor held by an operand
+    /// of an enclosing call (`docs/slice.md` section 6, "Text and bytes
+    /// read in place"). A backend that holds the variable's buffer itself
+    /// may hand it to the result. False for every other expression; it
+    /// changes no mark of [`moves`](Self::moves).
+    pub fn takes_buffer(&self, expr: &Expr) -> bool {
+        self.taken.contains_key(&key(expr))
+    }
+
     /// Whether the callee consumes its parameter `index` (UFCS receiver = 0). Defined for a
     /// declared fn, associated fn or role of this module or a module it was typed against;
     /// false for every other callee (a variant, a builtin, `Callee::Local`,
@@ -2298,11 +2313,13 @@ pub fn type_module(
         effects: typed.system.effects,
         moves: NodeMap::default(),
         late_moves: NodeMap::default(),
+        taken: NodeMap::default(),
         closure_consumed: NodeMap::default(),
     };
     let found = moves::analyse(program, &program_types, modules);
     program_types.moves = found.moves;
     program_types.late_moves = found.late;
+    program_types.taken = found.taken;
     program_types.closure_consumed = found.closures;
     if let Some(own) = program_types.modules.get_mut(&program_types.module) {
         own.consumed = found.consumed.clone();

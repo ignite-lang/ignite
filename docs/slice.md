@@ -678,8 +678,8 @@ meaning. The generator emits exactly the Rust on the right.
 | `t.starts_with(p)` | `t.starts_with(&p)`; `t.starts_with("..")` for a literal (20.3.7) | |
 | `t.strip_prefix(p)` | `t.strip_prefix(&p).map(\|s\| s.to_string())`; a literal as a `&str` (20.3.7) | |
 | `t.concat(u)` | `format!("{}{}", t, u)` | |
-| `t.to_bytes()` | `t.clone().into_bytes()`; `t.into_bytes()` when `t` is a fresh text nothing else owns (a literal, a `+` chain or interpolation, `to_text` of Int, Byte or Bool, `concat`, `trim`) | `t.as_bytes()` to a lent bytes parameter and in the other borrowed forms of 20.3.7 |
-| `b.to_text()` | `String::from_utf8_lossy(&b).into_owned()` | |
+| `t.to_bytes()` | `t.clone().into_bytes()`; `t.into_bytes()` when `t` is a fresh text nothing else owns (a literal, a `+` chain or interpolation, `to_text` of Int, Byte or Bool, `concat`, `trim`) or a variable read for the last time ("Text and bytes read in place", below) | `t.as_bytes()` to a lent bytes parameter and in the other borrowed forms of 20.3.7 |
+| `b.to_text()` | `String::from_utf8_lossy(&b).into_owned()`; `String::from_utf8(b).unwrap_or_else(\|e\| String::from_utf8_lossy(e.as_bytes()).into_owned())` when `b` is a variable read for the last time (below) | |
 | `b.slice(i, j).to_text()` | `String::from_utf8_lossy(::ignite_io::checked::slice_ref(&b, i, j, <site>)).into_owned()`: the slice is borrowed, not copied, with the failure of `checked::slice` | Bytes |
 | `b.index_of(n, i) -> Option<Int>` | `::ignite_io::text::index_of(&b, &n, i)`: the offset of the first `n` at or after `i` (a negative `i` reads as 0; `None` when `i` is past the end, also for an empty `n`), by a scan for the first byte of `n` eight bytes at a time (a word XOR eight copies of the byte, then the zero-byte test) and a compare of the rest (story `unsafe-sites-back`; before, `memchr` or `memmem`: the word scan costs no more instructions per request of `todod`); `t.to_bytes()` and a checked `slice` are borrowed, not copied. The LLVM runtime's `bytes_index_of` calls the same function (-1 for `None`). Story `text-fast-search` | Bytes |
 | `t.pieces(s) -> List<Text>` | `::ignite_io::text::pieces(&t, &s)`: the texts between the separators, empty pieces kept, `[t]` for an empty `s`; no piece is checked for UTF-8 again, since valid text cut at a valid separator stays valid. `std.text.split` is this builtin. The LLVM runtime's `text_pieces` uses the same search. Story `text-fast-search` | Text |
@@ -799,6 +799,53 @@ count): that path reads no constant built once. A form that is cheaper still, a 
 str` or `&'static [u8]` Rust builds at compile time, was not taken: every reference parameter
 is a `&String` or `&Vec<u8>`, so such a constant would need a second calling convention or a
 copy at each use that passes it on. `CODEGEN_REVISION` is `ignite-codegen/0.1.0-54` since this unit.
+
+**Text and bytes read in place.** Story `rust-target-text-reads-borrow` (section NN for its
+counts). Three forms that copied a `Text` or `Bytes` only to read it, or to turn it into the
+other, read it where it is:
+
+- *The bytes of a text, only read.* `let b = t.to_bytes()` is `let b: &[u8] = t.as_bytes();`
+  under the conditions of 20.3.7, and a read as a slice now includes the list of a `for`
+  (`for c in b`, `(b).iter().copied()`), so the reported loops over the bytes of a text and
+  over the bytes of a constant (`let digits = DIGITS.to_bytes()`, `DIGITS().as_bytes()`) copy
+  nothing. A `Bytes` parameter whose body iterates it is a lent bytes parameter for the same
+  reason (`ModuleTypes::lent_bytes`).
+- *The payload of a lent option, only read.* `let b = match o { Some(x) => x  None => return
+  .. }`, where `o` is a place the `match` lends ("`match` on a place", above), every arm's value
+  is a lent `Bytes` binding of its own pattern or leaves the block (`return`, `break`,
+  `continue`), and the statements after it read `b` as the `let` of `t.to_bytes()` must, is
+  `let b: &[u8] = match o { Some(x) => x, None => return .. };`, the binding not copied.
+- *A buffer taken at its last use.* `b.to_text()` on a `Bytes` variable, and `t.to_bytes()` on
+  a `Text` variable, that the fn owns (a local, a pattern binding of a value, a consumed
+  parameter; not a borrowed parameter or binding, not a capture) and that the call reads for
+  the last time hands the variable's buffer to the result: `String::from_utf8(b)`, which falls
+  back to the lossy copy only for bytes that are not UTF-8, and `t.into_bytes()`. The last use
+  is the moves analysis' (`TypedProgram::takes_buffer`, a set of its own beside the moves of
+  20.3: dead after the call, not pinned by an enclosing `match` or `for`, not held by an
+  operand of an enclosing call; a binding of a `match` on a place is not tracked there and is
+  not taken). The marks of `TypedProgram::moves` do not change. Where a `let` above lends
+  bytes out of such a variable and the take happens while they are still read, or a lent
+  tuple's arm takes an item's buffer, the lending form is not used and the bytes or the tuple
+  are copied as before (`ownership::taken_in`).
+
+Guards, each a test that gives the evaluator's value on both targets
+(`text_reads::a_text_or_payload_read_in_place_keeps_the_evaluator_value_on_both_targets`): a
+text changed, moved into a callee that changes it, given to `spawn`, captured by a closure that
+outlives a change, or changed by a loop while its bytes are read; an option replaced while its
+payload is read; bytes turned into text and changed after, and bytes that are not UTF-8.
+
+Not read in place, and what decides it (forms 3, 4 and 5 of the story, a unit of their own): a
+by-value parameter is lent (`&T`) unless its fn consumes it (20.3.3), whatever its callers
+pass. So `dedupe(cols: List<(Text, Val)>)` copies each element it keeps although its only
+caller builds the list for the call and never reads it again, `cells_to_row` copies the name
+of each lent `Cell` it keeps and passes its payload lent to `decode_cell`, and
+`bytes_of(w: Wire)` copies the text of `WTxt(t) => t.to_bytes()`. Taking such a parameter by
+value needs what every caller passes: the analysis decides each fn from its body alone, and
+Ignite has no private fn (4.1 exports every declaration), so a rule over callers covers the
+calls of the fn's own module only and leaves a caller in another module, compiled later, to
+copy where it does not pass a last use. `std.protocol.mysql`'s row readers turn a text cell's
+bytes into text themselves (`text_cell`, `is_text`), where they own the bytes, so the text
+takes the buffer `take_bytes` sliced out instead of a copy of it.
 
 The generator reads types (`generate_typed`, `generate_std_typed`) for UFCS, fn-field calls,
 `to_text`, `+` on `Text`, constant patterns and variants resolved by expected type; without
@@ -7369,7 +7416,8 @@ against the parameter, an extra copy and never a missed one.
   closure or a `spawn`, and that nothing assigns.
 - *Lent bytes* (`ModuleTypes::lent_bytes`, `TypedProgram::lent_bytes`): a `Bytes` parameter that
   is not consumed and that its body reads only as a slice (`TypedProgram::reads_as_slice`):
-  every use is the receiver of `len`, `is_empty`, `at`, `slice` or `to_text`, or a positional
+  every use is the receiver of `len`, `is_empty`, `at`, `slice` or `to_text`, the list of a
+  `for` (since story `rust-target-text-reads-borrow`), or a positional
   argument to a lent bytes parameter, outside any closure or `spawn`, never assigned. The
   greatest fixpoint over the module's fns, so a recursive call keeps it.
 
