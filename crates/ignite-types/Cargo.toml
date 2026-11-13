@@ -7,8 +7,6 @@ description = "Ignite type checker: a type for every expression, the resolved ca
 autotests = false
 
 [lib]
-# Cases live in tests/main.rs; re-enable before adding source unit tests.
-test = false
 bench = false
 
 [dependencies]
