@@ -1,23 +1,23 @@
 path-cost counts
 scenario todo
 target rust
-release v0.16.2
+release v0.16.3
 script a963bf8d260693657584bedbd577aa633747ba799bb59244c4beaf3b71f759b8
 file 3a087990045833f926c8482f46856d0416efc8f7c7bb13e93f68557733dfaa9a todo.ignite
 file 5360068ac2768cf01929837c31548f975be297c24416b9d97d71ce4bfcc53e18 health.ignite
 op start
-instructions 388903 runs 388903 388903 388903 388903 388903
+instructions 386829 runs 386829 386829 386829 386829 386829
 syscalls 104 runs 104 104 104 104 104
-fn 271723 ??? ld-linux-x86-64.so.2
-fn 62443 ??? libc.so.6
-fn 22588 __strtoul_internal
-fn 4048 _IO_sputbackc
-fn 3660 getdelim
-fn 2200 __isoc23_sscanf
+fn 271754 ??? ld-linux-x86-64.so.2
+fn 61141 ??? libc.so.6
+fn 22058 __strtoul_internal
+fn 3956 _IO_sputbackc
+fn 3580 getdelim
+fn 2150 __isoc23_sscanf
 fn 1761 malloc
 fn 1542 ignite_io::run::<todod::main::{closure#0}>
-fn 1308 pthread_getattr_np
-fn 887 _IO_setb
+fn 1284 pthread_getattr_np
+fn 868 _IO_setb
 fn 776 __libc_early_init
 fn 715 free
 fn 621 calloc
@@ -32,8 +32,8 @@ fn 308 _dl_catch_exception
 fn 302 pthread_create
 fn 292 getauxval
 fn 258 std::sys::pal::unix::stack_overflow::thread_info::set_current_info
-fn 225 ??? ???
 fn 222 alloc::fmt::format::format_inner
+fn 221 ??? ???
 fn 220 <std::sync::once::Once>::call_once::<ignite_io::drain::install::{closure#0}>::{closure#0}
 fn 220 pthread_mutex_lock
 fn 216 __cxa_thread_atexit_impl
@@ -42,9 +42,9 @@ fn 215 _IO_file_underflow
 fn 195 realpath
 fn 190 realloc
 fn 182 core::fmt::write
-fn 176 getline
 fn 175 _dl_find_dso_for_object
 fn 175 main
+fn 172 getline
 fn 171 <std::path::Components>::as_path
 fn 164 getenv
 fn 164 ignite_io::signal::install
@@ -156,13 +156,13 @@ syscall 1 socket
 syscall 1 write
 op get
 times 20
-instructions 302422 runs 302422 302422 302422 302422 302422
+instructions 303865 runs 303865 303865 303865 303865 303865
 syscalls 40 runs 40 40 40 40 40
-fn 35022 ??? libc.so.6
+fn 36195 ??? libc.so.6
 fn 27400 free
 fn 24320 ignite_io::text::find
 fn 22480 ignite_std::protocol::http::session::<ignite_io::net::TcpStream, todo::Todos>
-fn 21612 malloc
+fn 21942 malloc
 fn 13400 <core::str::lossy::Utf8Chunks as core::iter::traits::iterator::Iterator>::next
 fn 10740 todo::handle
 fn 9920 ignite_std::json::write_quoted
@@ -199,8 +199,8 @@ fn 1920 ignite_std::protocol::http::origin_parts
 fn 1840 <alloc::raw_vec::RawVecInner>::try_allocate_in
 fn 1800 ignite_std::protocol::http::trimmed_in
 fn 1760 ignite_io::checked::slice_ref::<u8>
-fn 1720 ignite_std::protocol::http::respond::<ignite_io::net::TcpStream, todo::Todos>
 fn 1680 ignite_std::protocol::http::Response__json
+fn 1660 ignite_std::protocol::http::respond::<ignite_io::net::TcpStream, todo::Todos>
 fn 1640 ignite_std::protocol::http::scheme_length
 fn 1580 todo::show
 fn 1520 core::ptr::drop_glue::<ignite_io::wait::LockGuard<ignite_io::net::Out>>
@@ -247,17 +247,17 @@ syscall 20 recvfrom
 syscall 20 sendto
 op patch
 times 20
-instructions 800543 runs 800543 800543 800543 800543 800543
+instructions 798633 runs 798633 798633 798633 798633 798633
 syscalls 300 runs 300 300 300 300 300
-fn 128445 ??? libc.so.6
-fn 71740 free
-fn 59281 malloc
+fn 131004 ??? libc.so.6
+fn 69760 free
+fn 59272 malloc
 fn 36820 ignite_io::text::find
 fn 33560 ignite_std::protocol::http::session::<ignite_io::net::TcpStream, todo::Todos>
 fn 28900 <core::str::lossy::Utf8Chunks as core::iter::traits::iterator::Iterator>::next
 fn 27200 ignite_std::json::write_quoted
 fn 24420 core::fmt::write
-fn 20260 todo::save
+fn 20180 todo::save
 fn 20000 alloc::fmt::format::format_inner
 fn 19780 ignite_std::protocol::http::is_token_in
 fn 19420 <alloc::string::String as core::fmt::Write>::write_str
@@ -265,24 +265,24 @@ fn 19120 <core::iter::adapters::filter::Filter<core::str::iter::Split<char>, ign
 fn 11560 ignite_std::json::write_value'2
 fn 11440 ignite_io::fs::check
 fn 11020 <alloc::raw_vec::RawVecInner>::finish_grow
-fn 10800 todo::handle
+fn 10780 todo::handle
 fn 10100 core::str::converts::from_utf8
 fn 8440 ignite_std::json::write_value
-fn 7980 ignite_std::fs::join_path
 fn 7920 <alloc::string::String>::from_utf8_lossy
 fn 7720 ignite_std::protocol::http::lowered_in
 fn 7680 <core::fmt::Formatter>::pad
-fn 6601 todo::patch
+fn 6581 todo::patch
 fn 6240 <core::fmt::Formatter>::pad_integral
 fn 6220 core::ptr::drop_glue::<(alloc::string::String, ignite_std::json::Json)>
 fn 6000 <alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+fn 5760 ignite_std::fs::join_path
 fn 5400 ignite_std::protocol::http::trimmed_in
 fn 4920 <alloc::sync::Arc<alloc::vec::Vec<(alloc::string::String, alloc::string::String)>>>::drop_slow
 fn 4800 <ignite_io::fs::Directory>::beneath
 fn 4720 <ignite_io::store::Taken<todo::Todo>>::put_back
 fn 4680 <ignite_io::store::Taken<todo::Todo>>::take
 fn 4640 ignite_std::protocol::http::request_line
-fn 4200 ignite_std::json::parse_object
+fn 4160 ignite_std::json::parse_object
 fn 4080 <alloc::collections::btree::map::entry::VacantEntry<i64, ignite_io::store::Slot<todo::Todo>>>::insert_entry
 fn 4020 <alloc::sync::Arc<alloc::vec::Vec<(alloc::string::String, ignite_std::json::Json)>>>::drop_slow
 fn 3840 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, i64, ignite_io::store::Slot<todo::Todo>, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::KV>>::remove_leaf_kv::<<alloc::collections::btree::map::entry::OccupiedEntry<i64, ignite_io::store::Slot<todo::Todo>>>::remove_kv::{closure#0}, alloc::alloc::Global>
@@ -314,8 +314,8 @@ fn 1920 ignite_std::protocol::http::origin_parts
 fn 1820 nix::fcntl::openat::<str, std::os::fd::owned::BorrowedFd>
 fn 1800 ignite_std::protocol::http::lists_connection_option
 fn 1760 ignite_io::checked::slice_ref::<u8>
-fn 1720 ignite_std::protocol::http::respond::<ignite_io::net::TcpStream, todo::Todos>
 fn 1680 ignite_std::protocol::http::Response__json
+fn 1660 ignite_std::protocol::http::respond::<ignite_io::net::TcpStream, todo::Todos>
 fn 1640 ignite_std::protocol::http::scheme_length
 fn 1600 <ignite_io::fs::Directory>::create_directory::<alloc::string::String>
 fn 1520 <alloc::sync::Arc<todo::Todo>>::drop_slow
@@ -325,7 +325,6 @@ fn 1440 todo::stored
 fn 1400 <ignite_io::net::Stream>::out
 fn 1340 <ignite_io::net::Stream>::send
 fn 1320 <u32 as core::fmt::Display>::fmt
-fn 1300 <alloc::string::String as core::fmt::Display>::fmt
 fn 1300 core::ptr::drop_glue::<ignite_std::protocol::http::Response>
 fn 1240 <ignite_io::fs::Directory>::directory
 fn 1220 <ignite_io::store::Shard<bool>>::lock_when::<<ignite_io::store::Shard<bool>>::lock_id::{closure#0}>
@@ -337,18 +336,20 @@ fn 1120 core::ptr::drop_glue::<ignite_std::json::Json>
 fn 1080 <ignite_io::wait::WaitList>::wake_all
 fn 1060 openat
 fn 1020 core::ptr::drop_glue::<todo::Todos>
-fn 1020 ignite_std::json::parse
+fn 1000 <alloc::string::String as core::fmt::Display>::fmt
+fn 980 ignite_std::json::parse
 fn 960 __rustc::__rust_alloc
 fn 960 __rustc::__rust_dealloc
-fn 900 ignite_std::json::parse_value'2
-fn 840 ignite_std::json::parse_value
+fn 880 ignite_std::json::parse_value'2
 fn 820 <u64 as core::fmt::Display>::fmt
 fn 800 core::ptr::drop_glue::<alloc::collections::vec_deque::drain::Drain<ignite_io::wait::Waiter>>
 fn 800 core::ptr::drop_glue::<ignite_io::store::Taken<todo::Todo>>
+fn 800 ignite_std::json::parse_value
 fn 782 recv
 fn 760 core::ptr::drop_glue::<ignite_io::wait::LockGuard<()>>
 fn 760 ignite_std::json::bool_
 fn 740 send
+fn 720 <&alloc::string::String as core::fmt::Display>::fmt
 fn 720 ignite_std::protocol::http::render_framed
 fn 720 syscall
 fn 720 write
@@ -369,7 +370,6 @@ fn 480 <alloc::raw_vec::RawVec<(alloc::string::String, alloc::string::String)>>:
 fn 480 <alloc::raw_vec::RawVec<(alloc::string::String, ignite_std::json::Json)>>::grow_one
 fn 440 ignite_std::protocol::http::is_list_field
 fn 420 ignite_std::json::text
-fn 360 <&alloc::string::String as core::fmt::Display>::fmt
 fn 360 todod::main::{closure#0}::{closure#0}
 fn 220 fstatat
 fn 140 renameat
@@ -390,14 +390,14 @@ syscall 20 unlinkat
 syscall 20 write
 op delete
 times 20
-instructions 541888 runs 541888 541888 541888 541888 541888
+instructions 532880 runs 532880 532880 532880 532880 532880
 syscalls 300 runs 300 300 300 300 300
-fn 63178 ??? libc.so.6
-fn 46640 free
-fn 37714 malloc
+fn 60307 ??? libc.so.6
+fn 44660 free
+fn 35857 malloc
 fn 22820 ignite_io::text::find
 fn 22800 ignite_std::protocol::http::session::<ignite_io::net::TcpStream, todo::Todos>
-fn 20320 todo::save
+fn 20240 todo::save
 fn 20000 alloc::fmt::format::format_inner
 fn 18920 core::fmt::write
 fn 18680 <core::iter::adapters::filter::Filter<core::str::iter::Split<char>, ignite_io::fs::check::{closure#1}> as core::iter::traits::iterator::Iterator>::next
@@ -407,10 +407,10 @@ fn 14660 <core::str::lossy::Utf8Chunks as core::iter::traits::iterator::Iterator
 fn 11720 ignite_io::fs::check
 fn 11020 todo::handle
 fn 10540 <alloc::raw_vec::RawVecInner>::finish_grow
-fn 7980 ignite_std::fs::join_path
 fn 7500 ignite_std::json::write_value'2
 fn 7200 <alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
 fn 6240 <core::fmt::Formatter>::pad
+fn 5760 ignite_std::fs::join_path
 fn 5260 <alloc::string::String>::from_utf8_lossy
 fn 5200 <core::fmt::Formatter>::pad_integral
 fn 5100 <ignite_io::fs::Directory>::beneath
@@ -454,8 +454,8 @@ fn 1620 <alloc::sync::Arc<alloc::vec::Vec<(alloc::string::String, ignite_std::js
 fn 1600 <ignite_io::fs::Directory>::create_directory::<alloc::string::String>
 fn 1520 <alloc::sync::Arc<todo::Todo>>::drop_slow
 fn 1520 core::ptr::drop_glue::<ignite_io::wait::LockGuard<ignite_io::net::Out>>
-fn 1520 ignite_std::protocol::http::respond::<ignite_io::net::TcpStream, todo::Todos>
 fn 1480 <ignite_io::fs::Checked>::through
+fn 1460 ignite_std::protocol::http::respond::<ignite_io::net::TcpStream, todo::Todos>
 fn 1400 <ignite_io::net::Stream>::out
 fn 1360 core::ptr::drop_glue::<todo::Todos>
 fn 1340 <ignite_io::net::Stream>::send
@@ -468,7 +468,6 @@ fn 1120 ignite_std::protocol::http::lists_connection_option
 fn 1080 <ignite_io::wait::WaitList>::wake_all
 fn 1060 openat
 fn 1020 ignite_std::json::encode
-fn 1000 <alloc::string::String as core::fmt::Display>::fmt
 fn 960 __rustc::__rust_dealloc
 fn 960 todo::stored
 fn 820 <u64 as core::fmt::Display>::fmt
@@ -477,9 +476,11 @@ fn 800 core::ptr::drop_glue::<ignite_io::store::Taken<todo::Todo>>
 fn 782 recv
 fn 760 core::ptr::drop_glue::<ignite_io::wait::LockGuard<()>>
 fn 740 send
+fn 720 <&alloc::string::String as core::fmt::Display>::fmt
 fn 720 ignite_std::protocol::http::checked
 fn 720 syscall
 fn 720 write
+fn 700 <alloc::string::String as core::fmt::Display>::fmt
 fn 680 core::ptr::drop_glue::<ignite_std::protocol::http::Response>
 fn 640 <ignite_io::census::Counting as core::alloc::global::GlobalAlloc>::dealloc
 fn 620 <ignite_io::list::List<(alloc::string::String, alloc::string::String)>>::from_vec
@@ -494,7 +495,6 @@ fn 520 core::ptr::drop_glue::<alloc::vec::drain::Drain<alloc::sync::Weak<dyn ign
 fn 483 <ignite_io::wait::Waiter>::current
 fn 480 <alloc::raw_vec::RawVec<(alloc::string::String, alloc::string::String)>>::grow_one
 fn 380 ignite_std::protocol::http::render_framed
-fn 360 <&alloc::string::String as core::fmt::Display>::fmt
 fn 360 todod::main::{closure#0}::{closure#0}
 fn 240 core::ptr::drop_glue::<ignite_std::json::Json>
 fn 220 fstatat
@@ -516,7 +516,7 @@ syscall 20 unlinkat
 syscall 20 write
 op connection
 times 20
-instructions 225727 runs 225729 225727 225727 225727 225727
+instructions 225727 runs 225727 225727 225729 225727 225727
 syscalls 227 runs 227 227 227 227 227
 fn 65421 ??? libc.so.6
 fn 13127 ignite_io::sched::work

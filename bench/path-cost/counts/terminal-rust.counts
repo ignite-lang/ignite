@@ -1,15 +1,15 @@
 path-cost counts
 scenario terminal
 target rust
-release v0.16.2
+release v0.16.3
 script 615d4b71f44c5c7022bd4feb0ccab8d7be02c6e8aeae1059cd4606447f2c890d
 file 633057460dd46491e354fcd49de5c92e22a849641373bb5acdd15b52eeae5d3c terminal.ignite
 file 5f111eb1cf4e35d034dad2a3976a2292658fcb1b309d3b2719fc955d374fb862 commands.ignite
 file 43c2f9b1eac5848791a75884f8bbd7304c7ddd8bc028d8b4758743785ff802c0 command_schema.ignite
 op start
-instructions 369111 runs 369109 369111 369111 369111 369111
+instructions 369116 runs 369114 369116 369116 369116 369116
 syscalls 100 runs 100 100 100 100 100
-fn 256781 ??? ld-linux-x86-64.so.2
+fn 256786 ??? ld-linux-x86-64.so.2
 fn 60933 ??? libc.so.6
 fn 21950 __strtoul_internal
 fn 3956 _IO_sputbackc
@@ -149,7 +149,7 @@ syscall 1 socket
 syscall 1 write
 op session
 times 10
-instructions 131735 runs 131737 131737 131735 131735 131735
+instructions 131735 runs 131737 131735 131737 131735 131735
 syscalls 120 runs 120 120 120 120 120
 fn 34532 ??? libc.so.6
 fn 9551 malloc

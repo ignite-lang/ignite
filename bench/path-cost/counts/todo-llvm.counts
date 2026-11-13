@@ -1,14 +1,14 @@
 path-cost counts
 scenario todo
 target llvm
-release v0.16.2
+release v0.16.3
 script a963bf8d260693657584bedbd577aa633747ba799bb59244c4beaf3b71f759b8
 file 3a087990045833f926c8482f46856d0416efc8f7c7bb13e93f68557733dfaa9a todo.ignite
 file 5360068ac2768cf01929837c31548f975be297c24416b9d97d71ce4bfcc53e18 health.ignite
 op start
-instructions 321798 runs 321798 321798 321798 321798 321798
-syscalls 80 runs 80 80 80 80 80
-fn 284749 ??? ld-linux-x86-64.so.2
+instructions 321822 runs 321822 321822 321822 321822 321822
+syscalls 80 runs 80 80 80 80 79
+fn 284762 ??? ld-linux-x86-64.so.2
 fn 7974 ??? libc.so.6
 fn 2325 <core::ops::range::Range<usize> as core::iter::traits::iterator::Iterator>::fold::<(), core::iter::adapters::map::map_fold<usize, ignite_rt::net::Slot, (), ignite_rt::net::slot_at::{closure#0}, core::iter::traits::iterator::Iterator::for_each::call<ignite_rt::net::Slot, <alloc::vec::Vec<ignite_rt::net::Slot>>::extend_trusted<core::iter::adapters::map::Map<core::ops::range::Range<usize>, ignite_rt::net::slot_at::{closure#0}>>::{closure#0}>::{closure#0}>::{closure#0}>
 fn 1744 ??? todod
@@ -43,7 +43,7 @@ fn 229 main
 fn 222 ignite_rt::net::register
 fn 208 ignite_rt::net::lookup
 fn 195 realpath
-fn 192 <std::ffi::os_str::OsString as <[_]>::to_vec_in::ConvertVec>::to_vec::<alloc::alloc::Global>
+fn 191 <std::ffi::os_str::OsString as <[_]>::to_vec_in::ConvertVec>::to_vec::<alloc::alloc::Global>
 fn 186 <std::sync::once::Once>::call_once::<ignite_io::signal::install>::{closure#0}
 fn 186 ignite_rt::arena::with_state::<core::option::Option<*mut u8>, ignite_rt::arena::alloc::{closure#0}>
 fn 176 <ignite_io::net::TcpListener>::bind_with
@@ -57,11 +57,11 @@ fn 156 ignite_rt::process::decode_args::{closure#0}::{closure#0}
 fn 143 <std::sys::sync::once::futex::Once>::call'2
 fn 138 ignite_io::report::catch::<(), ignite_rt::text::ignite_rt_text_concat::{closure#0}>
 fn 138 std::sys::thread_local::destructors::linux_like::register
-fn 136 <alloc::vec::Vec<std::ffi::os_str::OsString> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<std::ffi::os_str::OsString, core::iter::adapters::filter_map::FilterMap<core::ops::range::Range<usize>, ignite_rt::process::decode_args::{closure#0}>>>::from_iter
 fn 136 ignite_io::args::port_from_os_args::<alloc::vec::into_iter::IntoIter<std::ffi::os_str::OsString>>
 fn 135 <alloc::string::String>::from_utf8_lossy
 fn 135 <ignite_io::report::CATCHING::{K#0}::{closure#1} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::Cell<usize>>>,)>>::call_once
 fn 132 core::sync::atomic::atomic_compare_exchange::<u32>
+fn 127 <alloc::vec::Vec<std::ffi::os_str::OsString> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<std::ffi::os_str::OsString, core::iter::adapters::filter_map::FilterMap<core::ops::range::Range<usize>, ignite_rt::process::decode_args::{closure#0}>>>::from_iter
 fn 125 <ignite_io::fs::Directory>::open
 fn 124 alloc::fmt::format::format_inner
 fn 122 ignite_rt::store::ignite_rt_store_new::{closure#0}
@@ -81,10 +81,11 @@ fn 88 ignite_rt::arena::with_task::<core::result::Result<*mut u8, alloc::string:
 fn 86 __cxa_atexit
 fn 84 <std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<usize>>::initialize<<std::sync::once_lock::OnceLock<usize>>::get_or_init<ignite_io::sched::worker_limit::{closure#0}>::{closure#0}, !>::{closure#0}>::{closure#0}
 fn 82 <alloc::raw_vec::RawVecInner>::grow_amortized
-fn 81 <&mut ignite_rt::process::decode_args::{closure#0} as core::ops::function::FnMut<(usize,)>>::call_mut
+fn 80 ignite_rt::net::ignite_rt_tcp_bind::{closure#0}
 fn 79 <core::fmt::Formatter>::pad_integral
 fn 79 <ignite_io::net::TcpListener>::accept
 fn 79 ignite_rt::fs::ignite_rt_directory_launch::{closure#0}::{closure#0}
+fn 78 ignite_rt::process::decode_args::{closure#0}
 fn 78 mmap
 fn 78 std::panicking::set_hook
 fn 77 ignite_rt::fs::ignite_rt_directory_launch::{closure#0}
@@ -126,7 +127,6 @@ fn 48 ignite_rt::process::store_args
 fn 48 strnlen
 fn 48 wcschr
 fn 47 <std::thread::thread::Thread>::new
-fn 47 <u8 as <[_]>::to_vec_in::ConvertVec>::to_vec::<alloc::alloc::Global>
 fn 47 ignite_io::report::catch::<*mut u8, ignite_rt::arena::ignite_rt_alloc::{closure#0}>
 fn 47 ignite_io::report::catch::<i32, ignite_rt::net::ignite_rt_tcp_bind::{closure#0}>
 fn 47 ignite_io::report::catch::<i32, ignite_rt::process::ignite_rt_args_port::{closure#0}>
@@ -142,12 +142,13 @@ fn 44 core::sync::atomic::atomic_compare_exchange_weak::<u32>
 fn 44 wmemchr
 fn 43 ignite_io::report::catch::<(), ignite_rt::process::ignite_rt_log::{closure#0}>
 fn 43 ignite_io::report::catch::<i64, ignite_rt::net::ignite_rt_own_mark::{closure#0}>
+fn 42 <nix::sys::signal::SigAction>::new
 fn 42 _IO_enable_locks
 fn 41 <str as std::net::socket_addr::ToSocketAddrs>::to_socket_addrs
 fn 41 ??? ???
-fn 41 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::net::ignite_rt_tcp_bind::{closure#0}>, i32>
 fn 40 getcwd
 fn 40 ignite_rt::process::os_args
+fn 38 <std::sync::once::Once>::call_once::<ignite_rt::process::ignite_rt_init::{closure#0}>::{closure#0}
 fn 38 <std::thread::spawnhook::SpawnHooks as core::ops::drop::Drop>::drop
 fn 37 <alloc::ffi::c_str::CString>::_from_vec_unchecked
 fn 37 <i64 as core::fmt::Display>::fmt
@@ -199,7 +200,7 @@ syscall 1 socket
 syscall 1 write
 op get
 times 20
-instructions 450246 runs 450246 450246 450246 450246 450246
+instructions 450236 runs 450236 450236 450236 450236 450236
 syscalls 40 runs 40 40 40 40 40
 fn 87376 ??? todod
 fn 67983 ??? libc.so.6
@@ -220,7 +221,7 @@ fn 6740 ignite_io::text::index_of::<&[u8], &[u8]>
 fn 6680 std.protocol.http.is_token_byte
 fn 5380 std.protocol.http.checked
 fn 4440 std.protocol.http.segments
-fn 4400 ignite.grow.llvm.9393871106090441843
+fn 4400 ignite.grow.llvm.16071189956402355218
 fn 4320 ignite_rt::arena::with_task::<core::result::Result<*mut u8, alloc::string::String>, ignite_rt::arena::alloc_slow::{closure#0}>::{closure#0}
 fn 4220 std.protocol.http.asked
 fn 4200 core::slice::copy_from_slice_impl::<u8>
@@ -265,7 +266,7 @@ fn 880 core::sync::atomic::atomic_compare_exchange::<u32>
 fn 880 std.protocol.http.keep_alive
 fn 840 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::text::ignite_rt_int_parse::{closure#0}>, i8>
 fn 782 recv
-fn 766 <ignite_io::net::TcpStream>::read_with::<ignite_rt::IgniteInput, ignite_rt::net::ignite_rt_tcp_read::{closure#0}::{closure#0}::{closure#0}>::{closure#1}
+fn 765 <ignite_io::net::TcpStream>::read_with::<ignite_rt::IgniteInput, ignite_rt::net::ignite_rt_tcp_read::{closure#0}::{closure#0}::{closure#0}>::{closure#1}
 fn 760 std.json.encode
 fn 760 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::store::ignite_rt_store_get::{closure#0}>, i8>
 fn 740 <alloc::vec::Vec<u8> as alloc::vec::spec_extend::SpecExtend<&u8, core::slice::iter::Iter<u8>>>::spec_extend
@@ -311,7 +312,7 @@ syscall 20 recvfrom
 syscall 20 sendto
 op patch
 times 20
-instructions 930548 runs 930548 930548 930548 930548 930548
+instructions 930498 runs 930498 930498 930498 930498 930498
 syscalls 380 runs 380 380 380 380 380
 fn 180376 ??? todod
 fn 140209 ??? libc.so.6
@@ -336,7 +337,7 @@ fn 8340 ignite_io::text::index_of::<&[u8], &[u8]>
 fn 8320 std.json.write_value'2
 fn 8160 <ignite_rt::IgniteList>::from_bytes
 fn 8160 ignite_io::fs::check
-fn 7700 ignite.grow.llvm.9393871106090441843
+fn 7700 ignite.grow.llvm.16071189956402355218
 fn 7640 std.protocol.http.render_fields
 fn 7260 free
 fn 7200 ignite_io::report::catch::<(), ignite_rt::text::ignite_rt_int_to_text::{closure#0}>
@@ -377,6 +378,7 @@ fn 2200 examples.todo.route
 fn 2160 ignite_rt::arena::with_task::<core::result::Result<*mut u8, alloc::string::String>, ignite_rt::arena::alloc_slow::{closure#0}>::{closure#0}
 fn 2120 ignite_rt::net::with_stream::<(), ignite_rt::net::ignite_rt_tcp_write_all::{closure#0}::{closure#0}>
 fn 2040 <alloc::string::String>::from_utf8_lossy
+fn 1980 ignite_rt::net::capability::<ignite_io::fs::Directory, ignite_rt::fs::directory::{closure#0}>
 fn 1960 ignite_io::report::catch::<core::option::Option<core::result::Result<(), ()>>, ignite_rt::store::ignite_rt_store_update::{closure#0}>
 fn 1946 ignite_rt::net::read_into_arena::<core::io::error::Error, &mut dyn for<'a> core::ops::function::FnMut<(&'a mut [u8],), Output = core::result::Result<usize, core::io::error::Error>>>
 fn 1920 ignite_io::report::catch::<i8, ignite_rt::text::ignite_rt_int_parse::{closure#0}>
@@ -389,7 +391,7 @@ fn 1740 std.protocol.http.header
 fn 1720 ignite_io::report::catch::<(), ignite_rt::fail::ignite_rt_guard_callback::{closure#0}>
 fn 1720 std.protocol.http.render_framed
 fn 1680 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::text::ignite_rt_int_parse::{closure#0}>, i8>
-fn 1660 0x0000000000098310'2
+fn 1660 0x0000000000098350'2
 fn 1640 ignite_io::report::catch::<(), ignite_rt::fail::ignite_rt_guard_pop::{closure#0}>
 fn 1540 <ignite_io::fs::Checked>::through
 fn 1520 <ignite_io::net::Stream>::send
@@ -403,7 +405,7 @@ fn 1440 ignite_rt_bytes_index_of
 fn 1400 ignite_io::parse_int::<&[u8]>
 fn 1400 ignite_rt::fs::ignite_rt_directory_create_directory::{closure#0}::{closure#0}
 fn 1400 ignite_rt::fs::ignite_rt_directory_remove::{closure#0}::{closure#0}
-fn 1380 copy.std.json.Json.llvm.9393871106090441843
+fn 1380 copy.std.json.Json.llvm.16071189956402355218
 fn 1380 std.protocol.http.head_authority
 fn 1320 <ignite_io::store::Store<ignite_rt::store::HeapValue>>::read::<(), ignite_rt::store::ignite_rt_store_get::{closure#0}::{closure#0}>
 fn 1320 <ignite_io::wait::LockGuard<ignite_io::net::Out> as core::ops::drop::Drop>::drop
@@ -419,8 +421,6 @@ fn 1120 ignite_rt::fail::push::{closure#0}
 fn 1080 std.protocol.http.render_head
 fn 1060 <[u8] as nix::NixPath>::with_nix_path::<core::result::Result<i32, nix::errno::consts::Errno>, nix::fcntl::renameat<str, str, std::os::fd::owned::BorrowedFd, std::os::fd::owned::BorrowedFd>::{closure#0}>
 fn 1060 openat
-fn 1020 ignite_rt::fs::ignite_rt_directory_create_directory::{closure#0}
-fn 1020 ignite_rt::fs::ignite_rt_directory_remove::{closure#0}
 fn 980 __rustc::__rust_alloc
 fn 960 <[u8] as nix::NixPath>::with_nix_path::<i32, nix::fcntl::renameat<str, str, std::os::fd::owned::BorrowedFd, std::os::fd::owned::BorrowedFd>::{closure#0}::{closure#0}>
 fn 960 <[u8] as nix::NixPath>::with_nix_path::<i32, nix::unistd::unlinkat<std::os::fd::owned::BorrowedFd, str>::{closure#0}>
@@ -439,7 +439,7 @@ fn 840 nix::fcntl::openat2::<str, std::os::fd::owned::BorrowedFd>
 fn 820 <u64 as core::fmt::Display>::fmt
 fn 782 recv
 fn 780 <[u8]>::starts_with
-fn 766 <ignite_io::net::TcpStream>::read_with::<ignite_rt::IgniteInput, ignite_rt::net::ignite_rt_tcp_read::{closure#0}::{closure#0}::{closure#0}>::{closure#1}
+fn 765 <ignite_io::net::TcpStream>::read_with::<ignite_rt::IgniteInput, ignite_rt::net::ignite_rt_tcp_read::{closure#0}::{closure#0}::{closure#0}>::{closure#1}
 fn 740 <alloc::vec::Vec<u8> as alloc::vec::spec_extend::SpecExtend<&u8, core::slice::iter::Iter<u8>>>::spec_extend
 fn 740 examples.todo.load
 fn 740 send
@@ -450,11 +450,12 @@ fn 720 syscall
 fn 720 write
 fn 680 nix::sys::stat::fstatat::<std::os::fd::owned::BorrowedFd, str>
 fn 660 <ignite_io::wait::LockGuard<()> as core::ops::drop::Drop>::drop
-fn 660 ignite_rt::net::capability::<ignite_io::fs::Directory, ignite_rt::fs::directory::{closure#0}>
 fn 640 <ignite_io::wait::Lock<()>>::lock
 fn 620 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::fs::ignite_rt_directory_write_file::{closure#0}>, i32>
 fn 600 std.protocol.http.response_closes
 fn 600 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::fail::ignite_rt_guard_pop::{closure#0}>, ()>
+fn 600 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::fs::ignite_rt_directory_create_directory::{closure#0}>, i32>
+fn 600 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::fs::ignite_rt_directory_remove::{closure#0}>, i32>
 fn 580 <std::thread::local::LocalKey<core::cell::RefCell<core::option::Option<(i64, ignite_io::net::TcpStream)>>>>::try_with::<ignite_rt::net::with_stream<(), ignite_rt::net::ignite_rt_tcp_write_all::{closure#0}::{closure#0}>::{closure#1}, ()>
 fn 580 <std::thread::local::LocalKey<core::cell::RefCell<core::option::Option<(i64, ignite_io::net::TcpStream)>>>>::try_with::<ignite_rt::net::with_stream<ignite_rt::IgniteInput, ignite_rt::net::ignite_rt_tcp_read::{closure#0}::{closure#0}>::{closure#1}, ()>
 fn 560 nix::fcntl::renameat::<str, str, std::os::fd::owned::BorrowedFd, std::os::fd::owned::BorrowedFd>
@@ -467,7 +468,7 @@ fn 500 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertU
 fn 480 <alloc::vec::Vec<ignite_rt::fail::Handler>>::pop
 fn 480 ignite_rt_text_from_bytes_lossy
 fn 480 nix::fcntl::openat::<str, std::os::fd::owned::BorrowedFd>
-fn 460 0x0000000000093a10'2
+fn 460 0x0000000000093a50'2
 fn 460 ignite_rt::arena::alloc_slow
 fn 460 ignite_rt::net::with_stream::<(), ignite_rt::net::ignite_rt_tcp_write_all::{closure#0}::{closure#0}>::{closure#1}
 fn 460 ignite_rt::net::with_stream::<ignite_rt::IgniteInput, ignite_rt::net::ignite_rt_tcp_read::{closure#0}::{closure#0}>::{closure#1}
@@ -484,8 +485,6 @@ fn 324 <ignite_rt::arena::TASK::{K#0}::{closure#0} as core::ops::function::FnOnc
 fn 276 <ignite_rt::arena::Arena>::release
 fn 260 <ignite_io::net::Stream>::check_failure
 fn 260 core::ptr::drop_glue::<std::os::fd::owned::OwnedFd>
-fn 260 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::fs::ignite_rt_directory_create_directory::{closure#0}>, i32>
-fn 260 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::fs::ignite_rt_directory_remove::{closure#0}>, i32>
 fn 240 <alloc::raw_vec::RawVec<u8> as core::ops::drop::Drop>::drop
 fn 240 core::char::methods::encode_utf8_raw_unchecked
 fn 240 ignite_rt_directory_remove
@@ -517,7 +516,7 @@ syscall 20 unlinkat
 syscall 20 write
 op delete
 times 20
-instructions 636697 runs 636697 636697 636697 636697 636697
+instructions 636647 runs 636647 636647 636647 636647 636647
 syscalls 380 runs 380 380 380 380 380
 fn 110096 ??? todod
 fn 78159 ??? libc.so.6
@@ -551,7 +550,7 @@ fn 5280 std.json.write_value'2
 fn 4800 <alloc::vec::Vec<&str> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<&str, core::iter::adapters::filter::Filter<core::str::iter::Split<char>, ignite_io::fs::check::{closure#1}>>>::from_iter
 fn 4760 <ignite_io::store::Store<ignite_rt::store::HeapValue>>::try_replace_with::<(), (), ignite_rt::store::ignite_rt_store_update::{closure#0}::{closure#0}, ignite_rt::store::ignite_rt_store_update::{closure#0}::{closure#1}>
 fn 4440 std.protocol.http.segments
-fn 4400 ignite.grow.llvm.9393871106090441843
+fn 4400 ignite.grow.llvm.16071189956402355218
 fn 4340 <ignite_io::census::Counting as core::alloc::global::GlobalAlloc>::alloc
 fn 4320 ignite_rt::arena::with_task::<core::result::Result<*mut u8, alloc::string::String>, ignite_rt::arena::alloc_slow::{closure#0}>::{closure#0}
 fn 4220 std.protocol.http.asked
@@ -579,6 +578,7 @@ fn 2120 examples.todo.route
 fn 2120 ignite_rt::net::with_stream::<(), ignite_rt::net::ignite_rt_tcp_write_all::{closure#0}::{closure#0}>
 fn 2040 <alloc::string::String>::from_utf8_lossy
 fn 2040 std.protocol.http.lists_connection_option
+fn 1980 ignite_rt::net::capability::<ignite_io::fs::Directory, ignite_rt::fs::directory::{closure#0}>
 fn 1960 ignite_io::report::catch::<core::option::Option<core::result::Result<(), ()>>, ignite_rt::store::ignite_rt_store_update::{closure#0}>
 fn 1946 ignite_rt::net::read_into_arena::<core::io::error::Error, &mut dyn for<'a> core::ops::function::FnMut<(&'a mut [u8],), Output = core::result::Result<usize, core::io::error::Error>>>
 fn 1840 <ignite_io::net::TcpStream>::write_from
@@ -610,8 +610,6 @@ fn 1080 std.protocol.http.render_head
 fn 1060 <[u8] as nix::NixPath>::with_nix_path::<core::result::Result<i32, nix::errno::consts::Errno>, nix::fcntl::renameat<str, str, std::os::fd::owned::BorrowedFd, std::os::fd::owned::BorrowedFd>::{closure#0}>
 fn 1060 openat
 fn 1060 std.protocol.http.header
-fn 1020 ignite_rt::fs::ignite_rt_directory_create_directory::{closure#0}
-fn 1020 ignite_rt::fs::ignite_rt_directory_remove::{closure#0}
 fn 1000 <ignite_rt::arena::Arena>::alloc
 fn 1000 std.protocol.http.render_framed
 fn 980 __rustc::__rust_alloc
@@ -640,7 +638,7 @@ fn 820 <u64 as core::fmt::Display>::fmt
 fn 782 recv
 fn 780 <[u8]>::starts_with
 fn 780 std.protocol.http.reason
-fn 766 <ignite_io::net::TcpStream>::read_with::<ignite_rt::IgniteInput, ignite_rt::net::ignite_rt_tcp_read::{closure#0}::{closure#0}::{closure#0}>::{closure#1}
+fn 765 <ignite_io::net::TcpStream>::read_with::<ignite_rt::IgniteInput, ignite_rt::net::ignite_rt_tcp_read::{closure#0}::{closure#0}::{closure#0}>::{closure#1}
 fn 760 std.json.encode
 fn 740 <alloc::vec::Vec<u8> as alloc::vec::spec_extend::SpecExtend<&u8, core::slice::iter::Iter<u8>>>::spec_extend
 fn 740 examples.todo.load
@@ -651,11 +649,12 @@ fn 720 syscall
 fn 720 write
 fn 680 nix::sys::stat::fstatat::<std::os::fd::owned::BorrowedFd, str>
 fn 660 <ignite_io::wait::LockGuard<()> as core::ops::drop::Drop>::drop
-fn 660 ignite_rt::net::capability::<ignite_io::fs::Directory, ignite_rt::fs::directory::{closure#0}>
 fn 640 <ignite_io::wait::Lock<()>>::lock
 fn 620 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::fs::ignite_rt_directory_write_file::{closure#0}>, i32>
 fn 600 std.protocol.http.response_closes
 fn 600 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::fail::ignite_rt_guard_pop::{closure#0}>, ()>
+fn 600 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::fs::ignite_rt_directory_create_directory::{closure#0}>, i32>
+fn 600 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::fs::ignite_rt_directory_remove::{closure#0}>, i32>
 fn 580 <std::thread::local::LocalKey<core::cell::RefCell<core::option::Option<(i64, ignite_io::net::TcpStream)>>>>::try_with::<ignite_rt::net::with_stream<(), ignite_rt::net::ignite_rt_tcp_write_all::{closure#0}::{closure#0}>::{closure#1}, ()>
 fn 580 <std::thread::local::LocalKey<core::cell::RefCell<core::option::Option<(i64, ignite_io::net::TcpStream)>>>>::try_with::<ignite_rt::net::with_stream<ignite_rt::IgniteInput, ignite_rt::net::ignite_rt_tcp_read::{closure#0}::{closure#0}>::{closure#1}, ()>
 fn 560 nix::fcntl::renameat::<str, str, std::os::fd::owned::BorrowedFd, std::os::fd::owned::BorrowedFd>
@@ -678,8 +677,6 @@ fn 340 <std::fs::File as core::io::write::Write>::write
 fn 280 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::store::ignite_rt_store_next_id::{closure#0}>, i64>
 fn 260 <ignite_io::net::Stream>::check_failure
 fn 260 core::ptr::drop_glue::<std::os::fd::owned::OwnedFd>
-fn 260 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::fs::ignite_rt_directory_create_directory::{closure#0}>, i32>
-fn 260 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::fs::ignite_rt_directory_remove::{closure#0}>, i32>
 fn 258 ignite_rt::arena::with_task::<(), ignite_rt::arena::ignite_rt_arena_scratch::{closure#0}::{closure#0}>::{closure#0}
 fn 240 <alloc::raw_vec::RawVec<u8> as core::ops::drop::Drop>::drop
 fn 240 core::char::methods::encode_utf8_raw_unchecked
@@ -718,10 +715,10 @@ syscall 20 unlinkat
 syscall 20 write
 op connection
 times 20
-instructions 471700 runs 471700 471700 471700 471694 471700
+instructions 469930 runs 469930 469930 469930 469930 469930
 syscalls 246 runs 246 246 246 246 246
 fn 65499 ??? libc.so.6
-fn 30109 ??? todod
+fn 29435 ??? todod
 fn 13789 malloc
 fn 13280 <core::fmt::Formatter>::pad_integral
 fn 12903 free
@@ -747,6 +744,7 @@ fn 4055 malloc_trim
 fn 3920 <ignite_io::net::TcpStream>::read_with::<ignite_rt::IgniteInput, ignite_rt::net::ignite_rt_tcp_read::{closure#0}::{closure#0}::{closure#0}>
 fn 3720 ignite_rt::arena::with_state::<core::option::Option<*mut u8>, ignite_rt::arena::alloc::{closure#0}>
 fn 3619 ignite_rt::net::read_into_arena::<core::io::error::Error, &mut dyn for<'a> core::ops::function::FnMut<(&'a mut [u8],), Output = core::result::Result<usize, core::io::error::Error>>>
+fn 3080 ignite_rt::net::ignite_rt_tcp_retain::{closure#0}
 fn 3000 <alloc::vec::Vec<i64>>::split_off
 fn 2762 <ignite_rt::arena::Arena>::release
 fn 2580 ignite_io::report::catch::<(), ignite_rt::net::ignite_rt_tcp_own::{closure#0}>
@@ -756,20 +754,20 @@ fn 2460 ignite_rt::arena::with_task::<(), ignite_rt::arena::task_end::{closure#0
 fn 2400 ignite_rt::net::ignite_rt_own_release::{closure#0}
 fn 2305 <ignite_rt::arena::STATE::{K#0}::{closure#1} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::UnsafeCell<ignite_rt::arena::State>>>,)>>::call_once
 fn 2300 ignite_rt::net::with_stream::<ignite_rt::IgniteInput, ignite_rt::net::ignite_rt_tcp_read::{closure#0}::{closure#0}>
+fn 2280 <ignite_rt::arena::TaskArena>::swap
 fn 2280 ignite_rt::net::register
-fn 2168 <ignite_rt::net::CACHED::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<core::option::Option<(i64, ignite_io::net::TcpStream)>>>>,)>>::call_once
-fn 2160 ignite_rt::net::slot_at
 fn 2153 ignite_rt::arena::move_spare
 fn 2120 <alloc::vec::Vec<u8>>::reserve
 fn 2100 ignite_rt::arena::adopt::{closure#0}
 fn 2021 ignite_rt::arena::transfer_begin::{closure#0}
 fn 2000 main
-fn 1988 <ignite_rt::arena::TASK::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<ignite_rt::arena::Task>>>,)>>::call_once
+fn 1988 <ignite_rt::net::CACHED::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<core::option::Option<(i64, ignite_io::net::TcpStream)>>>>,)>>::call_once
+fn 1986 <ignite_rt::task::ignite_rt_spawn::{closure#0}::{closure#0} as core::ops::function::FnOnce<()>>::call_once::{shim:vtable#0}
 fn 1940 <ignite_io::sched::Readiness>::release
-fn 1880 ignite_rt::task::ignite_rt_spawn::{closure#0}::{closure#0}
 fn 1845 <alloc::raw_vec::RawVecInner>::try_allocate_in
 fn 1840 <ignite_rt::fail::TaskHandlers>::swap
 fn 1824 __rustc::__rust_dealloc
+fn 1808 <ignite_rt::arena::TASK::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<ignite_rt::arena::Task>>>,)>>::call_once
 fn 1808 <ignite_rt::net::OWNED::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<alloc::vec::Vec<i64>>>>,)>>::call_once
 fn 1780 <alloc::sync::Arc<ignite_io::wait::Inner>>::drop_slow
 fn 1760 ignite_rt::net::with_stream::<(), ignite_rt::net::ignite_rt_tcp_close::{closure#0}::{closure#0}>
@@ -779,10 +777,10 @@ fn 1722 core::ptr::drop_glue::<ignite_rt::arena::Arena>
 fn 1720 ignite_io::report::catch::<(), ignite_rt::net::ignite_rt_own_release::{closure#0}>
 fn 1720 ignite_io::report::catch::<(), ignite_rt::net::ignite_rt_tcp_retain::{closure#0}>
 fn 1720 ignite_io::report::catch::<i64, ignite_rt::net::ignite_rt_own_mark::{closure#0}>
+fn 1720 ignite_rt::task::ignite_rt_spawn::{closure#0}
 fn 1680 <ignite_rt::arena::Arena>::clear
-fn 1667 <ignite_io::net::TcpStream>::read_with::<ignite_rt::IgniteInput, ignite_rt::net::ignite_rt_tcp_read::{closure#0}::{closure#0}::{closure#0}>::{closure#1}
+fn 1646 <ignite_io::net::TcpStream>::read_with::<ignite_rt::IgniteInput, ignite_rt::net::ignite_rt_tcp_read::{closure#0}::{closure#0}::{closure#0}>::{closure#1}
 fn 1620 ignite_rt::net::ignite_rt_tcp_peer::{closure#0}
-fn 1620 ignite_rt::task::new_locals
 fn 1610 <std::thread::local::LocalKey<core::cell::UnsafeCell<ignite_rt::arena::State>>>::try_with::<<core::cell::UnsafeCell<ignite_rt::arena::State>>::get, *mut ignite_rt::arena::State>
 fn 1600 ignite_rt::net::ignite_rt_tcp_local::{closure#0}
 fn 1598 recv
@@ -790,8 +788,6 @@ fn 1582 __rustc::__rust_alloc
 fn 1580 ignite_rt::arena::with_task::<core::result::Result<*mut u8, alloc::string::String>, ignite_rt::arena::alloc_slow::{closure#0}>::{closure#0}
 fn 1558 <ignite_io::census::Counting as core::alloc::global::GlobalAlloc>::realloc
 fn 1520 <ignite_rt::net::TaskHandles>::swap
-fn 1520 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::net::ignite_rt_tcp_retain::{closure#0}>, ()>
-fn 1480 ignite_rt::task::ignite_rt_spawn::{closure#0}
 fn 1476 <alloc::vec::drain::Drain<(core::ptr::non_null::NonNull<u8>, core::alloc::layout::Layout)> as core::ops::drop::Drop>::drop
 fn 1476 <alloc::vec::drain::Drain<core::ptr::non_null::NonNull<u8>> as core::ops::drop::Drop>::drop
 fn 1476 <alloc::vec::drain::Drain<ignite_rt::arena::Block> as core::ops::drop::Drop>::drop
@@ -813,6 +809,7 @@ fn 1069 ignite_io::reactor::poll_beside
 fn 1060 <alloc::vec::Vec<i64>>::push_mut
 fn 980 <corosensei::coroutine::Coroutine<(), (), ()>>::with_stack_unchecked::<<ignite_io::sched::Worker>::start::{closure#1}>
 fn 980 <std::net::tcp::TcpListener>::accept
+fn 960 <ignite_rt::arena::TaskArena>::new
 fn 960 <std::thread::local::LocalKey<core::cell::RefCell<core::option::Option<ignite_rt::arena::Transfer>>>>::with::<ignite_rt::task::ignite_rt_spawn::{closure#0}::{closure#0}::{closure#0}, ()>
 fn 960 ignite_io::report::catch::<i32, ignite_rt::net::ignite_rt_tcp_close::{closure#0}>
 fn 960 ignite_io::report::catch::<i64, ignite_rt::text::ignite_rt_bytes_index_of::{closure#0}>
@@ -834,22 +831,21 @@ fn 840 ignite_rt::arena::task_end::{closure#0}
 fn 820 ignite_io::report::catch::<(), ignite_rt::arena::task_end>
 fn 820 ignite_io::report::catch::<(), ignite_rt::arena::transfer_begin>
 fn 820 ignite_io::report::catch::<(), ignite_rt::fail::ignite_rt_guard_pop::{closure#0}>
+fn 820 ignite_rt::task::new_locals
 fn 800 <ignite_io::wait::WaitList>::wake_all
 fn 780 stack_init_trampoline
 fn 774 <std::time::Instant>::now
 fn 770 close
-fn 760 ignite_rt::net::lock::<ignite_rt::net::Entry>
 fn 757 <ignite_io::reactor::EpollReactor>::poll_one
 fn 740 epoll_wait
 fn 740 ignite_rt::arena::ignite_rt_alloc::{closure#0}
 fn 729 core::ptr::drop_glue::<core::option::Option<ignite_rt::arena::Transfer>>
 fn 728 <ignite_rt::fail::HANDLERS::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<alloc::vec::Vec<ignite_rt::fail::Handler>>>>,)>>::call_once
-fn 728 <ignite_rt::task::READY::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<core::option::Option<ignite_rt::arena::Transfer>>>>,)>>::call_once
 fn 725 <std::thread::local::LocalKey<core::cell::RefCell<alloc::collections::vec_deque::VecDeque<ignite_io::wait::Waiter>>>>::with::<<ignite_io::sched::Worker>::start::{closure#3}, ()>
 fn 723 poll
 fn 720 accept4
 fn 720 ignite_io::report::catch::<(), alloc::boxed::Box<dyn core::ops::function::FnOnce<(), Output = ()> + core::marker::Send>>
-fn 720 ignite_rt::net::decode
+fn 720 ignite_rt::net::slot_at
 fn 720 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::net::ignite_rt_own_mark::{closure#0}>, i64>
 fn 700 ignite_io::task::task_started
 fn 700 ignite_rt::arena::task_end
@@ -896,12 +892,10 @@ fn 460 ignite_rt::net::with_stream::<(), ignite_rt::net::ignite_rt_tcp_close::{c
 fn 460 ignite_rt::net::with_stream::<(), ignite_rt::net::ignite_rt_tcp_set_idle_timeout::{closure#0}::{closure#0}>::{closure#1}
 fn 460 ignite_rt::net::with_stream::<ignite_rt::IgniteInput, ignite_rt::net::ignite_rt_tcp_read::{closure#0}::{closure#0}>::{closure#1}
 fn 460 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::net::ignite_rt_tcp_set_idle_timeout::{closure#0}>, i32>
-fn 440 core::ptr::drop_glue::<ignite_rt::arena::TaskArena>
 fn 440 ignite_rt::status::<ignite_rt::IgniteInput>
 fn 420 _dl_find_dso_for_object
 fn 420 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::net::ignite_rt_tcp_close::{closure#0}>, i32>
 fn 400 <alloc::raw_vec::RawVec<core::ptr::non_null::NonNull<u8>>>::grow_one
-fn 400 core::ptr::drop_glue::<ignite_rt::task::Locals>
 fn 400 ignite_rt::net::task_ended::{closure#1}
 fn 398 pthread_create
 fn 380 core::ptr::drop_glue::<ignite_rt::net::Handle>
@@ -931,7 +925,6 @@ fn 276 std::sys::thread_local::destructors::linux_like::register
 fn 260 <ignite_io::net::Stream>::check_failure
 fn 260 <std::thread::local::LocalKey<core::cell::RefCell<ignite_rt::arena::Task>>>::try_with::<ignite_rt::arena::with_task<(), ignite_rt::arena::task_end::{closure#0}>::{closure#0}, ()>
 fn 260 <std::thread::local::LocalKey<core::cell::RefCell<ignite_rt::arena::Task>>>::try_with::<ignite_rt::arena::with_task<(), ignite_rt::arena::transfer_begin::{closure#0}>::{closure#0}, ()>
-fn 260 core::ptr::drop_glue::<ignite_rt::fail::TaskHandlers>
 fn 260 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::fail::ignite_rt_guard_push::{closure#0}>, ()>
 fn 260 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::net::ignite_rt_tcp_accept::{closure#0}>, i32>
 fn 252 <std::time::Instant as core::ops::arith::Add<core::time::Duration>>::add
@@ -946,8 +939,6 @@ fn 200 <alloc::raw_vec::RawVec<i64>>::grow_one
 fn 200 <alloc::raw_vec::RawVec<ignite_rt::arena::Block>>::grow_one
 fn 200 <alloc::raw_vec::RawVec<ignite_rt::fail::Handler>>::grow_one
 fn 200 <core::net::ip_addr::IpAddr as core::fmt::Display>::fmt
-fn 189 core::sync::atomic::atomic_load::<*mut core::io::error::OsFunctions>
-fn 188 <ignite_rt::net::READ_BUFFER::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<alloc::vec::Vec<u8>>>>,)>>::call_once
 fn 185 __call_tls_dtors
 fn 168 nix::errno::consts::from_i32
 fn 162 0x0000000000097ca0'2
@@ -963,6 +954,7 @@ fn 87 sbrk
 fn 80 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::net::ignite_rt_own_release::{closure#0}>, ()>
 fn 80 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::net::ignite_rt_tcp_local::{closure#0}>, ()>
 fn 80 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::net::ignite_rt_tcp_peer::{closure#0}>, ()>
+fn 80 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::net::ignite_rt_tcp_retain::{closure#0}>, ()>
 fn 78 mmap
 fn 75 <corosensei::stack::unix::DefaultStack>::new
 fn 64 <alloc::sync::Arc<ignite_io::sched::Shared>>::drop_slow

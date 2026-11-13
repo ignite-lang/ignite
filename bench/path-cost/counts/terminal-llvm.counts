@@ -1,15 +1,15 @@
 path-cost counts
 scenario terminal
 target llvm
-release v0.16.2
+release v0.16.3
 script 615d4b71f44c5c7022bd4feb0ccab8d7be02c6e8aeae1059cd4606447f2c890d
 file 633057460dd46491e354fcd49de5c92e22a849641373bb5acdd15b52eeae5d3c terminal.ignite
 file 5f111eb1cf4e35d034dad2a3976a2292658fcb1b309d3b2719fc955d374fb862 commands.ignite
 file 43c2f9b1eac5848791a75884f8bbd7304c7ddd8bc028d8b4758743785ff802c0 command_schema.ignite
 op start
-instructions 304816 runs 304816 304816 304816 304816 304816
-syscalls 76 runs 76 75 76 76 76
-fn 274299 ??? ld-linux-x86-64.so.2
+instructions 304805 runs 304805 304805 304805 304805 304805
+syscalls 76 runs 76 76 76 76 76
+fn 274256 ??? ld-linux-x86-64.so.2
 fn 6416 ??? libc.so.6
 fn 2325 <core::ops::range::Range<usize> as core::iter::traits::iterator::Iterator>::fold::<(), core::iter::adapters::map::map_fold<usize, ignite_rt::net::Slot, (), ignite_rt::net::slot_at::{closure#0}, core::iter::traits::iterator::Iterator::for_each::call<ignite_rt::net::Slot, <alloc::vec::Vec<ignite_rt::net::Slot>>::extend_trusted<core::iter::adapters::map::Map<core::ops::range::Range<usize>, ignite_rt::net::slot_at::{closure#0}>>::{closure#0}>::{closure#0}>::{closure#0}>
 fn 1228 malloc
@@ -29,7 +29,6 @@ fn 335 <std::sys::sync::once::futex::Once>::call
 fn 307 <core::str::lossy::Utf8Chunks as core::iter::traits::iterator::Iterator>::next
 fn 302 pthread_create
 fn 289 <ignite_io::census::Counting as core::alloc::global::GlobalAlloc>::dealloc
-fn 285 ignite_rt::text::ignite_rt_text_concat::{closure#0}
 fn 270 __cxa_thread_atexit_impl
 fn 259 <alloc::vec::Vec<u8> as alloc::vec::spec_extend::SpecExtend<&u8, core::slice::iter::Iter<u8>>>::spec_extend
 fn 256 pthread_mutex_lock
@@ -39,18 +38,20 @@ fn 240 <alloc::raw_vec::RawVecInner>::deallocate
 fn 234 <[&[u8]] as alloc::slice::Concat<u8>>::concat
 fn 210 _dl_find_dso_for_object
 fn 199 main
-fn 192 <std::ffi::os_str::OsString as <[_]>::to_vec_in::ConvertVec>::to_vec::<alloc::alloc::Global>
+fn 191 <std::ffi::os_str::OsString as <[_]>::to_vec_in::ConvertVec>::to_vec::<alloc::alloc::Global>
 fn 186 <std::sync::once::Once>::call_once::<ignite_io::signal::install>::{closure#0}
 fn 186 ignite_rt::arena::with_state::<core::option::Option<*mut u8>, ignite_rt::arena::alloc::{closure#0}>
+fn 177 ignite_rt::text::ignite_rt_text_concat::{closure#0}
 fn 176 <ignite_io::net::TcpListener>::bind_with
 fn 164 getenv
 fn 157 std::thread::lifecycle::spawn_unchecked::<ignite_io::drain::install::{closure#0}::{closure#0}, ()>
 fn 156 ignite_rt::process::decode_args::{closure#0}::{closure#0}
+fn 153 <ignite_rt::IgniteList>::from_bytes
 fn 147 __rustc::__rust_alloc
 fn 143 <std::sys::sync::once::futex::Once>::call'2
 fn 138 ignite_io::report::catch::<(), ignite_rt::text::ignite_rt_text_concat::{closure#0}>
-fn 136 <alloc::vec::Vec<std::ffi::os_str::OsString> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<std::ffi::os_str::OsString, core::iter::adapters::filter_map::FilterMap<core::ops::range::Range<usize>, ignite_rt::process::decode_args::{closure#0}>>>::from_iter
 fn 136 ignite_io::args::port_from_os_args::<alloc::vec::into_iter::IntoIter<std::ffi::os_str::OsString>>
+fn 127 <alloc::vec::Vec<std::ffi::os_str::OsString> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<std::ffi::os_str::OsString, core::iter::adapters::filter_map::FilterMap<core::ops::range::Range<usize>, ignite_rt::process::decode_args::{closure#0}>>>::from_iter
 fn 124 alloc::fmt::format::format_inner
 fn 122 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::text::ignite_rt_int_to_text::{closure#0}>, ()>
 fn 115 std::sys::thread_local::destructors::linux_like::register
@@ -72,10 +73,10 @@ fn 86 __cxa_atexit
 fn 84 <std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<usize>>::initialize<<std::sync::once_lock::OnceLock<usize>>::get_or_init<ignite_io::sched::worker_limit::{closure#0}>::{closure#0}, !>::{closure#0}>::{closure#0}
 fn 84 std.protocol.telnet.TelnetServer.protocol
 fn 82 <alloc::raw_vec::RawVecInner>::grow_amortized
-fn 81 <&mut ignite_rt::process::decode_args::{closure#0} as core::ops::function::FnMut<(usize,)>>::call_mut
 fn 80 ignite_rt::net::ignite_rt_tcp_bind::{closure#0}
 fn 79 <core::fmt::Formatter>::pad_integral
 fn 79 <ignite_io::net::TcpListener>::accept
+fn 78 ignite_rt::process::decode_args::{closure#0}
 fn 78 mmap
 fn 78 std::panicking::set_hook
 fn 76 <ignite_io::census::Counting as core::alloc::global::GlobalAlloc>::realloc
@@ -184,10 +185,10 @@ syscall 1 socket
 syscall 1 write
 op session
 times 10
-instructions 244745 runs 244745 244745 244745 244745 244745
+instructions 245028 runs 245028 245028 245028 245028 245028
 syscalls 126 runs 126 126 126 126 126
 fn 39751 ??? libc.so.6
-fn 22591 ??? terminald
+fn 22257 ??? terminald
 fn 7193 malloc
 fn 6148 free
 fn 5510 <alloc::raw_vec::RawVecInner>::finish_grow
@@ -210,9 +211,8 @@ fn 1930 core::fmt::write
 fn 1860 ignite_rt::arena::with_state::<core::option::Option<*mut u8>, ignite_rt::arena::alloc::{closure#0}>
 fn 1850 <ignite_io::net::TcpStream>::write_from
 fn 1740 <ignite_io::net::Stream>::send
-fn 1628 <ignite_rt::net::CACHED::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<core::option::Option<(i64, ignite_io::net::TcpStream)>>>>,)>>::call_once
+fn 1538 <ignite_rt::net::CACHED::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<core::option::Option<(i64, ignite_io::net::TcpStream)>>>>,)>>::call_once
 fn 1400 <ignite_rt::arena::STATE::{K#0}::{closure#1} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::UnsafeCell<ignite_rt::arena::State>>>,)>>::call_once
-fn 1400 ignite_rt::text::ignite_rt_text_from_bytes_lossy::{closure#0}
 fn 1382 <ignite_rt::arena::Arena>::release
 fn 1356 calloc
 fn 1350 <ignite_io::net::TcpStream>::read_with::<ignite_rt::IgniteInput, ignite_rt::net::ignite_rt_tcp_read::{closure#0}::{closure#0}::{closure#0}>
@@ -225,17 +225,19 @@ fn 1230 ignite_rt::arena::with_task::<(), ignite_rt::arena::task_end::{closure#0
 fn 1180 <ignite_io::sched::Readiness>::wait
 fn 1180 std.protocol.telnet.TelnetServer.main
 fn 1150 ignite_rt::net::with_stream::<ignite_rt::IgniteInput, ignite_rt::net::ignite_rt_tcp_read::{closure#0}::{closure#0}>
+fn 1140 <ignite_rt::arena::TaskArena>::swap
 fn 1140 ignite_rt::net::register
 fn 1063 ignite_rt::arena::move_spare
 fn 1050 ignite_rt::arena::adopt::{closure#0}
+fn 1020 <ignite_rt::IgniteList>::from_bytes
 fn 1001 ignite_rt::arena::transfer_begin::{closure#0}
-fn 998 <ignite_rt::arena::TASK::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<ignite_rt::arena::Task>>>,)>>::call_once
+fn 996 <ignite_rt::task::ignite_rt_spawn::{closure#0}::{closure#0} as core::ops::function::FnOnce<()>>::call_once::{shim:vtable#0}
 fn 970 <ignite_io::sched::Readiness>::release
 fn 940 ignite_io::report::catch::<i32, ignite_rt::net::ignite_rt_tcp_write_all::{closure#0}>
-fn 940 ignite_rt::task::ignite_rt_spawn::{closure#0}::{closure#0}
 fn 930 ignite_rt::net::read_into_arena::<core::io::error::Error, &mut dyn for<'a> core::ops::function::FnMut<(&'a mut [u8],), Output = core::result::Result<usize, core::io::error::Error>>>
 fn 920 <ignite_rt::fail::TaskHandlers>::swap
 fn 920 std.console.first_word
+fn 908 <ignite_rt::arena::TASK::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<ignite_rt::arena::Task>>>,)>>::call_once
 fn 900 ignite_io::report::catch::<(), ignite_rt::text::ignite_rt_text_from_bytes_lossy::{closure#0}>
 fn 890 <alloc::sync::Arc<ignite_io::wait::Inner>>::drop_slow
 fn 882 core::ptr::drop_glue::<ignite_rt::arena::Arena>
@@ -244,10 +246,11 @@ fn 880 ignite_rt::net::with_stream::<bool, ignite_rt::net::ignite_rt_tcp_urgent_
 fn 864 __rustc::__rust_dealloc
 fn 860 ignite_io::report::catch::<(), ignite_rt::net::ignite_rt_tcp_own::{closure#0}>
 fn 860 ignite_io::report::catch::<(), ignite_rt::net::ignite_rt_tcp_release::{closure#0}>
+fn 860 ignite_rt::task::ignite_rt_spawn::{closure#0}
 fn 840 <ignite_rt::arena::Arena>::clear
 fn 840 core::slice::ascii::is_ascii::runtime
 fn 840 ignite_rt::arena::keep_for_transfers
-fn 810 ignite_rt::task::new_locals
+fn 800 ignite_rt::text::ignite_rt_text_from_bytes_lossy::{closure#0}
 fn 790 ignite_rt::arena::with_task::<core::result::Result<*mut u8, alloc::string::String>, ignite_rt::arena::alloc_slow::{closure#0}>::{closure#0}
 fn 770 ignite_rt::net::ignite_rt_tcp_retain::{closure#0}
 fn 760 <ignite_rt::net::TaskHandles>::swap
@@ -258,7 +261,6 @@ fn 750 <alloc::vec::Vec<i64>>::split_off
 fn 750 examples.terminal.commands.respond
 fn 742 __rustc::__rust_alloc
 fn 740 <alloc::vec::Vec<u8> as alloc::vec::spec_extend::SpecExtend<&u8, core::slice::iter::Iter<u8>>>::spec_extend
-fn 740 ignite_rt::task::ignite_rt_spawn::{closure#0}
 fn 740 send
 fn 738 <alloc::collections::vec_deque::VecDeque<ignite_io::wait::Waiter> as core::ops::drop::Drop>::drop
 fn 733 std::thread::functions::park_timeout
@@ -288,6 +290,7 @@ fn 490 <corosensei::coroutine::Coroutine<(), (), ()>>::with_stack_unchecked::<<i
 fn 490 <std::net::tcp::TcpListener>::accept
 fn 481 pthread_mutex_unlock
 fn 480 <alloc::sync::Weak<dyn ignite_io::net::Buffered> as core::ops::drop::Drop>::drop
+fn 480 <ignite_rt::arena::TaskArena>::new
 fn 480 <std::thread::local::LocalKey<core::cell::RefCell<core::option::Option<ignite_rt::arena::Transfer>>>>::with::<ignite_rt::task::ignite_rt_spawn::{closure#0}::{closure#0}::{closure#0}, ()>
 fn 480 ignite_io::report::catch::<i32, ignite_rt::net::ignite_rt_tcp_close::{closure#0}>
 fn 480 ignite_io::report::catch::<i8, ignite_rt::task::ignite_rt_spawn::{closure#0}>
@@ -315,6 +318,7 @@ fn 410 <ignite_io::net::TcpStream>::wait_readable
 fn 410 ignite_io::report::catch::<(), ignite_rt::arena::task_end>
 fn 410 ignite_io::report::catch::<(), ignite_rt::arena::transfer_begin>
 fn 410 ignite_io::report::catch::<(), ignite_rt::fail::ignite_rt_guard_pop::{closure#0}>
+fn 410 ignite_rt::task::new_locals
 fn 398 pthread_create
 fn 390 stack_init_trampoline
 fn 382 realloc
@@ -323,7 +327,6 @@ fn 370 ignite_rt::arena::ignite_rt_alloc::{closure#0}
 fn 370 recv
 fn 369 core::ptr::drop_glue::<core::option::Option<ignite_rt::arena::Transfer>>
 fn 368 <ignite_rt::fail::HANDLERS::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<alloc::vec::Vec<ignite_rt::fail::Handler>>>>,)>>::call_once
-fn 368 <ignite_rt::task::READY::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<core::option::Option<ignite_rt::arena::Transfer>>>>,)>>::call_once
 fn 365 <std::thread::local::LocalKey<core::cell::RefCell<alloc::collections::vec_deque::VecDeque<ignite_io::wait::Waiter>>>>::with::<<ignite_io::sched::Worker>::start::{closure#3}, ()>
 fn 360 <alloc::vec::Vec<i64>>::push_mut
 fn 360 <ignite_io::net::TcpStream>::read_with::<ignite_rt::IgniteInput, ignite_rt::net::ignite_rt_tcp_read::{closure#0}::{closure#0}::{closure#0}>::{closure#1}
@@ -349,12 +352,12 @@ fn 316 <std::thread::local::LocalKey<core::cell::RefCell<ignite_io::sched::Timer
 fn 310 <core::net::ip_addr::Ipv4Addr as core::fmt::Display>::fmt
 fn 310 ignite_rt::arena::alloc
 fn 300 ignite_rt::fail::push::{closure#0}
+fn 291 ??? ld-linux-x86-64.so.2
 fn 290 <std::thread::local::LocalKey<core::cell::RefCell<core::option::Option<(i64, ignite_io::net::TcpStream)>>>>::try_with::<ignite_rt::net::with_stream<(), ignite_rt::net::ignite_rt_tcp_close::{closure#0}::{closure#0}>::{closure#1}, ()>
 fn 290 <std::thread::local::LocalKey<core::cell::RefCell<core::option::Option<(i64, ignite_io::net::TcpStream)>>>>::try_with::<ignite_rt::net::with_stream<(), ignite_rt::net::ignite_rt_tcp_set_idle_timeout::{closure#0}::{closure#0}>::{closure#1}, ()>
 fn 290 <std::thread::local::LocalKey<core::cell::RefCell<core::option::Option<(i64, ignite_io::net::TcpStream)>>>>::try_with::<ignite_rt::net::with_stream<bool, ignite_rt::net::ignite_rt_tcp_urgent_pending::{closure#0}::{closure#0}>::{closure#1}, ()>
 fn 290 <std::thread::local::LocalKey<core::cell::RefCell<core::option::Option<(i64, ignite_io::net::TcpStream)>>>>::try_with::<ignite_rt::net::with_stream<ignite_rt::IgniteInput, ignite_rt::net::ignite_rt_tcp_read::{closure#0}::{closure#0}>::{closure#1}, ()>
 fn 290 <std::thread::local::LocalKey<core::cell::RefCell<core::option::Option<ignite_io::wait::Waiter>>>>::with::<<ignite_io::sched::Worker>::resume::{closure#3}, ()>
-fn 290 ??? ld-linux-x86-64.so.2
 fn 280 <alloc::vec::drain::Drain<ignite_io::reactor::Event> as core::ops::drop::Drop>::drop
 fn 280 ignite_rt::net::listener
 fn 276 std::sys::thread_local::destructors::linux_like::register
@@ -373,13 +376,11 @@ fn 230 ignite_rt::net::with_stream::<(), ignite_rt::net::ignite_rt_tcp_set_idle_
 fn 230 ignite_rt::net::with_stream::<bool, ignite_rt::net::ignite_rt_tcp_urgent_pending::{closure#0}::{closure#0}>::{closure#1}
 fn 230 ignite_rt::net::with_stream::<ignite_rt::IgniteInput, ignite_rt::net::ignite_rt_tcp_read::{closure#0}::{closure#0}>::{closure#1}
 fn 230 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::net::ignite_rt_tcp_set_idle_timeout::{closure#0}>, i32>
-fn 220 core::ptr::drop_glue::<ignite_rt::arena::TaskArena>
 fn 220 ignite_rt::status::<ignite_rt::IgniteInput>
 fn 217 <alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
 fn 213 _dl_allocate_tls_init
 fn 210 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::net::ignite_rt_tcp_close::{closure#0}>, i32>
 fn 200 <alloc::raw_vec::RawVec<core::ptr::non_null::NonNull<u8>>>::grow_one
-fn 200 core::ptr::drop_glue::<ignite_rt::task::Locals>
 fn 200 ignite_rt::net::task_ended::{closure#1}
 fn 190 core::ptr::drop_glue::<ignite_rt::net::Handle>
 fn 190 ignite_rt::status::<i64>
@@ -404,7 +405,6 @@ fn 132 <std::time::Instant as core::ops::arith::Add<core::time::Duration>>::add
 fn 130 <ignite_io::net::Stream>::check_failure
 fn 130 <std::thread::local::LocalKey<core::cell::RefCell<ignite_rt::arena::Task>>>::try_with::<ignite_rt::arena::with_task<(), ignite_rt::arena::task_end::{closure#0}>::{closure#0}, ()>
 fn 130 <std::thread::local::LocalKey<core::cell::RefCell<ignite_rt::arena::Task>>>::try_with::<ignite_rt::arena::with_task<(), ignite_rt::arena::transfer_begin::{closure#0}>::{closure#0}, ()>
-fn 130 core::ptr::drop_glue::<ignite_rt::fail::TaskHandlers>
 fn 130 core::ptr::drop_glue::<std::os::fd::owned::OwnedFd>
 fn 130 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::fail::ignite_rt_guard_push::{closure#0}>, ()>
 fn 130 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::net::ignite_rt_tcp_accept::{closure#0}>, i32>
@@ -419,7 +419,6 @@ fn 100 <alloc::raw_vec::RawVec<i64>>::grow_one
 fn 100 <alloc::raw_vec::RawVec<ignite_rt::arena::Block>>::grow_one
 fn 100 <alloc::raw_vec::RawVec<ignite_rt::fail::Handler>>::grow_one
 fn 99 __rustc::__rust_realloc
-fn 98 <ignite_rt::net::READ_BUFFER::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<alloc::vec::Vec<u8>>>>,)>>::call_once
 fn 80 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::arena::ignite_rt_alloc::{closure#0}>, *mut u8>
 fn 80 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::task::ignite_rt_spawn::{closure#0}>, i8>
 fn 80 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::text::ignite_rt_text_from_bytes_lossy::{closure#0}>, ()>

@@ -33,6 +33,7 @@ against the run before on a host of the same type.
 | v0.16.0 | a45d5cd3 | 2026-11-11 | ec2:c7i.metal-24xl | 5.3 llvm 105 ms; 6.1 all/check 198 ms; 6.1 all/plan 199 ms; 6.2 llvm 933 ms; 6.2 rust 4110 ms | 5.3 llvm 106 ms→105 ms better; 6.1 all/check 207 ms→198 ms better; 6.1 all/plan 207 ms→199 ms better; 6.2 llvm 1875 ms→933 ms better; 6.2 rust 4957 ms→4110 ms better |
 | v0.16.1 | f3b1e159 | 2026-11-12 | ec2:c7i.metal-24xl | 5.3 llvm 106 ms; 6.1 all/check 198 ms; 6.1 all/plan 198 ms; 6.2 llvm 934 ms; 6.2 rust 4118 ms | 5.3 llvm 105 ms→106 ms; 6.1 all/plan 199 ms→198 ms better; 6.2 llvm 933 ms→934 ms; 6.2 rust 4110 ms→4118 ms |
 | v0.16.2 | 20cfcbe6 | 2026-11-12 | ec2:c7i.metal-24xl | 5.3 llvm 105 ms; 6.1 all/check 199 ms; 6.1 all/plan 201 ms; 6.2 llvm 933 ms; 6.2 rust 4128 ms | 5.3 llvm 106 ms→105 ms better; 6.1 all/check 198 ms→199 ms; 6.1 all/plan 198 ms→201 ms; 6.2 llvm 934 ms→933 ms better; 6.2 rust 4118 ms→4128 ms |
+| v0.16.3 | ed39b372 | 2026-11-13 | ec2:c7i.metal-24xl | 5.3 llvm 106 ms; 6.1 all/check 197 ms; 6.1 all/plan 197 ms; 6.2 llvm 927 ms; 6.2 rust 4106 ms | 5.3 llvm 105 ms→106 ms; 6.1 all/check 199 ms→197 ms better; 6.1 all/plan 201 ms→197 ms better; 6.2 llvm 933 ms→927 ms better; 6.2 rust 4128 ms→4106 ms better |
 
 ## Against plain Rust on the dedicated host
 
@@ -99,3 +100,11 @@ peak RSS or a larger stripped binary than plain Rust).
 | v0.16.2 | 20cfcbe6 | 2026-11-12 | ec2:c7i.metal-24xl | todo/get-1 | rps 1.027×, p99 0.988×, RSS 0.742× | rps 0.983×, p99 1.008×, RSS 0.769× | rps 0.740×, p99 1.562×, RSS 3.589× |
 | v0.16.2 | 20cfcbe6 | 2026-11-12 | ec2:c7i.metal-24xl | todo/get-64 | rps 1.299×, p99 0.492×, RSS 1.088× | rps 1.170×, p99 0.553×, RSS 0.774× | rps 0.675×, p99 3.672×, RSS 3.143× |
 | v0.16.2 | 20cfcbe6 | 2026-11-12 | ec2:c7i.metal-24xl | todo/patch-16 | rps 1.173×, p99 0.586×, RSS 0.815× | rps 1.189×, p99 0.778×, RSS 0.781× | rps 0.889×, p99 1.992×, RSS 3.466× |
+| v0.16.3 | ed39b372 | 2026-11-13 | ec2:c7i.metal-24xl | terminal | size 1.315× | size 1.509× | size 4.983× |
+| v0.16.3 | ed39b372 | 2026-11-13 | ec2:c7i.metal-24xl | terminal/connect-8 | rps 0.910×, p99 1.298×, RSS 0.948× | rps 0.964×, p99 1.201×, RSS 0.939× | rps 0.722×, p99 2.083×, RSS 3.789× |
+| v0.16.3 | ed39b372 | 2026-11-13 | ec2:c7i.metal-24xl | terminal/rr-1 | rps 0.982×, p99 1.008×, RSS 1.065× | rps 0.974×, p99 1.025×, RSS 1.058× | rps 0.908×, p99 1.071×, RSS 3.902× |
+| v0.16.3 | ed39b372 | 2026-11-13 | ec2:c7i.metal-24xl | terminal/rr-64 | rps 1.239×, p99 0.397×, RSS 1.178× | rps 1.234×, p99 0.400×, RSS 0.803× | rps 1.021×, p99 1.367×, RSS 2.873× |
+| v0.16.3 | ed39b372 | 2026-11-13 | ec2:c7i.metal-24xl | todo | size 0.708× | size 0.839× | size 4.837× |
+| v0.16.3 | ed39b372 | 2026-11-13 | ec2:c7i.metal-24xl | todo/get-1 | rps 1.031×, p99 0.961×, RSS 0.725× | rps 0.983×, p99 1.004×, RSS 0.750× | rps 0.738×, p99 1.535×, RSS 3.540× |
+| v0.16.3 | ed39b372 | 2026-11-13 | ec2:c7i.metal-24xl | todo/get-64 | rps 1.322×, p99 0.481×, RSS 1.086× | rps 1.178×, p99 0.541×, RSS 0.772× | rps 0.678×, p99 3.539×, RSS 3.155× |
+| v0.16.3 | ed39b372 | 2026-11-13 | ec2:c7i.metal-24xl | todo/patch-16 | rps 1.189×, p99 0.578×, RSS 0.800× | rps 1.184×, p99 0.782×, RSS 0.766× | rps 0.862×, p99 2.065×, RSS 3.441× |
