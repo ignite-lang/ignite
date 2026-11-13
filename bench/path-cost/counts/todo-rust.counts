@@ -6,47 +6,34 @@ script a963bf8d260693657584bedbd577aa633747ba799bb59244c4beaf3b71f759b8
 file 3a087990045833f926c8482f46856d0416efc8f7c7bb13e93f68557733dfaa9a todo.ignite
 file 5360068ac2768cf01929837c31548f975be297c24416b9d97d71ce4bfcc53e18 health.ignite
 op start
-instructions 404330 runs 404330 404330 404328 404330 404330
-syscalls 130 runs 130 130 130 130 129
-fn 271433 ??? ld-linux-x86-64.so.2
-fn 63308 ??? libc.so.6
+instructions 388903 runs 388903 388903 388903 388903 388903
+syscalls 104 runs 104 104 104 104 104
+fn 271723 ??? ld-linux-x86-64.so.2
+fn 62443 ??? libc.so.6
 fn 22588 __strtoul_internal
 fn 4048 _IO_sputbackc
 fn 3660 getdelim
-fn 3372 <std::path::Components as core::iter::traits::iterator::Iterator>::next
-fn 2846 <std::path::Components>::parse_next_component_back
-fn 2270 <std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<usize>>::initialize<<std::sync::once_lock::OnceLock<usize>>::get_or_init<ignite_io::sched::worker_limit::{closure#0}>::{closure#0}, !>::{closure#0}>::{closure#0}
 fn 2200 __isoc23_sscanf
-fn 1913 malloc
+fn 1761 malloc
 fn 1542 ignite_io::run::<todod::main::{closure#0}>
-fn 1527 <std::path::Path>::_starts_with
 fn 1308 pthread_getattr_np
-fn 1178 <std::path::Components as core::iter::traits::double_ended::DoubleEndedIterator>::next_back
 fn 887 _IO_setb
-fn 814 free
 fn 776 __libc_early_init
-fn 711 <std::path::Components>::as_path
+fn 715 free
 fn 621 calloc
 fn 589 __tunable_get_val
-fn 568 <std::path::Component as core::cmp::PartialEq>::eq
-fn 556 std::sys::fs::unix::try_statx
+fn 570 <std::path::Components>::parse_next_component_back
+fn 539 <std::path::Components as core::iter::traits::double_ended::DoubleEndedIterator>::next_back
 fn 480 __libc_sigaction
-fn 432 <std::path::PathBuf>::pop
 fn 429 _dl_allocate_tls_init
-fn 414 alloc::io::read::default_read_to_end::<&std::fs::File>
-fn 393 core::str::converts::from_utf8
 fn 367 __cpu_indicator_init
 fn 335 <std::sys::sync::once::futex::Once>::call
-fn 330 <std::sys::fs::unix::File>::open_c
 fn 308 _dl_catch_exception
-fn 305 open
 fn 302 pthread_create
-fn 297 alloc::io::read::default_read_to_end::small_probe_read::<&std::fs::File>
 fn 292 getauxval
-fn 288 read
 fn 258 std::sys::pal::unix::stack_overflow::thread_info::set_current_info
+fn 225 ??? ???
 fn 222 alloc::fmt::format::format_inner
-fn 221 ??? ???
 fn 220 <std::sync::once::Once>::call_once::<ignite_io::drain::install::{closure#0}>::{closure#0}
 fn 220 pthread_mutex_lock
 fn 216 __cxa_thread_atexit_impl
@@ -55,26 +42,25 @@ fn 215 _IO_file_underflow
 fn 195 realpath
 fn 190 realloc
 fn 182 core::fmt::write
-fn 177 std::sys::fs::metadata
 fn 176 getline
 fn 175 _dl_find_dso_for_object
 fn 175 main
+fn 171 <std::path::Components>::as_path
+fn 164 getenv
 fn 164 ignite_io::signal::install
+fn 157 core::str::converts::from_utf8
 fn 156 std::sys::pal::unix::stack_overflow::imp::make_handler
 fn 152 <alloc::string::String as core::fmt::Write>::write_str
-fn 150 <&std::fs::File as alloc::io::read::Read>::read_to_string
-fn 150 getenv
 fn 148 <alloc::raw_vec::RawVecInner>::finish_grow
 fn 148 <std::path::Components as core::cmp::PartialEq>::eq
-fn 148 std::fs::buffer_capacity_required
 fn 145 <core::net::parser::Parser>::read_ipv4_addr
-fn 140 close
+fn 138 <std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<usize>>::initialize<<std::sync::once_lock::OnceLock<usize>>::get_or_init<ignite_io::sched::worker_limit::{closure#0}>::{closure#0}, !>::{closure#0}>::{closure#0}
 fn 133 sigaction
 fn 131 __underflow
+fn 126 std::sys::env::unix::getenv::{closure#0}
 fn 107 _IO_file_fopen
 fn 104 <core::fmt::Formatter>::pad_integral
 fn 104 mmap
-fn 102 std::sys::env::unix::getenv::{closure#0}
 fn 96 <i64 as core::fmt::Display>::fmt
 fn 93 (below main)
 fn 89 _IO_link_in
@@ -83,7 +69,6 @@ fn 86 pthread_attr_setaffinity_np
 fn 84 <std::sys::fs::unix::DirBuilder>::mkdir
 fn 84 std::sys::thread_local::destructors::linux_like::register
 fn 82 ignite_io::net::flush
-fn 80 __rustc::__rust_dealloc
 fn 79 ignite_io::log
 fn 78 _IO_un_link
 fn 72 bcmp
@@ -100,7 +85,6 @@ fn 60 <alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::
 fn 59 <std::sys::thread::unix::Thread>::new
 fn 58 __rustc::__rust_realloc
 fn 57 <std::thread::spawnhook::ChildSpawnHooks>::inherit_and_run
-fn 55 statx
 fn 54 pthread_attr_init
 fn 54 std::thread::spawnhook::run_spawn_hooks
 fn 52 <std::sync::once::Once>::call_once::<ignite_io::report::install_hook_once::{closure#0}>::{closure#0}
@@ -109,6 +93,7 @@ fn 51 sbrk
 fn 50 _IO_file_doallocate
 fn 50 fopen
 fn 50 ignite_io::args::text
+fn 50 open
 fn 49 <std::sys::sync::once::futex::Once>::call'2
 fn 49 strdup
 fn 48 strnlen
@@ -129,26 +114,26 @@ fn 41 <std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock
 fn 41 _IO_file_open
 fn 40 <std::sys::stdio::unix::Stderr as core::io::write::Write>::write_all
 fn 40 getcwd
+fn 38 pthread_attr_destroy
 syscall 16 mmap
-syscall 13 read
-syscall 10 openat
-syscall 8 close
 syscall 8 rt_sigaction
 syscall 7 mprotect
-syscall 6 lseek
+syscall 5 openat
+syscall 5 read
 syscall 5 rt_sigprocmask
-syscall 5 statx
+syscall 4 close
 syscall 4 fstat
+syscall 4 prlimit64
 syscall 4 sigaltstack
 syscall 3 brk
 syscall 3 newfstatat
-syscall 3 prlimit64
-syscall 3 sched_getaffinity
 syscall 3 setsockopt
 syscall 2 getrandom
 syscall 2 gettid
+syscall 2 lseek
 syscall 2 munmap
 syscall 2 rseq
+syscall 2 sched_getaffinity
 syscall 2 set_robust_list
 syscall 1 accept4
 syscall 1 access
@@ -531,9 +516,9 @@ syscall 20 unlinkat
 syscall 20 write
 op connection
 times 20
-instructions 225731 runs 225733 225731 225731 225731 225731
+instructions 225727 runs 225729 225727 225727 225727 225727
 syscalls 227 runs 227 227 227 227 227
-fn 65425 ??? libc.so.6
+fn 65421 ??? libc.so.6
 fn 13127 ignite_io::sched::work
 fn 9283 malloc
 fn 8320 <core::fmt::Formatter>::pad_integral

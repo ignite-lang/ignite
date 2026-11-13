@@ -7,62 +7,50 @@ file 633057460dd46491e354fcd49de5c92e22a849641373bb5acdd15b52eeae5d3c terminal.i
 file 5f111eb1cf4e35d034dad2a3976a2292658fcb1b309d3b2719fc955d374fb862 commands.ignite
 file 43c2f9b1eac5848791a75884f8bbd7304c7ddd8bc028d8b4758743785ff802c0 command_schema.ignite
 op start
-instructions 320238 runs 320238 320238 320238 320238 320238
-syscalls 102 runs 102 102 102 102 102
-fn 274009 ??? ld-linux-x86-64.so.2
-fn 7417 ??? libc.so.6
-fn 5463 ??? terminald
-fn 3280 <std::path::Components as core::iter::traits::iterator::Iterator>::next
+instructions 304816 runs 304816 304816 304816 304816 304816
+syscalls 76 runs 76 75 76 76 76
+fn 274299 ??? ld-linux-x86-64.so.2
+fn 6416 ??? libc.so.6
 fn 2325 <core::ops::range::Range<usize> as core::iter::traits::iterator::Iterator>::fold::<(), core::iter::adapters::map::map_fold<usize, ignite_rt::net::Slot, (), ignite_rt::net::slot_at::{closure#0}, core::iter::traits::iterator::Iterator::for_each::call<ignite_rt::net::Slot, <alloc::vec::Vec<ignite_rt::net::Slot>>::extend_trusted<core::iter::adapters::map::Map<core::ops::range::Range<usize>, ignite_rt::net::slot_at::{closure#0}>>::{closure#0}>::{closure#0}>::{closure#0}>
-fn 1966 std::thread::functions::available_parallelism
-fn 1527 <std::path::Path>::_starts_with
-fn 1409 malloc
+fn 1228 malloc
+fn 1183 ??? terminald
 fn 776 __libc_early_init
-fn 747 <ignite_io::census::Counting as core::alloc::global::GlobalAlloc>::alloc
-fn 745 <core::ffi::c_str::CStr>::from_bytes_with_nul
 fn 720 <alloc::raw_vec::RawVecInner>::try_allocate_in
-fn 648 <std::path::Components as core::iter::traits::double_ended::DoubleEndedIterator>::next_back
+fn 654 <ignite_io::census::Counting as core::alloc::global::GlobalAlloc>::alloc
 fn 592 calloc
 fn 589 __tunable_get_val
-fn 550 free
-fn 540 <std::path::Components>::as_path
-fn 468 <std::path::PathBuf>::pop
+fn 451 free
 fn 448 <ignite_rt::net::Entry as core::default::Default>::default
 fn 429 _dl_allocate_tls_init
 fn 367 __cpu_indicator_init
-fn 355 <ignite_io::census::Counting as core::alloc::global::GlobalAlloc>::dealloc
 fn 352 _dl_catch_exception
 fn 351 __libc_sigaction
 fn 335 <std::sys::sync::once::futex::Once>::call
-fn 326 core::str::converts::from_utf8
 fn 307 <core::str::lossy::Utf8Chunks as core::iter::traits::iterator::Iterator>::next
 fn 302 pthread_create
-fn 288 read
+fn 289 <ignite_io::census::Counting as core::alloc::global::GlobalAlloc>::dealloc
 fn 285 ignite_rt::text::ignite_rt_text_concat::{closure#0}
 fn 270 __cxa_thread_atexit_impl
 fn 259 <alloc::vec::Vec<u8> as alloc::vec::spec_extend::SpecExtend<&u8, core::slice::iter::Iter<u8>>>::spec_extend
 fn 256 pthread_mutex_lock
-fn 255 open
 fn 253 pthread_mutex_unlock
+fn 242 <core::ffi::c_str::CStr>::from_bytes_with_nul
+fn 240 <alloc::raw_vec::RawVecInner>::deallocate
 fn 234 <[&[u8]] as alloc::slice::Concat<u8>>::concat
-fn 221 <alloc::raw_vec::RawVecInner>::deallocate
 fn 210 _dl_find_dso_for_object
 fn 199 main
 fn 192 <std::ffi::os_str::OsString as <[_]>::to_vec_in::ConvertVec>::to_vec::<alloc::alloc::Global>
 fn 186 <std::sync::once::Once>::call_once::<ignite_io::signal::install>::{closure#0}
 fn 186 ignite_rt::arena::with_state::<core::option::Option<*mut u8>, ignite_rt::arena::alloc::{closure#0}>
 fn 176 <ignite_io::net::TcpListener>::bind_with
-fn 168 __rustc::__rust_alloc
+fn 164 getenv
 fn 157 std::thread::lifecycle::spawn_unchecked::<ignite_io::drain::install::{closure#0}::{closure#0}, ()>
 fn 156 ignite_rt::process::decode_args::{closure#0}::{closure#0}
-fn 150 <&std::fs::File as alloc::io::read::Read>::read_to_string
-fn 150 getenv
+fn 147 __rustc::__rust_alloc
 fn 143 <std::sys::sync::once::futex::Once>::call'2
-fn 140 close
 fn 138 ignite_io::report::catch::<(), ignite_rt::text::ignite_rt_text_concat::{closure#0}>
 fn 136 <alloc::vec::Vec<std::ffi::os_str::OsString> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<std::ffi::os_str::OsString, core::iter::adapters::filter_map::FilterMap<core::ops::range::Range<usize>, ignite_rt::process::decode_args::{closure#0}>>>::from_iter
 fn 136 ignite_io::args::port_from_os_args::<alloc::vec::into_iter::IntoIter<std::ffi::os_str::OsString>>
-fn 128 __rustc::__rust_dealloc
 fn 124 alloc::fmt::format::format_inner
 fn 122 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::text::ignite_rt_int_to_text::{closure#0}>, ()>
 fn 115 std::sys::thread_local::destructors::linux_like::register
@@ -71,14 +59,17 @@ fn 113 <std::sync::once::Once>::call_once::<ignite_io::drain::install::{closure#
 fn 111 ignite_rt::net::register
 fn 105 core::fmt::write
 fn 104 <alloc::raw_vec::RawVecInner>::finish_grow
+fn 104 __rustc::__rust_dealloc
 fn 100 realloc
 fn 96 ignite_io::net::flush
 fn 95 <ignite_io::report::CATCHING::{K#0}::{closure#1} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::Cell<usize>>>,)>>::call_once
 fn 93 (below main)
 fn 90 ignite_rt_init
+fn 88 core::str::converts::from_utf8
 fn 88 core::sync::atomic::atomic_compare_exchange::<u32>
 fn 88 ignite_rt::arena::with_task::<core::result::Result<*mut u8, alloc::string::String>, ignite_rt::arena::alloc_slow::{closure#0}>::{closure#0}
 fn 86 __cxa_atexit
+fn 84 <std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<usize>>::initialize<<std::sync::once_lock::OnceLock<usize>>::get_or_init<ignite_io::sched::worker_limit::{closure#0}>::{closure#0}, !>::{closure#0}>::{closure#0}
 fn 84 std.protocol.telnet.TelnetServer.protocol
 fn 82 <alloc::raw_vec::RawVecInner>::grow_amortized
 fn 81 <&mut ignite_rt::process::decode_args::{closure#0} as core::ops::function::FnMut<(usize,)>>::call_mut
@@ -99,19 +90,20 @@ fn 66 memmove
 fn 64 <core::net::socket_addr::SocketAddr>::parse_ascii
 fn 63 std::sys::net::connection::each_addr::<&alloc::string::String, <std::sys::net::connection::socket::TcpListener>::bind::inner, std::sys::net::connection::socket::TcpListener>
 fn 62 __sigsetjmp
+fn 61 <core::str::pattern::MultiCharEqSearcher<<char>::is_whitespace> as core::str::pattern::Searcher>::next
 fn 61 ignite_io::drain::register
 fn 61 ignite_io::log
 fn 60 <std::thread::spawnhook::ChildSpawnHooks>::inherit_and_run
+fn 60 std::env::var::inner
 fn 59 <std::sys::net::connection::socket::TcpListener>::bind::inner
 fn 59 <std::sys::thread::unix::Thread>::new
+fn 59 <str>::trim_matches::<<char>::is_whitespace>
 fn 58 ignite_rt::net::slot_at
 fn 58 std::thread::spawnhook::run_spawn_hooks
 fn 56 <core::fmt::Formatter>::pad
 fn 56 <ignite_rt::arena::Arena>::alloc
 fn 56 ignite_rt::net::listener
-fn 55 statx
 fn 52 <std::thread::thread::thread_name_string::ThreadNameString as core::convert::From<alloc::string::String>>::from
-fn 52 std::env::var::inner
 fn 51 sbrk
 fn 50 <ignite_rt::arena::STATE::{K#0}::{closure#1} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::UnsafeCell<ignite_rt::arena::State>>>,)>>::call_once
 fn 50 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::process::ignite_rt_args_port::{closure#0}>, i32>
@@ -135,9 +127,9 @@ fn 44 wmemchr
 fn 43 ignite_io::report::catch::<(), ignite_rt::process::ignite_rt_log::{closure#0}>
 fn 42 _IO_enable_locks
 fn 41 <str as std::net::socket_addr::ToSocketAddrs>::to_socket_addrs
-fn 41 std::sys::fs::metadata
 fn 40 <std::thread::local::LocalKey<core::cell::UnsafeCell<ignite_rt::arena::State>>>::try_with::<<core::cell::UnsafeCell<ignite_rt::arena::State>>::get, *mut ignite_rt::arena::State>
 fn 40 ignite_rt::process::os_args
+fn 39 ??? ???
 fn 38 <std::thread::spawnhook::SpawnHooks as core::ops::drop::Drop>::drop
 fn 38 ignite_rt::status::<i64>
 fn 37 <alloc::ffi::c_str::CString>::_from_vec_unchecked
@@ -146,7 +138,6 @@ fn 37 ignite_rt::arena::ignite_rt_alloc::{closure#0}
 fn 36 wmemset
 fn 36 write
 fn 35 <str>::parse::<i64>
-fn 35 ??? ???
 fn 35 dlsym
 fn 34 <ignite_io::wait::Waiter>::for_descriptor
 fn 34 __ctype_init
@@ -154,22 +145,26 @@ fn 34 ignite_io::sched::prepare
 fn 34 pthread_setname_np
 fn 33 <std::io::stdio::Stdout>::lock
 fn 33 core::ptr::copy_nonoverlapping::precondition_check
+fn 31 <alloc::vec::into_iter::IntoIter<std::ffi::os_str::OsString> as core::ops::drop::Drop>::drop
+fn 31 ignite_rt::arena::alloc
+fn 31 std::panicking::take_hook
+fn 30 <alloc::raw_vec::RawVec<u8> as core::ops::drop::Drop>::drop
+fn 30 <std::thread::builder::Builder>::name
+fn 30 sigemptyset
 syscall 15 mmap
-syscall 10 read
-syscall 8 openat
-syscall 7 close
 syscall 5 mprotect
 syscall 5 rt_sigaction
 syscall 5 rt_sigprocmask
-syscall 5 statx
-syscall 4 lseek
 syscall 3 brk
+syscall 3 close
 syscall 3 fstat
 syscall 3 newfstatat
+syscall 3 openat
+syscall 3 prlimit64
 syscall 3 setsockopt
 syscall 2 getrandom
 syscall 2 munmap
-syscall 2 prlimit64
+syscall 2 read
 syscall 2 rseq
 syscall 2 set_robust_list
 syscall 1 accept4
@@ -184,17 +179,16 @@ syscall 1 listen
 syscall 1 madvise
 syscall 1 prctl
 syscall 1 rt_sigtimedwait
-syscall 1 sched_getaffinity
 syscall 1 set_tid_address
 syscall 1 socket
 syscall 1 write
 op session
 times 10
-instructions 245441 runs 245441 245441 245441 245441 245441
+instructions 244745 runs 244745 244745 244745 244745 244745
 syscalls 126 runs 126 126 126 126 126
-fn 40414 ??? libc.so.6
+fn 39751 ??? libc.so.6
 fn 22591 ??? terminald
-fn 7226 malloc
+fn 7193 malloc
 fn 6148 free
 fn 5510 <alloc::raw_vec::RawVecInner>::finish_grow
 fn 5434 ignite_io::sched::work
