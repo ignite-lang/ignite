@@ -801,8 +801,8 @@ is a `&String` or `&Vec<u8>`, so such a constant would need a second calling con
 copy at each use that passes it on. `CODEGEN_REVISION` is `ignite-codegen/0.1.0-54` since this unit.
 
 **Text and bytes read in place.** Story `rust-target-text-reads-borrow` (section 44 for its
-counts; `CODEGEN_REVISION` is `ignite-codegen/0.1.0-55` since this unit). Three forms that copied a `Text` or `Bytes` only to read it, or to turn it into the
-other, read it where it is:
+counts; `CODEGEN_REVISION` is `ignite-codegen/0.1.0-55` since this unit). Three forms that
+copied a `Text` or `Bytes` only to read it, or to turn it into the other, read it where it is:
 
 - *The bytes of a text, only read.* `let b = t.to_bytes()` is `let b: &[u8] = t.as_bytes();`
   under the conditions of 20.3.7, and a read as a slice now includes the list of a `for`
@@ -12176,7 +12176,8 @@ evaluator's.
 `examples/` on the Rust target, release, the compiler and std of v0.16.3 against this change:
 `todod` stripped 878,752 to 878,832 bytes, `terminald` 600,176 both; a `GET /todos/1` of
 `todod` 19,173 to 19,195 instructions (callgrind, 200 replies after 50 on one connection,
-counters zeroed between), inside row 3.10's band of 1 %. Two golden lines changed: a reply
+counters zeroed between), 0.12 % more; row 3.10 judges the frozen scenario of that path, with
+a band of a thousandth at least (`docs/quality.md`). Two golden lines changed: a reply
 handed to `write_all` without a copy (`modules.std.rs`) and a `Bytes` parameter a loop reads
 lent as `&[u8]` (`syntax.rs`); row 3.1 `rust` 156 to 155.
 
