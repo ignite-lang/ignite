@@ -157,3 +157,153 @@ fn a_buffer_read_for_the_last_time_is_taken() {
         "{text}"
     );
 }
+
+/// Forms 3, 4 and 5 of the story, the reduced program's row: the fns of
+/// the program's own module whose every caller gives the argument up
+/// (`docs/slice.md` section 6, "By-value parameters given by every
+/// caller"), and two kept lent by their callers.
+const GIVEN: &str = "enum Val {
+  Nil
+  Txt(Text)
+}
+
+enum Wire {
+  WNil
+  WTxt(Text)
+  WRaw(Bytes)
+}
+
+type Cell {
+  name: Text
+  raw: Option<Bytes>
+  kind: Int
+}
+
+fn decode_cell(raw: Option<Bytes>, kind: Int) -> Val {
+  let b = match raw {
+    Some(x) => x
+    None => return Nil
+  }
+  if kind == 1 {
+    return Nil
+  }
+  Txt(b.to_text())
+}
+
+fn dedupe(cols: List<(Text, Val)>) -> List<(Text, Val)> {
+  var out: List<(Text, Val)> = []
+  for c in cols {
+    if out.is_empty() || out[out.len() - 1].0 != c.0 {
+      out.push(c)
+    }
+  }
+  out
+}
+
+fn cells_to_row(cells: List<Cell>) -> List<(Text, Val)> {
+  var columns: List<(Text, Val)> = []
+  for c in cells {
+    columns.push((c.name, decode_cell(c.raw, c.kind)))
+  }
+  dedupe(columns)
+}
+
+fn bytes_of(w: Wire) -> Bytes = match w {
+  WNil => Bytes.empty()
+  WTxt(t) => t.to_bytes()
+  WRaw(b) => b
+}
+
+fn wire_bytes(w: Wire) -> Bytes = match w {
+  WNil => Bytes.empty()
+  WTxt(t) => t.to_bytes()
+  WRaw(b) => b
+}
+
+fn slots_of(wires: List<Wire>, names: List<Text>) -> List<Cell> {
+  var cells: List<Cell> = []
+  var i = 0
+  while i < wires.len() {
+    let raw = match wires[i] {
+      WNil => None
+      _ => Some(bytes_of(wires[i]))
+    }
+    cells.push(Cell { name = names[i], raw = raw, kind = 0 })
+    i = i + 1
+  }
+  cells
+}
+
+fn kept(l: List<Text>) -> List<Text> {
+  var out: List<Text> = []
+  for x in l {
+    out.push(x)
+  }
+  out
+}
+
+fn row(wires: List<Wire>, names: List<Text>) -> Int {
+  let cells = slots_of(wires, names)
+  var l = [\"a\"]
+  let k = kept(l)
+  l.push(\"b\")
+  cells_to_row(cells).len() + bytes_of(WNil).len() + wire_bytes(WTxt(\"w\")).len() + k.len() + l.len()
+}
+";
+
+fn given_lib() -> String {
+    common::generate_source(GIVEN, &common::repository_std())
+        .unwrap_or_else(|d| panic!("{d:?}"))
+        .lib_rs
+}
+
+/// Forms 3 and 4: `dedupe` and `cells_to_row` take the lists their only
+/// callers give up, iterate them by value and keep the elements and the
+/// fields of the cells without a copy; `decode_cell` takes the payload of
+/// the cell `cells_to_row` owns, matches it by value and turns its buffer
+/// into the text.
+#[test]
+fn a_list_every_caller_gives_up_is_moved_into() {
+    let lib = given_lib();
+    let text = section(&lib, "pub fn dedupe(");
+    assert!(text.contains("pub fn dedupe(cols: Vec<(String, Val)>)"), "{text}");
+    assert!(text.contains("for c in (cols) {"), "{text}");
+    assert!(text.contains("out.push(c);"), "{text}");
+    assert!(!text.contains("clone()"), "{text}");
+    let text = section(&lib, "pub fn cells_to_row(");
+    assert!(text.contains("pub fn cells_to_row(cells: Vec<Cell>)"), "{text}");
+    assert!(text.contains("for c in (cells) {"), "{text}");
+    assert!(
+        text.contains("columns.push((c.name, decode_cell(c.raw, &c.kind)));"),
+        "{text}"
+    );
+    assert!(text.contains("dedupe(columns)"), "{text}");
+    let text = section(&lib, "pub fn decode_cell(");
+    assert!(
+        text.contains("pub fn decode_cell(raw: ::std::option::Option<Vec<u8>>, kind: &i64)"),
+        "{text}"
+    );
+    assert!(text.contains("match raw {"), "{text}");
+    assert!(text.contains("String::from_utf8(b)"), "{text}");
+}
+
+/// Form 5: `wire_bytes`, whose callers give the value up, matches it by
+/// value and hands the text's buffer to the bytes; `bytes_of`, whose
+/// caller passes an element of a list it keeps, and `kept`, whose caller
+/// reads the list after the call, stay lent and copy what they keep.
+#[test]
+fn a_value_a_caller_keeps_stays_lent() {
+    let lib = given_lib();
+    let text = section(&lib, "pub fn wire_bytes(");
+    assert!(text.contains("pub fn wire_bytes(w: Wire)"), "{text}");
+    assert!(text.contains("match w {"), "{text}");
+    assert!(text.contains("t.into_bytes()"), "{text}");
+    let text = section(&lib, "pub fn bytes_of(");
+    assert!(text.contains("pub fn bytes_of(w: &Wire)"), "{text}");
+    assert!(text.contains("t.clone().into_bytes()"), "{text}");
+    let text = section(&lib, "pub fn kept(");
+    assert!(text.contains("pub fn kept(l: &Vec<String>)"), "{text}");
+    assert!(text.contains("out.push(x.clone());"), "{text}");
+    let text = section(&lib, "pub fn slots_of(");
+    assert!(text.contains("pub fn slots_of(wires: &Vec<Wire>, names: &Vec<String>)"), "{text}");
+}

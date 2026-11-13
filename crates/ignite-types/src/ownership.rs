@@ -338,7 +338,7 @@ pub fn changed_in<'a>(e: &'a Expr, types: Option<&TypedProgram>) -> BTreeSet<&'a
 /// The [`place_root`] of every place that moves in `e`
 /// ([`TypedProgram::moves`]), closure bodies included, by name.
 pub fn moved_in<'a>(e: &'a Expr, types: &TypedProgram) -> BTreeSet<&'a str> {
-    moved(vec![Node::Expr(e)], types)
+    moved(vec![Node::Expr(e)], types, false)
 }
 
 /// The names a run of statements moves, as [`moved_in`].
@@ -348,7 +348,24 @@ pub fn moved_in_stmts<'a>(
 ) -> BTreeSet<&'a str> {
     let mut stack = Vec::new();
     stmts_children(stmts, &mut stack);
-    moved(stack, types)
+    moved(stack, types, false)
+}
+
+/// The names `e` moves on the Rust target: [`moved_in`], and the places
+/// of [`TypedProgram::moves_owned`] and [`TypedProgram::takes_whole`].
+pub fn moved_on_rust_in<'a>(e: &'a Expr, types: &TypedProgram) -> BTreeSet<&'a str> {
+    moved(vec![Node::Expr(e)], types, true)
+}
+
+/// The names a run of statements moves on the Rust target, as
+/// [`moved_on_rust_in`].
+pub fn moved_on_rust_in_stmts<'a>(
+    stmts: &'a [ignite_syntax::ast::Stmt],
+    types: &TypedProgram,
+) -> BTreeSet<&'a str> {
+    let mut stack = Vec::new();
+    stmts_children(stmts, &mut stack);
+    moved(stack, types, true)
 }
 
 /// The names whose buffer a `to_text` or `to_bytes` in `e` takes
@@ -382,11 +399,11 @@ fn taken<'a>(mut stack: Vec<Node<'a>>, types: &TypedProgram) -> BTreeSet<&'a str
     names
 }
 
-fn moved<'a>(mut stack: Vec<Node<'a>>, types: &TypedProgram) -> BTreeSet<&'a str> {
+fn moved<'a>(mut stack: Vec<Node<'a>>, types: &TypedProgram, rust: bool) -> BTreeSet<&'a str> {
     let mut names = BTreeSet::new();
     while let Some(node) = stack.pop() {
         if let Node::Expr(e) = node {
-            if types.moves(e) {
+            if types.moves(e) || (rust && (types.moves_owned(e) || types.takes_whole(e))) {
                 names.extend(place_root(e));
             }
             expr_children(e, &mut stack);

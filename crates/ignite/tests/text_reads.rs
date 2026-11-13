@@ -215,6 +215,14 @@ fn size(v: Val) -> Int = match v {
   Txt(t) => t.len()
 }
 
+// Form 5 where the caller gives the value up: the body of `bytes_of`,
+// whose callers keep theirs.
+fn wire_bytes(w: Wire) -> Bytes = match w {
+  WNil => Bytes.empty()
+  WTxt(t) => t.to_bytes()
+  WRaw(b) => b
+}
+
 fn measure(form: Text, m: Int, n: Int) -> Int {
   let s = repeated(m, "a")
   let d = repeated(m, "7")
@@ -247,12 +255,17 @@ fn measure(form: Text, m: Int, n: Int) -> Int {
     }
   } else if form == "decode" {
     while i < n {
-      total = total + size(decode_cell(raw, 0))
+      total = total + size(decode_cell(raw.copy(), 0))
       i = i + 1
     }
   } else if form == "bytes" {
     while i < n {
       total = total + bytes_of(w).len()
+      i = i + 1
+    }
+  } else if form == "wire" {
+    while i < n {
+      total = total + wire_bytes(w.copy()).len()
       i = i + 1
     }
   } else if form == "row" {
@@ -347,20 +360,33 @@ fn per_call(binary: &Path, form: &str, m: u64) -> (f64, String) {
 ///
 /// - `escape`, `digits`: form 1, the bytes of a text only read: 0 (1 and
 ///   2 before: the copy of the text and, in `all_digits`, of the constant).
-/// - `decode`: form 2, a payload of a lent option read and turned into
-///   text: 1, the text (2 before: the payload copied first).
+/// - `decode`: form 2, a payload of an option turned into text, the
+///   option a copy the caller gives (`raw.copy()`): 1, the copy, whose
+///   buffer becomes the text (2 before the second unit: the copy, and the
+///   text copied out of the lent payload; with the option lent, as the
+///   first unit counted it, 1 and 2 before the story).
 /// - `bytes`: form 5, a text payload of a lent enum returned as bytes: 1,
-///   the copy the caller's value needs (as before).
-/// - `row`: forms 1, 2 and 5 along `slots_of` and `cells_to_row`, per
-///   element: the name copied by `slots_of`, by `cells_to_row` and by
-///   `dedupe`, the value by `bytes_of`, as a text by `decode_cell` and
-///   by `dedupe`: 6 (7 before: the payload copied in `decode_cell`).
-const FORMS: [(&str, f64, f64); 5] = [
+///   the copy the caller's value needs (as before): both callers of
+///   `bytes_of` keep the value, `slots_of` an element of a list it keeps,
+///   the loop the same value every round, so it stays lent.
+/// - `wire`: form 5 where the caller gives the value up (`w.copy()` to
+///   `wire_bytes`, the body of `bytes_of`): 1, the copy, whose text
+///   becomes the bytes (2 before: the copy and the text copied).
+/// - `row`: forms 3 and 4 along `slots_of` and `cells_to_row`, per
+///   element: the name copied once by `slots_of` out of the names the
+///   loop keeps, the value once by `bytes_of` out of the wires it keeps;
+///   `cells_to_row` and `dedupe` take the lists their callers give up,
+///   and `decode_cell` the payload of the cell, whose buffer the text
+///   takes: 2, so an element is copied at most once (6 before the second
+///   unit: the name also by `cells_to_row` and `dedupe`, the value also
+///   by `decode_cell` and `dedupe`; 7 before the story).
+const FORMS: [(&str, f64, f64); 6] = [
     ("escape", 0.0, 1.0),
     ("digits", 0.0, 2.0),
     ("decode", 1.0, 2.0),
     ("bytes", 1.0, 1.0),
-    ("row", 6.0, 7.0),
+    ("wire", 1.0, 2.0),
+    ("row", 2.0, 6.0),
 ];
 
 /// Acceptance bullet 1: the allocations per call of the reduced
@@ -398,7 +424,7 @@ fn a_text_or_bytes_only_read_is_not_copied_on_the_rust_target() {
         if held[0] > most + 0.2 {
             failures.push(format!(
                 "{form}: {small:.3} allocations per call at M = 10, {large:.3} at M = 200, \
-                 at most {most} expected ({before} before the story)"
+                 at most {most} expected ({before} before)"
             ));
         }
         for (llvm_line, line) in [(llvm_small_line, small_line), (llvm_large_line, large_line)] {
@@ -710,4 +736,265 @@ test "bytes given to text at their last use in a loop" {
 #[test]
 fn a_text_or_payload_read_in_place_keeps_the_evaluator_value_on_both_targets() {
     agree("text_read_guards", GUARDS, 9);
+}
+
+/// The second unit's guards (`docs/slice.md` section 6, "By-value
+/// parameters given by every caller"): each fn uses its list or value
+/// parameter as an owner (it keeps the elements, a payload or the
+/// parameter), and its callers give it up or keep it in every way the
+/// rule names. The evaluator is the reference; both targets must compile
+/// the program and give its values. A parameter wrongly taken by value on
+/// the Rust target is a use after a move rustc refuses, or a value a later
+/// read sees changed.
+pub(crate) const GIVEN: &str = r#"package given_params
+
+type Shelf {
+  items: List<Text>
+  tag: Text
+}
+
+enum Wire {
+  WNil
+  WTxt(Text)
+  WRaw(Bytes)
+}
+
+const NAMES: List<Text> = ["k1", "k2"]
+
+fn kept(l: List<Text>) -> List<Text> {
+  var out: List<Text> = []
+  for x in l {
+    out.push(x)
+  }
+  out
+}
+
+fn read_after(l: List<Text>) -> List<Text> {
+  var out: List<Text> = []
+  for x in l {
+    out.push(x)
+  }
+  out
+}
+
+fn as_value(l: List<Text>) -> List<Text> {
+  var out: List<Text> = []
+  for x in l {
+    out.push(x)
+  }
+  out
+}
+
+fn apply(f: fn(List<Text>) -> List<Text>, l: List<Text>) -> Int = f(l).len()
+
+fn in_closure(l: List<Text>) -> List<Text> {
+  var out: List<Text> = []
+  for x in l {
+    out.push(x)
+  }
+  out
+}
+
+fn sent(l: List<Text>, done: Sender<Int>) -> Result<Unit, IoError> {
+  var out: List<Text> = []
+  for x in l {
+    out.push(x)
+  }
+  done.send(out.len())
+  Ok(())
+}
+
+fn looped(l: List<Text>) -> List<Text> {
+  var out: List<Text> = []
+  for x in l {
+    out.push(x)
+  }
+  out
+}
+
+fn recursive(l: List<Text>, n: Int) -> List<Text> {
+  if n == 0 {
+    var out: List<Text> = []
+    for x in l {
+      out.push(x)
+    }
+    return out
+  }
+  recursive(l, n - 1)
+}
+
+fn reassigned(l: List<Text>) -> List<Text> {
+  var out: List<Text> = []
+  for x in l {
+    out.push(x)
+  }
+  let l = ["z"]
+  out.push(l[0])
+  out
+}
+
+fn returned(l: List<Text>, keep: Bool) -> List<Text> {
+  if keep {
+    return l
+  }
+  []
+}
+
+fn both(a: List<Text>, b: List<Text>) -> List<Text> {
+  var out: List<Text> = []
+  for x in a {
+    out.push(x)
+  }
+  for y in b {
+    out.push(y)
+  }
+  out
+}
+
+fn fielded(l: List<Text>) -> List<Text> {
+  var out: List<Text> = []
+  for x in l {
+    out.push(x)
+  }
+  out
+}
+
+fn element(l: List<Text>) -> List<Text> {
+  var out: List<Text> = []
+  for x in l {
+    out.push(x)
+  }
+  out
+}
+
+fn constant(l: List<Text>) -> List<Text> {
+  var out: List<Text> = []
+  for x in l {
+    out.push(x)
+  }
+  out
+}
+
+fn joined(l: List<Text>, sep: Text) -> List<Text> {
+  var out: List<Text> = []
+  for x in l {
+    out.push(x)
+  }
+  out.push(sep)
+  out
+}
+
+fn wire_bytes(w: Wire) -> Bytes = match w {
+  WNil => Bytes.empty()
+  WTxt(t) => t.to_bytes()
+  WRaw(b) => b
+}
+
+fn wire_kept(w: Wire) -> Bytes = match w {
+  WNil => Bytes.empty()
+  WTxt(t) => t.to_bytes()
+  WRaw(b) => b
+}
+
+fn first_caller() -> Int {
+  let l = ["a", "b"]
+  read_after(l).len()
+}
+
+test "a list given by every caller" {
+  let l = ["a", "b"]
+  let r = kept(l)
+  assert r == ["a", "b"]
+  assert kept(["c"]) == ["c"]
+}
+
+test "one of two callers reads its argument after the call" {
+  var l = ["x"]
+  let r = read_after(l)
+  l.push("y")
+  assert r == ["x"]
+  assert l == ["x", "y"]
+  assert first_caller() == 2
+}
+
+test "a fn passed as a value and called with a lent argument" {
+  let l = ["a"]
+  assert apply(as_value, l) == 1
+  assert l.len() == 1
+  assert as_value(["p", "q"]).len() == 2
+}
+
+test "a fn called from a closure, from spawn and in a loop" {
+  let l = ["a", "b", "c"]
+  let f = |n: Int| in_closure(l).len() + n
+  assert f(1) == 4
+  assert in_closure(["d"]) == ["d"]
+  let (done, results) = Channel.bounded(1)
+  let m = ["e", "f"]
+  spawn sent(m, done)
+  assert results.receive() == Some(2)
+  assert m.len() == 2
+  var total = 0
+  var i = 0
+  while i < 3 {
+    total = total + looped(l).len()
+    i = i + 1
+  }
+  assert total == 9
+  assert looped(["g"]) == ["g"]
+  assert l.len() == 3
+}
+
+test "a recursive fn, a parameter reassigned and one returned" {
+  assert recursive(["a", "b"], 3) == ["a", "b"]
+  let l = ["r"]
+  assert reassigned(l) == ["r", "z"]
+  assert l == ["r"]
+  let m = ["s"]
+  assert returned(m, true) == ["s"]
+  assert m == ["s"]
+  assert returned(["t"], false).len() == 0
+}
+
+test "two parameters of which one is a last use" {
+  let a = ["a"]
+  let b = ["b"]
+  let r = both(a, b)
+  assert r == ["a", "b"]
+  assert b == ["b"]
+}
+
+test "a field, an element and a constant the caller keeps" {
+  let s = Shelf { items = ["i", "j"], tag = "t" }
+  assert fielded(s.items) == ["i", "j"]
+  assert s.items.len() == 2
+  let ls = [["e"], ["f", "g"]]
+  assert element(ls[1]) == ["f", "g"]
+  assert ls[1].len() == 2
+  assert constant(NAMES) == ["k1", "k2"]
+  assert NAMES.len() == 2
+}
+
+test "a method called through UFCS and with named arguments" {
+  let l = ["a"]
+  assert l.joined("-") == ["a", "-"]
+  let m = ["b"]
+  let sep = "+"
+  assert joined(sep = sep, l = m) == ["b", "+"]
+}
+
+test "a wire value given and one kept" {
+  assert wire_bytes(WTxt("ab")) == b"ab"
+  let w = WRaw(b"c")
+  assert wire_bytes(w) == b"c"
+  assert wire_bytes(WNil).is_empty()
+  let k = WTxt("kk")
+  assert wire_kept(k) == b"kk"
+  assert wire_kept(k).len() == 2
+}
+"#;
+
+#[test]
+fn a_parameter_every_caller_gives_up_keeps_the_evaluator_value_on_both_targets() {
+    agree("given_params", GIVEN, 9);
 }

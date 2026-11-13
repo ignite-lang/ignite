@@ -1272,7 +1272,7 @@ pub(crate) fn type_parsed_with(
     let (siblings, modules, typed) = check_siblings(siblings, library, std_types)?;
     let symbols =
         ignite_check::check_module(&program, &modules).map_err(|d| diagnostics(&source, d))?;
-    let types = ignite_types::type_module(&program, &symbols, &typed)
+    let types = ignite_types::type_program(&program, &symbols, &typed)
         .map_err(|d| diagnostics(&source, d))?;
     Ok(TypedFile {
         source,

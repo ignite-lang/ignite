@@ -834,21 +834,69 @@ text changed, moved into a callee that changes it, given to `spawn`, captured by
 outlives a change, or changed by a loop while its bytes are read; an option replaced while its
 payload is read; bytes turned into text and changed after, and bytes that are not UTF-8.
 
-Not read in place, and what decides it (forms 3, 4 and 5 of the story, a unit of their own): a
-by-value parameter is lent (`&T`) unless its fn consumes it (20.3.3), whatever its callers
-pass. So `dedupe(cols: List<(Text, Val)>)` copies each element it keeps although its only
-caller builds the list for the call and never reads it again, `cells_to_row` copies the name
-of each lent `Cell` it keeps and passes its payload lent to `decode_cell`, and
-`bytes_of(w: Wire)` copies the text of `WTxt(t) => t.to_bytes()`. Taking such a parameter by
-value needs what every caller passes, and the analysis decides each fn from its body alone. A
-fn of the program's own module has every caller in that module (no module can import the
-program's module, E031 of 4.1, and the module is typed in one pass), so a rule over callers
-can decide it there; that rule is not written yet. A fn of `std` or of a sibling module of the
-package (4.1 exports every declaration) is called from modules compiled later, and a rule over
-the callers of its own module would leave those to copy where they do not pass a last use.
 `std.protocol.mysql`'s row readers turn a text cell's
 bytes into text themselves (`text_cell`, `is_text`), where they own the bytes, so the text
 takes the buffer `take_bytes` sliced out instead of a copy of it.
+
+**By-value parameters given by every caller.** Story `rust-target-text-reads-borrow`, its
+second unit (forms 3, 4 and 5; section 44.3 for the counts). A by-value parameter is lent
+(`&T`) unless its fn consumes it (20.3.3), and the analysis decides that from the body alone.
+A fn of the *program's own module* (the module of the file `ignite` checks, builds, emits or
+tests; never a module of `std`, never a sibling module of the package, typed with
+`ignite_types::type_program`) has every caller in that module: no module can import it (E031,
+4.1) and the module is typed in one pass. There a parameter `p` of a fn `f` is also consumed,
+so declared `p: T` and moved into, when all of these hold (`moves.rs`, `Given`):
+
+- `f` is a fn of the module, not an associated fn (`Owner.f`: the generated mains, interface
+  and handler methods are called by code the analysis does not see), not a protocol role and
+  not named `to_text` (the generator calls it for `assert` and `?` reports);
+- every use of `f` is a call the analysis walks (in a fn, test or closure body), there is at
+  least one, and none is the call of a `spawn`: a fn used as a value (passed, stored, a field
+  of a handler record) or called from a constant, a field default or a declaration keeps its
+  lent parameters;
+- every call passes for `p` a last use or a value built for the call. A last use is an
+  argument that would move if `p` were consumed (20.3.1, 20.3.2): a local, a consumed
+  parameter, or an element or binding the caller itself iterates or matches by value (below),
+  dead after the call, not pinned by an enclosing `match` or `for`, not mentioned by another
+  argument and not held by an enclosing call. A value built for the call is the result of a
+  fn, role or variant call, a variant without payload, a record, list or tuple literal, an
+  operator or `x.copy()`: the caller builds it with either declaration. Anything else keeps
+  `f` lent: a text literal and a constant (lent today without an allocation), an element or
+  a field of a value the caller keeps, a lent parameter, a capture, the same argument in
+  every round of a loop, an argument another argument reads;
+- `f`'s body would use `p` as an owner: some path moves `p` or a place rooted at it (pushes
+  it, keeps it in a record, list, variant or tuple, passes it on to a consumed parameter),
+  takes its buffer at its last use (`p.to_bytes()`, `p.to_text()`), or iterates or matches it
+  at its last use and moves an element or a binding or takes its buffer. A parameter only
+  read stays lent: moving it would save nothing.
+
+The set is the least fixpoint over the module, after the consumed sets of 20.3.3: a
+recursive fn that passes its own parameter on, and two fns that pass a parameter to each
+other, keep it lent, and a chain of last uses (`cells_to_row` gives `dedupe` the list it
+built, and `decode_cell` the payload of a cell it owns) is moved into from the outermost
+call inwards. The marks of `TypedProgram::moves` change for exactly these parameters: an
+argument at their calls moves, and a place rooted at one moves where 20.3.1 lets a consumed
+parameter's place move. Both targets read the set as `consumed`: the Rust target declares
+`p: T` and its callers pass the place bare, the LLVM target owns the parameter (20.3.5) and
+its callers pass the place's pointer.
+
+A parameter given so is iterated and matched by value at its last use: a `for` over it (a
+`List<T>`, `T` not `Copy` in Rust) or a `match` on it, where it is dead after the `for` or
+`match`, not changed in it, not pinned and not held, and where at least one element or
+binding then moves or gives its buffer, is `for c in (cols)` or `match raw {` instead of
+`(cols).iter()` or `match &raw`; the element or binding is owned, so `out.push(c)` and
+`(c.name, decode_cell(c.raw, c.kind))` take what they keep, and `WTxt(t) => t.to_bytes()`
+is `t.into_bytes()`. These moves are the Rust target's alone (`TypedProgram::moves_owned`
+and `takes_whole`, sets of their own beside `moves`): the LLVM target's `for` and `match`
+bindings point into the list or the value, and it copies what it keeps from them as before.
+
+What it costs a caller: nothing. A caller that still reads its argument after the call keeps
+the parameter lent for every caller, and no caller is made to copy. Letting one such caller
+copy instead would cost it a copy of the whole argument at every call, where the lent
+parameter copies only what the body keeps on the path it takes (`bytes_of` copies the text
+of `WTxt` and nothing for `WNil`), so a program that copied nothing before could copy. A fn
+of `std` or of a sibling module keeps today's rule: it is called from modules compiled
+later, whose arguments the rule cannot see.
 
 The generator reads types (`generate_typed`, `generate_std_typed`) for UFCS, fn-field calls,
 `to_text`, `+` on `Text`, constant patterns and variants resolved by expected type; without
@@ -12161,7 +12209,7 @@ once (section 6, "Constants"). Forms 3, 4 and 5 keep their copies (section 6 say
 element the name is copied by `slots_of`, by `cells_to_row` (`c.name.clone()`, the cell is
 lent) and by `dedupe` (`c.clone()`, the list is lent), the value by `bytes_of`, into text by
 `decode_cell` and again by `dedupe`. The story's bar for them, at most one copy per element,
-is not met here and is a unit of its own.
+is not met here; the second unit meets it (44.3).
 
 `std.protocol.mysql`: a text cell of `read_text_row` and of `read_binary_row` went from 2.021
 to 1.021 allocations (a row of 200 cells of 8 bytes less a row of 10, over 190), the slice
@@ -12186,7 +12234,15 @@ lent as `&[u8]` (`syntax.rs`); row 3.1 `rust` 156 to 155.
   0, 0, 1 and 6 are held; 2.021 per MySQL cell where 1 is), the program's five inline tests on
   the evaluator and both targets, and nine guards (section 6) on all three.
 - `text_reads::` in `crates/ignite-rustgen`: the emitted forms, and the copies a value read
-  after, a text changed while its bytes are read and a text taken while they are read keep.
+  after, a text changed while its bytes are read and a text taken while they are read keep;
+  for 44.3, the given lists and payloads moved into and the values a caller keeps lent.
+- `text_reads::a_parameter_every_caller_gives_up_keeps_the_evaluator_value_on_both_targets`
+  (44.3): nine inline tests on the evaluator and both targets over the guards of the rule (an
+  argument read after the call by one of two callers, a fn passed as a value, called from a
+  closure, from `spawn` and in a loop with the same argument, a recursive fn, a parameter
+  shadowed in the body, a parameter returned, two parameters of which one is given, a field
+  of a record, an element of a list and a constant the caller keeps, UFCS and named
+  arguments).
 - `text_reads_adversary::` in both crates (the adversary pass): 7 programs with 33 inline tests
   on the evaluator and both targets (the lent bytes alive across every way the text changes or
   moves, buffers taken in loops, arms, closures and operands, a lent bytes parameter through
@@ -12196,3 +12252,31 @@ lent as `&[u8]` (`syntax.rs`); row 3.1 `rust` 156 to 155.
   cases; the eleventh (`taken_in` in `touched_in`) changes nothing, a shared binding is never
   a `Text` or `Bytes`. `ignite check --json` over the 668 `.ignite` files of the repository
   gives the same output before and after the unit.
+
+### 44.3 Forms 3, 4 and 5: parameters every caller gives up
+
+The second unit of the story; the rule is section 6, "By-value parameters given by every
+caller". The counts of 44.1, measured as there, with the calls of the measuring program
+changed so that each form has a caller that gives its argument up: `decode_cell(raw.copy(),
+0)`, and `wire_bytes(w.copy())`, a fn with the body of `bytes_of` (its own fn, so that
+`bytes_of` keeps the caller of `slots_of`, which passes an element of a list it keeps).
+
+| form | count | before | after |
+|---|---|---|---|
+| 2, 4 | `decode_cell` given a copy, per call | 2.000, 2.001 | 1.000, 1.001 |
+| 5 | `wire_bytes` given a copy, per call | 2.000, 2.000 | 1.000, 1.000 |
+| 5 | `bytes_of`, its caller keeps the value, per call | 1.000, 1.001 | 1.000, 1.001 |
+| 3, 4 | `slots_of` and `cells_to_row`, per element | 6.063 | 2.063 |
+
+Per element of a row what is left is the name `slots_of` copies out of the list of names it
+is lent and the bytes `bytes_of` copies out of the lent wire value: the two copies the
+caller of `slots_of` asks for by keeping both lists. `cells_to_row` takes the list of cells,
+moves each name into the row and gives each payload to `decode_cell`, whose text takes the
+payload's buffer; `dedupe` takes the list of columns and keeps its elements. Forms 1 and 2
+and the MySQL cells are unchanged: 0.000 and 0.001, 0.000 and 0.000 per call, 1.021 per text
+and per binary cell.
+
+The LLVM target: under 0.002 `malloc` calls per call for every form at both sizes and per row
+of cells, before and after. It reads the parameters this rule adds as consumed (its callers
+pass the place, the fn owns it); the bindings of a `for` or `match` that takes one whole
+keep pointing into it, so its copies are the ones of 44.1.

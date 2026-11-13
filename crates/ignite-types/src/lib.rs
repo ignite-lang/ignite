@@ -1616,6 +1616,12 @@ pub struct TypedProgram {
     /// The consumed parameters of every closure literal inside a body, by
     /// the closure's id (`docs/slice.md` 20.3.1).
     closure_consumed: NodeMap<Vec<bool>>,
+    /// The Rust target's moves of the elements and bindings of a `for` or
+    /// `match` that takes a given parameter whole (`docs/slice.md`
+    /// section 6, "By-value parameters given by every caller").
+    moves_owned: NodeMap<()>,
+    /// The iterables and scrutinees those take whole.
+    taken_whole: NodeMap<()>,
 }
 
 fn key(expr: &Expr) -> NodeId {
@@ -1971,6 +1977,26 @@ impl TypedProgram {
         self.taken.contains_key(&key(expr))
     }
 
+    /// Whether `expr`, a place in a move position rooted at an element of
+    /// a `for` or a binding of a `match` that takes a given parameter
+    /// whole ([`takes_whole`](Self::takes_whole)), takes its value without
+    /// a copy on the Rust target (`docs/slice.md` section 6, "By-value
+    /// parameters given by every caller"). Not a mark of
+    /// [`moves`](Self::moves): the LLVM target's bindings point into the
+    /// list or value and are copied where they are kept.
+    pub fn moves_owned(&self, expr: &Expr) -> bool {
+        self.moves_owned.contains_key(&key(expr))
+    }
+
+    /// Whether `expr`, the iterable of a `for` or the scrutinee of a
+    /// `match` that names a given parameter, is read for the last time
+    /// there and taken whole on the Rust target: the `for` iterates the
+    /// list by value, the `match` matches the value, and their elements
+    /// and bindings are owned ([`moves_owned`](Self::moves_owned)).
+    pub fn takes_whole(&self, expr: &Expr) -> bool {
+        self.taken_whole.contains_key(&key(expr))
+    }
+
     /// Whether the callee consumes its parameter `index` (UFCS receiver = 0). Defined for a
     /// declared fn, associated fn or role of this module or a module it was typed against;
     /// false for every other callee (a variant, a builtin, `Callee::Local`,
@@ -2278,6 +2304,29 @@ pub fn type_module(
     symbols: &Symbols,
     modules: &TypedModules,
 ) -> Result<TypedProgram, Vec<Diagnostic>> {
+    type_any(program, symbols, modules, false)
+}
+
+/// [`type_module`] for the program's own module: the module of the file a
+/// command compiles, checks or tests, which no other module imports
+/// (E031). Its fns have every caller in it, so a by-value parameter every
+/// caller gives up is consumed too (`docs/slice.md` section 6, "By-value
+/// parameters given by every caller"). A module of `std` or a sibling
+/// module is typed with [`type_module`].
+pub fn type_program(
+    program: &Program,
+    symbols: &Symbols,
+    modules: &TypedModules,
+) -> Result<TypedProgram, Vec<Diagnostic>> {
+    type_any(program, symbols, modules, true)
+}
+
+fn type_any(
+    program: &Program,
+    symbols: &Symbols,
+    modules: &TypedModules,
+    root: bool,
+) -> Result<TypedProgram, Vec<Diagnostic>> {
     let typed = typer::Typer::new(program, symbols, modules).run(program)?;
     let mut all: TypedModules = modules
         .iter()
@@ -2315,12 +2364,16 @@ pub fn type_module(
         late_moves: NodeMap::default(),
         taken: NodeMap::default(),
         closure_consumed: NodeMap::default(),
+        moves_owned: NodeMap::default(),
+        taken_whole: NodeMap::default(),
     };
-    let found = moves::analyse(program, &program_types, modules);
+    let found = moves::analyse(program, &program_types, modules, root);
     program_types.moves = found.moves;
     program_types.late_moves = found.late;
     program_types.taken = found.taken;
     program_types.closure_consumed = found.closures;
+    program_types.moves_owned = found.owned;
+    program_types.taken_whole = found.whole;
     if let Some(own) = program_types.modules.get_mut(&program_types.module) {
         own.consumed = found.consumed.clone();
     }

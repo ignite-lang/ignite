@@ -2440,11 +2440,23 @@ impl<'a> Generator<'a> {
     /// binding or `for` element of a place (20.3.1), and this keeps the
     /// copy should it ever mark one. A late move moves only inside the fn
     /// call that binds its later arguments first ([`fn_call`](Self::fn_call)).
+    /// An element or binding of a `for` or `match` that takes a given
+    /// parameter whole moves too ([`TypedProgram::moves_owned`]), and so
+    /// does that parameter as the list or scrutinee
+    /// ([`TypedProgram::takes_whole`]).
     fn moves(&self, expr: &Expr) -> bool {
-        self.types
-            .is_some_and(|t| t.moves(expr) && (!t.moves_late(expr) || self.late.contains(&expr.id)))
-            && place_root(expr)
-                .is_some_and(|root| !self.is_borrowed(root) && !self.is_captured(root))
+        self.types.is_some_and(|t| {
+            (t.moves(expr) && (!t.moves_late(expr) || self.late.contains(&expr.id)))
+                || t.moves_owned(expr)
+                || t.takes_whole(expr)
+        }) && place_root(expr)
+            .is_some_and(|root| !self.is_borrowed(root) && !self.is_captured(root))
+    }
+
+    /// Whether `expr`, the list of a `for` or the scrutinee of a `match`,
+    /// is a given parameter taken whole there ([`TypedProgram::takes_whole`]).
+    fn takes_whole(&self, expr: &Expr) -> bool {
+        self.types.is_some_and(|t| t.takes_whole(expr))
     }
 
     /// Whether `callee` consumes its parameter `index` (`docs/slice.md`
@@ -2589,6 +2601,9 @@ impl<'a> Generator<'a> {
     /// [`field_of_element`](Self::field_of_element), whose root variable is
     /// not in `mutated`, the names the loop's body changes.
     fn lent_iterable(&self, iter: &Expr, mutated: &BTreeSet<&str>) -> bool {
+        if self.takes_whole(iter) {
+            return false;
+        }
         let root = if self.is_place(iter) {
             place_root(iter)
         } else if let Some(list) = self.sliced_place(iter) {
@@ -3894,7 +3909,7 @@ impl<'a> Generator<'a> {
         !rest.iter().rev().any(|stmt| {
             let stmt = std::slice::from_ref(stmt);
             read |= ownership::mentions_in_stmts(stmt, name);
-            read && (ownership::moved_in_stmts(stmt, types).contains(root)
+            read && (ownership::moved_on_rust_in_stmts(stmt, types).contains(root)
                 || ownership::taken_in_stmts(stmt, types).contains(root))
         })
     }
@@ -6075,6 +6090,9 @@ impl<'a> Generator<'a> {
         ty: Option<&Ty>,
         arms: &[ignite_syntax::ast::Arm],
     ) -> bool {
+        if self.takes_whole(scrutinee) {
+            return false;
+        }
         let root = if self.is_place(scrutinee) {
             place_root(scrutinee)
         } else if self.field_of_element(scrutinee) || self.lent_element(scrutinee) {
@@ -6133,7 +6151,7 @@ impl<'a> Generator<'a> {
         let mut touched = BTreeSet::new();
         for arm in arms {
             touched.extend(ownership::changed_in(&arm.body, self.types));
-            touched.extend(ownership::moved_in(&arm.body, types));
+            touched.extend(ownership::moved_on_rust_in(&arm.body, types));
             touched.extend(ownership::taken_in(&arm.body, types));
         }
         let mut lent = Vec::new();
@@ -6203,7 +6221,7 @@ impl<'a> Generator<'a> {
     fn touched_in<'e>(&self, body: &'e Expr) -> BTreeSet<&'e str> {
         let mut touched = ownership::changed_in(body, self.types);
         if let Some(types) = self.types {
-            touched.extend(ownership::moved_in(body, types));
+            touched.extend(ownership::moved_on_rust_in(body, types));
             touched.extend(ownership::taken_in(body, types));
         }
         touched
