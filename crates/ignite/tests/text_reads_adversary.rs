@@ -1470,6 +1470,78 @@ test "an assert whose left operand holds the text" {
 }
 "#;
 
+/// Group 2: buffers taken from owned scrutinees and iterables (an `if`, a
+/// list literal, a field of a call), a `spawn` argument and the parameter
+/// of a closure `map` lends or one it changes.
+const OWNED: &str = r#"package text_reads_adversary_owned
+
+type Rec {
+  raw: Option<Bytes>
+  n: Int
+}
+
+fn make(k: Bool) -> Rec = Rec { raw = if k { Some(b"mk") } else { None }, n = 1 }
+
+fn worker(t: Text, done: Sender<Int>) -> Result<Unit, IoError> {
+  done.send(t.len())
+  Ok(())
+}
+
+fn if_scrutinee(k: Bool) -> Text {
+  let a = Some(b"aa")
+  let b = Some(b"bbb")
+  let out = match if k { a } else { b } {
+    Some(x) => x.to_text()
+    None => ""
+  }
+  out + "{a == None}"
+}
+
+fn literal_for() -> Text {
+  let a = b"x"
+  let b = b"yz"
+  var out = ""
+  for e in [a, b] {
+    out = out + e.to_text()
+  }
+  out + "{a.len()}"
+}
+
+fn field_of_call(k: Bool) -> Text = match make(k).raw {
+  Some(x) => x.to_text()
+  None => "none"
+}
+
+fn spawned_take() -> Int {
+  let b = b"abcd"
+  let (done, results) = Channel.bounded(1)
+  spawn worker(b.to_text(), done)
+  match results.receive() {
+    Some(n) => n
+    None => -1
+  }
+}
+
+fn mapped(l: List<Bytes>) -> List<Text> = l.map(|x: Bytes| x.to_text())
+
+fn mapped_changed(l: List<Bytes>) -> List<Text> = l.map(|x: Bytes| {
+  var y = x
+  y.push(33)
+  y.to_text()
+})
+
+test "owned scrutinees and iterables give up their buffers" {
+  assert if_scrutinee(true) == "aafalse"
+  assert if_scrutinee(false) == "bbbfalse"
+  assert literal_for() == "xyz1"
+  assert field_of_call(true) == "mk"
+  assert field_of_call(false) == "none"
+  assert spawned_take() == 4
+  assert mapped([b"a", b"b"]) == ["a", "b"]
+  assert mapped_changed([b"a"]) == ["a!"]
+}
+"#;
+
 #[test]
 fn lent_bytes_and_taken_buffers_keep_the_evaluator_value_on_both_targets() {
     agree("text_reads_adversary_liveness", LIVENESS, 17);
@@ -1488,4 +1560,9 @@ fn mysql_cells_decode_as_before_on_the_evaluator_and_both_targets() {
 #[test]
 fn taken_buffers_beside_operands_that_hold_them_agree_on_both_targets() {
     agree("text_reads_adversary_operands", OPERANDS, 3);
+}
+
+#[test]
+fn buffers_of_owned_scrutinees_and_iterables_agree_on_both_targets() {
+    agree("text_reads_adversary_owned", OWNED, 1);
 }
