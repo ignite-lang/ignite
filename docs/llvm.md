@@ -842,6 +842,7 @@ calling task (section 4). `T*` means a pointer to the section-3 layout;
 | `void text_debug(Text* out, Text* text)` | the debug text of `text` (`docs/slice.md` section 13.6): quoted and escaped |
 | `i8 text_starts_with(Text* text, Text* prefix)` | |
 | `void text_join(Text* out, List* texts, Text* separator)` | one arena block of the summed length, written in place |
+| `void list_sort(List* out, List* keys, i64 size, ptr compare)` | `keys` is the bytes of `n` keys of `size` bytes each; `out` gets the positions `0..n` as native-endian `i64` (arena memory aligned to 1, read with `align 1`), stably ascending by key as `i32 compare(ptr, ptr)` orders them; one arena block of `2 * n` positions holds them and the merge sort's scratch; declared only by a module that sorts (`docs/slice.md`, "A List is sorted with sort and sort_by") |
 | `void int_to_text(Text* out, i64 value)` | |
 | `i8 int_parse(Text* text, i64* out)` | 1 and `out` when `text` is a decimal `i64` with an optional leading `-` (`ignite_io::parse_int`: what Rust `str::parse` accepts less a leading `+`, read from the bytes without a UTF-8 pass), else 0; `text` may be the `List` of a `Bytes`, as `Int.parse(b.to_text())` passes `b` |
 | `i32 tcp_set_idle_timeout(i64 stream, i64 ms, IoError* err)` | a read that waits longer than `ms` returns `Eof`; 0 or less removes the timeout (`ignite_io::TcpStream::set_idle_timeout`) |

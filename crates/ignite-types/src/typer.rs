@@ -3611,6 +3611,11 @@ impl<'a> Typer<'a> {
         {
             return self.list_map(expr, element, args, expected);
         }
+        if let Ty::List(element) = &receiver_ty
+            && name.name == "sort_by"
+        {
+            return self.list_sort_by(expr, element, args);
+        }
         let bounded = match &receiver_ty {
             Ty::Param(param) if self.bounded.contains(param) => builtins::stream_method(&name.name),
             _ => None,
@@ -3632,6 +3637,19 @@ impl<'a> Typer<'a> {
                     self.fail_site(expr, FailureOp::Index, expr.span.start)
                 }
                 Builtin::ListSlice => self.fail_site(expr, FailureOp::Slice, expr.span.start),
+                Builtin::ListSort => {
+                    if let Ty::List(element) = &receiver_ty
+                        && !self.ordered(element)
+                    {
+                        self.error(
+                            "E045",
+                            expr.span,
+                            format!(
+                                "`sort` needs elements with an order, and `{element}` has none; order by a key that has one with `sort_by(|x| key)`"
+                            ),
+                        );
+                    }
+                }
                 _ => {}
             }
             self.captured_change(expr, receiver, sig.builtin);
@@ -3771,7 +3789,7 @@ impl<'a> Typer<'a> {
             EffectScope::Pure => None,
             _ => self.map_fn_effects(f),
         };
-        self.map_local_site(f, own.is_some());
+        self.map_local_site(f, own.is_some(), "map");
         let wanted = |ret: Ty| match &own {
             Some(effects) => Ty::EffectFn(vec![element.clone()], Box::new(ret), effects.clone()),
             None => fn_ty(vec![element.clone()], ret),
@@ -3780,7 +3798,7 @@ impl<'a> Typer<'a> {
             if self.check(f, &wanted((**item).clone())).is_some()
                 && let Some(effects) = &own
             {
-                self.map_effects_fit(f, effects);
+                self.map_effects_fit(f, effects, "map");
             }
             return expected.cloned();
         }
@@ -3793,7 +3811,8 @@ impl<'a> Typer<'a> {
             Ty::EffectFn(params, ret, effects)
                 if own.is_some() && params.len() == 1 && compatible(element, &params[0]) =>
             {
-                self.map_effects_fit(f, &effects).then_some(Ty::List(ret))
+                self.map_effects_fit(f, &effects, "map")
+                    .then_some(Ty::List(ret))
             }
             Ty::Never => None,
             other => {
@@ -3809,13 +3828,81 @@ impl<'a> Typer<'a> {
         }
     }
 
+    /// `l.sort_by(f)` on a `List<element>`: `f` is a `fn(element) -> K`, `K`
+    /// a type with an order ([`Self::ordered`]; E045 otherwise), and the
+    /// result a `List<element>`. `f` may perform effects exactly where
+    /// `map`'s may (`docs/slice.md` 20.4.3).
+    fn list_sort_by(&mut self, expr: &Expr, element: &Ty, args: &[Expr]) -> Option<Ty> {
+        self.callees
+            .insert(key(expr), Callee::Builtin(crate::Builtin::ListSortBy));
+        let [f] = args else {
+            self.arguments(expr.span, "sort_by", &[Ty::Unit], args);
+            return None;
+        };
+        let own = match self.effect_scope {
+            EffectScope::Pure => None,
+            _ => self.map_fn_effects(f),
+        };
+        self.map_local_site(f, own.is_some(), "sort_by");
+        let open = match &own {
+            Some(effects) => Ty::EffectFn(
+                vec![element.clone()],
+                Box::new(Ty::Param("'K".into())),
+                effects.clone(),
+            ),
+            None => fn_ty(vec![element.clone()], Ty::Param("'K".into())),
+        };
+        let given = (own.is_some() || matches!(f.kind, ExprKind::Closure(_))).then_some(&open);
+        let key = match self.expr(f, Mode::Value(given))? {
+            Ty::Fn(params, ret) if params.len() == 1 && compatible(element, &params[0]) => *ret,
+            Ty::EffectFn(params, ret, effects)
+                if own.is_some() && params.len() == 1 && compatible(element, &params[0]) =>
+            {
+                if !self.map_effects_fit(f, &effects, "sort_by") {
+                    return None;
+                }
+                *ret
+            }
+            Ty::Never => return None,
+            other => {
+                self.error(
+                    "E040",
+                    f.span,
+                    format!(
+                        "type mismatch: `sort_by` takes a pure `fn({element}) -> K`, K a type with an order, found `{other}`"
+                    ),
+                );
+                return None;
+            }
+        };
+        if !self.ordered(&key) {
+            self.error(
+                "E045",
+                f.span,
+                format!(
+                    "`sort_by` needs a key with an order, and `{key}` has none; a key is `Int`, `Byte`, `U32`, `Bool`, `Text`, `Bytes`, an enum without payloads or a tuple of them"
+                ),
+            );
+        }
+        Some(Ty::List(Box::new(element.clone())))
+    }
+
+    /// Whether `ty` has the order of `sort` and `sort_by`
+    /// ([`crate::ordered`]).
+    fn ordered(&self, ty: &Ty) -> bool {
+        crate::ordered(ty, &|q| {
+            self.variants(&Ty::Enum(q.clone()))
+                .is_some_and(|(_, variants)| variants.iter().all(|(_, p)| p.is_empty()))
+        })
+    }
+
     /// E042 for `map`'s argument `f`, a local of effectful fn type, where
     /// the caller's effects are inferred (no `requires`) and `ignite-check`
     /// could not charge them because it cannot tell the local's type (bound
     /// from a call, a field of a call's result, a pattern; `docs/slice.md`
     /// 20.4.3), as for a call of the local. Under a `requires` the type
     /// checker checks the effects itself (`map_effects_fit`).
-    fn map_local_site(&mut self, f: &Expr, effectful: bool) {
+    fn map_local_site(&mut self, f: &Expr, effectful: bool, call: &str) {
         let ExprKind::Name(name) = &f.kind else {
             return;
         };
@@ -3832,7 +3919,7 @@ impl<'a> Typer<'a> {
             "E042",
             f.span,
             format!(
-                "cannot check the effects of `{}` passed to `map`: its type is not declared; bind it with its type: `let {}: {ty} = …`",
+                "cannot check the effects of `{}` passed to `{call}`: its type is not declared; bind it with its type: `let {}: {ty} = …`",
                 name.name, name.name
             ),
         );
@@ -3876,7 +3963,7 @@ impl<'a> Typer<'a> {
     /// called (`docs/slice.md` 20.4.3): none on `f`'s own parameter, the
     /// element `map` hands it, and every other one covered by the
     /// `requires` of the fn that calls `map`. E017 at `f` otherwise.
-    fn map_effects_fit(&mut self, f: &Expr, effects: &FnEffects) -> bool {
+    fn map_effects_fit(&mut self, f: &Expr, effects: &FnEffects, call: &str) -> bool {
         let what = match &f.kind {
             ExprKind::Name(name) if self.lookup(&name.name).is_some() => {
                 format!("effectful fn value `{}`", name.name)
@@ -3905,7 +3992,7 @@ impl<'a> Typer<'a> {
                 "E017",
                 f.span,
                 format!(
-                    "{what} passed to `map` needs {} on its parameter `{param}`, the list's element; `map` passes on only its caller's effects",
+                    "{what} passed to `{call}` needs {} on its parameter `{param}`, the list's element; `{call}` passes on only its caller's effects",
                     shown(&on_param)
                 ),
             );
@@ -3921,7 +4008,7 @@ impl<'a> Typer<'a> {
                     "E017",
                     f.span,
                     format!(
-                        "{what} passed to `map` needs {}, which the `requires` of `{name}` does not cover",
+                        "{what} passed to `{call}` needs {}, which the `requires` of `{name}` does not cover",
                         shown(&missing)
                     ),
                 );

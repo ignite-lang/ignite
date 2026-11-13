@@ -1,0 +1,23 @@
+path-cost counts
+scenario todo
+target llvm
+release v0.16.2
+op start
+instructions 2000000 runs 1999990 2000000 2000010 2000000 1999995
+syscalls 120 runs 120 120 120 120 120
+fn 500000 _dl_relocate_object
+fn 300000 ignite_io::sched::prepare
+syscall 70 read
+syscall 30 mmap
+syscall 20 openat
+op patch
+instructions 400000 runs 399990 400000 400010 400000 400005
+syscalls 160 runs 160 160 160 160 160
+fn 120000 std.protocol.http.serve_connection
+fn 90000 ignite_io::net::TcpStream::read
+fn 60000 ignite_io::fs::Directory::write_file
+syscall 40 epoll_wait
+syscall 40 read
+syscall 40 write
+syscall 20 openat
+syscall 20 renameat

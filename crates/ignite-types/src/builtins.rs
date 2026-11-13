@@ -317,6 +317,7 @@ fn list_method(element: &Ty, name: &str) -> Option<Sig> {
         "set" => sig(ListSet, vec![Ty::Int, element.clone()], Ty::Unit),
         "append" => sig(ListAppend, vec![list], Ty::Unit),
         "clear" => sig(ListClear, vec![], Ty::Unit),
+        "sort" => sig(ListSort, vec![], list),
         "join" if *element == Ty::Text => sig(ListJoin, vec![Ty::Text], Ty::Text),
         "to_text" if *element == Ty::Byte => sig(BytesToText, vec![], Ty::Text),
         "index_of" if *element == Ty::Byte => sig(

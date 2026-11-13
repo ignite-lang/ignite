@@ -570,8 +570,51 @@ pub fn compare(module: &mut Module<'_>, f: &mut Func, ty: &Ty, a: &str, b: &str)
             let y = f.val(format!("load i8, ptr {b}, align 1"));
             three_way(f, "i8", "ult", "ugt", &x, &y)
         }
-        other => panic!("no ordering for a map key of type {other:?}"),
+        // The order of `sort` and `sort_by` (`ignite_types::ordered`) adds
+        // `U32` by unsigned value, `Bytes` bytewise as `Text`, and tuples
+        // element by element.
+        Ty::U32 => {
+            let x = f.val(format!("load i32, ptr {a}, align 4"));
+            let y = f.val(format!("load i32, ptr {b}, align 4"));
+            three_way(f, "i32", "ult", "ugt", &x, &y)
+        }
+        Ty::List(element) if **element == Ty::Byte => compare(module, f, &Ty::Text, a, b),
+        Ty::Tuple(elements) => {
+            let symbol = format!("cmp.{}", mangle(ty));
+            if !module.has(&symbol) {
+                let text = tuple_compare(module, &symbol, elements);
+                module.helper(&symbol, &text);
+            }
+            f.val(format!("call i32 {}(ptr {a}, ptr {b})", global(&symbol)))
+        }
+        // A key fn that never returns (`ignite_types::ordered` accepts
+        // `Never`): no key exists, so no comparison ever runs.
+        Ty::Never => "0".to_string(),
+        other => panic!("no ordering for a value of type {other:?}"),
     }
+}
+
+/// `i32 cmp.<(A, B, ..)>(ptr a, ptr b)`: the first element order that is
+/// not zero, else zero.
+fn tuple_compare(module: &mut Module<'_>, symbol: &str, elements: &[Ty]) -> String {
+    let mut f = Func::new(format!(
+        "define internal i32 {}(ptr %a, ptr %b)",
+        global(symbol)
+    ));
+    let (offsets, _) = module.env.tuple_layout(elements);
+    for (element, offset) in elements.iter().zip(offsets) {
+        let pa = f.val(format!("getelementptr inbounds i8, ptr %a, i64 {offset}"));
+        let pb = f.val(format!("getelementptr inbounds i8, ptr %b, i64 {offset}"));
+        let order = compare(module, &mut f, element, &pa, &pb);
+        let differ = f.val(format!("icmp ne i32 {order}, 0"));
+        let (done, next) = (f.label(), f.label());
+        f.cond_br(&differ, &done, &next);
+        f.place(&done);
+        f.term(format!("ret i32 {order}"));
+        f.place(&next);
+    }
+    f.term("ret i32 0");
+    f.finish("unreachable")
 }
 
 /// `-1`, `0` or `1` from a less-than and a greater-than comparison of `x`

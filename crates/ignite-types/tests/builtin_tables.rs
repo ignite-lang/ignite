@@ -145,6 +145,8 @@ const TYPE_CHECKER_METHOD_NAMES: &[&str] = &[
     "clear",
     "join",
     "map",
+    "sort",
+    "sort_by",
     "keys",
     "contains",
     "to_ms",

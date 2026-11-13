@@ -5682,6 +5682,54 @@ impl<'a> Generator<'a> {
                     "{{ let (address, port) = {r}.local(); {endpoint} {{ address, port }} }}"
                 );
             }
+            // A new list; the standard library's sort is stable. The order
+            // of every type with one (`ignite_types::ordered`) is its Rust
+            // `Ord`: payload-free enums derive it in declaration order.
+            Some(Callee::Builtin(Builtin::ListSort)) => {
+                let r = self.receiver(receiver);
+                let sorted = self.fresh();
+                return format!("{{ let mut {sorted} = {r}.to_vec(); {sorted}.sort(); {sorted} }}");
+            }
+            // The keys in element order, then the positions sorted stably
+            // by key. The key fn reads each element where `map`'s fn does
+            // (20.3.7): lent to a closure or a named fn that only reads
+            // it, copied for any other fn value.
+            Some(Callee::Builtin(Builtin::ListSortBy)) if args.len() == 1 => {
+                let r = self.receiver(receiver);
+                let arg = &args[0];
+                // An element that is `Copy` in Rust is passed by value: its
+                // copy allocates nothing.
+                let lend = !matches!(
+                    self.type_of(receiver),
+                    Some(Ty::List(element)) if rust_copy(element)
+                );
+                let lent = if lend { self.lent_closure(arg) } else { None };
+                let keyed = if let Some(f) = lent {
+                    format!("iter().map({f})")
+                } else if lend
+                    && let ExprKind::Name(id) = &arg.kind
+                    && !self.is_local(&id.name)
+                    && let Some(callee @ Callee::Fn(_)) = self.callee(arg).cloned()
+                    && !self.consumes(Some(&callee), 0)
+                    && !self.lends_fn(Some(&callee), 0)
+                {
+                    let target = format!("{}{}", self.name(id), self.turbofish(arg));
+                    format!("iter().map(|__a0| {target}(__a0))")
+                } else if let Some(f) = self.passed_closure(arg) {
+                    format!("iter().cloned().map({f})")
+                } else {
+                    let a = self.args(args);
+                    format!("iter().cloned().map(&*{})", wrap(arg, a[0].clone()))
+                };
+                let (list, keys, order) = (self.fresh(), self.fresh(), self.fresh());
+                return format!(
+                    "{{ let {list} = &{r}; \
+                     let {keys}: Vec<_> = {list}.{keyed}.collect(); \
+                     let mut {order}: Vec<usize> = (0..{keys}.len()).collect(); \
+                     {order}.sort_by(|a, b| {keys}[*a].cmp(&{keys}[*b])); \
+                     {order}.into_iter().map(|i| {list}[i].clone()).collect::<Vec<_>>() }}"
+                );
+            }
             _ => {}
         }
         if let Some(owner) = self.qualifier(receiver)

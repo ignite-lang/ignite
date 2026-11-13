@@ -19,7 +19,7 @@ bench = false
 [dependencies]
 clap.workspace = true
 sha2 = "0.10"
-nix = { workspace = true, features = ["fs", "signal"] }
+nix = { workspace = true, features = ["fs", "signal", "sched", "process"] }
 
 [[test]]
 name = "main"

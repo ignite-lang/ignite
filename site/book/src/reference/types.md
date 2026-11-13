@@ -185,12 +185,24 @@ negative `n` counts as 0.
 | `push(x)`, `append(other)`, `clear()` | `Unit` | change the list in place |
 | `a + b` | `List<T>` | a new list: the elements of `a`, then those of `b` |
 | `map(f)` | `List<U>` | `f: fn(T) -> U`, pure |
+| `sort()` | `List<T>` | a new list in ascending order; `T` has an order (below) |
+| `sort_by(f)` | `List<T>` | a new list ordered by the key `f` gives each element; `f: fn(T) -> K`, `K` has an order |
 | `join(sep)` | `Text` | on `List<Text>` only |
 | `to_text()` | `Text` | on `Bytes` only |
 | `index_of(needle, start)` | `Option<Int>` | on `Bytes` only: the offset of the first `needle` at or after `start` |
 | `Bytes.of(list)`, `Bytes.empty()` | `Bytes` | statics |
 
 `for x in list { .. }` visits the elements in order.
+
+`sort` and `sort_by` return a new list and leave the list they are called on as it was. Both
+are stable: elements that compare equal keep the order they had. The types with an order are
+`Int`, `Byte` and `U32` by value, `Bool` with `false` first, `Text` and `Bytes` by their bytes,
+an enum without payloads in the order its variants are declared, and a tuple of these, element
+by element. `sort` on a list of any other type is refused by `ignite check` and names
+`sort_by`; to order records, sort by a key: `entries.sort_by(|e| (e.level, e.name))` orders by
+level, then by name. There is no sort with a comparison function and no descending sort; for a
+descending `Int` key `k`, sort by `0 - 1 - k`. The negation `0 - k` overflows for the smallest
+`Int`.
 
 Lists are values: assigning or passing a list copies it, as far as the program can tell.
 `set` (and `l[i] = x`), `push`, `append` and `clear` change a place rooted in a `var` or a
