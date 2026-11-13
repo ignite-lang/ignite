@@ -50,6 +50,7 @@ mod leak;
 mod llvm;
 mod llvm_build;
 mod llvm_memory;
+mod moves_cost;
 mod mysql;
 mod mysql_adversary;
 mod nats;
