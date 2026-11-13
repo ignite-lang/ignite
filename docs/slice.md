@@ -800,8 +800,8 @@ str` or `&'static [u8]` Rust builds at compile time, was not taken: every refere
 is a `&String` or `&Vec<u8>`, so such a constant would need a second calling convention or a
 copy at each use that passes it on. `CODEGEN_REVISION` is `ignite-codegen/0.1.0-54` since this unit.
 
-**Text and bytes read in place.** Story `rust-target-text-reads-borrow` (section NN for its
-counts). Three forms that copied a `Text` or `Bytes` only to read it, or to turn it into the
+**Text and bytes read in place.** Story `rust-target-text-reads-borrow` (section 44 for its
+counts; `CODEGEN_REVISION` is `ignite-codegen/0.1.0-55` since this unit). Three forms that copied a `Text` or `Bytes` only to read it, or to turn it into the
 other, read it where it is:
 
 - *The bytes of a text, only read.* `let b = t.to_bytes()` is `let b: &[u8] = t.as_bytes();`
@@ -840,10 +840,13 @@ pass. So `dedupe(cols: List<(Text, Val)>)` copies each element it keeps although
 caller builds the list for the call and never reads it again, `cells_to_row` copies the name
 of each lent `Cell` it keeps and passes its payload lent to `decode_cell`, and
 `bytes_of(w: Wire)` copies the text of `WTxt(t) => t.to_bytes()`. Taking such a parameter by
-value needs what every caller passes: the analysis decides each fn from its body alone, and
-Ignite has no private fn (4.1 exports every declaration), so a rule over callers covers the
-calls of the fn's own module only and leaves a caller in another module, compiled later, to
-copy where it does not pass a last use. `std.protocol.mysql`'s row readers turn a text cell's
+value needs what every caller passes, and the analysis decides each fn from its body alone. A
+fn of the program's own module has every caller in that module (no module can import the
+program's module, E031 of 4.1, and the module is typed in one pass), so a rule over callers
+can decide it there; that rule is not written yet. A fn of `std` or of a sibling module of the
+package (4.1 exports every declaration) is called from modules compiled later, and a rule over
+the callers of its own module would leave those to copy where they do not pass a last use.
+`std.protocol.mysql`'s row readers turn a text cell's
 bytes into text themselves (`text_cell`, `is_text`), where they own the bytes, so the text
 takes the buffer `take_bytes` sliced out instead of a copy of it.
 
@@ -12126,7 +12129,7 @@ builtin methods of `List` nor `std` had a sort, and a `Map` orders only by a uni
 - `list::tests::merge_sort_is_stable_and_ascending` in `crates/ignite-rt`: every length up to
   69 with repeating keys.
 
-## NN A text or byte string that is only read is not copied on the Rust target
+## 44 A text or byte string that is only read is not copied on the Rust target
 
 Story `rust-target-text-reads-borrow`. The first user of `std.protocol.mysql` (a read-only
 HTTP service backed by MySQL 8 over TLS, Rust target, release build) ranked copies of `Text`
@@ -12134,7 +12137,7 @@ second among the allocations of its largest answer once lists were shared, and r
 five functions to one synthetic program. The lowering is section 6, "Text and bytes read in
 place"; this section holds the counts.
 
-### NN.1 The reduced program
+### 44.1 The reduced program
 
 `text_reads::PROGRAM` in `crates/ignite/tests/text_reads.rs`: `escape_into` and `all_digits`
 (form 1, the bytes of a text and of a constant read by a loop), `decode_cell` (form 2, the
@@ -12177,10 +12180,19 @@ counters zeroed between), inside row 3.10's band of 1 %. Two golden lines change
 handed to `write_all` without a copy (`modules.std.rs`) and a `Bytes` parameter a loop reads
 lent as `&[u8]` (`syntax.rs`); row 3.1 `rust` 156 to 155.
 
-### NN.2 Tests
+### 44.2 Tests
 
 - `text_reads::` in `crates/ignite`: the counts above held (red first: 1, 2, 2 and 7.063 where
   0, 0, 1 and 6 are held; 2.021 per MySQL cell where 1 is), the program's five inline tests on
   the evaluator and both targets, and nine guards (section 6) on all three.
 - `text_reads::` in `crates/ignite-rustgen`: the emitted forms, and the copies a value read
   after, a text changed while its bytes are read and a text taken while they are read keep.
+- `text_reads_adversary::` in both crates (the adversary pass): 7 programs with 33 inline tests
+  on the evaluator and both targets (the lent bytes alive across every way the text changes or
+  moves, buffers taken in loops, arms, closures and operands, a lent bytes parameter through
+  every kind of caller, text of bytes that are not UTF-8 in seven shapes, crafted text and
+  binary MySQL rows with the strings the decoder gave before the change) and 6 cases on the
+  emitted text. Eleven mutants of the checks: ten are killed, five of them only by these
+  cases; the eleventh (`taken_in` in `touched_in`) changes nothing, a shared binding is never
+  a `Text` or `Bytes`. `ignite check --json` over the 668 `.ignite` files of the repository
+  gives the same output before and after the unit.
