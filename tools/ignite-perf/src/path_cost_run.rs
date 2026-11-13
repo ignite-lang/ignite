@@ -20,8 +20,11 @@
 //! many on every machine. The programs are staged, built and run in [`server_home`], a
 //! directory outside the tree whose path has one length on a machine; a server's executable is
 //! copied to its `bin/` and starts as `../bin/<executable>` from `run/`, with `TMPDIR=../tmp`
-//! its only variable. The executable's path is in `/proc/self/maps`, which a starting thread
-//! reads, the working directory in `getcwd`, and the build's paths in the program's data: in
+//! and `IGNITE_WORKERS=2` its only variables: without the second, a server reads the cgroup
+//! files of whoever started the mode to find its worker count, and two more levels of that
+//! cgroup were 13 system calls and about 7,000 instructions of every `start`. The executable's
+//! path is in `/proc/self/maps`, which a starting thread reads, the working directory in
+//! `getcwd`, and the build's paths in the program's data: in
 //! the work directory their length moved the start of `rust/todo` by 479 instructions, and
 //! `patch` and `delete` by 280, between two work directories.
 //!
@@ -55,6 +58,9 @@ pub const SETTLE_SEEN: usize = 3;
 pub const SETTLE_POLL: Duration = Duration::from_millis(1);
 /// The environment of a server, relative to its run directory.
 pub const SERVER_TMPDIR: &str = "../tmp";
+/// The workers of a server, as many as the CPUs the mode pins itself to: with it set the
+/// server does not read the cgroup files of the process that started the mode.
+pub const SERVER_WORKERS: &str = "2";
 
 /// The directory the programs of the work directory `work` are staged, built and run in:
 /// `<XDG_CACHE_HOME or ~/.cache>/ignite/path-cost/<16 hex digits of the SHA-256 of work's path>`,
@@ -319,9 +325,13 @@ impl Tools {
             .env("CARGO_INCREMENTAL", "0");
     }
 
-    /// The environment of a server: [`SERVER_TMPDIR`] only, the same in every work directory.
+    /// The environment of a server: [`SERVER_TMPDIR`] and [`SERVER_WORKERS`] only, the same in
+    /// every work directory and under every caller.
     fn server_env(&self, command: &mut Command) {
-        command.env_clear().env("TMPDIR", SERVER_TMPDIR);
+        command
+            .env_clear()
+            .env("TMPDIR", SERVER_TMPDIR)
+            .env("IGNITE_WORKERS", SERVER_WORKERS);
     }
 
     /// A fresh directory under the work directory for the instrument's outputs, the server's
