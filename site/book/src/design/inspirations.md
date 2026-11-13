@@ -6,9 +6,9 @@ by side and says what the combination adds.
 
 On both pages, every statement about another project is taken from that project's own
 documentation, linked where it is made, as read on 2026-11-04. Every statement about Ignite
-describes release v0.16.2, an early prototype with one local host and two native targets.
+describes release v0.16.3, an early prototype with one local host and two native targets.
 "Planned" marks what is designed and not built, and "unreleased" what is on `main` after
-v0.16.2.
+v0.16.3.
 
 ## Why Ignite exists
 
