@@ -12125,3 +12125,62 @@ builtin methods of `List` nor `std` had a sort, and a `Map` orders only by a uni
   differential corpus.
 - `list::tests::merge_sort_is_stable_and_ascending` in `crates/ignite-rt`: every length up to
   69 with repeating keys.
+
+## NN A text or byte string that is only read is not copied on the Rust target
+
+Story `rust-target-text-reads-borrow`. The first user of `std.protocol.mysql` (a read-only
+HTTP service backed by MySQL 8 over TLS, Rust target, release build) ranked copies of `Text`
+second among the allocations of its largest answer once lists were shared, and reduced its
+five functions to one synthetic program. The lowering is section 6, "Text and bytes read in
+place"; this section holds the counts.
+
+### NN.1 The reduced program
+
+`text_reads::PROGRAM` in `crates/ignite/tests/text_reads.rs`: `escape_into` and `all_digits`
+(form 1, the bytes of a text and of a constant read by a loop), `decode_cell` (form 2, the
+payload of a lent `Option<Bytes>` turned into text), `dedupe` and `cells_to_row` (forms 3 and
+4, lists their callers are done with), `bytes_of` (form 5, a text payload returned as bytes)
+and `slots_of`, which builds the cells of a row. Allocations per call on the Rust target
+(memcheck's `total heap usage`, a run of 1,001 calls less a run of 1, over 1,000; dev build),
+over a text of `M` = 10 and 200 bytes, and per element of a row between `slots_of` and the
+result of `cells_to_row` (the row of 200 less the row of 10, over 190):
+
+| form | count | before | after |
+|---|---|---|---|
+| 1 | `escape_into`, per call | 1.000, 1.006 | 0.000, 0.001 |
+| 1 | `all_digits` (a constant), per call | 2.005, 2.000 | 0.000, 0.000 |
+| 2 | `decode_cell`, per call | 2.000, 2.006 | 1.000, 1.001 (the text kept) |
+| 5 | `bytes_of`, per call | 1.000, 1.001 | 1.000, 1.001 |
+| 3, 4 | `slots_of` and `cells_to_row`, per element | 7.063 | 6.063 |
+
+Form 1 starts from one allocation less than the report said for the constant: it is built
+once (section 6, "Constants"). Forms 3, 4 and 5 keep their copies (section 6 says why): per
+element the name is copied by `slots_of`, by `cells_to_row` (`c.name.clone()`, the cell is
+lent) and by `dedupe` (`c.clone()`, the list is lent), the value by `bytes_of`, into text by
+`decode_cell` and again by `dedupe`. The story's bar for them, at most one copy per element,
+is not met here and is a unit of its own.
+
+`std.protocol.mysql`: a text cell of `read_text_row` and of `read_binary_row` went from 2.021
+to 1.021 allocations (a row of 200 cells of 8 bytes less a row of 10, over 190), the slice
+`take_bytes` makes, whose buffer the text now takes
+(`text_reads::a_text_cell_of_a_mysql_row_takes_the_buffer_of_its_bytes`).
+
+The LLVM target, unchanged: under 0.002 `malloc` calls per call for every form at both sizes
+and per row of cells, before and after; what a task's arena takes is not a `malloc` and is
+not in this count (as for `constants::`). Its values are the Rust target's and the
+evaluator's.
+
+`examples/` on the Rust target, release, the compiler and std of v0.16.3 against this change:
+`todod` stripped 878,752 to 878,832 bytes, `terminald` 600,176 both; a `GET /todos/1` of
+`todod` 19,173 to 19,195 instructions (callgrind, 200 replies after 50 on one connection,
+counters zeroed between), inside row 3.10's band of 1 %. Two golden lines changed: a reply
+handed to `write_all` without a copy (`modules.std.rs`) and a `Bytes` parameter a loop reads
+lent as `&[u8]` (`syntax.rs`); row 3.1 `rust` 156 to 155.
+
+### NN.2 Tests
+
+- `text_reads::` in `crates/ignite`: the counts above held (red first: 1, 2, 2 and 7.063 where
+  0, 0, 1 and 6 are held; 2.021 per MySQL cell where 1 is), the program's five inline tests on
+  the evaluator and both targets, and nine guards (section 6) on all three.
+- `text_reads::` in `crates/ignite-rustgen`: the emitted forms, and the copies a value read
+  after, a text changed while its bytes are read and a text taken while they are read keep.

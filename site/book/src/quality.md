@@ -72,7 +72,7 @@ Current values: run `v0.16.3` on 2026-11-13, commit `ed39b372`.
 | # | metric | kind | target | bar | current | trend |
 |---|---|---|---|---|---|---|
 | 3.1 | copies in the generated code of the golden corpus | ratchet | llvm | 90 | 90 | = |
-| 3.1 | copies in the generated code of the golden corpus | ratchet | rust | 156 | 156 | −7 better |
+| 3.1 | copies in the generated code of the golden corpus | ratchet | rust | 155 | 156 | −7 better |
 | 3.10 | cost of a frozen path: instructions and system calls | ratchet | all/design/check/instructions | 851984229 |  |  |
 | 3.10 | cost of a frozen path: instructions and system calls | ratchet | all/design/check/syscalls | 74 |  |  |
 | 3.10 | cost of a frozen path: instructions and system calls | ratchet | all/design/plan/instructions | 857679569 |  |  |
