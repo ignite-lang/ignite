@@ -7,40 +7,40 @@ file 5386ebdc26cbd8ffaa1bfcf479adf7b8320fd294b484c7fdd3f3ccb83ee8140e terminal.d
 file 5f111eb1cf4e35d034dad2a3976a2292658fcb1b309d3b2719fc955d374fb862 commands.ignite
 file 43c2f9b1eac5848791a75884f8bbd7304c7ddd8bc028d8b4758743785ff802c0 command_schema.ignite
 op build
-instructions 2236411447 runs 2236721850 2236237913 2236411447 2236141352 2236414911
-syscalls 14924 runs 14890 14924 14891 14992 14937
-fn 115042732 ??? liblldELF.so.23.1
-fn 103358789 ??? libLLVM.so.23.1
+instructions 2236463944 runs 2236495675 2236463944 2236437053 2236497242 2236463898
+syscalls 14967 runs 14908 14981 14936 14983 14967
+fn 115124048 ??? liblldELF.so.23.1
+fn 103358850 ??? libLLVM.so.23.1
 fn 102357852 _dl_lookup_symbol_x
-fn 85842986 __memcpy_avx_unaligned_erms
+fn 85838091 __memcpy_avx_unaligned_erms
 fn 84575291 do_lookup_x
 fn 70945569 _dl_relocate_object_no_relro
-fn 45013586 <*const ()>::is_aligned_to
-fn 40847321 __memcmp_avx2_movbe
-fn 36169073 _int_malloc
+fn 45005154 <*const ()>::is_aligned_to
+fn 40845503 __memcmp_avx2_movbe
+fn 36181062 _int_malloc
 fn 33262352 void lld::elf::InputSection::writeTo<llvm::object::ELFType<(llvm::endianness)1, true> >(lld::elf::Ctx&, unsigned char*)
-fn 32435946 core::ptr::copy_nonoverlapping::precondition_check
+fn 32427886 core::ptr::copy_nonoverlapping::precondition_check
 fn 28798173 <core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<alloc::string::String>> as core::iter::traits::iterator::Iterator>::next
 fn 23536928 ??? libz.so.1.3.2
-fn 21517508 free
-fn 16684262 malloc
+fn 21517611 free
+fn 16684594 malloc
 fn 16653720 llvm::xxh3_64bits(unsigned char const*, unsigned long)
 fn 15122712 ignite_syntax::lexer::lex_into
 fn 14346332 <core::slice::iter::Iter<alloc::string::String> as core::iter::traits::iterator::Iterator>::next
-fn 14183532 core::ub_checks::maybe_is_nonoverlapping::runtime
-fn 14122722 <str as core::cmp::PartialEq>::eq
-fn 13486702 _int_free_merge_chunk
+fn 14179940 core::ub_checks::maybe_is_nonoverlapping::runtime
+fn 14122698 <str as core::cmp::PartialEq>::eq
+fn 13486359 _int_free_merge_chunk
 fn 12878214 check_match
 fn 12310317 <u8 as core::slice::cmp::SliceOrd>::compare
 fn 11756110 lld::elf::MergeInputSection::getSectionPiece(unsigned long)
 fn 11538556 <core::slice::iter::Iter<u8> as core::iter::traits::iterator::Iterator>::next
-fn 11262024 __strlen_avx2
+fn 11262238 __strlen_avx2
 fn 11110021 <alloc::raw_vec::RawVecInner>::deallocate
 fn 11067844 <str as core::cmp::Ord>::cmp
 fn 10762721 <core::iter::adapters::enumerate::Enumerate<core::str::iter::Bytes> as core::iter::traits::iterator::Iterator>::next
-fn 10655372 _int_free_create_chunk
+fn 10656538 _int_free_create_chunk
 fn 10327951 lld::elf::SymbolTable::insert(llvm::StringRef)
-fn 10072999 __libc_malloc2
+fn 10074671 __libc_malloc2
 fn 9077744 <core::str::iter::Bytes as core::iter::traits::iterator::Iterator>::next
 fn 8520123 <alloc::string::String as core::clone::Clone>::clone
 fn 8391586 core::fmt::write
@@ -52,7 +52,7 @@ fn 8016304 <u8>::is_ascii_alphanumeric
 fn 8009646 <ignite_syntax::parser::Parser>::peek_index
 fn 7690808 <core::slice::iter::Iter<alloc::string::String> as core::iter::traits::iterator::Iterator>::any::<<ignite_llvm::ir::Module>::prune::{closure#7}>
 fn 7635835 <alloc::raw_vec::RawVecInner>::try_allocate_in
-fn 7438769 __memset_avx2_unaligned_erms
+fn 7438797 __memset_avx2_unaligned_erms
 fn 7211836 <ignite_syntax::parser::Parser>::binary_left'2
 fn 7101074 <alloc::string::String as core::fmt::Write>::write_str
 fn 6917342 <core::hash::sip::Hasher<core::hash::sip::Sip13Rounds> as core::hash::Hasher>::write
@@ -68,30 +68,30 @@ fn 5476443 <ignite_llvm::ir::Module>::di_file
 fn 5281861 <ignite_syntax::lexer::TokenKind>::keyword
 fn 5265640 <core::str::iter::Bytes as core::iter::traits::iterator::Iterator>::try_fold::<(), <core::iter::adapters::enumerate::Enumerate<_> as core::iter::traits::iterator::Iterator>::try_fold::enumerate<u8, (), core::ops::control_flow::ControlFlow<(usize, u8)>, core::iter::traits::iterator::Iterator::find::check<(usize, u8), &mut ignite_syntax::diagnostic::line_starts::{closure#0}>::{closure#0}>::{closure#0}, core::ops::control_flow::ControlFlow<(usize, u8)>>
 fn 5224415 <core::str::pattern::TwoWaySearcher>::next::<core::str::pattern::MatchOnly>
-fn 5203098 _int_free_chunk
+fn 5203106 _int_free_chunk
 fn 5191063 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, usize, alloc::collections::btree::set_val::SetValZST, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<usize>
 fn 5180393 <ignite_llvm::ir::Module>::prune::{closure#7}
-fn 5091743 unlink_chunk.isra.0
-fn 5066150 core::core_arch::x86::sse2::_mm_cmpeq_epi8
+fn 5099596 unlink_chunk.isra.0
 fn 5065854 lld::elf::ObjFile<llvm::object::ELFType<(llvm::endianness)1, true> >::initSectionsAndLocalSyms(bool)
+fn 5061875 core::core_arch::x86::sse2::_mm_cmpeq_epi8
 fn 4994051 __rustc::__rdl_alloc
-fn 4907150 core::core_arch::x86::sse2::_mm_loadu_si128
+fn 4904050 core::core_arch::x86::sse2::_mm_loadu_si128
 fn 4883972 lld::elf::SectionBase::getOffset(unsigned long) const
 fn 4855935 core::slice::raw::from_raw_parts_mut::precondition_check
 fn 4795754 lld::elf::SectionBase::getVA(unsigned long) const
 fn 4765440 core::iter::traits::iterator::Iterator::find::check::<(usize, u8), &mut ignite_syntax::diagnostic::line_starts::{closure#0}>::{closure#0}
 fn 4723393 llvm::LLLexer::LexToken()
-fn 4653586 <hashbrown::raw::RawTableInner>::find_or_find_insert_index_inner
+fn 4648171 <hashbrown::raw::RawTableInner>::find_or_find_insert_index_inner
 fn 4628282 llvm::MachineInstr::addOperand(llvm::MachineFunction&, llvm::MachineOperand const&)
 fn 4572856 <[u8]>::ends_with
 fn 4344350 <alloc::vec::Vec<u8> as core::cmp::Ord>::cmp
-fn 4320564 void lld::elf::markLive<llvm::object::ELFType<(llvm::endianness)1, true> >(lld::elf::Ctx&)
-fn 4315560 <hashbrown::raw::RawTableInner>::find_insert_index_in_group
+fn 4320578 void lld::elf::markLive<llvm::object::ELFType<(llvm::endianness)1, true> >(lld::elf::Ctx&)
+fn 4313128 <hashbrown::raw::RawTableInner>::find_insert_index_in_group
 fn 4281550 core::slice::raw::from_raw_parts::precondition_check
 fn 4232124 <alloc::raw_vec::RawVecInner>::finish_grow
 fn 3934566 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, ignite_check::Local, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<str>
 fn 3911600 <alloc::vec::Vec<u8>>::append_elements
-fn 3835862 realloc
+fn 3837951 realloc
 fn 3827931 llvm::StringTableBuilder::add(llvm::CachedHashStringRef, unsigned char)
 fn 3809364 <usize as core::slice::index::SliceIndex<[_]>>::get_unchecked::precondition_check
 fn 3782003 <core::slice::iter::Iter<&str> as core::iter::traits::iterator::Iterator>::any::<<&str as core::slice::cmp::SliceContains>::slice_contains::{closure#0}>
@@ -103,10 +103,10 @@ fn 3637166 __memchr_avx2
 fn 3636020 void lld::elf::EhInputSection::split<llvm::object::ELFType<(llvm::endianness)1, true> >()
 fn 3625459 <ignite_types::moves::Walk>::call
 fn 3623317 core::slice::memchr::memchr_aligned
-fn 3571711 core::core_arch::x86::sse2::_mm_movemask_epi8
+fn 3569027 core::core_arch::x86::sse2::_mm_movemask_epi8
 fn 3549794 <core::str::iter::CharIndices as core::iter::traits::iterator::Iterator>::next
 fn 3478598 <ignite_syntax::lexer::TokenKind as core::cmp::PartialEq>::eq
-fn 3435873 lld::elf::ObjFile<llvm::object::ELFType<(llvm::endianness)1, true> >::createInputSection(unsigned int, llvm::object::Elf_Shdr_Impl<llvm::object::ELFType<(llvm::endianness)1, true> > const&, llvm::StringRef)
+fn 3435993 lld::elf::ObjFile<llvm::object::ELFType<(llvm::endianness)1, true> >::createInputSection(unsigned int, llvm::object::Elf_Shdr_Impl<llvm::object::ELFType<(llvm::endianness)1, true> > const&, llvm::StringRef)
 fn 3425616 <alloc::vec::Vec<ignite_syntax::lexer::Token>>::push_mut
 fn 3379518 core::ptr::drop_glue::<alloc::vec::Vec<u8>>
 fn 3352019 <&str as core::str::pattern::Pattern>::is_suffix_of
@@ -118,9 +118,9 @@ fn 3167556 <ignite_types::ids::NodeHasher as core::hash::Hasher>::finish
 fn 3145954 <core::slice::iter::Iter<usize> as core::iter::traits::iterator::Iterator>::next
 fn 3141492 core::hash::sip::u8to64_le
 fn 3042852 <[(usize, bool)]>::binary_search_by::<<[(usize, bool)]>::partition_point<<ignite_llvm::ir::Module>::line_col::{closure#0}>::{closure#0}>
-fn 3039690 core::core_arch::x86::sse2::_mm_set1_epi8
+fn 3037125 core::core_arch::x86::sse2::_mm_set1_epi8
 fn 3002534 <hashbrown::raw::RawTable<(ignite_syntax::ast::NodeId, ignite_types::Ty)>>::reserve_rehash::<hashbrown::map::make_hasher<ignite_syntax::ast::NodeId, ignite_types::Ty, core::hash::BuildHasherDefault<ignite_types::ids::NodeHasher>>::{closure#0}>
-fn 2919972 <core::core_arch::x86::__m128i>::as_i8x16
+fn 2917628 <core::core_arch::x86::__m128i>::as_i8x16
 fn 2881200 <core::fmt::Formatter>::pad_integral
 fn 2866295 <core::str::pattern::CharSearcher as core::str::pattern::Searcher>::next_match
 fn 2857304 <core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<&str>> as core::iter::traits::iterator::Iterator>::next
@@ -129,7 +129,7 @@ fn 2821448 <alloc::string::String>::push_str
 fn 2816725 <core::str::pattern::StrSearcher>::new
 fn 2781553 <ignite_types::Ty as core::clone::Clone>::clone
 fn 2737888 <alloc::string::String as <[_]>::to_vec_in::ConvertVec>::to_vec::<alloc::alloc::Global>
-fn 2675956 _int_realloc
+fn 2677019 _int_realloc
 fn 2552214 <*const _>::offset_from_unsigned::precondition_check
 fn 2525057 core::ptr::drop_glue::<ignite_types::Ty>
 fn 2519580 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, usize, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<str>
@@ -174,7 +174,7 @@ fn 1920300 llvm::object::ELFFile<llvm::object::ELFType<(llvm::endianness)1, true
 fn 1900316 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, &ignite_syntax::diagnostic::SourceFile, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<str>
 fn 1880228 isalnum
 fn 1869948 <core::slice::iter::Iter<u8> as core::iter::traits::iterator::Iterator>::try_fold::<usize, <core::iter::adapters::take_while::TakeWhile<_, _> as core::iter::traits::iterator::Iterator>::try_fold::check<&u8, usize, core::ops::try_trait::NeverShortCircuit<usize>, ignite_llvm::ir::scan_symbols<ignite_llvm::ir::symbol_slices::{closure#0}>::{closure#0}, <core::ops::try_trait::NeverShortCircuit<usize>>::wrap_mut_2<usize, &u8, <core::iter::adapters::take_while::TakeWhile<core::slice::iter::Iter<u8>, ignite_llvm::ir::scan_symbols<ignite_llvm::ir::symbol_slices::{closure#0}>::{closure#0}> as core::iter::traits::iterator::Iterator>::count::{closure#0}>::{closure#0}>::{closure#0}, core::ops::control_flow::ControlFlow<core::ops::try_trait::NeverShortCircuit<usize>, usize>>
-fn 1823814 <core::core_arch::simd::Simd<i8, 16>>::splat
+fn 1822275 <core::core_arch::simd::Simd<i8, 16>>::splat
 fn 1820335 llvm::APSInt::APSInt(llvm::StringRef)
 fn 1819179 ignite_syntax::lexer::lex_string
 fn 1810032 <ignite_syntax::ast::NodeId as core::hash::Hash>::hash::<ignite_types::ids::NodeHasher>
@@ -183,12 +183,12 @@ fn 1742349 <core::range::Range<usize> as core::slice::index::SliceIndex<str>>::g
 fn 1740696 llvm::object::ELFFile<llvm::object::ELFType<(llvm::endianness)1, true> >::getSectionName(llvm::object::Elf_Shdr_Impl<llvm::object::ELFType<(llvm::endianness)1, true> > const&, llvm::StringRef) const
 fn 1734585 lld::elf::InputSectionBase::getRelocTargetVA(lld::elf::Ctx&, lld::elf::Relocation const&, unsigned long) const
 fn 1728784 <&mut ignite_syntax::diagnostic::line_starts::{closure#0} as core::ops::function::FnMut<(&(usize, u8),)>>::call_mut
+fn 1717820 msort_with_tmp.part.0'2
 fn 1713140 <core::fmt::Formatter>::pad
-fn 1708150 msort_with_tmp.part.0'2
 fn 1706178 lld::elf::LinkerScript::assignOffsets(lld::elf::OutputSection*)
 fn 1701013 <hashbrown::map::HashMap<ignite_syntax::ast::NodeId, ignite_types::Ty, core::hash::BuildHasherDefault<ignite_types::ids::NodeHasher>>>::insert
 fn 1697552 <alloc::string::String as core::cmp::Ord>::cmp
-fn 1686550 <hashbrown::raw::RawTableInner>::find_insert_index
+fn 1686523 <hashbrown::raw::RawTableInner>::find_insert_index
 fn 1679847 llvm::consumeUnsignedInteger(llvm::StringRef&, unsigned int, unsigned long long&)
 fn 1677110 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, core::option::Option<ignite_types::Ty>, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<str>
 fn 1667230 lld::elf::Symbol::resolve(lld::elf::Ctx&, lld::elf::Defined const&)
@@ -196,7 +196,7 @@ fn 1664096 llvm::Expected<llvm::ArrayRef<unsigned char> > llvm::object::ELFFile<
 fn 1661118 <alloc::collections::btree::map::BTreeMap<alloc::string::String, ignite_check::Local>>::get::<str>
 fn 1641631 lld::elf::ObjFile<llvm::object::ELFType<(llvm::endianness)1, true> >::postParse()
 fn 1630768 llvm::raw_ostream::write(char const*, unsigned long)
-fn 1604110 <ignite_types::Ty as core::cmp::PartialEq>::eq
+fn 1599952 <ignite_types::Ty as core::cmp::PartialEq>::eq
 fn 1586250 <ignite_types::QualName as core::clone::Clone>::clone
 fn 1525230 <core::ptr::non_null::NonNull<_>>::new_unchecked::precondition_check
 fn 1509785 0x00000000001ef400'2
@@ -217,7 +217,7 @@ fn 1431272 <ignite_types::moves::Walk>::call'2
 fn 1429352 lld::elf::parseVersionAndComputeIsPreemptible(lld::elf::Ctx&)
 fn 1410628 llvm::PassRegistry::enumerateWith(llvm::PassRegistrationListener*)
 fn 1403064 core::ptr::copy::precondition_check
-fn 1397139 <hashbrown::raw::RawTableInner>::fix_insert_index
+fn 1397214 <hashbrown::raw::RawTableInner>::fix_insert_index
 fn 1390390 <alloc::vec::Vec<ignite_types::moves::Node>>::pop
 fn 1359024 <core::iter::adapters::enumerate::Enumerate<core::iter::adapters::copied::Copied<core::slice::iter::Iter<(&ignite_syntax::ast::Expr, ignite_types::moves::Operand)>>> as core::iter::traits::iterator::Iterator>::next
 fn 1340601 <ignite_syntax::parser::Parser>::newlines_insignificant
@@ -226,7 +226,7 @@ fn 1317198 <ignite_syntax::ast::Type as <[_]>::to_vec_in::ConvertVec>::to_vec::<
 fn 1287071 ignite::module_dependencies
 fn 1279142 <alloc::vec::Vec<u8>>::reserve
 fn 1278621 <&str as core::slice::cmp::SliceContains>::slice_contains::{closure#0}
-fn 1268217 lld::elf::RelocScan::processAux(lld::elf::RelExpr, lld::elf::RelType, unsigned long, lld::elf::Symbol&, long) const
+fn 1268442 lld::elf::RelocScan::processAux(lld::elf::RelExpr, lld::elf::RelType, unsigned long, lld::elf::Symbol&, long) const
 fn 1258929 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, ignite_types::QualName, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<alloc::string::String>
 fn 1244273 <alloc::vec::Vec<ignite_types::moves::Node>>::push_mut
 fn 1217018 llvm::raw_svector_ostream::write_impl(char const*, unsigned long)
@@ -271,12 +271,12 @@ fn 989624 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::n
 fn 987042 llvm::DenseMapInfo<llvm::StringRef, void>::getHashValue(llvm::StringRef)
 fn 981808 core::ptr::drop_glue::<ignite_types::Ty>'2
 fn 981222 core::slice::memchr::memchr
-fn 978688 llvm::SmallVectorBase<unsigned int>::grow_pod(void*, unsigned long, unsigned long)
+fn 979718 llvm::SmallVectorBase<unsigned int>::grow_pod(void*, unsigned long, unsigned long)
 fn 976842 llvm::SmallPtrSetImplBase::insert_imp_big(void const*)
 fn 974152 <u8>::is_ascii
 fn 967842 lld::elf::RelocScan::isStaticLinkTimeConstant(lld::elf::RelExpr, lld::elf::RelType, lld::elf::Symbol const&, unsigned long) const
-fn 967758 <alloc::vec::Vec<u8> as core::cmp::PartialEq>::eq
-fn 964161 <alloc::string::String as core::borrow::Borrow<str>>::borrow
+fn 966659 <alloc::vec::Vec<u8> as core::cmp::PartialEq>::eq
+fn 964155 <alloc::string::String as core::borrow::Borrow<str>>::borrow
 fn 961929 <hashbrown::raw::RawTable<(ignite_syntax::ast::NodeId, ignite_types::Ty)>>::reserve_rehash::<hashbrown::map::make_hasher<ignite_syntax::ast::NodeId, ignite_types::Ty, core::hash::BuildHasherDefault<ignite_types::ids::NodeHasher>>::{closure#0}>::{closure#0}
 fn 961677 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, &str, alloc::collections::btree::set_val::SetValZST, alloc::collections::btree::node::marker::LeafOrInternal>>::search_tree::<&str>
 fn 956957 <ignite_types::moves::Walk>::var_place
@@ -318,14 +318,14 @@ fn 838866 <core::iter::adapters::peekable::Peekable<core::iter::adapters::map::M
 fn 838099 ignite_syntax::lexer::in_file
 fn 837826 ignite_syntax::lexer::lex_string::{closure#0}
 fn 837700 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, ignite_types::moves::Entry, alloc::collections::btree::set_val::SetValZST, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::collections::btree::node::marker::KV>>::next_leaf_edge
-fn 836038 <alloc::string::String as core::borrow::Borrow<alloc::string::String>>::borrow
+fn 836036 <alloc::string::String as core::borrow::Borrow<alloc::string::String>>::borrow
 fn 833688 <core::slice::iter::Iter<(&str, &str)> as core::iter::traits::iterator::Iterator>::try_fold::<(), core::iter::adapters::filter::filter_try_fold<&(&str, &str), (), core::ops::control_flow::ControlFlow<ignite_types::builtins::Sig>, ignite_types::builtins::std_modules_of::{closure#0}, core::iter::traits::iterator::Iterator::find_map::check<&(&str, &str), ignite_types::builtins::Sig, &mut ignite_types::builtins::std_modules_of::{closure#1}>::{closure#0}>::{closure#0}, core::ops::control_flow::ControlFlow<ignite_types::builtins::Sig>>
 fn 831906 <alloc::collections::btree::navigate::LazyLeafRange<alloc::collections::btree::node::marker::Dying, alloc::string::String, alloc::collections::btree::set_val::SetValZST>>::take_front
 fn 829236 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, alloc::vec::Vec<(alloc::string::String, alloc::vec::Vec<ignite_types::Ty>)>, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<alloc::string::String>
-fn 822666 operator new(unsigned long, std::align_val_t)
+fn 823836 operator new(unsigned long, std::align_val_t)
 fn 822493 <usize as core::cmp::Ord>::min
 fn 820380 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, alloc::string::String, alloc::vec::Vec<bool>, alloc::collections::btree::node::marker::Leaf>>::push_with_handle
-fn 810584 <core::core_arch::simd::Simd<i8, 16>>::as_m128i
+fn 809900 <core::core_arch::simd::Simd<i8, 16>>::as_m128i
 fn 808467 llvm::cl::Option::addArgument()
 fn 807474 lld::elf::ObjFile<llvm::object::ELFType<(llvm::endianness)1, true> >::parseLazy()
 fn 804914 <core::iter::adapters::copied::Copied<core::slice::iter::Iter<(&ignite_syntax::ast::Expr, ignite_types::moves::Operand)>> as core::iter::traits::iterator::Iterator>::next
@@ -392,7 +392,7 @@ fn 664117 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::n
 fn 660968 llvm::calculateDbgEntityHistory(llvm::MachineFunction const*, llvm::TargetRegisterInfo const*, llvm::DbgValueHistoryMap&, llvm::DbgLabelInstrMap&)
 fn 660318 ignite_llvm::ir::scan_symbols::<ignite_llvm::ir::symbol_slices::{closure#0}>
 fn 660048 <core::slice::iter::Iter<ignite_syntax::ast::Expr> as core::iter::traits::iterator::Iterator>::next
-fn 657387 <ignite_syntax::ast::NodeId as core::cmp::PartialEq>::eq
+fn 657399 <ignite_syntax::ast::NodeId as core::cmp::PartialEq>::eq
 fn 651012 llvm::AsmPrinter::emitFunctionBody()
 fn 649716 <alloc::vec::Vec<(&ignite_syntax::ast::Expr, ignite_types::moves::Operand)>>::push_mut
 fn 649546 <ignite_check::Checker>::expr'2
@@ -446,7 +446,6 @@ fn 572952 <core::ops::range::RangeFrom<usize> as core::slice::index::SliceIndex<
 fn 571618 llvm::object::Archive::Child::Child(llvm::object::Archive const*, char const*, llvm::Error*)
 fn 569000 <ignite_types::typer::Typer>::use_local
 fn 568876 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, alloc::string::String, alloc::collections::btree::set_val::SetValZST, alloc::collections::btree::node::marker::Leaf>>::push_with_handle
-fn 567223 lld::elf::SymbolTableBaseSection::sortSymTabSymbols()
 fn 566460 <&str as core::cmp::Ord>::cmp
 fn 566175 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, ignite_types::QualName, alloc::collections::btree::node::marker::LeafOrInternal>>::search_tree::<alloc::string::String>
 fn 564705 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, ignite_types::moves::Entry, alloc::collections::btree::set_val::SetValZST, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::collections::btree::node::marker::KV>>::into_kv
@@ -472,7 +471,8 @@ fn 549448 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::n
 fn 549094 llvm::DILocation* llvm::MDNode::storeImpl<llvm::DILocation, llvm::DenseSet<llvm::DILocation*, llvm::MDNodeInfo<llvm::DILocation> > >(llvm::DILocation*, llvm::Metadata::StorageType, llvm::DenseSet<llvm::DILocation*, llvm::MDNodeInfo<llvm::DILocation> >&)
 fn 545989 <alloc::collections::btree::map::BTreeMap<&str, alloc::collections::btree::set_val::SetValZST>>::entry
 fn 542025 <str as alloc::string::SpecToString>::spec_to_string
-fn 536328 <ignite_syntax::ast::NodeId as hashbrown::Equivalent<ignite_syntax::ast::NodeId>>::equivalent
+fn 538818 lld::elf::SymbolTableBaseSection::sortSymTabSymbols()
+fn 536340 <ignite_syntax::ast::NodeId as hashbrown::Equivalent<ignite_syntax::ast::NodeId>>::equivalent
 fn 533510 <hashbrown::raw::RawTableInner>::drop_elements::<(ignite_syntax::ast::NodeId, ignite_types::Ty)>
 fn 533407 <alloc::collections::btree::navigate::LazyLeafRange<alloc::collections::btree::node::marker::Dying, ignite_types::moves::Entry, alloc::collections::btree::set_val::SetValZST>>::take_front
 fn 533362 <alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::collections::btree::set_val::SetValZST>>::entry
@@ -498,8 +498,8 @@ fn 506223 llvm::LLParser::parseType(llvm::Type*&, llvm::Twine const&, bool)
 fn 505522 <core::ops::range::Range<usize> as core::iter::traits::double_ended::DoubleEndedIterator>::try_rfold::<(), core::iter::traits::double_ended::DoubleEndedIterator::rfind::check<usize, core::str::pattern::simd_contains::{closure#0}>::{closure#0}, core::ops::control_flow::ControlFlow<usize>>
 fn 504097 <alloc::alloc::Global as core::alloc::Allocator>::allocate
 fn 502842 <core::slice::iter::Iter<(alloc::string::String, ignite_types::Ty)> as core::iter::traits::iterator::Iterator>::find::<ignite_types::boxed_field::{closure#1}::{closure#0}>
-fn 502148 sysmalloc
-fn 501129 0x00000000001efe90'2
+fn 502372 sysmalloc
+fn 501350 0x00000000001efe90'2
 fn 498139 <ignite_types::typer::Typer>::call
 fn 497451 llvm::opt::OptTable::getOption(llvm::opt::OptSpecifier) const
 fn 496579 lld::elf::InputSectionBase::getSize() const
@@ -527,6 +527,7 @@ fn 463924 <core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<ig
 fn 463459 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, alloc::string::String, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<alloc::string::String>
 fn 462682 <core::str::iter::SplitInternal<char>>::next_inclusive
 fn 461772 <core::ops::range::Range<usize> as core::slice::index::SliceIndex<str>>::get_unchecked::precondition_check
+fn 461203 __GI___tunables_init
 fn 460087 llvm::Value::setNameImpl(llvm::Twine const&)
 fn 457702 <alloc::collections::btree::set::BTreeSet<alloc::string::String> as core::iter::traits::collect::IntoIterator>::into_iter
 fn 456799 <ignite_types::typer::Typer>::check'2
@@ -544,10 +545,9 @@ fn 446201 <alloc::collections::btree::map::IntoIter<alloc::string::String, alloc
 fn 444702 llvm::PMDataManager::freePass(llvm::Pass*, llvm::StringRef, llvm::PassDebuggingString)
 fn 443900 <core::slice::iter::Iter<ignite_syntax::ast::Stmt> as core::iter::traits::iterator::Iterator>::next
 fn 443778 llvm::object::ArchiveMemberHeader::isThin() const
+fn 443625 posix_memalign
 fn 443076 <ignite_llvm::ir::Module>::line_col::{closure#0}
 fn 443051 llvm::Value::getName() const
-fn 442995 posix_memalign
-fn 442573 __GI___tunables_init
 fn 442054 llvm::MachineInstr::addImplicitDefUseOperands(llvm::MachineFunction&)
 fn 441999 <char>::is_ascii_alphanumeric
 fn 441330 <ignite_llvm::layout::TypeEnv>::fields_of::{closure#0}
@@ -594,7 +594,7 @@ fn 396667 llvm::PMTopLevelManager::findAnalysisUsage(llvm::Pass*)
 fn 395458 <alloc::collections::btree::map::IntoIter<ignite_types::moves::Entry, alloc::collections::btree::set_val::SetValZST> as core::ops::drop::Drop>::drop
 fn 395063 <hashbrown::map::HashMap<ignite_syntax::ast::NodeId, ignite_types::Callee, core::hash::BuildHasherDefault<ignite_types::ids::NodeHasher>>>::insert
 fn 394789 <hashbrown::raw::RawTable<(ignite_syntax::ast::NodeId, usize)>>::reserve_rehash::<hashbrown::map::make_hasher<ignite_syntax::ast::NodeId, usize, core::hash::BuildHasherDefault<ignite_types::ids::NodeHasher>>::{closure#0}>
-fn 394310 llvm::ReplaceableMetadataImpl::moveRef(void*, void*, llvm::Metadata const&)
+fn 394388 llvm::ReplaceableMetadataImpl::moveRef(void*, void*, llvm::Metadata const&)
 fn 392343 <ignite_syntax::parser::Parser>::node
 fn 392092 llvm::Value::setValueName(llvm::StringMapEntry<llvm::Value*>*)
 fn 391558 llvm::LexicalScopes::extractLexicalScopes(llvm::SmallVectorImpl<std::pair<llvm::MachineInstr const*, llvm::MachineInstr const*> >&, llvm::DenseMap<llvm::MachineInstr const*, llvm::LexicalScope*, llvm::DenseMapInfo<llvm::MachineInstr const*, void>, llvm::detail::DenseMapPair<llvm::MachineInstr const*, llvm::LexicalScope*> >&)
@@ -602,7 +602,7 @@ fn 389350 <str as core::fmt::Display>::fmt
 fn 388800 <ignite_llvm::ir::Func>::reg
 fn 387612 lld::elf::Symbol::resolve(lld::elf::Ctx&, lld::elf::LazySymbol const&)
 fn 387477 <alloc::string::String as core::fmt::Display>::fmt
-fn 387401 __memcpy_chk_avx_unaligned_erms
+fn 387461 __memcpy_chk_avx_unaligned_erms
 fn 387115 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Dying, &str, alloc::collections::btree::set_val::SetValZST, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::Edge>>::deallocating_next::<alloc::alloc::Global>
 fn 387055 <core::slice::iter::Iter<(alloc::string::String, alloc::vec::Vec<ignite_types::Ty>)> as core::iter::traits::iterator::Iterator>::try_fold::<(), <core::iter::adapters::enumerate::Enumerate<_> as core::iter::traits::iterator::Iterator>::try_fold::enumerate<&(alloc::string::String, alloc::vec::Vec<ignite_types::Ty>), (), core::ops::control_flow::ControlFlow<(usize, &(alloc::string::String, alloc::vec::Vec<ignite_types::Ty>))>, core::iter::traits::iterator::Iterator::find::check<(usize, &(alloc::string::String, alloc::vec::Vec<ignite_types::Ty>)), <ignite_types::typer::Typer>::selected_variant::{closure#1}>::{closure#0}>::{closure#0}, core::ops::control_flow::ControlFlow<(usize, &(alloc::string::String, alloc::vec::Vec<ignite_types::Ty>))>>
 fn 386592 lld::elf::Symbol::getGotVA(lld::elf::Ctx&) const
@@ -711,8 +711,8 @@ fn 318407 <core::option::Option<&usize> as core::ops::try_trait::Try>::branch
 fn 317560 <ignite_syntax::parser::Parser>::stmt
 fn 316824 <core::ops::control_flow::ControlFlow<usize> as core::ops::try_trait::Try>::branch
 fn 316704 <core::slice::iter::Iter<ignite_syntax::lexer::Token> as core::iter::traits::iterator::Iterator>::try_fold::<(), core::iter::adapters::filter_map::filter_map_try_fold<&ignite_syntax::lexer::Token, &alloc::collections::btree::set::BTreeSet<alloc::string::String>, (), core::ops::control_flow::ControlFlow<&alloc::string::String>, ignite::builtin_dependencies::{closure#1}, <core::iter::adapters::flatten::FlattenCompat<_, _>>::iter_try_fold::flatten<&alloc::collections::btree::set::BTreeSet<alloc::string::String>, (), core::ops::control_flow::ControlFlow<&alloc::string::String>, <core::iter::adapters::flatten::FlattenCompat<_, _> as core::iter::traits::iterator::Iterator>::try_fold::flatten<alloc::collections::btree::set::Iter<alloc::string::String>, (), core::ops::control_flow::ControlFlow<&alloc::string::String>, core::iter::traits::iterator::Iterator::find::check<&alloc::string::String, &mut ignite::builtin_dependencies::{closure#2}>::{closure#0}>::{closure#0}>::{closure#0}>::{closure#0}, core::ops::control_flow::ControlFlow<&alloc::string::String>>
+fn 316643 <hashbrown::raw::RawTable<((usize, alloc::string::String), ignite_syntax::ast::Span)>>::find::<hashbrown::map::equivalent_key<(usize, alloc::string::String), (usize, alloc::string::String), ignite_syntax::ast::Span>::{closure#0}>
 fn 316519 llvm::LLVMContext::getMDKindID(llvm::StringRef) const
-fn 316001 <hashbrown::raw::RawTable<((usize, alloc::string::String), ignite_syntax::ast::Span)>>::find::<hashbrown::map::equivalent_key<(usize, alloc::string::String), (usize, alloc::string::String), ignite_syntax::ast::Span>::{closure#0}>
 fn 315755 <ignite_syntax::ast::Span>::new
 fn 314682 <core::option::Option<bool>>::unwrap_or
 fn 313618 <(alloc::string::String, ignite_types::Ty) as <[_]>::to_vec_in::ConvertVec>::to_vec::<alloc::alloc::Global>
@@ -786,13 +786,13 @@ fn 279652 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::n
 fn 279509 core::iter::adapters::map::map_fold::<&(alloc::string::String, ignite_types::Ty), (alloc::string::String, ignite_types::Ty), (), <ignite_llvm::layout::TypeEnv>::fields_of::{closure#0}, core::iter::traits::iterator::Iterator::for_each::call<(alloc::string::String, ignite_types::Ty), <alloc::vec::Vec<(alloc::string::String, ignite_types::Ty)>>::extend_trusted<core::iter::adapters::map::Map<core::slice::iter::Iter<(alloc::string::String, ignite_types::Ty)>, <ignite_llvm::layout::TypeEnv>::fields_of::{closure#0}>>::{closure#0}>::{closure#0}>::{closure#0}
 fn 278167 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, &str, usize, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<str>
 fn 278055 <core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<(alloc::string::String, alloc::vec::Vec<ignite_types::Ty>)>> as core::iter::traits::iterator::Iterator>::next
-fn 277550 <alloc::string::String as core::cmp::PartialEq>::eq
+fn 277205 <alloc::string::String as core::cmp::PartialEq>::eq
 fn 276846 core::iter::adapters::flatten::and_then_or_clear::<alloc::vec::into_iter::IntoIter<ignite_types::Ty>, ignite_types::Ty, <alloc::vec::into_iter::IntoIter<ignite_types::Ty> as core::iter::traits::iterator::Iterator>::next>
 fn 276608 <ignite_llvm::lower::Lower>::expr_kind'2
 fn 276337 <ignite_check::Checker>::expr
 fn 276167 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, usize, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::collections::btree::node::marker::KV>>::into_kv
 fn 276150 llvm::APFloat::Storage::Storage(llvm::detail::IEEEFloat, llvm::fltSemantics const&)
-fn 275697 llvm::ReplaceableMetadataImpl::addRef(void*, llvm::PointerUnion<llvm::MetadataAsValue*, llvm::Metadata*, llvm::DebugValueUser*>)
+fn 275757 llvm::ReplaceableMetadataImpl::addRef(void*, llvm::PointerUnion<llvm::MetadataAsValue*, llvm::Metadata*, llvm::DebugValueUser*>)
 fn 275136 ignite_syntax::lexer::lex_into::{closure#1}
 fn 274968 <ignite_syntax::ast::Span as core::clone::Clone>::clone
 fn 274646 <core::slice::iter::Iter<ignite_syntax::ast::Stmt> as core::iter::traits::double_ended::DoubleEndedIterator>::next_back
@@ -806,7 +806,7 @@ fn 270792 <core::iter::adapters::enumerate::Enumerate<_> as core::iter::traits::
 fn 270776 getArchiveMemberDecField(llvm::Twine, llvm::StringRef, llvm::object::Archive const*, llvm::object::AbstractArchiveMemberHeader const*)
 fn 270756 core::ptr::drop_glue::<alloc::vec::Vec<ignite_types::Ty>>
 fn 270555 core::iter::traits::double_ended::DoubleEndedIterator::rfind::check::<usize, core::str::pattern::simd_contains::{closure#0}>::{closure#0}
-fn 270280 <u8 as core::slice::cmp::SlicePartialEq<u8>>::equal_same_length
+fn 270152 <u8 as core::slice::cmp::SlicePartialEq<u8>>::equal_same_length
 fn 268387 <core::result::Result<ignite_syntax::ast::ExprKind, ignite_syntax::parser::Fail> as core::ops::try_trait::Try>::branch
 fn 268380 core::ptr::drop_glue::<ignite_syntax::ast::Type>
 fn 267753 core::ptr::drop_glue::<ignite_syntax::ast::ExprKind>'2
@@ -830,7 +830,6 @@ fn 261360 <ignite_syntax::lexer::TokenKind as core::cmp::PartialEq>::ne
 fn 261276 <alloc::collections::btree::set::BTreeSet<alloc::string::String>>::contains::<alloc::string::String>
 fn 260849 <ignite_types::moves::Walk>::read_place
 fn 260823 llvm::AttributeList::hasFnAttr(llvm::Attribute::AttrKind) const
-fn 259132 <hashbrown::raw::RawTable<(ignite_types::Ty, ignite_llvm::layout::Layout)>>::find::<hashbrown::map::equivalent_key<ignite_types::Ty, ignite_types::Ty, ignite_llvm::layout::Layout>::{closure#0}>
 fn 258899 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, usize, alloc::collections::btree::set::BTreeSet<alloc::string::String>, alloc::collections::btree::node::marker::LeafOrInternal>>::search_tree::<usize>
 fn 258298 <ignite_types::Ty as core::hash::Hash>::hash::<std::hash::random::DefaultHasher>
 fn 258060 llvm::MachineFunctionPass::runOnFunction(llvm::Function&)
@@ -843,10 +842,11 @@ fn 255929 <core::iter::adapters::flatten::FlattenCompat<core::iter::adapters::ma
 fn 255807 llvm::raw_string_ostream::write_impl(char const*, unsigned long)
 fn 255478 llvm::FunctionLoweringInfo::set(llvm::Function const&, llvm::MachineFunction&, llvm::SelectionDAG*)
 fn 255018 <alloc::collections::btree::map::BTreeMap<alloc::string::String, &ignite_syntax::diagnostic::SourceFile>>::get::<str>
+fn 254746 <hashbrown::raw::RawTable<(ignite_types::Ty, ignite_llvm::layout::Layout)>>::find::<hashbrown::map::equivalent_key<ignite_types::Ty, ignite_types::Ty, ignite_llvm::layout::Layout>::{closure#0}>
 fn 254532 <core::str::pattern::MatchOnly as core::str::pattern::TwoWayStrategy>::use_early_reject
 fn 254338 <ignite_types::moves::Live>::read
-fn 253903 <ignite_types::Ty as core::cmp::PartialEq>::eq'2
-fn 253818 <hashbrown::raw::RawTable<(ignite_syntax::ast::Span, usize)>>::find::<hashbrown::map::equivalent_key<ignite_syntax::ast::Span, ignite_syntax::ast::Span, usize>::{closure#0}>
+fn 253795 <ignite_types::Ty as core::cmp::PartialEq>::eq'2
+fn 252948 <hashbrown::raw::RawTable<(ignite_syntax::ast::Span, usize)>>::find::<hashbrown::map::equivalent_key<ignite_syntax::ast::Span, ignite_syntax::ast::Span, usize>::{closure#0}>
 fn 252945 <str as alloc::string::ToString>::to_string
 fn 252715 alloc::str::join_generic_copy::<str, u8, alloc::string::String>
 fn 251500 <core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<&ignite_syntax::ast::Expr>> as core::iter::traits::iterator::Iterator>::next
@@ -929,8 +929,8 @@ fn 223888 llvm::object::ArchiveMemberHeader::getSize() const
 fn 223704 llvm::EVT::getEVT(llvm::Type*, bool)
 fn 223671 llvm::MachineRegisterInfo::createIncompleteVirtualRegister(llvm::StringRef)
 fn 223669 <alloc::vec::Vec<ignite_types::moves::Entry> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<ignite_types::moves::Entry, core::iter::adapters::cloned::Cloned<alloc::collections::btree::set::Union<ignite_types::moves::Entry>>>>::from_iter
-syscall 5497 futex
-syscall 4532 mprotect
+syscall 5526 futex
+syscall 4547 mprotect
 syscall 782 mmap
 syscall 630 newfstatat
 syscall 614 openat
@@ -941,7 +941,7 @@ syscall 310 close
 syscall 296 readlink
 syscall 268 access
 syscall 193 read
-syscall 162 brk
+syscall 161 brk
 syscall 89 statx
 syscall 80 execve
 syscall 58 getdents64

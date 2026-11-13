@@ -396,14 +396,20 @@ stays the judge of a release, on the dedicated host.
   path. `ignite-perf path-cost --record first --scenario <name> --runs 5` records its first
   value (`first <commit>`), which a merge shows and does not judge; the next release's
   `RECORD` writes it as that release's, and from then on it is judged like every other.
-- **At v0.16.2** (recorded again 2026-11-12 with the digests and the settled server, 5 runs at
-  a load average of 33 to 55, `bench/path-cost/counts/`): the cells of `todo` and `terminal`
-  spread 0 to 2 instructions and 0 or 1 system call on both targets, so each is held to its
-  floor (a thousandth of its instructions, a hundredth of its system calls and at least one),
-  `rust/todo/start/syscalls` to 2. The `design` cells spread: instructions under 0.03 %
-  (141,709 on 854 million for check, 580,498 on 2,236 million for the LLVM build), all within
-  the floor of a thousandth; system calls 0 for check and plan, 73 to 74 for the Rust build
-  (band 2) and 14,890 to 14,992 for the LLVM build (band 204 from its spread). Two earlier
+- **At v0.16.2** (recorded again 2026-11-13 with `IGNITE_WORKERS=2` for the servers, 5 runs,
+  `bench/path-cost/counts/`): the cells of `todo` and `terminal` spread 0 to 6 instructions
+  and 0 or 1 system call on both targets, so each is held to its floor (a thousandth of its
+  instructions, a hundredth of its system calls and at least one),
+  `llvm/terminal/start/syscalls` to 2. The `design` cells spread: instructions under 0.01 %
+  (67,248 on 854 million for check, 60,189 on 2,236 million for the LLVM build), all within
+  the floor of a thousandth; system calls 74 to 75 for check and 73 to 74 for plan (band 2
+  each), 74 for the Rust build and 14,908 to 14,983 for the LLVM build (band 150 from its
+  spread). The recording of 2026-11-12, without `IGNITE_WORKERS` and started from a session
+  scope, read the four `start` cells 15,402 to 15,427 instructions and 26 system calls higher
+  (`llvm/terminal` 320,238 and 102 against 304,816 and 76). Of the other cells of `todo` and
+  `terminal`, `llvm/terminal/session` read 245,441 then and 244,745 now, with no spread in
+  either recording and no known cause; the rest are the same value in both or within 42
+  instructions of it. Two earlier
   recordings, with the programs still built in the work directory, differed by 280
   instructions on `patch` and `delete` of both targets, each constant over its five runs.
 - **Cost in the gate.** A pass that measures nothing again starts 65 processes itself: 8
@@ -456,7 +462,7 @@ release.
 | # | metric | kind | better | instrument | bar | target |
 |---|---|---|---|---|---|---|
 | 3.1 | copies in the generated code of the golden corpus | ratchet | lower | `quality::static_metrics_hold_the_bar`: `.clone()` in the Rust generator's goldens, calls of `copy.*` in the LLVM goldens | llvm 90, rust 163 |  |
-| 3.10 | cost of a frozen path: instructions and system calls | ratchet | lower | `ignite-perf path-cost` (task gate, every merge): instructions (callgrind, self per function) and system calls (`strace -f`) of the frozen scenarios of `bench/path-cost/` per target, scenario and operation (a server's start, a batch of `repeat` operations, an `ignite` command), against their counts at the last release in `bench/path-cost/counts/`; noise band 1 %, at least one system call | all/design/check/instructions 854142290, all/design/check/syscalls 75, all/design/plan/instructions 860008832, all/design/plan/syscalls 74, llvm/design/build/instructions 2236411447, llvm/design/build/syscalls 14924, llvm/terminal/session/instructions 245441, llvm/terminal/session/syscalls 126, llvm/terminal/start/instructions 320238, llvm/terminal/start/syscalls 102, llvm/todo/connection/instructions 471658, llvm/todo/connection/syscalls 246, llvm/todo/delete/instructions 636697, llvm/todo/delete/syscalls 380, llvm/todo/get/instructions 450246, llvm/todo/get/syscalls 40, llvm/todo/patch/instructions 930548, llvm/todo/patch/syscalls 380, llvm/todo/start/instructions 337200, llvm/todo/start/syscalls 106, rust/design/build/instructions 1155672609, rust/design/build/syscalls 74, rust/terminal/session/instructions 131733, rust/terminal/session/syscalls 120, rust/terminal/start/instructions 384522, rust/terminal/start/syscalls 126, rust/todo/connection/instructions 225731, rust/todo/connection/syscalls 227, rust/todo/delete/instructions 541888, rust/todo/delete/syscalls 300, rust/todo/get/instructions 302422, rust/todo/get/syscalls 40, rust/todo/patch/instructions 800543, rust/todo/patch/syscalls 300, rust/todo/start/instructions 404330, rust/todo/start/syscalls 130 |  |
+| 3.10 | cost of a frozen path: instructions and system calls | ratchet | lower | `ignite-perf path-cost` (task gate, every merge): instructions (callgrind, self per function) and system calls (`strace -f`) of the frozen scenarios of `bench/path-cost/` per target, scenario and operation (a server's start, a batch of `repeat` operations, an `ignite` command), against their counts at the last release in `bench/path-cost/counts/`; noise band 1 %, at least one system call | all/design/check/instructions 854153551, all/design/check/syscalls 75, all/design/plan/instructions 859996322, all/design/plan/syscalls 74, llvm/design/build/instructions 2236463944, llvm/design/build/syscalls 14967, llvm/terminal/session/instructions 244745, llvm/terminal/session/syscalls 126, llvm/terminal/start/instructions 304816, llvm/terminal/start/syscalls 76, llvm/todo/connection/instructions 471700, llvm/todo/connection/syscalls 246, llvm/todo/delete/instructions 636697, llvm/todo/delete/syscalls 380, llvm/todo/get/instructions 450246, llvm/todo/get/syscalls 40, llvm/todo/patch/instructions 930548, llvm/todo/patch/syscalls 380, llvm/todo/start/instructions 321798, llvm/todo/start/syscalls 80, rust/design/build/instructions 1155668462, rust/design/build/syscalls 74, rust/terminal/session/instructions 131735, rust/terminal/session/syscalls 120, rust/terminal/start/instructions 369111, rust/terminal/start/syscalls 100, rust/todo/connection/instructions 225727, rust/todo/connection/syscalls 227, rust/todo/delete/instructions 541888, rust/todo/delete/syscalls 300, rust/todo/get/instructions 302422, rust/todo/get/syscalls 40, rust/todo/patch/instructions 800543, rust/todo/patch/syscalls 300, rust/todo/start/instructions 388903, rust/todo/start/syscalls 104 |  |
 | 3.2 | binary size | ratchet | lower | `ignite-perf quality` (task quality): size of `todod` and `terminald` per target and profile | llvm/terminald/dev 7264152 B, llvm/terminald/release 1394536 B, llvm/todod/dev 7969480 B, llvm/todod/release 1967944 B, rust/terminald/dev 6344576 B, rust/terminald/release 743384 B, rust/todod/dev 7586840 B, rust/todod/release 1038712 B |  |
 | 3.3 | throughput against plain Rust | ratchet | higher | `ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): replies per second of todod and terminald over the plain-Rust implementation's, per cell | llvm/terminal/connect-8 0.929×, llvm/terminal/rr-1 0.995×, llvm/terminal/rr-64 1.254×, llvm/todo/get-1 1.033×, llvm/todo/get-64 1.299×, llvm/todo/patch-16 1.203×, rust/terminal/connect-8 0.971×, rust/terminal/rr-1 0.972×, rust/terminal/rr-64 1.235×, rust/todo/get-1 0.990×, rust/todo/get-64 1.176×, rust/todo/patch-16 1.193× |  |
 | 3.4 | peak RSS, leaked handles and threads after a load run | gate | lower | `llvm_memory::` and `terminal::idle_terminald_runs_one_thread` (every merge) | unmeasured: no number: the named tests gate it in task gate |  |

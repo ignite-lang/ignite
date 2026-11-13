@@ -7,32 +7,32 @@ file 5386ebdc26cbd8ffaa1bfcf479adf7b8320fd294b484c7fdd3f3ccb83ee8140e terminal.d
 file 5f111eb1cf4e35d034dad2a3976a2292658fcb1b309d3b2719fc955d374fb862 commands.ignite
 file 43c2f9b1eac5848791a75884f8bbd7304c7ddd8bc028d8b4758743785ff802c0 command_schema.ignite
 op build
-instructions 1155672609 runs 1155671927 1155727795 1155651433 1155762255 1155672609
-syscalls 74 runs 73 74 74 73 74
-fn 59174618 __memcpy_avx_unaligned_erms
-fn 39991684 <*const ()>::is_aligned_to
-fn 29557796 core::ptr::copy_nonoverlapping::precondition_check
+instructions 1155668462 runs 1155668462 1155664414 1155697586 1155643816 1155681929
+syscalls 74 runs 74 74 74 74 74
+fn 59175167 __memcpy_avx_unaligned_erms
+fn 39988080 <*const ()>::is_aligned_to
+fn 29554351 core::ptr::copy_nonoverlapping::precondition_check
 fn 27867503 <core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<alloc::string::String>> as core::iter::traits::iterator::Iterator>::next
-fn 26634156 __memcmp_avx2_movbe
-fn 24805476 <str as core::cmp::PartialEq>::eq
-fn 23826043 _int_malloc
+fn 26636165 __memcmp_avx2_movbe
+fn 24805806 <str as core::cmp::PartialEq>::eq
+fn 23828361 _int_malloc
 fn 23529667 <core::slice::iter::Iter<&str> as core::iter::traits::iterator::Iterator>::any::<<&str as core::slice::cmp::SliceContains>::slice_contains::{closure#0}>
-fn 15829402 free
+fn 15830317 free
 fn 15282345 <u8 as core::slice::cmp::SliceOrd>::compare
 fn 15122712 ignite_syntax::lexer::lex_into
 fn 13954114 <core::slice::iter::Iter<alloc::string::String> as core::iter::traits::iterator::Iterator>::next
-fn 12922496 core::ub_checks::maybe_is_nonoverlapping::runtime
-fn 11937651 <&str as core::cmp::PartialEq>::eq
-fn 11217679 malloc
-fn 10288380 _int_free_merge_chunk
+fn 12920957 core::ub_checks::maybe_is_nonoverlapping::runtime
+fn 11937695 <&str as core::cmp::PartialEq>::eq
+fn 11218269 malloc
+fn 10289340 _int_free_merge_chunk
 fn 9325420 <str as core::cmp::Ord>::cmp
-fn 9097700 <alloc::raw_vec::RawVecInner>::deallocate
+fn 9097928 <alloc::raw_vec::RawVecInner>::deallocate
 fn 8922743 ignite_rustgen::rust_identifiers::<<ignite_rustgen::StdDependencies>::new::{closure#0}>
 fn 8233020 <&str as core::slice::cmp::SliceContains>::slice_contains::{closure#0}
 fn 8009646 <ignite_syntax::parser::Parser>::peek_index
-fn 7964608 _int_free_create_chunk
+fn 7965841 _int_free_create_chunk
 fn 7904732 <alloc::raw_vec::RawVecInner>::try_allocate_in
-fn 7844731 __libc_malloc2
+fn 7845387 __libc_malloc2
 fn 7211836 <ignite_syntax::parser::Parser>::binary_left'2
 fn 6915136 <core::iter::adapters::enumerate::Enumerate<_> as core::iter::traits::iterator::Iterator>::try_fold::enumerate::<u8, (), core::ops::control_flow::ControlFlow<(usize, u8)>, core::iter::traits::iterator::Iterator::find::check<(usize, u8), &mut ignite_syntax::diagnostic::line_starts::{closure#0}>::{closure#0}>::{closure#0}
 fn 6762888 <alloc::raw_vec::RawVecInner>::with_capacity_in
@@ -46,38 +46,38 @@ fn 5363073 <u8>::is_ascii_alphanumeric
 fn 5325624 <core::str::iter::Bytes as core::iter::traits::iterator::Iterator>::next
 fn 5281861 <ignite_syntax::lexer::TokenKind>::keyword
 fn 5265640 <core::str::iter::Bytes as core::iter::traits::iterator::Iterator>::try_fold::<(), <core::iter::adapters::enumerate::Enumerate<_> as core::iter::traits::iterator::Iterator>::try_fold::enumerate<u8, (), core::ops::control_flow::ControlFlow<(usize, u8)>, core::iter::traits::iterator::Iterator::find::check<(usize, u8), &mut ignite_syntax::diagnostic::line_starts::{closure#0}>::{closure#0}>::{closure#0}, core::ops::control_flow::ControlFlow<(usize, u8)>>
-fn 4789900 core::core_arch::x86::sse2::_mm_cmpeq_epi8
+fn 4788200 core::core_arch::x86::sse2::_mm_cmpeq_epi8
 fn 4771633 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, alloc::vec::Vec<(usize, usize)>, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<alloc::string::String>
 fn 4765440 core::iter::traits::iterator::Iterator::find::check::<(usize, u8), &mut ignite_syntax::diagnostic::line_starts::{closure#0}>::{closure#0}
-fn 4531075 core::core_arch::x86::sse2::_mm_loadu_si128
-fn 4239475 unlink_chunk.isra.0
-fn 4230540 <hashbrown::raw::RawTableInner>::find_or_find_insert_index_inner
-fn 4221791 _int_free_chunk
-fn 4064207 __rustc::__rdl_alloc
+fn 4529750 core::core_arch::x86::sse2::_mm_loadu_si128
+fn 4239958 unlink_chunk.isra.0
+fn 4227312 <hashbrown::raw::RawTableInner>::find_or_find_insert_index_inner
+fn 4222169 _int_free_chunk
+fn 4064432 __rustc::__rdl_alloc
 fn 3983280 core::slice::raw::from_raw_parts_mut::precondition_check
 fn 3934566 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, ignite_check::Local, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<str>
-fn 3850054 <hashbrown::raw::RawTableInner>::find_insert_index_in_group
+fn 3848838 <hashbrown::raw::RawTableInner>::find_insert_index_in_group
 fn 3625459 <ignite_types::moves::Walk>::call
 fn 3478598 <ignite_syntax::lexer::TokenKind as core::cmp::PartialEq>::eq
 fn 3450037 <alloc::alloc::Global>::alloc_impl_runtime
-fn 3449486 <alloc::raw_vec::RawVecInner>::finish_grow
+fn 3449732 <alloc::raw_vec::RawVecInner>::finish_grow
 fn 3434064 <core::hash::sip::Sip13Rounds as core::hash::sip::Sip>::c_rounds
 fn 3425616 <alloc::vec::Vec<ignite_syntax::lexer::Token>>::push_mut
 fn 3410640 core::intrinsics::rotate_left::<u64>
 fn 3334987 <core::hash::sip::Hasher<core::hash::sip::Sip13Rounds> as core::hash::Hasher>::write
 fn 3332805 <ignite_types::ids::NodeHasher as core::hash::Hasher>::finish
-fn 3311858 core::core_arch::x86::sse2::_mm_movemask_epi8
+fn 3310879 core::core_arch::x86::sse2::_mm_movemask_epi8
 fn 3172827 <core::result::Result<ignite_syntax::ast::Expr, ignite_syntax::parser::Fail> as core::ops::try_trait::Try>::branch
 fn 3119993 <ignite_types::Ty as <[_]>::to_vec_in::ConvertVec>::to_vec::<alloc::alloc::Global>
 fn 3014560 <core::hash::sip::Sip13Rounds as core::hash::sip::Sip>::d_rounds
 fn 3002534 <hashbrown::raw::RawTable<(ignite_syntax::ast::NodeId, ignite_types::Ty)>>::reserve_rehash::<hashbrown::map::make_hasher<ignite_syntax::ast::NodeId, ignite_types::Ty, core::hash::BuildHasherDefault<ignite_types::ids::NodeHasher>>::{closure#0}>
-fn 2873940 core::core_arch::x86::sse2::_mm_set1_epi8
+fn 2872920 core::core_arch::x86::sse2::_mm_set1_epi8
 fn 2854152 core::ptr::copy::precondition_check
-fn 2737080 <core::core_arch::x86::__m128i>::as_i8x16
+fn 2736180 <core::core_arch::x86::__m128i>::as_i8x16
 fn 2699092 <hashbrown::raw::RawTable<(ignite_syntax::ast::NodeId, ignite_types::Callee)>>::find::<hashbrown::map::equivalent_key<ignite_syntax::ast::NodeId, ignite_syntax::ast::NodeId, ignite_types::Callee>::{closure#0}>
 fn 2647566 <alloc::string::String as <[_]>::to_vec_in::ConvertVec>::to_vec::<alloc::alloc::Global>
 fn 2635714 <u8 as <[_]>::to_vec_in::ConvertVec>::to_vec::<alloc::alloc::Global>
-fn 2592000 core::ptr::drop_glue::<alloc::vec::Vec<u8>>
+fn 2592108 core::ptr::drop_glue::<alloc::vec::Vec<u8>>
 fn 2526026 <core::str::iter::CharIndices as core::iter::traits::iterator::Iterator>::next
 fn 2497074 <usize as core::slice::index::SliceIndex<[_]>>::get_unchecked::precondition_check
 fn 2481469 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, alloc::vec::Vec<bool>, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<alloc::string::String>
@@ -92,7 +92,7 @@ fn 2221870 <core::hash::BuildHasherDefault<ignite_types::ids::NodeHasher> as cor
 fn 2203914 core::slice::sort::unstable::quicksort::partition_lomuto_branchless_cyclic::<&str, <&str as core::cmp::PartialOrd>::lt>::{closure#0}
 fn 2130696 <core::slice::iter::Iter<alloc::collections::btree::map::BTreeMap<alloc::string::String, ignite_check::Local>> as core::iter::traits::double_ended::DoubleEndedIterator>::try_rfold::<(), core::iter::traits::iterator::Iterator::find_map::check<&alloc::collections::btree::map::BTreeMap<alloc::string::String, ignite_check::Local>, &ignite_check::Local, <ignite_check::Checker>::local::{closure#0}>::{closure#0}, core::ops::control_flow::ControlFlow<&ignite_check::Local>>
 fn 2085048 <alloc::string::String as core::cmp::Ord>::cmp
-fn 2070485 realloc
+fn 2070826 realloc
 fn 2070194 core::hint::assert_unchecked::precondition_check
 fn 2020296 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, ignite_types::ModuleTypes, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<alloc::string::String>
 fn 2018340 core::str::validations::next_code_point::<core::slice::iter::Iter<u8>>
@@ -116,7 +116,7 @@ fn 1819179 ignite_syntax::lexer::lex_string
 fn 1806324 <core::slice::iter::Windows<u8> as core::iter::traits::iterator::Iterator>::next
 fn 1728784 <&mut ignite_syntax::diagnostic::line_starts::{closure#0} as core::ops::function::FnMut<(&(usize, u8),)>>::call_mut
 fn 1724577 core::slice::sort::shared::smallsort::bidirectional_merge::<&str, <&str as core::cmp::PartialOrd>::lt>
-fn 1724364 <core::core_arch::simd::Simd<i8, 16>>::splat
+fn 1723752 <core::core_arch::simd::Simd<i8, 16>>::splat
 fn 1702662 <usize as core::slice::index::SliceIndex<[_]>>::get_unchecked_mut::precondition_check
 fn 1701013 <hashbrown::map::HashMap<ignite_syntax::ast::NodeId, ignite_types::Ty, core::hash::BuildHasherDefault<ignite_types::ids::NodeHasher>>>::insert
 fn 1688817 <alloc::vec::Vec<ignite_types::moves::Node>>::pop
@@ -134,7 +134,7 @@ fn 1431272 <ignite_types::moves::Walk>::call'2
 fn 1416606 <alloc::vec::Vec<_, _>>::set_len::precondition_check
 fn 1410038 <core::slice::iter::Windows<u8> as core::iter::traits::iterator::Iterator>::try_fold::<(), core::iter::traits::iterator::Iterator::any::check<&[u8], core::str::pattern::simd_contains::{closure#1}>::{closure#0}, core::ops::control_flow::ControlFlow<()>>
 fn 1402212 <core::ptr::non_null::NonNull<_>>::new_unchecked::precondition_check
-fn 1399399 _int_realloc
+fn 1399708 _int_realloc
 fn 1359024 <core::iter::adapters::enumerate::Enumerate<core::iter::adapters::copied::Copied<core::slice::iter::Iter<(&ignite_syntax::ast::Expr, ignite_types::moves::Operand)>>> as core::iter::traits::iterator::Iterator>::next
 fn 1340601 <ignite_syntax::parser::Parser>::newlines_insignificant
 fn 1328321 ignite_types::moves::expr_children
@@ -143,12 +143,12 @@ fn 1287071 ignite::module_dependencies
 fn 1283850 <ignite_types::QualName as core::clone::Clone>::clone
 fn 1258929 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, ignite_types::QualName, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<alloc::string::String>
 fn 1256780 <isize>::unchecked_neg::precondition_check
-fn 1248295 <hashbrown::raw::RawTableInner>::fix_insert_index
+fn 1248720 <hashbrown::raw::RawTableInner>::fix_insert_index
 fn 1247626 <u8>::is_ascii_whitespace
-fn 1217060 <ignite_types::Ty as core::cmp::PartialEq>::eq
+fn 1217082 <ignite_types::Ty as core::cmp::PartialEq>::eq
 fn 1172945 <ignite_types::moves::Resolver>::expr'2
 fn 1172787 <&str as core::cmp::PartialOrd>::lt
-fn 1152000 core::ptr::drop_glue::<alloc::raw_vec::RawVec<u8>>
+fn 1152048 core::ptr::drop_glue::<alloc::raw_vec::RawVec<u8>>
 fn 1151369 <core::str::iter::Bytes as core::iter::traits::iterator::Iterator>::fold::<u64, ignite_rustgen::content_hash::{closure#0}>
 fn 1149282 <hashbrown::raw::RawTable<(ignite_syntax::ast::NodeId, ignite_types::Ty)>>::insert_tagged_at_index
 fn 1148124 core::ptr::drop_glue::<alloc::string::String>
@@ -163,10 +163,10 @@ fn 1059072 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::
 fn 1049612 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, ignite_types::QualName, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<str>
 fn 1034110 core::slice::raw::from_raw_parts::precondition_check
 fn 1030528 <alloc::vec::Vec<alloc::string::String> as <[_]>::to_vec_in::ConvertVec>::to_vec::<alloc::alloc::Global>
-fn 1029852 <alloc::string::String as core::borrow::Borrow<alloc::string::String>>::borrow
+fn 1029864 <alloc::string::String as core::borrow::Borrow<alloc::string::String>>::borrow
 fn 1026977 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, alloc::collections::btree::set_val::SetValZST, alloc::collections::btree::node::marker::LeafOrInternal>>::search_tree::<alloc::string::String>
 fn 1022372 <core::mem::alignment::Alignment>::new_unchecked::precondition_check
-fn 1010098 <core::ops::control_flow::ControlFlow<()> as core::ops::try_trait::Try>::branch
+fn 1010170 <core::ops::control_flow::ControlFlow<()> as core::ops::try_trait::Try>::branch
 fn 1008564 <i8 as core::core_simd::masks::private_methods::PrivateMethods>::valid::<16>
 fn 1006701 <alloc::collections::btree::navigate::LazyLeafRange<alloc::collections::btree::node::marker::Immut, ignite_types::moves::Entry, alloc::collections::btree::set_val::SetValZST>>::init_front
 fn 1000584 <hashbrown::map::HashMap<ignite_syntax::ast::NodeId, ignite_types::Callee, core::hash::BuildHasherDefault<ignite_types::ids::NodeHasher>>>::get::<ignite_syntax::ast::NodeId>
@@ -174,7 +174,7 @@ fn 995202 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::n
 fn 989624 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, core::option::Option<ignite_types::Ty>, alloc::collections::btree::node::marker::LeafOrInternal>>::search_tree::<str>
 fn 975455 <core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<&str>> as core::iter::traits::iterator::Iterator>::next
 fn 973566 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, usize, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<str>
-fn 967641 <alloc::vec::Vec<u8> as core::cmp::PartialEq>::eq
+fn 967555 <alloc::vec::Vec<u8> as core::cmp::PartialEq>::eq
 fn 963864 <core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<usize>> as core::iter::traits::iterator::Iterator>::next
 fn 961929 <hashbrown::raw::RawTable<(ignite_syntax::ast::NodeId, ignite_types::Ty)>>::reserve_rehash::<hashbrown::map::make_hasher<ignite_syntax::ast::NodeId, ignite_types::Ty, core::hash::BuildHasherDefault<ignite_types::ids::NodeHasher>>::{closure#0}>::{closure#0}
 fn 959553 <<&str as core::cmp::PartialOrd>::lt as core::ops::function::FnMut<(&&str, &&str)>>::call_mut
@@ -193,7 +193,7 @@ fn 886333 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::n
 fn 878052 <alloc::collections::btree::navigate::LazyLeafRange<alloc::collections::btree::node::marker::Dying, alloc::string::String, alloc::collections::btree::set_val::SetValZST>>::take_front
 fn 869483 <hashbrown::map::HashMap<ignite_syntax::ast::NodeId, usize, core::hash::BuildHasherDefault<ignite_types::ids::NodeHasher>>>::get::<ignite_syntax::ast::NodeId>
 fn 864392 ignite_syntax::diagnostic::line_starts::{closure#0}
-fn 864000 <alloc::raw_vec::RawVec<u8> as core::ops::drop::Drop>::drop
+fn 864036 <alloc::raw_vec::RawVec<u8> as core::ops::drop::Drop>::drop
 fn 860733 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, alloc::vec::Vec<bool>, alloc::collections::btree::node::marker::LeafOrInternal>>::search_tree::<alloc::string::String>
 fn 853211 core::ptr::drop_glue::<ignite_syntax::lexer::TokenKind>
 fn 851815 <core::slice::iter::Iter<alloc::string::String> as core::iter::traits::iterator::Iterator>::any::<<ignite_rustgen::Generator>::is_local::{closure#0}::{closure#0}>
@@ -225,7 +225,7 @@ fn 779680 core::str::pattern::simd_contains::{closure#1}
 fn 776050 <ignite_syntax::parser::Parser>::postfix_ops
 fn 775574 <u8>::is_ascii_digit
 fn 771334 <alloc::vec::Vec<ignite::module_dependencies::Node>>::pop
-fn 766384 <core::core_arch::simd::Simd<i8, 16>>::as_m128i
+fn 766112 <core::core_arch::simd::Simd<i8, 16>>::as_m128i
 fn 762720 <std::hash::random::RandomState as core::hash::BuildHasher>::build_hasher
 fn 762199 <ignite_types::Ty as core::clone::Clone>::clone'2
 fn 760484 <core::slice::iter::Iter<(&str, usize)> as core::iter::traits::double_ended::DoubleEndedIterator>::try_rfold::<(), core::iter::traits::double_ended::DoubleEndedIterator::rfind::check<&(&str, usize), <ignite_types::moves::Resolver>::lookup::{closure#0}::{closure#0}>::{closure#0}, core::ops::control_flow::ControlFlow<&(&str, usize)>>
@@ -269,10 +269,10 @@ fn 649546 <ignite_check::Checker>::expr'2
 fn 648870 <core::str::pattern::CharSearcher as core::str::pattern::ReverseSearcher>::next_back
 fn 647022 <alloc::vec::Vec<u8>>::append_elements
 fn 644032 <core::slice::iter::Iter<alloc::collections::btree::map::BTreeMap<alloc::string::String, core::option::Option<ignite_types::Ty>>> as core::iter::traits::iterator::Iterator>::rposition::<<ignite_types::typer::Typer>::use_local::{closure#0}>
-fn 640310 __rustc::__rdl_realloc
+fn 640442 __rustc::__rdl_realloc
 fn 636064 <ignite_types::typer::Typer>::expr_kind'2
 fn 634820 <core::hash::BuildHasherDefault<ignite_types::ids::NodeHasher> as core::hash::BuildHasher>::build_hasher
-fn 633498 <alloc::string::String as core::borrow::Borrow<str>>::borrow
+fn 633516 <alloc::string::String as core::borrow::Borrow<str>>::borrow
 fn 626451 <alloc::boxed::Box<ignite_types::Ty> as core::ops::drop::Drop>::drop
 fn 624762 <&alloc::string::String as core::cmp::PartialEq<&str>>::eq
 fn 619885 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, alloc::string::String, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<alloc::string::String>
@@ -370,10 +370,10 @@ fn 453970 core::ptr::drop_glue::<ignite_types::QualName>
 fn 453768 <alloc::string::String as core::ops::deref::Deref>::deref
 fn 453172 <alloc::vec::Vec<ignite_types::moves::Held>>::push_mut
 fn 451696 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, ignite_types::ModuleTypes, alloc::collections::btree::node::marker::LeafOrInternal>>::find_key_index::<str>
-fn 451621 __rustc::__rust_no_alloc_shim_is_unstable_v2
-fn 451592 __rustc::__rdl_dealloc
-fn 451592 __rustc::__rust_dealloc
-fn 451577 __rustc::__rust_alloc
+fn 451646 __rustc::__rust_no_alloc_shim_is_unstable_v2
+fn 451617 __rustc::__rdl_dealloc
+fn 451617 __rustc::__rust_dealloc
+fn 451602 __rustc::__rust_alloc
 fn 450744 ignite_syntax::lexer::lex_int
 fn 449834 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, alloc::collections::btree::set_val::SetValZST, alloc::collections::btree::node::marker::LeafOrInternal>>::search_tree::<str>
 fn 449524 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, usize, alloc::collections::btree::node::marker::LeafOrInternal>>::search_tree::<str>
@@ -479,10 +479,10 @@ fn 323638 <alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc
 fn 323258 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, alloc::string::String, alloc::collections::btree::node::marker::LeafOrInternal>>::search_tree::<alloc::string::String>
 fn 323121 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Dying, usize, alloc::collections::btree::set_val::SetValZST, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::Edge>>::deallocating_next::<alloc::alloc::Global>
 fn 323043 <alloc::vec::Vec<alloc::string::String> as core::ops::drop::Drop>::drop
-fn 322431 <hashbrown::raw::RawTable<((usize, alloc::string::String), ignite_syntax::ast::Span)>>::find::<hashbrown::map::equivalent_key<(usize, alloc::string::String), (usize, alloc::string::String), ignite_syntax::ast::Span>::{closure#0}>
 fn 321360 <ignite_types::moves::Entry as core::clone::Clone>::clone
 fn 321075 <ignite_syntax::parser::Parser>::shift_op
 fn 320688 <alloc::vec::Vec<alloc::string::String> as core::clone::Clone>::clone
+fn 320149 <hashbrown::raw::RawTable<((usize, alloc::string::String), ignite_syntax::ast::Span)>>::find::<hashbrown::map::equivalent_key<(usize, alloc::string::String), (usize, alloc::string::String), ignite_syntax::ast::Span>::{closure#0}>
 fn 318912 <alloc::vec::Vec<ignite_types::moves::Held>>::truncate
 fn 318407 <core::option::Option<&usize> as core::ops::try_trait::Try>::branch
 fn 318312 ignite_types::variants_of
@@ -522,7 +522,7 @@ fn 294202 <core::slice::iter::Iter<(&str, &str)> as core::iter::traits::iterator
 fn 291184 <alloc::collections::btree::map::BTreeMap<alloc::string::String, ignite_types::ModuleTypes>>::get::<alloc::string::String>
 fn 290385 <ignite_syntax::parser::Parser>::postfix
 fn 289128 <alloc::raw_vec::RawVec<alloc::string::String> as core::ops::drop::Drop>::drop
-fn 288000 <alloc::vec::Vec<u8> as core::ops::drop::Drop>::drop
+fn 288012 <alloc::vec::Vec<u8> as core::ops::drop::Drop>::drop
 fn 287807 <ignite_types::moves::Place as core::cmp::Ord>::cmp
 fn 287488 <alloc::boxed::Box<ignite_types::Ty> as core::clone::Clone>::clone
 fn 287128 <u64>::from_ascii_bytes_radix_impl
@@ -534,7 +534,7 @@ fn 285155 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::n
 fn 284000 <core::slice::iter::Iter<(&ignite_syntax::ast::Expr, ignite_types::moves::Operand)>>::new
 fn 283120 <ignite_types::typer::Typer>::expr'2
 fn 282453 <ignite_syntax::ast::Expr as core::ops::drop::Drop>::drop
-fn 281055 <alloc::string::String as core::cmp::PartialEq>::eq
+fn 281025 <alloc::string::String as core::cmp::PartialEq>::eq
 fn 280943 <ignite_types::typer::Typer>::assert
 fn 280621 <core::slice::iter::Iter<alloc::string::String> as core::iter::traits::iterator::Iterator>::find_map::<(&alloc::string::String, &alloc::vec::Vec<(usize, usize)>), &mut <ignite_rustgen::StdDependencies>::new::{closure#2}::{closure#0}::{closure#0}>
 fn 280296 <alloc::vec::Vec<(&ignite_syntax::ast::Expr, ignite_types::moves::Operand)> as core::ops::index::Index<core::ops::range::RangeTo<usize>>>::index
@@ -581,7 +581,7 @@ fn 257619 <ignite_types::moves::Walk>::block
 fn 257530 <alloc::boxed::Box<ignite_types::Ty>>::new_uninit_in
 fn 257262 <alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, ignite_types::moves::Entry, alloc::collections::btree::set_val::SetValZST, alloc::collections::btree::node::marker::LeafOrInternal>>::lower_bound::<ignite_types::moves::Entry>
 fn 254338 <ignite_types::moves::Live>::read
-fn 253050 <hashbrown::raw::RawTable<(ignite_syntax::ast::Span, usize)>>::find::<hashbrown::map::equivalent_key<ignite_syntax::ast::Span, ignite_syntax::ast::Span, usize>::{closure#0}>
+fn 253128 <hashbrown::raw::RawTable<(ignite_syntax::ast::Span, usize)>>::find::<hashbrown::map::equivalent_key<ignite_syntax::ast::Span, ignite_syntax::ast::Span, usize>::{closure#0}>
 fn 252087 <alloc::collections::btree::navigate::LazyLeafRange<alloc::collections::btree::node::marker::Dying, usize, alloc::collections::btree::set_val::SetValZST>>::init_front
 fn 251805 <alloc::collections::btree::navigate::LazyLeafRange<alloc::collections::btree::node::marker::Dying, alloc::string::String, alloc::vec::Vec<bool>>>::init_front
 fn 251733 <core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<&ignite_syntax::ast::Expr>> as core::iter::traits::iterator::Iterator>::next
@@ -592,7 +592,7 @@ fn 249534 <alloc::collections::btree::node::Handle<alloc::collections::btree::no
 fn 249483 <[alloc::string::String]>::starts_with
 fn 249246 <core::option::Option<alloc::vec::Vec<ignite_syntax::ast::Path>> as core::clone::Clone>::clone
 fn 249084 <alloc::vec::Vec<&ignite_types::Ty> as core::iter::traits::collect::IntoIterator>::into_iter
-fn 249040 <u8 as core::slice::cmp::SlicePartialEq<u8>>::equal_same_length
+fn 249048 <u8 as core::slice::cmp::SlicePartialEq<u8>>::equal_same_length
 fn 246680 ignite_syntax::ast::take_operands
 fn 245910 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, alloc::vec::Vec<bool>, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::collections::btree::node::marker::KV>>::into_kv
 fn 244490 <alloc::vec::into_iter::IntoIter<ignite_types::moves::Node>>::as_raw_mut_slice
@@ -699,11 +699,11 @@ fn 194728 <alloc::vec::into_iter::IntoIter<&str> as core::iter::traits::iterator
 fn 194260 <alloc::vec::into_iter::IntoIter<ignite_types::moves::Entry> as core::iter::traits::iterator::Iterator>::next
 fn 193679 <ignite_types::moves::Walk>::stmt
 fn 193340 <alloc::collections::btree::map::BTreeMap<ignite_types::moves::Entry, alloc::collections::btree::set_val::SetValZST>>::insert
+fn 193331 core::slice::memchr::memchr_aligned
 fn 193134 <alloc::collections::btree::map::BTreeMap<alloc::string::String, usize>>::get::<str>
 fn 192752 core::ptr::drop_glue::<alloc::raw_vec::RawVec<alloc::string::String>>
 fn 192168 <core::fmt::rt::Argument>::new_display::<alloc::string::String>
 fn 192123 core::ptr::drop_glue::<[alloc::vec::Vec<alloc::string::String>]>
-fn 191889 core::slice::memchr::memchr_aligned
 fn 191534 <std::hash::random::DefaultHasher as core::hash::Hasher>::write_usize
 fn 191499 core::iter::adapters::map::map_fold::<&str, alloc::string::String, (), <str as alloc::string::ToString>::to_string, core::iter::traits::iterator::Iterator::for_each::call<alloc::string::String, <alloc::vec::Vec<alloc::string::String>>::extend_trusted<core::iter::adapters::map::Map<alloc::vec::into_iter::IntoIter<&str>, <str as alloc::string::ToString>::to_string>>::{closure#0}>::{closure#0}>::{closure#0}
 fn 191310 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, alloc::vec::Vec<bool>, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::KV>>::into_kv
@@ -875,12 +875,11 @@ fn 139790 <ignite_syntax::ast::Span as core::hash::Hash>::hash::<std::hash::rand
 fn 139725 <alloc::collections::btree::set::ExtractIf<ignite_types::moves::Entry, core::ops::range::RangeFull, <alloc::collections::btree::set::BTreeSet<ignite_types::moves::Entry>>::retain<<ignite_types::moves::Live>::kill::{closure#0}>::{closure#0}> as core::iter::traits::iterator::Iterator>::next
 fn 139645 ignite_types::moves::unnamed
 fn 139266 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Immut, alloc::string::String, alloc::collections::btree::set_val::SetValZST, alloc::collections::btree::node::marker::LeafOrInternal>, alloc::collections::btree::node::marker::KV>>::into_kv
-fn 138888 _int_free_maybe_trim.part.0
 fn 138671 <ignite_syntax::parser::Parser>::and::{closure#0}
 fn 138402 <ignite_types::Capability>::name
 fn 138062 <alloc::collections::btree::map::BTreeMap<&str, alloc::collections::btree::set::BTreeSet<alloc::string::String>>>::get::<str>
 fn 137714 <core::iter::adapters::enumerate::Enumerate<core::slice::iter::Iter<(alloc::string::String, ignite_types::Ty)>> as core::iter::traits::iterator::Iterator>::next
-fn 137643 <hashbrown::raw::RawTable<(ignite_syntax::ast::Span, ignite_types::Ty)>>::find::<hashbrown::map::equivalent_key<ignite_syntax::ast::Span, ignite_syntax::ast::Span, ignite_types::Ty>::{closure#0}>
+fn 137591 <hashbrown::raw::RawTable<(ignite_syntax::ast::Span, ignite_types::Ty)>>::find::<hashbrown::map::equivalent_key<ignite_syntax::ast::Span, ignite_syntax::ast::Span, ignite_types::Ty>::{closure#0}>
 fn 137376 <alloc::vec::Vec<alloc::collections::btree::map::BTreeMap<alloc::string::String, ignite_check::Local>>>::pop
 fn 137135 <core::ops::control_flow::ControlFlow<&alloc::string::String> as core::ops::try_trait::Try>::branch
 fn 136815 <&ignite_types::Ty as core::cmp::PartialEq>::eq
@@ -888,6 +887,7 @@ fn 136227 <alloc::vec::Vec<ignite_syntax::ast::Ident> as core::ops::drop::Drop>:
 fn 136189 <alloc::collections::btree::map::IntoIter<&str, alloc::collections::btree::set_val::SetValZST>>::dying_next
 fn 136186 <[usize]>::binary_search_by::<<[usize]>::partition_point<<ignite_syntax::diagnostic::SourceFile>::line_col_in::{closure#0}>::{closure#0}>
 fn 135945 <(&str, &str) as core::cmp::PartialEq>::eq
+fn 135880 _int_free_maybe_trim.part.0
 fn 135473 <ignite_syntax::parser::Parser>::or::{closure#0}
 fn 135240 <str as core::fmt::Display>::fmt
 fn 134988 <ignite_syntax::parser::Parser>::enter

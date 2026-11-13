@@ -427,37 +427,37 @@
       "area": "Generated code and runtime behaviour",
       "bars": {
         "all/design/check/instructions": {
-          "value": 854142290
+          "value": 854153551
         },
         "all/design/check/syscalls": {
           "value": 75
         },
         "all/design/plan/instructions": {
-          "value": 860008832
+          "value": 859996322
         },
         "all/design/plan/syscalls": {
           "value": 74
         },
         "llvm/design/build/instructions": {
-          "value": 2236411447
+          "value": 2236463944
         },
         "llvm/design/build/syscalls": {
-          "value": 14924
+          "value": 14967
         },
         "llvm/terminal/session/instructions": {
-          "value": 245441
+          "value": 244745
         },
         "llvm/terminal/session/syscalls": {
           "value": 126
         },
         "llvm/terminal/start/instructions": {
-          "value": 320238
+          "value": 304816
         },
         "llvm/terminal/start/syscalls": {
-          "value": 102
+          "value": 76
         },
         "llvm/todo/connection/instructions": {
-          "value": 471658
+          "value": 471700
         },
         "llvm/todo/connection/syscalls": {
           "value": 246
@@ -481,31 +481,31 @@
           "value": 380
         },
         "llvm/todo/start/instructions": {
-          "value": 337200
+          "value": 321798
         },
         "llvm/todo/start/syscalls": {
-          "value": 106
+          "value": 80
         },
         "rust/design/build/instructions": {
-          "value": 1155672609
+          "value": 1155668462
         },
         "rust/design/build/syscalls": {
           "value": 74
         },
         "rust/terminal/session/instructions": {
-          "value": 131733
+          "value": 131735
         },
         "rust/terminal/session/syscalls": {
           "value": 120
         },
         "rust/terminal/start/instructions": {
-          "value": 384522
+          "value": 369111
         },
         "rust/terminal/start/syscalls": {
-          "value": 126
+          "value": 100
         },
         "rust/todo/connection/instructions": {
-          "value": 225731
+          "value": 225727
         },
         "rust/todo/connection/syscalls": {
           "value": 227
@@ -529,10 +529,10 @@
           "value": 300
         },
         "rust/todo/start/instructions": {
-          "value": 404330
+          "value": 388903
         },
         "rust/todo/start/syscalls": {
-          "value": 130
+          "value": 104
         }
       },
       "direction": "lower",
