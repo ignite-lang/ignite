@@ -1007,9 +1007,32 @@ impl Entry {
         self.place.overlaps(p) && !self.except.iter().any(|e| p.path.starts_with(e))
     }
 
+    /// Make `self` the one entry that conflicts with every place `self` or
+    /// `other`, an entry of the same place, conflicts with. A place is in
+    /// conflict with neither when an excepted subtree of each holds it; two
+    /// subtrees that hold one place lie one inside the other, so the entry
+    /// excepts the inner subtree of every such pair. Two entries that
+    /// except different fields become the entry without an exception.
+    fn meet(&mut self, other: &Entry) {
+        let mut except: Vec<Vec<String>> = Vec::new();
+        for mine in &self.except {
+            for theirs in &other.except {
+                if mine.starts_with(theirs) {
+                    except.push(mine.clone());
+                } else if theirs.starts_with(mine) {
+                    except.push(theirs.clone());
+                }
+            }
+        }
+        except.sort();
+        except.dedup();
+        self.except = except;
+    }
+
     /// Whether `self` conflicts with every place `other` conflicts with:
     /// the same place, and every subtree `self` excepts lies inside one
-    /// `other` excepts. `other` is then redundant beside `self`.
+    /// `other` excepts. The tests hold [`Live::join`] to it.
+    #[cfg(test)]
     fn covers(&self, other: &Entry) -> bool {
         self.place == other.place
             && self
@@ -1074,16 +1097,16 @@ impl Live {
     }
 
     /// The places live after either of two points: the entries of both,
-    /// less every entry of one side that an entry of the same place on the
-    /// other side covers ([`Entry::covers`]; of two that cover each other,
-    /// the smaller stays). [`dead`](Self::dead) answers as for the plain
-    /// union: a dropped entry is covered by one that stays, or by one
-    /// dropped for one that stays. Without the reduction an `if` without
-    /// `else` that assigns a field of a live variable keeps its entry both
-    /// with and without that field excepted, and every such `if` doubles
-    /// the set. Entries of one side are not compared with each other: the
-    /// doubling comes from the two sides, and a `match` that joins many
-    /// arms pays for each new arm only.
+    /// with the entries of one place made one ([`Entry::meet`]).
+    /// [`dead`](Self::dead) answers as for the plain union of the two
+    /// sets, and so does every state reached from the result: `read`,
+    /// `assign` and `kill` change each entry by a rule that holds for the
+    /// one entry as it holds for the entries it stands for. Without it an
+    /// `if` that assigns a field of a live variable in one branch only,
+    /// or different fields in its two branches, keeps one entry per path
+    /// through the branches, and every such `if` doubles the set. A place
+    /// has one entry on each side (`read` and `assign` replace the entries
+    /// of their place), so a join costs what walking both sets costs.
     fn join(&self, other: &Live) -> Live {
         let all = self.all || other.all;
         if self.entries == other.entries {
@@ -1092,31 +1115,27 @@ impl Live {
                 entries: self.entries.clone(),
             };
         }
-        let beaten = |e: &Entry, side: &[&Entry]| {
-            side.iter().any(|o| o.covers(e) && (!e.covers(o) || *o < e))
-        };
-        // In place order, collected once at the end: one bulk build of
-        // the set rather than an ordered insert per entry.
+        // Both sets are ordered by place first: merged in that order, the
+        // entries of one place follow each other, and the set is built
+        // once from an ordered list.
         let mut entries: Vec<Entry> = Vec::new();
         let (mut mine, mut theirs) = (
             self.entries.iter().peekable(),
             other.entries.iter().peekable(),
         );
-        let (mut a, mut b): (Vec<&Entry>, Vec<&Entry>) = (Vec::new(), Vec::new());
-        // Both sets are ordered by place: one place's entries at a time.
         loop {
-            let place = match (mine.peek().copied(), theirs.peek().copied()) {
+            let next = match (mine.peek(), theirs.peek()) {
                 (None, None) => break,
-                (Some(x), None) => &x.place,
-                (None, Some(y)) => &y.place,
-                (Some(x), Some(y)) => (&x.place).min(&y.place),
+                (Some(_), None) => mine.next(),
+                (None, Some(_)) => theirs.next(),
+                (Some(x), Some(y)) if x.place <= y.place => mine.next(),
+                (Some(_), Some(_)) => theirs.next(),
             };
-            a.clear();
-            b.clear();
-            a.extend(std::iter::from_fn(|| mine.next_if(|e| e.place == *place)));
-            b.extend(std::iter::from_fn(|| theirs.next_if(|e| e.place == *place)));
-            entries.extend(a.iter().filter(|e| !beaten(e, &b)).map(|&e| e.clone()));
-            entries.extend(b.iter().filter(|e| !beaten(e, &a)).map(|&e| e.clone()));
+            let Some(entry) = next else { break };
+            match entries.last_mut() {
+                Some(last) if last.place == entry.place => last.meet(entry),
+                _ => entries.push(entry.clone()),
+            }
         }
         Live {
             all,
