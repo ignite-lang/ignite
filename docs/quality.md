@@ -338,7 +338,10 @@ stays the judge of a release, on the dedicated host.
   The programs are staged, built and run outside the tree, in `<XDG_CACHE_HOME or
   ~/.cache>/ignite/path-cost/<16 hex digits of the work directory's SHA-256>`; a server's
   executable is copied to its `bin/` and started from a fresh `run/` as `../bin/<executable>`
-  with `TMPDIR=../tmp` its only variable, and valgrind's files for `vgdb` are in `run/` too.
+  with `TMPDIR=../tmp` and `IGNITE_WORKERS=2` its only variables, and valgrind's files for
+  `vgdb` are in `run/` too. Without `IGNITE_WORKERS` a server finds its worker count in the
+  cgroup files of the process that started the mode: a run started two cgroup levels deeper
+  counted 13 more system calls and about 7,000 more instructions in every `start` cell.
   Those paths have one length in every tree of a machine; inside the work directory, the paths
   in `/proc/self/maps` (the executable, valgrind's shared memory with `vgdb`), the working
   directory and the build's paths in the program's data moved the start of `rust/todo` by 479
