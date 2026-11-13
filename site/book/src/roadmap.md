@@ -1,6 +1,6 @@
 # Roadmap
 
-Ignite is an early prototype. The latest release is v0.16.3. This page separates what is
+Ignite is an early prototype. The latest release is v0.16.4. This page separates what is
 released, what is built on `main` and not released, what is planned, and what exists only as a
 design document. Designs that are not built appear only on this page.
 
@@ -57,10 +57,11 @@ The measured state of each release, build times included, is on the [Quality](qu
 | **v0.16.1** | read-only walks over a list copy nothing, and the release archive builds the Rust target without a clone: on the Rust target `for (a, b) in l`, `for x in l` over `Int` or `Bytes` elements, `f(l[i])` to a read-only parameter, `match l[i]`, `l[i].len()` and `l[i] == k` read the list and the element in place; on the LLVM target `match l[i]` and `for x in l[i]` read the element in place; the release archive carries the substrate crate under `share/ignite/substrate`, and a driver at `<prefix>/bin/ignite` builds the Rust target against it; `ignite test`, `ignite run` and `ignite conformance` take `--substrate`; the released driver holds no path of the tree that built it ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.16.1)) |
 | **v0.16.2** | a record handed to a call or copied with its lists is not copied in full: a place that a later argument of the same call reads moves into the call (`r = set_in(r, k, read_in(r, j)?)`), and a `match` on a tuple of places copies neither place, on both targets; on the Rust target a list held by a record field or an enum payload is shared between the copies of the value and copied in full only when one of them changes it ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.16.2)) |
 | **v0.16.3** | a list is sorted, a constant is built once, and the check of fields set in `if` without `else` stays small: `xs.sort()` and `xs.sort_by(f)` return a new list in ascending order, stable, on the evaluator and both targets, and E045 refuses an element or key type without an order; on the Rust target a module constant that is not `Copy` in Rust is built once per process and read by reference; `ignite check` of a fn that sets the fields of a record in a row of `if`s without `else` no longer doubles its memory with every `if`; every merge counts the instructions and system calls of one request of the todo and terminal examples against the counts of the last release (`task path-cost`) ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.16.3)) |
+| **v0.16.4** | on the Rust target a text or byte string that is only read is not copied: the bytes of a text read by a loop (`let b = t.to_bytes()`, `for c in b`) and the payload of a lent `Option<Bytes>` are read in place, and `b.to_text()` or `t.to_bytes()` at the last use of a buffer the function owns takes the buffer; a text cell of a row read by `std.protocol.mysql` costs one allocation less ([release notes](https://github.com/ignite-lang/ignite/releases/tag/v0.16.4)) |
 
 ## What's next
 
-The work after v0.16.3 comes in waves of a few stories each. A wave is merged when every story
+The work after v0.16.4 comes in waves of a few stories each. A wave is merged when every story
 in it passes the gate. A release follows every third wave, and a patch release comes earlier
 when a user of the last release needs a change. The order below is the current plan, not a
 promise of dates.
