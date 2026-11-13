@@ -685,8 +685,8 @@ meaning. The generator emits exactly the Rust on the right.
 | `t.pieces(s) -> List<Text>` | `::ignite_io::text::pieces(&t, &s)`: the texts between the separators, empty pieces kept, `[t]` for an empty `s`; no piece is checked for UTF-8 again, since valid text cut at a valid separator stays valid. `std.text.split` is this builtin. The LLVM runtime's `text_pieces` uses the same search. Story `text-fast-search` | Text |
 | `b.at(i)` | `b[(i) as usize]`, then `.clone()` when the element is not `Int`, `Byte` or `Bool` (also `l[i]`) | Bytes, List |
 | `l.map(f)` | `l.iter().cloned().map(f).collect::<Vec<_>>()` | List; `l.iter().map(..)` without the copy in the cases of 20.3.7 |
-| `l.sort()` | `{ let mut s = l.to_vec(); s.sort(); s }` | List, Bytes; section NN |
-| `l.sort_by(f)` | `{ let l = &l; let keys: Vec<_> = l.iter().cloned().map(f).collect(); let mut order: Vec<usize> = (0..keys.len()).collect(); order.sort_by(\|a, b\| keys[*a].cmp(&keys[*b])); order.into_iter().map(\|i\| l[i].clone()).collect::<Vec<_>>() }` | List, Bytes; section NN |
+| `l.sort()` | `{ let mut s = l.to_vec(); s.sort(); s }` | List, Bytes; section 43 |
+| `l.sort_by(f)` | `{ let l = &l; let keys: Vec<_> = l.iter().map(f).collect(); let mut order: Vec<usize> = (0..keys.len()).collect(); order.sort_by(\|a, b\| keys[*a].cmp(&keys[*b])); order.into_iter().map(\|i\| l[i].clone()).collect::<Vec<_>>() }`; `l.iter().cloned().map(f)` for an `f` that is not lent its element (43.2) | List, Bytes; section 43 |
 | `b.to_int()` | `(b as i64)` | Byte |
 | `i.to_byte()` | `u8::try_from(i).ok()` | Int |
 | `Int.parse(t)` | `::ignite_io::parse_int(&t)`: decimal digits with an optional leading `-`, `None` for a leading `+` and for anything `str::parse::<i64>` rejects; the LLVM runtime's `int_parse` calls the same function | static |
@@ -1223,7 +1223,7 @@ E041 unknown method or field for the receiver type (also an ambiguous or inappli
 be inferred (also a type parameter neither the expected type nor later uses in the body decide, a closure parameter without type, and an effectful operation
 whose effects `ignite-check` could not check, section 11.7), E043 wrong number of arguments (also a range pattern whose start is above its end), E044 integer literal out of range for `Byte` or `U32` (32.2),
 E045 operator not defined for the operand type (also `==` on a type that is not comparable, section 13.5, a constant pattern of a type without
-`==`, a range bound that is no literal or constant with a literal value, and `sort` on a list of elements without an order or `sort_by` with a key without one, section NN), E046 `match` not exhaustive (ranges split `Int` and `Byte` into intervals, section 13.7), E047 record literal with a missing (and not defaulted),
+`==`, a range bound that is no literal or constant with a literal value, and `sort` on a list of elements without an order or `sort_by` with a key without one, section 43), E046 `match` not exhaustive (ranges split `Int` and `Byte` into intervals, section 13.7), E047 record literal with a missing (and not defaulted),
 unknown or duplicate field, E048 unknown type name, wrong number of type arguments or an
 alias that refers to itself, E052 `assert` condition not `Bool` (section 12.3). Since slice 14 also E096: a use instantiates a `ByteStream`-bounded type
 parameter with a type that does not implement `ByteStream` (section 18.7).
@@ -11998,12 +11998,12 @@ nothing.
   on the LLVM target, which the test pins exactly (42.2).
 - `layering::`, with `mysql` in the protocol names it reads from std.
 
-## NN A List is sorted with sort and sort_by
+## 43 A List is sorted with sort and sort_by
 
 Story `list-sort`, asked for by a command-line tool written in Ignite: at v0.16.2 neither the
 builtin methods of `List` nor `std` had a sort, and a `Map` orders only by a unique key.
 
-### NN.1 The forms
+### 43.1 The forms
 
 - `xs.sort() -> List<T>`: the elements in ascending order.
 - `xs.sort_by(f) -> List<T>`, `f: fn(T) -> K`: the elements in ascending order of the key `f`
@@ -12026,18 +12026,23 @@ builtin methods of `List` nor `std` had a sort, and a `Map` orders only by a uni
 - `f` may perform effects exactly where `map`'s may (20.4.3): E017 and E042 read as for `map`,
   naming `sort_by`.
 - Not in the language: a sort with a comparison fn `fn(T, T) -> ..`; a descending sort. Several
-  keys are one tuple key (`sort_by(|e| (e.level, e.name))`); an `Int` key sorts descending by
-  its negation.
-- No floating-point type exists, so the story's `Float`, and where NaN sorts, has nothing to
-  apply to here. A float type will have to state its order, NaN included, when it lands.
+  keys are one tuple key (`sort_by(|e| (e.level, e.name))`); an `Int` key `k` sorts descending
+  by `0 - 1 - k`, which has a value for every `Int`. The negation `0 - k` fails with an
+  overflow for the smallest `Int`.
+- No floating-point type exists. A float type will have to state its order, NaN included, when
+  it lands.
 
-### NN.2 Lowering
+### 43.2 Lowering
 
 - Evaluator: the order of map keys (`key_cmp`), extended by `U32`, lists and tuples; a stable
   `sort_by` of the values, or of the pairs of key and value for `sort_by`.
 - Rust target: section 6's rows. `sort` is the standard library's stable `slice::sort` on a
   copy; `sort_by` computes the keys, sorts the positions stably by key and copies each element
-  once. Payload-free enums already derive `Ord` in declaration order (14.3).
+  once, into the result. An element that is `Copy` in Rust (a scalar, or an option, result or tuple of scalars) is
+  passed to the key fn by value. Any other element is read where `map`'s fn reads it (20.3.7): a
+  closure or a named fn that only reads its parameter is lent the element; any other fn value
+  (a field, a constant, a parameter of fn type) gets a copy, the second of that element.
+  Payload-free enums already derive `Ord` in declaration order (14.3).
 - LLVM target: the keys are the elements themselves for `sort` and, for `sort_by`, a buffer of
   `f`'s results built as `map` builds its list. The runtime entry `ignite_rt_list_sort(out,
   keys, size, compare)` (`crates/ignite-rt/src/list.rs`, `docs/llvm.md` section 5) sorts the
@@ -12058,7 +12063,7 @@ builtin methods of `List` nor `std` had a sort, and a `Map` orders only by a uni
   standard library finds the one descending run), 64,783,442 and 791,052,051 on the LLVM
   target with the dev runtime (ratio 12.21; n log2 n gives 12.5, n² 100).
 
-### NN.3 Tests
+### 43.3 Tests
 
 - `list_sort::` in `crates/ignite/tests/list_sort.rs` over `fixtures/list_sort.ignite`: every
   type with an order, records by `Int`, enum, tuple and `Text` keys, a named fn as key, an empty

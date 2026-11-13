@@ -201,7 +201,8 @@ an enum without payloads in the order its variants are declared, and a tuple of 
 by element. `sort` on a list of any other type is refused by `ignite check` and names
 `sort_by`; to order records, sort by a key: `entries.sort_by(|e| (e.level, e.name))` orders by
 level, then by name. There is no sort with a comparison function and no descending sort; for a
-descending `Int` key, sort by its negation.
+descending `Int` key `k`, sort by `0 - 1 - k`. The negation `0 - k` overflows for the smallest
+`Int`.
 
 Lists are values: assigning or passing a list copies it, as far as the program can tell.
 `set` (and `l[i] = x`), `push`, `append` and `clear` change a place rooted in a `var` or a

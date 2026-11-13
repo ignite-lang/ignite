@@ -457,15 +457,33 @@ fn a_reversed_list_of_100000_ints_sorts_in_n_log_n_instructions() {
 /// and 32 without (memcheck), and 15 `mmap` calls each (`strace -c`).
 const LLVM_SORT_1000: u64 = 0;
 
+/// How often each form is counted for [`LLVM_SORT_1000`]. The adversary
+/// pass saw the smaller count in 4 of 12 builds: six runs that all show
+/// it are (1/3)^6, one gate run in about 700.
+const ALLOCATION_RUNS: usize = 6;
+
 /// Acceptance 5: the LLVM target's allocation count for a sort of 1,000
 /// elements (memcheck, those of building the list taken off) is no more
 /// than [`LLVM_SORT_1000`].
 #[test]
 fn the_llvm_sort_of_1000_ints_allocates_no_more_than_written_down() {
     let binary = cost(Target::Llvm);
-    let sorted = allocations(binary, "sort", 1000);
-    let built = allocations(binary, "build", 1000);
-    println!("Llvm: building 1,000 Ints {built} allocations, building and sorting {sorted}");
+    // One binary gives 31 or 32 `malloc` calls in either form from run to
+    // run, so one count against one count fails without a defect. The
+    // largest of several runs is compared: an allocation of the sort's
+    // own shows there as 33.
+    let most = |form: &str| {
+        (0..ALLOCATION_RUNS)
+            .map(|_| allocations(binary, form, 1000))
+            .max()
+            .unwrap_or(0)
+    };
+    let sorted = most("sort");
+    let built = most("build");
+    println!(
+        "Llvm: building 1,000 Ints {built} allocations, building and sorting {sorted} \
+         (the largest of {ALLOCATION_RUNS} runs each)"
+    );
     assert!(
         sorted <= built + LLVM_SORT_1000,
         "the sort of 1,000 Ints allocates {} times, {LLVM_SORT_1000} written down",

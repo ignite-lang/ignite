@@ -18,7 +18,7 @@
 //! - [`KEYS`]: a failing key fn fails with one report on all three, and a
 //!   key fn with an effect runs once per element, in order, on both targets.
 //! - [`ALLOC`]: the Rust target's allocations of a `sort_by` of `Text`
-//!   against the NN.2 sentence "copies each element once".
+//!   against the 43.2 sentence "copies each element once".
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -224,6 +224,8 @@ fn stable_sizes() -> List<(Int, Int)> {
 
 fn int_edges() -> List<Int> = [0, -9223372036854775807 - 1, 1, 9223372036854775807, -1, -9223372036854775807, 9223372036854775806].sort()
 
+fn descending() -> List<Int> = [1, -9223372036854775807 - 1, 9223372036854775807, 0, -1].sort_by(|k| 0 - 1 - k)
+
 fn byte_edges() -> List<Byte> = [byte(255), byte(0), byte(128), byte(127)].sort()
 
 fn words() -> List<U32> = [word(4294967295), word(2147483647), word(2147483648), word(0), word(1)].sort()
@@ -341,6 +343,7 @@ fn Printer.main(self: Printer) -> Result<Unit, IoError> {
   show(sizes().debug())?
   show(stable_sizes().debug())?
   show(int_edges().debug())?
+  show(descending().debug())?
   show(byte_edges().debug())?
   show(words().debug())?
   show(texts().debug())?
@@ -385,6 +388,11 @@ const EDGES_EXPECTED: &[(&str, &str)] = &[
     (
         "int_edges",
         "[-9223372036854775808, -9223372036854775807, -1, 0, 1, 9223372036854775806, 9223372036854775807]",
+    ),
+    // 43.1: the descending key `0 - 1 - k` has a value for every `Int`.
+    (
+        "descending",
+        "[9223372036854775807, 1, 0, -1, -9223372036854775808]",
     ),
     ("byte_edges", "[0, 127, 128, 255]"),
     ("words", "[0, 1, 2147483647, 2147483648, 4294967295]"),
@@ -625,7 +633,7 @@ const UNORDERED_TYPES: &[(&str, &str)] = &[
     ("sort_by", "`(Int, Option<Int>)`"),
 ];
 
-/// `docs/slice.md` NN.1: E045 refuses `sort` on a list of any type without
+/// `docs/slice.md` 43.1: E045 refuses `sort` on a list of any type without
 /// an order, naming the element type and `sort_by`, and `sort_by` with a
 /// key of any such type, naming the key's type; a generic `T` (and a
 /// generic key `K`) has no order. One diagnostic per fn, in order.
@@ -669,7 +677,7 @@ const ON_PARAMETER: &str = r#"package on_parameter
 fn untyped(stores: List<Store<Text>>) -> List<Store<Text>> requires [stdout.write] = stores.sort_by(|s| s.get(1))
 "#;
 
-/// `docs/slice.md` NN.1: `f` may perform effects exactly where `map`'s may.
+/// `docs/slice.md` 43.1: `f` may perform effects exactly where `map`'s may.
 /// A `sort_by` with an effectful key fn, named or a closure, in a fn
 /// without `requires` makes that fn effectful: a caller whose `requires`
 /// lacks the effect is E016. A closure whose parameter's type is inferred
@@ -813,7 +821,7 @@ fn a_failing_key_fn_fails_with_one_report_everywhere() {
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 
-/// `docs/slice.md` NN.1: `f` is called once per element, in the order of
+/// `docs/slice.md` 43.1: `f` is called once per element, in the order of
 /// the list; never on an empty list. Both targets print the same keys.
 #[test]
 fn an_effectful_key_fn_runs_once_per_element_in_order_on_both_targets() {
@@ -1012,7 +1020,7 @@ fn allocations(binary: &Path, form: &str, n: u64) -> u64 {
         .unwrap_or_else(|| panic!("no total heap usage in the valgrind log:\n{text}"))
 }
 
-/// `docs/slice.md` NN.2, Rust target: "`sort_by` computes the keys, sorts
+/// `docs/slice.md` 43.2, Rust target: "`sort_by` computes the keys, sorts
 /// the positions stably by key and copies each element once". A `sort_by`
 /// of 1,000 texts on the Rust target then allocates about one block per
 /// element (its copy) and a few for the keys, the positions and the new

@@ -587,6 +587,9 @@ pub fn compare(module: &mut Module<'_>, f: &mut Func, ty: &Ty, a: &str, b: &str)
             }
             f.val(format!("call i32 {}(ptr {a}, ptr {b})", global(&symbol)))
         }
+        // A key fn that never returns (`ignite_types::ordered` accepts
+        // `Never`): no key exists, so no comparison ever runs.
+        Ty::Never => "0".to_string(),
         other => panic!("no ordering for a value of type {other:?}"),
     }
 }
