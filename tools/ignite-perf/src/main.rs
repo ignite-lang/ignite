@@ -28,7 +28,9 @@ fn main() {
         Mode::QualityHost(args) => std::process::exit(readiness::exit_status(
             ignite_perf::remote::host_main(&args),
         )),
-        Mode::PathCost(args) => match ignite_perf::path_cost::main(&args) {
+        Mode::PathCost(args) => match ignite_perf::path_cost_run::stop_on_signal()
+            .and_then(|()| ignite_perf::path_cost::main(&args))
+        {
             Ok(code) => std::process::exit(code),
             Err(error) => {
                 eprintln!("{error}");

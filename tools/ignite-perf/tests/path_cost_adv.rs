@@ -7,7 +7,8 @@ use std::process::Command;
 
 use ignite_perf::path_cost::{
     self, Counts, Measure, PathCostArgs, Reference, Shown, frozen_differences,
-    frozen_in_repository, judge, parse_counts, parse_scenario, read_counts_dir, read_scenarios,
+    frozen_in_repository, judge, judge_measuring_again, parse_counts, parse_scenario,
+    read_counts_dir, read_scenarios,
 };
 
 fn repo() -> PathBuf {
@@ -301,27 +302,33 @@ fn adv_a_file_name_that_leaves_the_scenario_directory_is_refused() {
 /// (recorded 164, band 1) and `rust/todo/connection/instructions` 213697 208798 203217 202648
 /// 206783 (recorded 208357, band 2,083). Both cells are judged; the first pass was refused on
 /// both, with no change to any file. A merge that adds no cost passes every time.
+///
+/// Rewritten in the fix pass for its mechanism: a cell above its band is measured again and
+/// refused only when every measurement is above, and the recording changed (each request now
+/// ends with the server settled). Each value of those passes, as its distance from the value
+/// recorded then (+3 calls; +5,340 instructions), is the first measurement of a pass whose
+/// measurements after it are at the recorded value: no pass is refused.
 #[test]
 fn adv_the_values_of_an_unchanged_tree_are_not_refused() {
     let mut refused = Vec::new();
-    for (scenario, target, op, unit, values) in [
+    for (scenario, target, op, unit, deltas) in [
         (
             "terminal",
             "llvm",
             "session",
             "syscalls",
-            &[167u64, 164, 161, 165, 164][..],
+            &[3i64, 0, -3, 1, 0][..],
         ),
         (
             "todo",
             "rust",
             "connection",
             "instructions",
-            &[213_697, 208_798, 203_217, 202_648, 206_783][..],
+            &[5_340, 441, -5_140, -5_709, -1_574][..],
         ),
     ] {
         let then = recorded(scenario, target);
-        for &value in values {
+        for &delta in deltas {
             let mut now = unchanged(&then);
             let cell = op_mut(&mut now, op);
             let m = if unit == "syscalls" {
@@ -329,9 +336,13 @@ fn adv_the_values_of_an_unchanged_tree_are_not_refused() {
             } else {
                 &mut cell.instructions
             };
-            m.value = value;
-            m.runs = vec![value];
-            let verdict = judge(std::slice::from_ref(&then), &[now]);
+            m.value = m.value.saturating_add_signed(delta);
+            m.runs = vec![m.value];
+            let verdict =
+                judge_measuring_again(std::slice::from_ref(&then), vec![now], &mut |_, _| {
+                    Ok(unchanged(&then))
+                })
+                .unwrap();
             refused.extend(verdict.refused);
         }
     }

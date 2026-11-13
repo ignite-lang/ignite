@@ -12,13 +12,16 @@
 //! was added to a path that already existed, since the program cannot use what came later.
 //!
 //! The counts of the last release are files under [`COUNTS`], one per scenario and target
-//! ([`parse_counts`]), written by `--record` over several runs: per cell the median, every run's
-//! value, and the functions (self instructions) and system calls of the median run. A merge
-//! measures each cell once and is refused ([`judge`]) when a cell is above its recorded value by
-//! more than the noise band ([`band`]); the refusal names the functions and system calls that
-//! grew or are new, each with both values. A cell whose recorded runs spread further than the
-//! band is named and not judged; a scenario recorded with `first` (added after the freeze) is
-//! shown and compared from the next release on.
+//! ([`parse_counts`]), written by `--record` over several runs: the digests of the script and of
+//! every program file, then per cell the median, every run's value, and the functions (self
+//! instructions) and system calls of the median run. A count file holds its scenario's script:
+//! a script or file that differs from the digests it was recorded with fails the frozen check.
+//! A merge measures each cell once; a cell above its recorded value by more than its band
+//! ([`band`]), or with a system call the release did not make on that path at least once per
+//! execution, is measured again, and refused ([`judge`]) only when every measurement is above.
+//! The refusal names the functions and system calls that grew or are new, each with both values.
+//! A scenario recorded with `first` (added after the freeze) is shown and compared from the next
+//! release on.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -43,13 +46,22 @@ pub const MOST_LISTED: usize = 15;
 /// not depend on one.
 pub const TARGETS: [&str; 3] = ["all", "llvm", "rust"];
 
-/// The noise band of instructions: a cell is refused above its recorded value by more than this
-/// many thousandths of it.
-pub const INSTRUCTION_BAND_PERMILLE: u64 = 10;
-/// The noise band of system calls: thousandths of the recorded value, and at least
+/// The least band of instructions: this many thousandths of the recorded value.
+pub const INSTRUCTION_FLOOR_PERMILLE: u64 = 1;
+/// The least band of system calls: thousandths of the recorded value, and at least
 /// [`SYSCALL_BAND_LEAST`] calls.
-pub const SYSCALL_BAND_PERMILLE: u64 = 10;
+pub const SYSCALL_FLOOR_PERMILLE: u64 = 10;
 pub const SYSCALL_BAND_LEAST: u64 = 1;
+/// A cell's band is this many times the spread of its recorded runs when that is above the
+/// floor.
+pub const SPREAD_TIMES: u64 = 2;
+/// The widest band: this many thousandths of the recorded value (or the floor, if that is
+/// wider), whatever the runs spread.
+pub const BAND_CAP_PERMILLE: u64 = 100;
+/// How often a cell above its band is measured again before it is refused.
+pub const MEASURED_AGAIN: usize = 2;
+/// The highest count a count file may hold.
+pub const MOST_COUNT: u64 = 1_000_000_000_000_000;
 
 /// The unit of a cell.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -67,11 +79,40 @@ impl Unit {
     }
 }
 
-/// How far a cell may rise above its recorded `value` without being refused.
-pub fn band(unit: Unit, value: u64) -> u64 {
+/// `permille` thousandths of `value`, rounded down, without overflow.
+fn thousandths(value: u64, permille: u64) -> u64 {
+    value / 1000 * permille + value % 1000 * permille / 1000
+}
+
+/// The least band of a cell recorded at `value`.
+pub fn band_floor(unit: Unit, value: u64) -> u64 {
     match unit {
-        Unit::Instructions => value * INSTRUCTION_BAND_PERMILLE / 1000,
-        Unit::Syscalls => (value * SYSCALL_BAND_PERMILLE / 1000).max(SYSCALL_BAND_LEAST),
+        Unit::Instructions => thousandths(value, INSTRUCTION_FLOOR_PERMILLE),
+        Unit::Syscalls => thousandths(value, SYSCALL_FLOOR_PERMILLE).max(SYSCALL_BAND_LEAST),
+    }
+}
+
+/// How far a cell may rise above its recorded value without being refused: twice the spread of
+/// its recorded runs, at least [`band_floor`] and at most a tenth of the value.
+pub fn band(unit: Unit, recorded: &Measure) -> u64 {
+    let floor = band_floor(unit, recorded.value);
+    let cap = thousandths(recorded.value, BAND_CAP_PERMILLE).max(floor);
+    recorded
+        .spread()
+        .saturating_mul(SPREAD_TIMES)
+        .max(floor)
+        .min(cap)
+}
+
+/// Where a cell's band comes from, for the report.
+pub fn band_reason(unit: Unit, recorded: &Measure) -> &'static str {
+    let doubled = recorded.spread().saturating_mul(SPREAD_TIMES);
+    if doubled <= band_floor(unit, recorded.value) {
+        "the floor"
+    } else if band(unit, recorded) < doubled {
+        "a tenth of the value"
+    } else {
+        "twice the spread of its runs"
     }
 }
 
@@ -182,6 +223,15 @@ impl Scenario {
         }
     }
 
+    /// How often a cell of `op` executes it: `repeat` for a server's operation, once for its
+    /// start and for a CLI command.
+    pub fn executions(&self, op: &str) -> u64 {
+        match &self.kind {
+            Kind::Server(server) if op != "start" => server.repeat as u64,
+            _ => 1,
+        }
+    }
+
     /// Every `(target, op)` the scenario measures; a cell is one of them with a unit.
     pub fn cells(&self) -> Vec<(String, String)> {
         let mut out = Vec::new();
@@ -214,6 +264,11 @@ fn words(line: &str, n: usize) -> (Vec<&str>, &str) {
         rest = rest[end..].trim_start();
     }
     (out, rest.trim_end())
+}
+
+/// A file name that stays in its directory: not empty, no `/`, not `.` or `..`.
+fn plain_name(name: &str) -> bool {
+    !name.is_empty() && !name.contains('/') && name != "." && name != ".."
 }
 
 fn number(word: &str, what: &str) -> R<usize> {
@@ -271,6 +326,31 @@ pub fn parse_scenario(name: &str, text: &str) -> R<Scenario> {
                 if w.is_empty() || !extra.is_empty() {
                     return Err(at(n, "`file <name> [<path at the tag>]`".into()));
                 }
+                ensure(
+                    plain_name(w[0]) && w[0] != "scenario",
+                    at(
+                        n,
+                        format!(
+                            "file {:?}: a program file is a plain name in the scenario's directory, other than `scenario`",
+                            w[0]
+                        ),
+                    ),
+                )?;
+                if let Some(origin) = w.get(1) {
+                    ensure(
+                        !origin.starts_with('/') && origin.split('/').all(plain_name),
+                        at(
+                            n,
+                            format!(
+                                "{origin:?}: a path in the tag's tree, relative, without `.` or `..`"
+                            ),
+                        ),
+                    )?;
+                }
+                ensure(
+                    !files.iter().any(|f: &FrozenFile| f.name == w[0]),
+                    at(n, format!("file {:?} twice", w[0])),
+                )?;
                 files.push(FrozenFile {
                     name: w[0].to_string(),
                     origin: w.get(1).map(|s| s.to_string()),
@@ -320,6 +400,14 @@ pub fn parse_scenario(name: &str, text: &str) -> R<Scenario> {
     {
         return Err(format!(
             "bench/path-cost/{name}/scenario: `{}` of a frozen scenario names no path at its tag",
+            file.name
+        ));
+    }
+    if frozen.is_none()
+        && let Some(file) = files.iter().find(|f| f.origin.is_some())
+    {
+        return Err(format!(
+            "bench/path-cost/{name}/scenario: `{}` names a path at a tag and the scenario has no `frozen` line naming the tag",
             file.name
         ));
     }
@@ -461,121 +549,243 @@ pub enum Shown {
     NoTag,
 }
 
-/// The differences of the scenarios under `root` from their tags, and what the check could not
-/// compare yet. `last_release` is the last release tag; `show(tag, path)` reads a file of a
-/// tag's tree.
-///
-/// A scenario that the last release holds (its `scenario` file is in the tag's tree) is
-/// compared whole: every file of its directory is the release's. One that no release holds yet
-/// is compared by its program files: each `file` with a path is the file of the `frozen` tag
-/// at that path, and that tag must be in the repository. A file in the directory that the
-/// script does not list is an error either way.
+/// The SHA-256 of `bytes`, in hex: the digest a count file records of each file of its scenario.
+pub fn digest(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// [`frozen_check`] of the scenarios under `root` against their tags and against the count
+/// files under `root/counts`.
 pub fn frozen_differences(
     root: &Path,
     scenarios: &[Scenario],
     last_release: Option<&str>,
     show: &dyn Fn(&str, &str) -> Result<Shown, String>,
 ) -> (Vec<String>, Vec<String>) {
+    let dir = root.join("counts");
+    let recordings = if dir.is_dir() {
+        match read_counts_dir(&dir) {
+            Ok(counts) => counts,
+            Err(e) => return (vec![e], Vec::new()),
+        }
+    } else {
+        Vec::new()
+    };
+    frozen_check(root, scenarios, last_release, show, Some(&recordings))
+}
+
+/// The differences of the scenarios under `root` from their tags and from the count files they
+/// were recorded with, and what the check could not compare yet. `last_release` is the last
+/// release tag; `show(tag, path)` reads a file of a tag's tree; `recordings` are the count
+/// files, `None` while the counts are being recorded.
+///
+/// A scenario that the last release holds (its `scenario` file is in the tag's tree) is
+/// compared whole: every file of its directory is the release's. One that no release holds yet
+/// is compared by its program files: each `file` with a path is the file of the `frozen` tag
+/// at that path, and that tag must be in the repository. A file in the directory that the
+/// script does not list is an error either way.
+///
+/// The tag holds the programs, not the script. A count file records the digest of the script
+/// and of every program file at its recording, and each must be the digest of the file now, so
+/// the script (`repeat`, `warm`, the requests, the targets, the `frozen` line) is frozen with the
+/// programs. A frozen scenario no release holds has count files; a count file of a release's
+/// values belongs to a frozen scenario or to one a release holds.
+pub fn frozen_check(
+    root: &Path,
+    scenarios: &[Scenario],
+    last_release: Option<&str>,
+    show: &dyn Fn(&str, &str) -> Result<Shown, String>,
+    recordings: Option<&[Counts]>,
+) -> (Vec<String>, Vec<String>) {
     let (mut errors, mut notes) = (Vec::new(), Vec::new());
     for scenario in scenarios {
-        let dir = root.join(&scenario.name);
-        let shown_dir = format!("{SCENARIOS}/{}", scenario.name);
-        let mut present: Vec<String> = match fs::read_dir(&dir) {
-            Ok(entries) => entries
-                .filter_map(|e| e.ok())
-                .filter(|e| e.path().is_file())
-                .map(|e| e.file_name().to_string_lossy().into_owned())
-                .collect(),
-            Err(e) => {
-                errors.push(format!("{shown_dir}: {e}"));
-                continue;
-            }
-        };
-        present.sort();
-        for file in &present {
-            if file != "scenario" && !scenario.files.iter().any(|f| &f.name == file) {
-                errors.push(format!(
-                    "{shown_dir}/{file}: a file its scenario does not list"
-                ));
-            }
-        }
-        let read =
-            |name: &str| fs::read(dir.join(name)).map_err(|e| format!("{shown_dir}/{name}: {e}"));
-        let released = match last_release {
-            Some(tag) => match show(tag, &format!("{shown_dir}/scenario")) {
-                Ok(Shown::File(_)) => Some(tag),
-                Ok(_) => None,
-                Err(e) => {
-                    errors.push(e);
-                    continue;
-                }
-            },
-            None => None,
-        };
-        if let Some(tag) = released {
-            for file in &present {
-                let path = format!("{shown_dir}/{file}");
-                match (show(tag, &path), read(file)) {
-                    (Err(e), _) | (_, Err(e)) => errors.push(e),
-                    (Ok(Shown::File(then)), Ok(now)) if then == now => {}
-                    (Ok(Shown::File(_)), Ok(_)) => errors.push(format!(
-                        "{path} differs from its file at {tag}: a scenario a release holds is never edited; a changed program is a new scenario"
-                    )),
-                    (Ok(_), _) => errors.push(format!(
-                        "{path} is not in {tag}, which holds the scenario: a scenario a release holds is never edited"
-                    )),
-                }
-            }
-            notes.push(format!("{shown_dir}: every file is the file of {tag}"));
-            continue;
-        }
-        notes.push(format!(
-            "{shown_dir}/scenario is in no release yet{}: the directory is compared whole from the first release that holds it",
-            last_release.map_or(String::new(), |t| format!(" (the last is {t})"))
-        ));
-        let Some(tag) = &scenario.frozen else {
-            notes.push(format!(
-                "{shown_dir}: added after the freeze, its program files are frozen from the first release that holds them"
-            ));
-            continue;
-        };
-        let before = errors.len();
-        for file in &scenario.files {
-            let Some(origin) = &file.origin else {
-                continue;
-            };
-            let path = format!("{shown_dir}/{}", file.name);
-            match (show(tag, origin), read(&file.name)) {
-                (Err(e), _) | (_, Err(e)) => errors.push(e),
-                (Ok(Shown::NoTag), _) => {
-                    errors.push(format!(
-                        "tag {tag} is not in this repository: the frozen files of {shown_dir} cannot be compared with it; fetch it (`git fetch --tags`)"
-                    ));
-                    break;
-                }
-                (Ok(Shown::NoFile), _) => {
-                    errors.push(format!("{path}: {origin} is not in {tag}"));
-                }
-                (Ok(Shown::File(then)), Ok(now)) if then == now => {}
-                (Ok(Shown::File(_)), Ok(_)) => errors.push(format!(
-                    "{path} differs from {origin} at {tag}: a frozen scenario is never edited; a changed program is a new scenario"
-                )),
-            }
-        }
-        if errors.len() == before {
-            notes.push(format!("{shown_dir}: its program files are those of {tag}"));
+        let held = tag_differences(root, scenario, last_release, show, &mut errors, &mut notes);
+        if let Some(recordings) = recordings {
+            recording_differences(root, scenario, held, recordings, &mut errors);
         }
     }
     (errors, notes)
 }
 
+/// [`frozen_check`] against the tags for one scenario; whether the last release holds it.
+fn tag_differences(
+    root: &Path,
+    scenario: &Scenario,
+    last_release: Option<&str>,
+    show: &dyn Fn(&str, &str) -> Result<Shown, String>,
+    errors: &mut Vec<String>,
+    notes: &mut Vec<String>,
+) -> bool {
+    let dir = root.join(&scenario.name);
+    let shown_dir = format!("{SCENARIOS}/{}", scenario.name);
+    let mut present: Vec<String> = match fs::read_dir(&dir) {
+        Ok(entries) => entries
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().is_file())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect(),
+        Err(e) => {
+            errors.push(format!("{shown_dir}: {e}"));
+            return false;
+        }
+    };
+    present.sort();
+    for file in &present {
+        if file != "scenario" && !scenario.files.iter().any(|f| &f.name == file) {
+            errors.push(format!(
+                "{shown_dir}/{file}: a file its scenario does not list"
+            ));
+        }
+    }
+    let read =
+        |name: &str| fs::read(dir.join(name)).map_err(|e| format!("{shown_dir}/{name}: {e}"));
+    let released = match last_release {
+        Some(tag) => match show(tag, &format!("{shown_dir}/scenario")) {
+            Ok(Shown::File(_)) => Some(tag),
+            Ok(_) => None,
+            Err(e) => {
+                errors.push(e);
+                return false;
+            }
+        },
+        None => None,
+    };
+    if let Some(tag) = released {
+        for file in &present {
+            let path = format!("{shown_dir}/{file}");
+            match (show(tag, &path), read(file)) {
+                (Err(e), _) | (_, Err(e)) => errors.push(e),
+                (Ok(Shown::File(then)), Ok(now)) if then == now => {}
+                (Ok(Shown::File(_)), Ok(_)) => errors.push(format!(
+                    "{path} differs from its file at {tag}: a scenario a release holds is never edited; a changed program is a new scenario"
+                )),
+                (Ok(_), _) => errors.push(format!(
+                    "{path} is not in {tag}, which holds the scenario: a scenario a release holds is never edited"
+                )),
+            }
+        }
+        notes.push(format!("{shown_dir}: every file is the file of {tag}"));
+        return true;
+    }
+    notes.push(format!(
+        "{shown_dir}/scenario is in no release yet{}: the directory is compared whole from the first release that holds it",
+        last_release.map_or(String::new(), |t| format!(" (the last is {t})"))
+    ));
+    let Some(tag) = &scenario.frozen else {
+        notes.push(format!(
+            "{shown_dir}: added after the freeze, its program files are frozen from the first release that holds them"
+        ));
+        return false;
+    };
+    let before = errors.len();
+    for file in &scenario.files {
+        let Some(origin) = &file.origin else {
+            continue;
+        };
+        let path = format!("{shown_dir}/{}", file.name);
+        match (show(tag, origin), read(&file.name)) {
+            (Err(e), _) | (_, Err(e)) => errors.push(e),
+            (Ok(Shown::NoTag), _) => {
+                errors.push(format!(
+                    "tag {tag} is not in this repository: the frozen files of {shown_dir} cannot be compared with it; fetch it (`git fetch --tags`)"
+                ));
+                break;
+            }
+            (Ok(Shown::NoFile), _) => {
+                errors.push(format!("{path}: {origin} is not in {tag}"));
+            }
+            (Ok(Shown::File(then)), Ok(now)) if then == now => {}
+            (Ok(Shown::File(_)), Ok(_)) => errors.push(format!(
+                "{path} differs from {origin} at {tag}: a frozen scenario is never edited; a changed program is a new scenario"
+            )),
+        }
+    }
+    if errors.len() == before {
+        notes.push(format!("{shown_dir}: its program files are those of {tag}"));
+    }
+    false
+}
+
+/// [`frozen_check`] against the count files for one scenario.
+fn recording_differences(
+    root: &Path,
+    scenario: &Scenario,
+    held: bool,
+    recordings: &[Counts],
+    errors: &mut Vec<String>,
+) {
+    let shown_dir = format!("{SCENARIOS}/{}", scenario.name);
+    let mine: Vec<&Counts> = recordings
+        .iter()
+        .filter(|c| c.scenario == scenario.name)
+        .collect();
+    if mine.is_empty() {
+        if let (Some(tag), false) = (&scenario.frozen, held) {
+            errors.push(format!(
+                "{shown_dir}/scenario: frozen at {tag}, and no count file under {COUNTS} records it; record it (`task path-cost RECORD={tag}`)"
+            ));
+        }
+        return;
+    }
+    let now = |name: &str| {
+        fs::read(root.join(&scenario.name).join(name))
+            .map(|bytes| digest(&bytes))
+            .map_err(|e| format!("{shown_dir}/{name}: {e}"))
+    };
+    for counts in mine {
+        let file = format!("{COUNTS}/{}", counts_file(&counts.scenario, &counts.target));
+        if let (Reference::Release(tag), None, false) = (&counts.reference, &scenario.frozen, held)
+        {
+            errors.push(format!(
+                "{shown_dir}/scenario has no `frozen` line and no release holds it, while {file} holds its counts as those of {tag}: a scenario judged against a release is frozen"
+            ));
+        }
+        let mut recorded: Vec<(&str, Option<&str>)> = vec![("scenario", counts.script.as_deref())];
+        for program in &scenario.files {
+            recorded.push((
+                program.name.as_str(),
+                counts
+                    .files
+                    .iter()
+                    .find(|(name, _)| name == &program.name)
+                    .map(|(_, d)| d.as_str()),
+            ));
+        }
+        for (name, then) in recorded {
+            match (then, now(name)) {
+                (_, Err(e)) => errors.push(e),
+                (None, _) => errors.push(format!(
+                    "{file} records no digest of {shown_dir}/{name}; record the scenario again"
+                )),
+                (Some(then), Ok(now)) if then == now => {}
+                (Some(_), Ok(_)) => errors.push(format!(
+                    "{shown_dir}/{name} differs from the file {file} was recorded with: a recorded scenario is never edited; a changed scenario is a new scenario"
+                )),
+            }
+        }
+        for (name, _) in &counts.files {
+            if !scenario.files.iter().any(|f| &f.name == name) {
+                errors.push(format!(
+                    "{file} was recorded with {shown_dir}/{name}, which its scenario does not list"
+                ));
+            }
+        }
+    }
+}
+
+/// How many `git` processes the mode started, for its tally.
+pub static GIT_RUNS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 /// `git` in `repo`, its stdout, or `None` when it fails.
 fn git_out(repo: &Path, args: &[&str]) -> Option<Vec<u8>> {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(repo)
-        .output()
-        .ok()?;
+    GIT_RUNS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let mut command = Command::new("git");
+    command.args(args).current_dir(repo);
+    let output = crate::path_cost_run::output(&mut command).ok()?;
     output.status.success().then_some(output.stdout)
 }
 
@@ -589,26 +799,42 @@ pub fn last_release_tag(repo: &Path) -> Option<String> {
     (!tag.is_empty()).then_some(tag)
 }
 
+/// A file of a tag's tree in `repo`, through `git`.
+fn show_in(repo: &Path, tag: &str, path: &str) -> Result<Shown, String> {
+    if git_out(
+        repo,
+        &[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("refs/tags/{tag}"),
+        ],
+    )
+    .is_none()
+    {
+        return Ok(Shown::NoTag);
+    }
+    Ok(git_out(repo, &["show", &format!("{tag}:{path}")]).map_or(Shown::NoFile, Shown::File))
+}
+
 /// [`frozen_differences`] of the scenarios of `repo`, read through `git`.
 pub fn frozen_in_repository(repo: &Path, scenarios: &[Scenario]) -> (Vec<String>, Vec<String>) {
-    let show = |tag: &str, path: &str| -> Result<Shown, String> {
-        if git_out(
-            repo,
-            &[
-                "rev-parse",
-                "--verify",
-                "--quiet",
-                &format!("refs/tags/{tag}"),
-            ],
-        )
-        .is_none()
-        {
-            return Ok(Shown::NoTag);
-        }
-        Ok(git_out(repo, &["show", &format!("{tag}:{path}")]).map_or(Shown::NoFile, Shown::File))
-    };
+    let show = |tag: &str, path: &str| show_in(repo, tag, path);
     let last = last_release_tag(repo);
     frozen_differences(&repo.join(SCENARIOS), scenarios, last.as_deref(), &show)
+}
+
+/// [`frozen_check`] of the scenarios of `repo` against their tags alone, for a recording.
+pub fn frozen_for_recording(repo: &Path, scenarios: &[Scenario]) -> (Vec<String>, Vec<String>) {
+    let show = |tag: &str, path: &str| show_in(repo, tag, path);
+    let last = last_release_tag(repo);
+    frozen_check(
+        &repo.join(SCENARIOS),
+        scenarios,
+        last.as_deref(),
+        &show,
+        None,
+    )
 }
 
 // ---- counts -------------------------------------------------------------------------------
@@ -629,12 +855,18 @@ pub struct Counts {
     pub scenario: String,
     pub target: String,
     pub reference: Reference,
+    /// The [`digest`] of the scenario's script at the recording.
+    pub script: Option<String>,
+    /// The [`digest`] of each program file at the recording, by name.
+    pub files: Vec<(String, String)>,
     pub ops: Vec<OpCounts>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct OpCounts {
     pub op: String,
+    /// How often the cell executes its operation ([`Scenario::executions`]).
+    pub executions: u64,
     pub instructions: Measure,
     pub syscalls: Measure,
 }
@@ -678,7 +910,8 @@ fn sorted_items(items: &BTreeMap<String, u64>) -> Vec<(&String, &u64)> {
 }
 
 /// The text of a count file: `path-cost counts`, `scenario`, `target`, `release <tag>` or
-/// `first <commit>`, then per operation `op <name>`, `instructions <value> runs <v>...`,
+/// `first <commit>`, `script <digest>` and `file <digest> <name>` lines, then per operation
+/// `op <name>`, `times <executions>` (left out for one), `instructions <value> runs <v>...`,
 /// `syscalls <value> runs <v>...`, `fn <count> <name>` and `syscall <count> <name>` lines,
 /// most first.
 pub fn write_counts(counts: &Counts) -> String {
@@ -690,8 +923,17 @@ pub fn write_counts(counts: &Counts) -> String {
         Reference::Release(tag) => out.push_str(&format!("release {tag}\n")),
         Reference::First(commit) => out.push_str(&format!("first {commit}\n")),
     }
+    if let Some(script) = &counts.script {
+        out.push_str(&format!("script {script}\n"));
+    }
+    for (name, digest) in &counts.files {
+        out.push_str(&format!("file {digest} {name}\n"));
+    }
     for op in &counts.ops {
         out.push_str(&format!("op {}\n", op.op));
+        if op.executions != 1 {
+            out.push_str(&format!("times {}\n", op.executions));
+        }
         for unit in [Unit::Instructions, Unit::Syscalls] {
             let m = op.measure(unit);
             let runs: Vec<String> = m.runs.iter().map(u64::to_string).collect();
@@ -711,7 +953,10 @@ pub fn write_counts(counts: &Counts) -> String {
     out
 }
 
-/// Read a count file ([`write_counts`]).
+/// Read a count file ([`write_counts`]). Refused: a count above [`MOST_COUNT`], a value that is
+/// not the median of its runs (the lower of the two middle ones for an even number, as
+/// [`combine`] takes it), an operation, cell, function or system call twice, a digest after the
+/// first operation.
 pub fn parse_counts(text: &str) -> R<Counts> {
     let mut lines = text.lines().enumerate();
     ensure(
@@ -742,55 +987,98 @@ pub fn parse_counts(text: &str) -> R<Counts> {
         runs: Vec::new(),
         items: BTreeMap::new(),
     };
+    let (mut script, mut files): (Option<String>, Vec<(String, String)>) = (None, Vec::new());
     let mut ops: Vec<OpCounts> = Vec::new();
     let mut seen: Vec<(usize, bool, bool)> = Vec::new();
+    let count =
+        |word: &str| -> Option<u64> { word.parse::<u64>().ok().filter(|&v| v <= MOST_COUNT) };
     for (index, line) in lines {
         let n = index + 1;
         let (word, rest) = line.split_once(' ').unwrap_or((line, ""));
         let at = |e: &str| format!("line {n}: {e}: {line:?}");
-        if word == "op" {
-            ops.push(OpCounts {
-                op: rest.to_string(),
-                instructions: empty.clone(),
-                syscalls: empty.clone(),
-            });
-            seen.push((n, false, false));
-            continue;
+        match word {
+            "script" | "file" if !ops.is_empty() => {
+                return Err(at("a digest after the first `op`"));
+            }
+            "script" => {
+                ensure(script.is_none(), at("`script` twice"))?;
+                script = Some(rest.to_string());
+                continue;
+            }
+            "file" => {
+                let (digest, name) = rest
+                    .split_once(' ')
+                    .ok_or_else(|| at("`file <digest> <name>` expected"))?;
+                ensure(
+                    !files.iter().any(|(n, _)| n == name),
+                    at("the digest of a file twice"),
+                )?;
+                files.push((name.to_string(), digest.to_string()));
+                continue;
+            }
+            "op" => {
+                ensure(!ops.iter().any(|o| o.op == rest), at("an operation twice"))?;
+                ops.push(OpCounts {
+                    op: rest.to_string(),
+                    executions: 1,
+                    instructions: empty.clone(),
+                    syscalls: empty.clone(),
+                });
+                seen.push((n, false, false));
+                continue;
+            }
+            _ => {}
         }
         let (Some(op), Some(state)) = (ops.last_mut(), seen.last_mut()) else {
             return Err(at("before the first `op`"));
         };
         match word {
+            "times" => {
+                op.executions = count(rest)
+                    .filter(|&t| t > 0)
+                    .ok_or_else(|| at("`times <executions>` expected"))?;
+            }
             "instructions" | "syscalls" => {
                 let mut parts = rest.split(' ');
-                let value = parts.next().and_then(|v| v.parse::<u64>().ok());
+                let value = parts.next().and_then(count);
                 let runs_word = parts.next();
-                let runs: Option<Vec<u64>> = parts.map(|v| v.parse::<u64>().ok()).collect();
+                let runs: Option<Vec<u64>> = parts.map(count).collect();
                 let (Some(value), Some("runs"), Some(runs)) = (value, runs_word, runs) else {
-                    return Err(at("`<unit> <value> runs <value>...` expected"));
+                    return Err(at(&format!(
+                        "`<unit> <value> runs <value>...` expected, each at most {MOST_COUNT}"
+                    )));
                 };
                 ensure(!runs.is_empty(), at("no runs"))?;
-                let measure = if word == "instructions" {
-                    state.1 = true;
-                    &mut op.instructions
+                let mut sorted = runs.clone();
+                sorted.sort_unstable();
+                ensure(
+                    value == sorted[(sorted.len() - 1) / 2],
+                    at("the value is not the median of its runs"),
+                )?;
+                let (measure, done) = if word == "instructions" {
+                    (&mut op.instructions, &mut state.1)
                 } else {
-                    state.2 = true;
-                    &mut op.syscalls
+                    (&mut op.syscalls, &mut state.2)
                 };
+                ensure(!*done, at("the cell twice"))?;
+                *done = true;
                 measure.value = value;
                 measure.runs = runs;
             }
             "fn" | "syscall" => {
-                let (count, name) = rest
+                let (number, name) = rest
                     .split_once(' ')
                     .ok_or_else(|| at("`<word> <count> <name>` expected"))?;
-                let count: u64 = count.parse().map_err(|_| at("a count"))?;
+                let number = count(number).ok_or_else(|| at("a count"))?;
                 let measure = if word == "fn" {
                     &mut op.instructions
                 } else {
                     &mut op.syscalls
                 };
-                measure.items.insert(name.to_string(), count);
+                ensure(
+                    measure.items.insert(name.to_string(), number).is_none(),
+                    at("named twice"),
+                )?;
             }
             _ => return Err(at("unknown line")),
         }
@@ -805,6 +1093,8 @@ pub fn parse_counts(text: &str) -> R<Counts> {
         scenario,
         target,
         reference,
+        script,
+        files,
         ops,
     })
 }
@@ -907,6 +1197,26 @@ pub fn callgrind_profile(text: &str) -> R<Profile> {
     Ok(profile)
 }
 
+/// The system calls a trace at rest gained since `mark`, the length it had at the look before,
+/// and its length now, the next look's mark. A call counts where its line begins: a call still
+/// blocked at rest (its line not ended, as for every thread but one when several are blocked)
+/// counts in this segment, and the end of its line, written when it returns or another thread
+/// interrupts it, belongs to it and not to the next segment. Which of two blocked threads
+/// strace began last depends on their scheduling; where a call is counted does not.
+pub fn strace_segment(text: &str, mark: usize) -> (Profile, usize) {
+    let mark = mark.min(text.len());
+    let start = if mark > 0 && text.as_bytes()[mark - 1] != b'\n' {
+        text[mark..].find('\n').map_or(text.len(), |i| mark + i + 1)
+    } else {
+        mark
+    };
+    let mut part = text[start..].to_string();
+    if !part.is_empty() && !part.ends_with('\n') {
+        part.push('\n');
+    }
+    (strace_profile(&part), text.len())
+}
+
 /// The system calls of a `strace` output (`-o`, with `-f` or without): a call counts once, at
 /// the line that begins it; a resumed call, a signal and an exit are no call; a last line that
 /// is not complete yet is left out.
@@ -939,20 +1249,26 @@ pub fn strace_profile(text: &str) -> Profile {
 // ---- the judgement ------------------------------------------------------------------------
 
 /// What [`judge`] found: the refused cells (each a block of text whose first line names the
-/// cell), what it did not judge and why, and every measured value by cell.
+/// cell), what it did not judge and why, every measured cell with its band, and every measured
+/// value by cell.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Verdict {
     pub refused: Vec<String>,
     pub notes: Vec<String>,
+    /// Per cell: its lowest measured value, and its recorded value and band when it is judged.
+    pub lines: Vec<String>,
+    /// Per cell, the lowest of its measurements.
     pub values: Vec<(String, u64)>,
+    /// The `(scenario, target)` of the refused cells, once each: what measuring again may clear.
+    pub above: Vec<(String, String)>,
 }
 
 impl Verdict {
-    /// The values, the notes, then the refusals.
+    /// The cells, the notes, then the refusals.
     pub fn report(&self) -> String {
         let mut out = String::new();
-        for (cell, value) in &self.values {
-            out.push_str(&format!("{METRIC} {cell} {value}\n"));
+        for line in &self.lines {
+            out.push_str(&format!("{line}\n"));
         }
         for note in &self.notes {
             out.push_str(&format!("{note}\n"));
@@ -967,14 +1283,75 @@ impl Verdict {
     }
 }
 
+/// The system calls of `now` that `then` does not have, each made at least `executions` times:
+/// at least once per execution of the operation.
+fn new_calls<'a>(then: &Measure, now: &'a Measure, executions: u64) -> Vec<(&'a str, u64)> {
+    now.items
+        .iter()
+        .filter(|(name, count)| !then.items.contains_key(*name) && **count >= executions)
+        .map(|(name, count)| (name.as_str(), *count))
+        .collect()
+}
+
+/// Whether one measurement of a cell is above its recorded value: by more than the band, or with
+/// a system call made at least once per execution that the release did not make.
+fn is_above(unit: Unit, then: &Measure, now: &Measure, executions: u64) -> bool {
+    now.value > then.value.saturating_add(band(unit, then))
+        || (unit == Unit::Syscalls && !new_calls(then, now, executions).is_empty())
+}
+
 /// The refusal of one cell: its values and the functions or system calls that grew or are
-/// new, largest growth first, at most [`MOST_LISTED`].
-fn refusal(cell: &str, tag: &str, unit: Unit, then: &Measure, now: &Measure) -> String {
-    let slack = band(unit, then.value);
+/// new in its lowest measurement, largest growth first, at most [`MOST_LISTED`].
+fn refusal(
+    cell: &str,
+    tag: &str,
+    unit: Unit,
+    then: &Measure,
+    measured: &[&Measure],
+    executions: u64,
+) -> String {
+    let slack = band(unit, then);
+    let now = measured
+        .iter()
+        .min_by_key(|m| m.value)
+        .copied()
+        .unwrap_or(then);
+    let mut why = Vec::new();
+    if measured
+        .iter()
+        .all(|m| m.value > then.value.saturating_add(slack))
+    {
+        why.push(format!(
+            "above it by more than its band of {slack} ({})",
+            band_reason(unit, then)
+        ));
+    }
+    let calls = new_calls(then, now, executions);
+    if unit == Unit::Syscalls && !calls.is_empty() {
+        let names: Vec<&str> = calls.iter().map(|(name, _)| *name).collect();
+        why.push(format!(
+            "with {} not made at {tag} and made at least once per execution ({executions})",
+            names.join(", ")
+        ));
+    }
+    if why.is_empty() {
+        why.push("above it in every measurement".to_string());
+    }
     let mut out = format!(
-        "{METRIC} {cell}: {} at {tag}, {} now, above it by more than the noise band of {slack}\n",
-        then.value, now.value
+        "{METRIC} {cell}: {} at {tag}, {} now, {}",
+        then.value,
+        now.value,
+        why.join("; ")
     );
+    if measured.len() > 1 {
+        let values: Vec<String> = measured.iter().map(|m| m.value.to_string()).collect();
+        out.push_str(&format!(
+            "; measured {} times: {}",
+            measured.len(),
+            values.join(" ")
+        ));
+    }
+    out.push('\n');
     let mut grown: Vec<(u64, &str, Option<u64>, u64)> = now
         .items
         .iter()
@@ -1015,31 +1392,85 @@ fn refusal(cell: &str, tag: &str, unit: Unit, then: &Measure, now: &Measure) -> 
     out
 }
 
-/// Hold the `measured` counts against the `recorded` ones of the same scenario and target. A
-/// cell is refused when it is above its recorded value by more than [`band`]; not judged when
-/// its recorded runs spread further than the band; shown only when its file is a `first`
-/// value. A scenario, target or operation without a recorded value is refused, and so is a
-/// recorded operation the run did not measure.
+/// Hold the `measured` counts against the `recorded` ones of the same scenario and target.
+/// `measured` may hold several measurements of a scenario and target, in order; a cell is
+/// refused when every one of them is above its recorded value ([`is_above`]): by more than its
+/// [`band`], or with a system call the release did not make on that path, made at least once
+/// per execution. A cell whose file is a `first` value is shown only. A scenario, target or
+/// operation without a recorded value is refused, and so is a recorded operation the run did
+/// not measure.
 pub fn judge(recorded: &[Counts], measured: &[Counts]) -> Verdict {
     let mut verdict = Verdict::default();
-    for now in measured {
-        let place = format!("{}/{}", now.target, now.scenario);
-        for op in &now.ops {
+    let mut groups: Vec<(&str, &str, Vec<&Counts>)> = Vec::new();
+    for counts in measured {
+        match groups
+            .iter_mut()
+            .find(|(s, t, _)| *s == counts.scenario && *t == counts.target)
+        {
+            Some((_, _, list)) => list.push(counts),
+            None => groups.push((&counts.scenario, &counts.target, vec![counts])),
+        }
+    }
+    for (scenario, target, measurements) in groups {
+        let place = format!("{target}/{scenario}");
+        let first = measurements[0];
+        let then = recorded
+            .iter()
+            .find(|c| c.scenario == scenario && c.target == target);
+        let tag = match then.map(|c| &c.reference) {
+            Some(Reference::Release(tag)) => Some(tag.as_str()),
+            _ => None,
+        };
+        for op in &first.ops {
+            let before = then.and_then(|c| c.ops.iter().find(|o| o.op == op.op));
             for unit in [Unit::Instructions, Unit::Syscalls] {
-                verdict.values.push((
-                    format!("{place}/{}/{}", op.op, unit.word()),
-                    op.measure(unit).value,
-                ));
+                let cell = format!("{place}/{}/{}", op.op, unit.word());
+                let nows: Vec<&Measure> = measurements
+                    .iter()
+                    .filter_map(|c| c.ops.iter().find(|o| o.op == op.op))
+                    .map(|o| o.measure(unit))
+                    .collect();
+                let lowest = nows.iter().map(|m| m.value).min().unwrap_or(0);
+                verdict.values.push((cell.clone(), lowest));
+                let mut line = format!("{METRIC} {cell} {lowest}");
+                if let (Some(tag), Some(before)) = (tag, before) {
+                    let old = before.measure(unit);
+                    line.push_str(&format!(
+                        " ({} at {tag}, band {}: {})",
+                        old.value,
+                        band(unit, old),
+                        band_reason(unit, old)
+                    ));
+                    if nows.len() > 1 {
+                        let values: Vec<String> =
+                            nows.iter().map(|m| m.value.to_string()).collect();
+                        line.push_str(&format!(" measured {}", values.join(" ")));
+                    }
+                    if nows
+                        .iter()
+                        .all(|now| is_above(unit, old, now, before.executions))
+                    {
+                        verdict.refused.push(refusal(
+                            &cell,
+                            tag,
+                            unit,
+                            old,
+                            &nows,
+                            before.executions,
+                        ));
+                        let key = (scenario.to_string(), target.to_string());
+                        if !verdict.above.contains(&key) {
+                            verdict.above.push(key);
+                        }
+                    }
+                }
+                verdict.lines.push(line);
             }
         }
-        let Some(then) = recorded
-            .iter()
-            .find(|c| c.scenario == now.scenario && c.target == now.target)
-        else {
+        let Some(then) = then else {
             verdict.refused.push(format!(
-                "{METRIC} {place}: no recorded counts ({COUNTS}/{}); record them with `ignite-perf path-cost --record first --scenario {}`\n",
-                counts_file(&now.scenario, &now.target),
-                now.scenario
+                "{METRIC} {place}: no recorded counts ({COUNTS}/{}); record them with `ignite-perf path-cost --record first --scenario {scenario}`\n",
+                counts_file(scenario, target),
             ));
             continue;
         };
@@ -1052,33 +1483,16 @@ pub fn judge(recorded: &[Counts], measured: &[Counts]) -> Verdict {
             }
             Reference::Release(tag) => tag,
         };
-        for op in &now.ops {
-            let Some(before) = then.ops.iter().find(|o| o.op == op.op) else {
+        for op in &first.ops {
+            if !then.ops.iter().any(|o| o.op == op.op) {
                 verdict.refused.push(format!(
                     "{METRIC} {place}/{}: no value at {tag}; a frozen scenario gains no operation\n",
                     op.op
                 ));
-                continue;
-            };
-            for unit in [Unit::Instructions, Unit::Syscalls] {
-                let cell = format!("{place}/{}/{}", op.op, unit.word());
-                let (old, new) = (before.measure(unit), op.measure(unit));
-                let slack = band(unit, old.value);
-                if old.spread() > slack {
-                    let runs: Vec<String> = old.runs.iter().map(u64::to_string).collect();
-                    verdict.notes.push(format!(
-                        "{METRIC} {cell}: not judged, its runs at {tag} spread {} beyond the noise band of {slack}: {} (now {})",
-                        old.spread(),
-                        runs.join(" "),
-                        new.value
-                    ));
-                } else if new.value > old.value + slack {
-                    verdict.refused.push(refusal(&cell, tag, unit, old, new));
-                }
             }
         }
         for op in &then.ops {
-            if !now.ops.iter().any(|o| o.op == op.op) {
+            if !first.ops.iter().any(|o| o.op == op.op) {
                 verdict.refused.push(format!(
                     "{METRIC} {place}/{}: recorded at {tag} and not measured\n",
                     op.op
@@ -1087,6 +1501,27 @@ pub fn judge(recorded: &[Counts], measured: &[Counts]) -> Verdict {
         }
     }
     verdict
+}
+
+/// [`judge`], and while a scenario and target has a refused cell, `again(scenario, target)`
+/// measures it once more, at most [`MEASURED_AGAIN`] times: noise adds to some measurements, a
+/// cost added to the path is in every one.
+pub fn judge_measuring_again(
+    recorded: &[Counts],
+    mut measured: Vec<Counts>,
+    again: &mut dyn FnMut(&str, &str) -> R<Counts>,
+) -> R<Verdict> {
+    let mut verdict = judge(recorded, &measured);
+    for _ in 0..MEASURED_AGAIN {
+        if verdict.above.is_empty() {
+            break;
+        }
+        for (scenario, target) in verdict.above.clone() {
+            measured.push(again(&scenario, &target)?);
+        }
+        verdict = judge(recorded, &measured);
+    }
+    Ok(verdict)
 }
 
 /// One cell of several runs as a count file holds it: the median run's value and items (the
@@ -1117,7 +1552,8 @@ pub struct PathCostArgs {
     /// The compiler; default `debug/ignite` under `CARGO_TARGET_DIR`, else under `<repo>/target`.
     #[arg(long)]
     pub cli: Option<PathBuf>,
-    /// The directory this mode owns: staged sources, builds, outputs of the instruments.
+    /// The directory this mode owns: staged sources, builds, outputs of the instruments. One run
+    /// at a time: a second run in the same directory is refused (`<work>/lock`).
     #[arg(long)]
     pub work: PathBuf,
     /// The file the measured values are written to, as `{"values": [{metric, target, value}]}`.
@@ -1141,9 +1577,75 @@ fn head_commit(repo: &Path) -> String {
         .unwrap_or_else(|| "unknown".to_string())
 }
 
+/// Hold `<work>/lock` for as long as the returned value lives; refused while another run holds
+/// it.
+pub fn lock_work(work: &Path) -> R<nix::fcntl::Flock<fs::File>> {
+    use nix::fcntl::{Flock, FlockArg};
+    fs::create_dir_all(work).map_err(io_err(work.display()))?;
+    let path = work.join("lock");
+    let file = fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&path)
+        .map_err(io_err(path.display()))?;
+    Flock::lock(file, FlockArg::LockExclusiveNonblock).map_err(|(_, e)| {
+        format!(
+            "{}: another path-cost run holds this lock ({e}); two runs in one work directory are not supported, give each its own --work",
+            path.display()
+        )
+    })
+}
+
+/// The cells of `scenario` on `target` over `runs` runs, with the digests of its files.
+fn measure_counts(
+    tools: &mut crate::path_cost_run::Tools,
+    repo: &Path,
+    scenario: &Scenario,
+    target: &str,
+    runs: usize,
+    reference: &Reference,
+) -> R<Counts> {
+    let mut all = Vec::new();
+    for run in 0..runs {
+        println!("{METRIC}: {target}/{}, run {}", scenario.name, run + 1);
+        all.push(tools.measure(scenario, target)?);
+    }
+    let mut ops = Vec::new();
+    for (index, (op, _, _)) in all[0].iter().enumerate() {
+        let instructions: Vec<&Profile> = all.iter().map(|r| &r[index].1).collect();
+        let syscalls: Vec<&Profile> = all.iter().map(|r| &r[index].2).collect();
+        ops.push(OpCounts {
+            op: op.clone(),
+            executions: scenario.executions(op),
+            instructions: combine(Unit::Instructions, &instructions),
+            syscalls: combine(Unit::Syscalls, &syscalls),
+        });
+    }
+    let dir = repo.join(SCENARIOS).join(&scenario.name);
+    let read = |name: &str| -> R<String> {
+        let path = dir.join(name);
+        fs::read(&path)
+            .map(|bytes| digest(&bytes))
+            .map_err(io_err(path.display()))
+    };
+    let mut files = Vec::new();
+    for file in &scenario.files {
+        files.push((file.name.clone(), read(&file.name)?));
+    }
+    Ok(Counts {
+        scenario: scenario.name.clone(),
+        target: target.to_string(),
+        reference: reference.clone(),
+        script: Some(read("scenario")?),
+        files,
+        ops,
+    })
+}
+
 /// `ignite-perf path-cost`: check the frozen files, measure every scenario on every target
-/// `--runs` times, then record the counts (`--record`) or judge them against the recorded ones.
-/// Exit 1 when a frozen file differs or a cell is refused.
+/// `--runs` times, then record the counts (`--record`) or judge them against the recorded ones,
+/// measuring again what is above. Exit 1 when a frozen file differs or a cell is refused.
 pub fn main(args: &PathCostArgs) -> R<i32> {
     ensure(args.runs >= 1, "--runs is at least 1")?;
     if let Some(label) = &args.record {
@@ -1160,13 +1662,33 @@ pub fn main(args: &PathCostArgs) -> R<i32> {
             "--record first records the scenarios named by --scenario",
         )?;
     }
-    let cpus = crate::path_cost_run::pin_two_cpus()?;
     let scenarios: Vec<Scenario> = read_scenarios(&args.repo.join(SCENARIOS))?
         .into_iter()
         .filter(|s| args.scenario.is_empty() || args.scenario.contains(&s.name))
         .collect();
+    for name in &args.scenario {
+        ensure(
+            scenarios.iter().any(|s| &s.name == name),
+            format!("no scenario {name} under {SCENARIOS}"),
+        )?;
+    }
     ensure(!scenarios.is_empty(), "no scenario to measure")?;
-    let (errors, notes) = frozen_in_repository(&args.repo, &scenarios);
+    if args.record.as_deref() == Some("first")
+        && let Some(frozen) = scenarios.iter().find(|s| s.frozen.is_some())
+    {
+        return Err(format!(
+            "--record first is for a scenario added after the freeze; {} is frozen at {}, and its counts are a release's (`--record <tag>`)",
+            frozen.name,
+            frozen.frozen.as_deref().unwrap_or("?")
+        ));
+    }
+    let _lock = lock_work(&args.work)?;
+    let cpus = crate::path_cost_run::pin_two_cpus()?;
+    let (errors, notes) = if args.record.is_some() {
+        frozen_for_recording(&args.repo, &scenarios)
+    } else {
+        frozen_in_repository(&args.repo, &scenarios)
+    };
     for note in &notes {
         println!("{note}");
     }
@@ -1184,38 +1706,21 @@ pub fn main(args: &PathCostArgs) -> R<i32> {
         "{METRIC}: measuring on CPUs {cpus:?}, {} run(s) each",
         args.runs
     );
+    let reference = match args.record.as_deref() {
+        Some("first") => Reference::First(head_commit(&args.repo)),
+        Some(tag) => Reference::Release(tag.to_string()),
+        None => Reference::Release("now".to_string()),
+    };
     let mut measured = Vec::new();
     for scenario in &scenarios {
         for target in scenario.targets() {
-            let mut runs = Vec::new();
-            for run in 0..args.runs {
-                println!("{METRIC}: {target}/{}, run {}", scenario.name, run + 1);
-                runs.push(tools.measure(scenario, &target)?);
-            }
-            let mut ops = Vec::new();
-            for (index, (op, _, _)) in runs[0].iter().enumerate() {
-                let instructions: Vec<&Profile> = runs.iter().map(|r| &r[index].1).collect();
-                let syscalls: Vec<&Profile> = runs.iter().map(|r| &r[index].2).collect();
-                ops.push(OpCounts {
-                    op: op.clone(),
-                    instructions: combine(Unit::Instructions, &instructions),
-                    syscalls: combine(Unit::Syscalls, &syscalls),
-                });
-            }
-            measured.push(Counts {
-                scenario: scenario.name.clone(),
-                target: target.clone(),
-                reference: match args.record.as_deref() {
-                    Some("first") => Reference::First(head_commit(&args.repo)),
-                    Some(tag) => Reference::Release(tag.to_string()),
-                    None => Reference::Release("now".to_string()),
-                },
-                ops,
-            });
+            measured.push(measure_counts(
+                &mut tools, &args.repo, scenario, &target, args.runs, &reference,
+            )?);
         }
     }
-    println!("{}", tools.tally.text());
     if args.record.is_some() {
+        println!("{}", tools.tally.text());
         let dir = args.repo.join(COUNTS);
         fs::create_dir_all(&dir).map_err(io_err(dir.display()))?;
         for counts in &measured {
@@ -1224,10 +1729,9 @@ pub fn main(args: &PathCostArgs) -> R<i32> {
             for op in &counts.ops {
                 for unit in [Unit::Instructions, Unit::Syscalls] {
                     let m = op.measure(unit);
-                    let slack = band(unit, m.value);
                     let runs: Vec<String> = m.runs.iter().map(u64::to_string).collect();
                     println!(
-                        "{METRIC} {}/{}/{}/{} {} (runs {}; spread {}, band {slack}{})",
+                        "{METRIC} {}/{}/{}/{} {} (runs {}; spread {}, band {}: {})",
                         counts.target,
                         counts.scenario,
                         op.op,
@@ -1235,11 +1739,8 @@ pub fn main(args: &PathCostArgs) -> R<i32> {
                         m.value,
                         runs.join(" "),
                         m.spread(),
-                        if m.spread() > slack {
-                            ", not judged"
-                        } else {
-                            ""
-                        }
+                        band(unit, m),
+                        band_reason(unit, m)
                     );
                 }
             }
@@ -1248,7 +1749,15 @@ pub fn main(args: &PathCostArgs) -> R<i32> {
         return Ok(0);
     }
     let recorded = read_counts_dir(&args.repo.join(COUNTS))?;
-    let verdict = judge(&recorded, &measured);
+    let verdict = judge_measuring_again(&recorded, measured, &mut |name, target| {
+        let scenario = scenarios
+            .iter()
+            .find(|s| s.name == name)
+            .ok_or_else(|| format!("no scenario {name}"))?;
+        println!("{METRIC}: {target}/{name} has a cell above its band; measuring it again");
+        measure_counts(&mut tools, &args.repo, scenario, target, 1, &reference)
+    })?;
+    println!("{}", tools.tally.text());
     if let Some(out) = &args.out {
         let values = verdict
             .values

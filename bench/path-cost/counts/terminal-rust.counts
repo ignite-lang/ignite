@@ -2,14 +2,18 @@ path-cost counts
 scenario terminal
 target rust
 release v0.16.2
+script 615d4b71f44c5c7022bd4feb0ccab8d7be02c6e8aeae1059cd4606447f2c890d
+file 633057460dd46491e354fcd49de5c92e22a849641373bb5acdd15b52eeae5d3c terminal.ignite
+file 5f111eb1cf4e35d034dad2a3976a2292658fcb1b309d3b2719fc955d374fb862 commands.ignite
+file 43c2f9b1eac5848791a75884f8bbd7304c7ddd8bc028d8b4758743785ff802c0 command_schema.ignite
 op start
-instructions 385192 runs 385192 385192 385192 385192 385192
-syscalls 125 runs 125 125 125 125 125
-fn 256711 ??? ld-linux-x86-64.so.2
-fn 62058 ??? libc.so.6
+instructions 384522 runs 384522 384520 384522 384522 384522
+syscalls 126 runs 126 126 126 126 126
+fn 256491 ??? ld-linux-x86-64.so.2
+fn 61786 ??? libc.so.6
 fn 21950 __strtoul_internal
 fn 3956 _IO_sputbackc
-fn 3617 getdelim
+fn 3580 getdelim
 fn 3372 <std::path::Components as core::iter::traits::iterator::Iterator>::next
 fn 2276 <std::path::Components>::parse_next_component_back
 fn 2270 <std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<usize>>::initialize<<std::sync::once_lock::OnceLock<usize>>::get_or_init<ignite_io::sched::worker_limit::{closure#0}>::{closure#0}, !>::{closure#0}>::{closure#0}
@@ -40,33 +44,32 @@ fn 302 pthread_create
 fn 297 alloc::io::read::default_read_to_end::small_probe_read::<&std::fs::File>
 fn 292 getauxval
 fn 288 read
-fn 267 _IO_file_underflow
 fn 258 std::sys::pal::unix::stack_overflow::thread_info::set_current_info
 fn 255 open
 fn 222 alloc::fmt::format::format_inner
 fn 220 <std::sync::once::Once>::call_once::<ignite_io::drain::install::{closure#0}>::{closure#0}
 fn 220 pthread_mutex_lock
-fn 217 ??? ???
 fn 216 __cxa_thread_atexit_impl
 fn 216 pthread_mutex_unlock
+fn 215 ??? ???
+fn 215 _IO_file_underflow
 fn 190 realloc
 fn 182 core::fmt::write
 fn 177 std::sys::fs::metadata
 fn 175 _dl_find_dso_for_object
 fn 175 main
 fn 172 getline
-fn 171 getenv
-fn 164 __underflow
 fn 164 ignite_io::signal::install
 fn 156 std::sys::pal::unix::stack_overflow::imp::make_handler
 fn 152 <alloc::string::String as core::fmt::Write>::write_str
 fn 150 <&std::fs::File as alloc::io::read::Read>::read_to_string
+fn 150 getenv
 fn 148 <alloc::raw_vec::RawVecInner>::finish_grow
 fn 148 std::fs::buffer_capacity_required
 fn 145 <core::net::parser::Parser>::read_ipv4_addr
 fn 140 close
 fn 133 sigaction
-fn 110 _IO_switch_to_get_mode
+fn 131 __underflow
 fn 107 _IO_file_fopen
 fn 104 <core::fmt::Formatter>::pad_integral
 fn 104 mmap
@@ -75,6 +78,7 @@ fn 102 std::sys::env::unix::getenv::{closure#0}
 fn 96 <i64 as core::fmt::Display>::fmt
 fn 93 (below main)
 fn 89 _IO_link_in
+fn 88 _IO_switch_to_get_mode
 fn 86 pthread_attr_setaffinity_np
 fn 84 std::sys::thread_local::destructors::linux_like::register
 fn 82 ignite_io::net::flush
@@ -143,6 +147,7 @@ syscall 2 gettid
 syscall 2 munmap
 syscall 2 rseq
 syscall 2 set_robust_list
+syscall 1 accept4
 syscall 1 access
 syscall 1 arch_prctl
 syscall 1 bind
@@ -159,17 +164,17 @@ syscall 1 set_tid_address
 syscall 1 socket
 syscall 1 write
 op session
-instructions 159954 runs 159954 159997 160186 135174 135084
-syscalls 158 runs 158 158 161 158 158
-fn 51537 ??? libc.so.6
-fn 10932 malloc
-fn 9796 free
+times 10
+instructions 131733 runs 131733 131733 131733 131733 131733
+syscalls 120 runs 120 120 120 120 120
+fn 34530 ??? libc.so.6
+fn 9551 malloc
+fn 9206 free
 fn 7790 <ignite_std::protocol::telnet::TelnetServer__main::{closure#0} as core::ops::function::FnOnce<()>>::call_once::{shim:vtable#0}
-fn 7287 ignite_io::sched::work
-fn 5428 ignite_std::protocol::telnet::TelnetServer__main
-fn 3418 <alloc::raw_vec::RawVecInner>::finish_grow
+fn 7133 ignite_io::sched::work
+fn 4789 ignite_std::protocol::telnet::TelnetServer__main
+fn 3099 <alloc::raw_vec::RawVecInner>::finish_grow
 fn 3030 ignite_io::net::flush
-fn 2688 <ignite_io::reactor::EpollReactor as ignite_io::reactor::Reactor>::wait
 fn 2260 <ignite_io::net::TcpStream as ignite_io::stream::ByteStream>::write_all
 fn 2120 ignite_std::protocol::telnet::encode_input
 fn 2080 <core::fmt::Formatter>::pad_integral
@@ -180,165 +185,150 @@ fn 1540 <ignite_io::net::Stream>::send
 fn 1520 core::ptr::drop_glue::<ignite_io::wait::LockGuard<ignite_io::net::Out>>
 fn 1400 <ignite_io::net::Stream>::out
 fn 1320 <u8 as core::fmt::Display>::fmt
-fn 1308 <alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
-fn 1222 calloc
-fn 1184 <ignite_io::net::TcpStream>::read::{closure#0}
-fn 1092 core::ptr::drop_glue::<alloc::vec::drain::Drain<alloc::sync::Weak<dyn ignite_io::net::Buffered>>>
-fn 1032 <ignite_io::sched::Readiness>::wait
+fn 1244 <alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>
+fn 1152 <ignite_io::net::TcpStream>::read::{closure#0}
+fn 1066 core::ptr::drop_glue::<alloc::vec::drain::Drain<alloc::sync::Weak<dyn ignite_io::net::Buffered>>>
 fn 1020 <core::str::lossy::Utf8Chunks as core::iter::traits::iterator::Iterator>::next
+fn 1000 <ignite_io::sched::Readiness>::wait
 fn 940 ignite_std::console::first_word
 fn 910 <ignite_io::sched::Readiness>::release
+fn 900 core::ptr::drop_glue::<<alloc::collections::vec_deque::drain::Drain<_, _> as core::ops::drop::Drop>::drop::DropGuard<ignite_io::wait::Waiter, alloc::alloc::Global>>
 fn 840 <core::fmt::Formatter>::pad_integral::write_prefix
-fn 796 pthread_create
-fn 788 realloc
 fn 750 <alloc::sync::Arc<alloc::vec::Vec<alloc::string::String>>>::drop_slow
-fn 750 core::ptr::drop_glue::<<alloc::collections::vec_deque::drain::Drain<_, _> as core::ops::drop::Drop>::drop::DropGuard<ignite_io::wait::Waiter, alloc::alloc::Global>>
 fn 740 send
 fn 700 poll
-fn 688 ignite_io::sched::free_stack
+fn 694 realloc
+fn 693 std::thread::functions::park_timeout
 fn 660 <alloc::string::String>::from_utf8_lossy
-fn 648 __cxa_thread_atexit_impl
-fn 638 __rustc::__rust_realloc
+fn 611 calloc
 fn 610 <std::net::tcp::TcpListener>::accept
+fn 610 ignite_io::sched::block_alone
+fn 609 __rustc::__rust_realloc
+fn 600 core::ptr::drop_glue::<alloc::collections::vec_deque::drain::Drain<ignite_io::wait::Waiter>>
 fn 600 core::ptr::drop_glue::<ignite_io::wait::Kind>
 fn 590 <alloc::sync::Arc<ignite_io::net::Stream>>::drop_slow
-fn 584 getauxval
+fn 586 ignite_io::sched::free_stack
 fn 540 <ignite_io::wait::WaitList>::wake_all
-fn 518 ignite_io::sched::give_stack
-fn 518 pthread_mutex_unlock
-fn 504 pthread_mutex_lock
-fn 500 core::ptr::drop_glue::<alloc::collections::vec_deque::drain::Drain<ignite_io::wait::Waiter>>
-fn 490 close
+fn 527 <std::sys::pal::unix::time::Timespec>::now
+fn 514 ignite_io::sched::give_stack
 fn 480 <alloc::sync::Arc<ignite_io::wait::Inner>>::drop_slow
+fn 460 <ignite_io::wait::Waiter>::current
 fn 440 <ignite_io::net::Stream as core::ops::drop::Drop>::drop
 fn 440 core::ptr::drop_glue::<std::sync::poison::mutex::Mutex<ignite_io::wait::WaitList>>
 fn 430 <ignite_io::sched::Readiness>::new
 fn 430 ignite_io::report::catch::<(), alloc::boxed::Box<dyn core::ops::function::FnOnce<(), Output = ()> + core::marker::Send>>
-fn 426 _dl_allocate_tls_init
-fn 420 _dl_find_dso_for_object
 fn 420 ignite_io::reactor::poll_beside
-fn 396 <alloc::collections::vec_deque::VecDeque<ignite_io::wait::Waiter> as core::ops::drop::Drop>::drop
+fn 398 pthread_create
 fn 380 core::ptr::drop_glue::<ignite_io::wait::LockGuard<()>>
-fn 374 <std::sys::pal::unix::time::Timespec>::now
-fn 370 epoll_wait
+fn 378 <alloc::collections::vec_deque::VecDeque<ignite_io::wait::Waiter> as core::ops::drop::Drop>::drop
 fn 370 recv
-fn 366 ??? ld-linux-x86-64.so.2
-fn 360 <ignite_io::net::Pending as core::ops::drop::Drop>::drop
 fn 360 <std::sys::pal::unix::time::Timespec>::sub_timespec
 fn 360 accept4
 fn 360 terminald::main::{closure#0}::{closure#0}
-fn 330 <ignite_io::reactor::EpollReactor>::poll_one
+fn 350 close
+fn 341 clock_gettime
+fn 330 <ignite_io::net::Pending as core::ops::drop::Drop>::drop
+fn 324 __cxa_thread_atexit_impl
 fn 310 <core::net::ip_addr::Ipv4Addr as core::fmt::Display>::fmt
-fn 299 <std::sys::pal::unix::stack_overflow::Handler as core::ops::drop::Drop>::drop
-fn 299 std::sys::pal::unix::stack_overflow::thread_info::set_current_info
+fn 292 getauxval
 fn 290 <ignite_io::net::Stream as ignite_io::net::Buffered>::flush_kept
-fn 288 read
-fn 288 write
-fn 276 core::ptr::drop_glue::<alloc::vec::Vec<ignite_io::wait::Waiter>>
 fn 260 <corosensei::coroutine::Coroutine<_, _, _, _>>::with_stack_unchecked::coroutine_func::<(), (), (), <ignite_io::sched::Worker>::start::{closure#1}>
-fn 252 std::sys::thread_local::destructors::linux_like::register
+fn 259 pthread_mutex_unlock
+fn 253 core::ptr::drop_glue::<alloc::vec::Vec<ignite_io::wait::Waiter>>
+fn 252 pthread_mutex_lock
 fn 250 <alloc::raw_vec::RawVec<u8>>::grow_one
 fn 250 <ignite_io::wait::Limit>::poll_timeout
-fn 242 clock_gettime
 fn 240 <alloc::raw_vec::RawVec<alloc::sync::Weak<dyn ignite_io::net::Buffered>>>::grow_one
 fn 240 <alloc::raw_vec::RawVec<ignite_io::sched::Timer>>::grow_one
-fn 240 <ignite_io::sched::Shared>::reactor
-fn 230 <ignite_io::wait::Waiter>::current
+fn 232 syscall
 fn 230 core::ptr::drop_glue::<alloc::vec::Vec<(alloc::sync::Arc<ignite_io::sched::Shared>, ignite_io::reactor::Token)>>
 fn 230 core::ptr::drop_glue::<alloc::vec::into_iter::IntoIter<(alloc::sync::Arc<ignite_io::sched::Shared>, ignite_io::reactor::Token)>>
-fn 202 __call_tls_dtors
+fn 216 <ignite_io::sched::Shared>::notify
+fn 213 _dl_allocate_tls_init
+fn 210 _dl_find_dso_for_object
 fn 200 __rustc::__rust_alloc
 fn 200 ignite_std::protocol::telnet::decode_within
-fn 196 <std::sys::sync::once::futex::Once>::call
-fn 196 std::sys::pal::unix::stack_overflow::imp::make_handler
-fn 194 pthread_getattr_np
-fn 182 <std::sys::thread::unix::Thread>::new::thread_start
-fn 172 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, usize, std::sys::pal::unix::stack_overflow::thread_info::ThreadInfo, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::KV>>::remove_leaf_kv::<<alloc::collections::btree::map::entry::OccupiedEntry<usize, std::sys::pal::unix::stack_overflow::thread_info::ThreadInfo>>::remove_kv::{closure#0}, alloc::alloc::Global>
+fn 183 ??? ld-linux-x86-64.so.2
 fn 162 0x0000000000097ca0'2
-fn 152 <ignite_io::sched::Shared>::notify
-fn 144 <std::thread::thread::Thread>::new
-fn 130 <corosensei::stack::unix::DefaultStack>::new
-fn 126 <std::thread::spawnhook::SpawnHooks as core::ops::drop::Drop>::drop
-fn 114 <std::thread::spawnhook::ChildSpawnHooks>::inherit_and_run
-fn 108 core::ptr::drop_glue::<ignite_io::sched::Shared>
-fn 104 <std::sys::thread::unix::Thread>::new
-fn 104 mmap
-fn 104 std::sys::thread_local::native::eager::destroy::<core::cell::RefCell<ignite_io::sched::Timers>>
-fn 96 <alloc::raw_vec::RawVec<ignite_io::wait::Waiter>>::grow_one
-fn 94 <ignite_io::sched::Timers>::grow
-fn 92 std::thread::spawnhook::run_spawn_hooks
+fn 145 <std::sys::pal::unix::stack_overflow::Handler as core::ops::drop::Drop>::drop
+fn 145 std::sys::pal::unix::stack_overflow::thread_info::set_current_info
+fn 126 std::sys::thread_local::destructors::linux_like::register
+fn 101 __call_tls_dtors
+fn 98 std::sys::pal::unix::stack_overflow::imp::make_handler
+fn 96 pthread_getattr_np
+fn 91 <std::sys::thread::unix::Thread>::new::thread_start
 fn 90 stack_init_trampoline
-fn 88 core::ptr::drop_glue::<alloc::vec::Vec<core::option::Option<ignite_io::sched::Local>>>
-fn 88 sysconf
-fn 86 pthread_attr_setaffinity_np
-fn 74 <std::thread::lifecycle::spawn_unchecked<ignite_io::sched::start_worker::{closure#1}, ()>::{closure#1} as core::ops::function::FnOnce<()>>::call_once::{shim:vtable#0}
-fn 72 pthread_attr_init
-fn 68 <alloc::sync::Arc<std::thread::thread::Inner, std::alloc::System>>::drop_slow
-fn 68 pthread_setname_np
-fn 66 free'2
-fn 64 core::ptr::drop_glue::<ignite_io::sched::Worker>
-fn 62 <alloc::ffi::c_str::CString>::_from_vec_unchecked
-fn 62 __sigsetjmp
-fn 60 core::ptr::drop_glue::<alloc::vec::Vec<corosensei::stack::unix::DefaultStack>>
-fn 60 getpagesize
+fn 86 <alloc::collections::btree::node::Handle<alloc::collections::btree::node::NodeRef<alloc::collections::btree::node::marker::Mut, usize, std::sys::pal::unix::stack_overflow::thread_info::ThreadInfo, alloc::collections::btree::node::marker::Leaf>, alloc::collections::btree::node::marker::KV>>::remove_leaf_kv::<<alloc::collections::btree::map::entry::OccupiedEntry<usize, std::sys::pal::unix::stack_overflow::thread_info::ThreadInfo>>::remove_kv::{closure#0}, alloc::alloc::Global>
+fn 72 <std::thread::thread::Thread>::new
+fn 65 <corosensei::stack::unix::DefaultStack>::new
+fn 63 <std::thread::spawnhook::SpawnHooks as core::ops::drop::Drop>::drop
 fn 60 shutdown
-fn 58 std::sys::thread_local::native::eager::destroy::<core::cell::RefCell<alloc::collections::vec_deque::VecDeque<ignite_io::wait::Waiter>>>
-fn 56 core::ptr::drop_glue::<std::thread::lifecycle::Packet<()>>
-fn 52 snprintf
-fn 50 core::ptr::drop_glue::<ignite_io::net::Pending>
-fn 48 <alloc::raw_vec::RawVec<core::option::Option<ignite_io::sched::Local>>>::grow_one
-fn 48 <alloc::raw_vec::RawVec<corosensei::stack::unix::DefaultStack>>::grow_one
-fn 48 <alloc::sync::Arc<ignite_io::sched::Shared>>::drop_slow
-fn 48 <alloc::sync::Arc<std::thread::lifecycle::Packet<()>>>::drop_slow
-fn 48 core::ptr::drop_glue::<[(alloc::boxed::Box<dyn core::ops::function::FnOnce<(), Output = ()> + core::marker::Send>, corosensei::stack::unix::DefaultStack)]>
-fn 48 std::sys::thread_local::guard::key::enable::run
-fn 46 core::ptr::drop_glue::<alloc::vec::Vec<ignite_io::reactor::Event>>
-fn 46 pthread_setspecific
-fn 44 <std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<ignite_io::reactor::EpollReactor>>::initialize<<std::sync::once_lock::OnceLock<ignite_io::reactor::EpollReactor>>::get_or_init<<std::sync::once_lock::OnceLock<ignite_io::reactor::EpollReactor>>::try_insert::{closure#0}>::{closure#0}, !>::{closure#0}>::{closure#0}
-fn 44 pthread_attr_destroy
-fn 42 pthread_getaffinity_np
+fn 57 <std::thread::spawnhook::ChildSpawnHooks>::inherit_and_run
+fn 52 <std::sys::thread::unix::Thread>::new
+fn 52 mmap
+fn 52 std::sys::thread_local::native::eager::destroy::<core::cell::RefCell<ignite_io::sched::Timers>>
+fn 49 <std::sys::sync::once::futex::Once>::call
+fn 48 <alloc::raw_vec::RawVec<ignite_io::wait::Waiter>>::grow_one
+fn 47 <ignite_io::sched::Timers>::grow
+fn 46 std::thread::spawnhook::run_spawn_hooks
+fn 44 core::ptr::drop_glue::<alloc::vec::Vec<core::option::Option<ignite_io::sched::Local>>>
+fn 44 sysconf
+fn 43 pthread_attr_setaffinity_np
 fn 42 sigtimedwait
-fn 40 std::sys::thread_local::native::eager::destroy::<core::cell::Cell<alloc::vec::Vec<u8>>>
-fn 38 <std::sync::once_lock::OnceLock<ignite_io::reactor::EpollReactor>>::initialize::<<std::sync::once_lock::OnceLock<ignite_io::reactor::EpollReactor>>::get_or_init<<std::sync::once_lock::OnceLock<ignite_io::reactor::EpollReactor>>::try_insert::{closure#0}>::{closure#0}, !>
-fn 38 <std::sync::once_lock::OnceLock<std::thread::thread::Thread>>::initialize::<<std::sync::once_lock::OnceLock<std::thread::thread::Thread>>::get_or_init<<std::sync::once_lock::OnceLock<std::thread::thread::Thread>>::try_insert::{closure#0}>::{closure#0}, !>
-fn 38 clone
-fn 36 core::ptr::drop_glue::<[alloc::boxed::Box<dyn core::ops::function::FnOnce<(), Output = ()> + core::marker::Send>]>
-fn 36 sigaltstack
-fn 34 __ctype_init
-fn 34 __pthread_get_minstack
-fn 32 <alloc::collections::vec_deque::VecDeque<ignite_io::wait::Waiter>>::grow
-fn 32 __rustc::__rust_dealloc
-fn 28 <std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<std::thread::thread::Thread>>::initialize<<std::sync::once_lock::OnceLock<std::thread::thread::Thread>>::get_or_init<<std::sync::once_lock::OnceLock<std::thread::thread::Thread>>::try_insert::{closure#0}>::{closure#0}, !>::{closure#0}>::{closure#0}
-fn 28 std::sys::thread_local::native::eager::destroy::<core::cell::Cell<std::thread::spawnhook::SpawnHooks>>
-fn 26 core::ptr::drop_glue::<core::option::Option<ignite_io::sched::Local>>
-fn 24 ignite_io::task::trim_if_released
-fn 24 mprotect
-fn 24 munmap
-fn 20 pthread_detach
-fn 18 pthread_attr_getstack
-fn 16 __errno_location
+fn 40 core::ptr::drop_glue::<ignite_io::sched::Shared>
+fn 37 <std::thread::lifecycle::spawn_unchecked<ignite_io::sched::start_worker::{closure#1}, ()>::{closure#1} as core::ops::function::FnOnce<()>>::call_once::{shim:vtable#0}
+fn 36 pthread_attr_init
+fn 34 <alloc::sync::Arc<std::thread::thread::Inner, std::alloc::System>>::drop_slow
+fn 34 pthread_setname_np
+fn 33 free'2
+fn 32 core::ptr::drop_glue::<ignite_io::sched::Worker>
+fn 31 <alloc::ffi::c_str::CString>::_from_vec_unchecked
+fn 31 __sigsetjmp
+fn 30 core::ptr::drop_glue::<alloc::vec::Vec<corosensei::stack::unix::DefaultStack>>
+fn 30 getpagesize
+fn 29 std::sys::thread_local::native::eager::destroy::<core::cell::RefCell<alloc::collections::vec_deque::VecDeque<ignite_io::wait::Waiter>>>
+fn 28 core::ptr::drop_glue::<std::thread::lifecycle::Packet<()>>
+fn 26 snprintf
+fn 25 core::ptr::drop_glue::<ignite_io::net::Pending>
+fn 24 <alloc::raw_vec::RawVec<core::option::Option<ignite_io::sched::Local>>>::grow_one
+fn 24 <alloc::raw_vec::RawVec<corosensei::stack::unix::DefaultStack>>::grow_one
+fn 24 <alloc::sync::Arc<ignite_io::sched::Shared>>::drop_slow
+fn 24 <alloc::sync::Arc<std::thread::lifecycle::Packet<()>>>::drop_slow
+fn 24 core::ptr::drop_glue::<[(alloc::boxed::Box<dyn core::ops::function::FnOnce<(), Output = ()> + core::marker::Send>, corosensei::stack::unix::DefaultStack)]>
+fn 24 std::sys::thread_local::guard::key::enable::run
+fn 23 core::ptr::drop_glue::<alloc::vec::Vec<ignite_io::reactor::Event>>
+fn 23 pthread_setspecific
+fn 22 pthread_attr_destroy
+fn 21 pthread_getaffinity_np
+fn 20 std::sys::thread_local::native::eager::destroy::<core::cell::Cell<alloc::vec::Vec<u8>>>
+fn 19 <std::sync::once_lock::OnceLock<std::thread::thread::Thread>>::initialize::<<std::sync::once_lock::OnceLock<std::thread::thread::Thread>>::get_or_init<<std::sync::once_lock::OnceLock<std::thread::thread::Thread>>::try_insert::{closure#0}>::{closure#0}, !>
+fn 19 clone
+fn 18 core::ptr::drop_glue::<[alloc::boxed::Box<dyn core::ops::function::FnOnce<(), Output = ()> + core::marker::Send>]>
+fn 18 sigaltstack
+fn 17 __ctype_init
+fn 17 __pthread_get_minstack
+fn 16 <alloc::collections::vec_deque::VecDeque<ignite_io::wait::Waiter>>::grow
+fn 16 __rustc::__rust_dealloc
+fn 14 <std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<std::thread::thread::Thread>>::initialize<<std::sync::once_lock::OnceLock<std::thread::thread::Thread>>::get_or_init<<std::sync::once_lock::OnceLock<std::thread::thread::Thread>>::try_insert::{closure#0}>::{closure#0}, !>::{closure#0}>::{closure#0}
+fn 14 std::sys::thread_local::native::eager::destroy::<core::cell::Cell<std::thread::spawnhook::SpawnHooks>>
+fn 13 core::ptr::drop_glue::<core::option::Option<ignite_io::sched::Local>>
 syscall 20 poll
 syscall 20 sendto
-syscall 14 close
+syscall 19 futex
 syscall 10 accept4
-syscall 10 epoll_wait
+syscall 10 close
 syscall 10 recvfrom
 syscall 10 shutdown
-syscall 8 read
-syscall 8 rt_sigprocmask
-syscall 8 write
-syscall 6 sigaltstack
-syscall 4 mmap
-syscall 4 mprotect
-syscall 4 munmap
-syscall 2 clone3
-syscall 2 epoll_create1
-syscall 2 epoll_ctl
-syscall 2 eventfd2
-syscall 2 exit
-syscall 2 gettid
-syscall 2 madvise
-syscall 2 prctl
-syscall 2 rseq
-syscall 2 sched_getaffinity
-syscall 2 set_robust_list
+syscall 4 rt_sigprocmask
+syscall 3 sigaltstack
+syscall 2 mmap
+syscall 2 mprotect
+syscall 2 munmap
+syscall 1 clone3
+syscall 1 exit
+syscall 1 gettid
+syscall 1 madvise
+syscall 1 prctl
+syscall 1 rseq
+syscall 1 sched_getaffinity
+syscall 1 set_robust_list
