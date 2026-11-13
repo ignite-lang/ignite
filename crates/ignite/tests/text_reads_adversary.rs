@@ -1597,6 +1597,40 @@ test "a buffer a for or a match holds is not taken inside it" {
 }
 "#;
 
+/// Group 3: a closure that iterates a `Bytes` parameter and outlives the
+/// call (returned, stored in a record): the parameter must stay a value the
+/// closure copies, not a lent `&[u8]`.
+const ESCAPING: &str = r#"package text_reads_adversary_escaping
+
+type Counter {
+  count: fn(Int) -> Int
+}
+
+fn counter_of(b: Bytes) -> fn(Int) -> Int = |n: Int| {
+  var s = n
+  for c in b {
+    s = s + c.to_int()
+  }
+  s
+}
+
+fn record_of(b: Bytes) -> Counter = Counter { count = |n: Int| {
+  var s = n
+  for c in b {
+    s = s + 1
+  }
+  s
+} }
+
+test "a closure that iterates a bytes parameter outlives the call" {
+  let f = counter_of(b"ab")
+  assert f(1) == 196
+  let r = record_of(b"xyz")
+  let g = r.count
+  assert g(10) == 13
+}
+"#;
+
 #[test]
 fn lent_bytes_and_taken_buffers_keep_the_evaluator_value_on_both_targets() {
     agree("text_reads_adversary_liveness", LIVENESS, 17);
@@ -1625,4 +1659,9 @@ fn buffers_of_owned_scrutinees_and_iterables_agree_on_both_targets() {
 #[test]
 fn buffers_a_for_or_a_match_holds_agree_on_both_targets() {
     agree("text_reads_adversary_pinned", PINNED, 1);
+}
+
+#[test]
+fn closures_that_iterate_a_bytes_parameter_and_escape_agree_on_both_targets() {
+    agree("text_reads_adversary_escaping", ESCAPING, 1);
 }
