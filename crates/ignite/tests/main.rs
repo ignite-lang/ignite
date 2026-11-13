@@ -89,6 +89,7 @@ mod stream_ownership;
 mod syntax;
 mod terminal;
 mod text_reads;
+mod text_reads_adversary;
 mod tls;
 mod tls_adversary;
 mod todo;
