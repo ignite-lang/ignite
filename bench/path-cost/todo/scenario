@@ -1,0 +1,12 @@
+frozen v0.16.2
+file todo.ignite examples/todo/todo.ignite
+file health.ignite examples/todo/health.ignite
+server todo.ignite todod
+targets llvm rust
+warm 10
+repeat 20
+setup 31 201 POST /todos {"title":"bench"}
+op get 200 GET /todos/1
+op patch 200 PATCH /todos/1 {"done":true}
+op delete 204 DELETE /todos/{id:2}
+op connection connect

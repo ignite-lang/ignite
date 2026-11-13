@@ -423,6 +423,126 @@
       "tolerance": 0,
       "unit": "count"
     },
+    "3.10": {
+      "area": "Generated code and runtime behaviour",
+      "bars": {
+        "all/design/check/instructions": {
+          "value": 854142290
+        },
+        "all/design/check/syscalls": {
+          "value": 75
+        },
+        "all/design/plan/instructions": {
+          "value": 860008832
+        },
+        "all/design/plan/syscalls": {
+          "value": 74
+        },
+        "llvm/design/build/instructions": {
+          "value": 2236411447
+        },
+        "llvm/design/build/syscalls": {
+          "value": 14924
+        },
+        "llvm/terminal/session/instructions": {
+          "value": 245441
+        },
+        "llvm/terminal/session/syscalls": {
+          "value": 126
+        },
+        "llvm/terminal/start/instructions": {
+          "value": 320238
+        },
+        "llvm/terminal/start/syscalls": {
+          "value": 102
+        },
+        "llvm/todo/connection/instructions": {
+          "value": 471658
+        },
+        "llvm/todo/connection/syscalls": {
+          "value": 246
+        },
+        "llvm/todo/delete/instructions": {
+          "value": 636697
+        },
+        "llvm/todo/delete/syscalls": {
+          "value": 380
+        },
+        "llvm/todo/get/instructions": {
+          "value": 450246
+        },
+        "llvm/todo/get/syscalls": {
+          "value": 40
+        },
+        "llvm/todo/patch/instructions": {
+          "value": 930548
+        },
+        "llvm/todo/patch/syscalls": {
+          "value": 380
+        },
+        "llvm/todo/start/instructions": {
+          "value": 337200
+        },
+        "llvm/todo/start/syscalls": {
+          "value": 106
+        },
+        "rust/design/build/instructions": {
+          "value": 1155672609
+        },
+        "rust/design/build/syscalls": {
+          "value": 74
+        },
+        "rust/terminal/session/instructions": {
+          "value": 131733
+        },
+        "rust/terminal/session/syscalls": {
+          "value": 120
+        },
+        "rust/terminal/start/instructions": {
+          "value": 384522
+        },
+        "rust/terminal/start/syscalls": {
+          "value": 126
+        },
+        "rust/todo/connection/instructions": {
+          "value": 225731
+        },
+        "rust/todo/connection/syscalls": {
+          "value": 227
+        },
+        "rust/todo/delete/instructions": {
+          "value": 541888
+        },
+        "rust/todo/delete/syscalls": {
+          "value": 300
+        },
+        "rust/todo/get/instructions": {
+          "value": 302422
+        },
+        "rust/todo/get/syscalls": {
+          "value": 40
+        },
+        "rust/todo/patch/instructions": {
+          "value": 800543
+        },
+        "rust/todo/patch/syscalls": {
+          "value": 300
+        },
+        "rust/todo/start/instructions": {
+          "value": 404330
+        },
+        "rust/todo/start/syscalls": {
+          "value": 130
+        }
+      },
+      "direction": "lower",
+      "instrument": "`ignite-perf path-cost` (task gate, every merge): instructions (callgrind, self per function) and system calls (`strace -f`) of the frozen scenarios of `bench/path-cost/` per target, scenario and operation (a server's start, a batch of `repeat` operations, an `ignite` command), against their counts at the last release in `bench/path-cost/counts/`; noise band 1 %, at least one system call",
+      "kind": "ratchet",
+      "name": "cost of a frozen path: instructions and system calls",
+      "source": "path-cost",
+      "tolerance": "1%",
+      "unit": "count"
+    },
     "3.2": {
       "area": "Generated code and runtime behaviour",
       "bars": {

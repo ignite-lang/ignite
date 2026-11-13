@@ -1,0 +1,8 @@
+frozen v0.16.2
+file terminal.design.ignite examples/terminal/terminal.design.ignite
+file commands.ignite examples/terminal/commands.ignite
+file command_schema.ignite examples/terminal/command_schema.ignite
+op check all driver check terminal.design.ignite
+op plan all driver plan terminal.design.ignite --out {out}/plan.json
+op build llvm tree build terminal.design.ignite --target llvm --out {out}
+op build rust driver build terminal.design.ignite --target rust --out {out} --target-dir {cargo}

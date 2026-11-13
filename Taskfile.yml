@@ -56,7 +56,16 @@ tasks:
     cmds:
       - task: check
       - task: test
+      - task: path-cost
       - task: ux
+
+  path-cost:
+    desc: Count the instructions and system calls of the frozen scenarios of bench/path-cost (row 3.10 of docs/quality.md) and refuse a cell above the last release beyond the noise band (RECORD=vX.Y.Z writes the counts of a release over 5 runs)
+    vars:
+      T: '{{.CARGO_TARGET_DIR | default "target"}}'
+    cmds:
+      - cargo build -q -p ignite -p ignite-perf
+      - '{{.T}}/debug/ignite-perf path-cost --cli {{.T}}/debug/ignite --work {{.T}}/path-cost --out target/quality/path-cost-metrics.json{{if .RECORD}} --record {{.RECORD}} --runs 5{{end}}'
 
   quality:
     desc: Measure every instrumented metric of docs/quality.md once and append the run to quality/history.jsonl (RUN=vX.Y.Z for a release, whose rows worse than the last are printed as tracked)

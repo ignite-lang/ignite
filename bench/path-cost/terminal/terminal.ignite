@@ -1,0 +1,36 @@
+package examples.terminal
+
+import std.console.CommandConsole
+import std.protocol.telnet.{TelnetServer, TelnetClient}
+
+// The terminal system, the buildable part of design section 11.3
+// (`terminal.design.ignite` is the whole declaration): a console whose
+// commands are the module `commands.ignite` and whose command names are
+// `command_schema.ignite`, served over Telnet by `terminald`, reached with
+// `tn`. `ignite build` emits both executables (`docs/slice.md` section
+// 14.5).
+
+system Terminal {
+  resource ingress: TcpListener {
+    address = "127.0.0.1"
+    port = 2323
+  }
+
+  component console: CommandConsole {
+    implementation = module("examples.terminal.commands")
+    prompt = "terminal> "
+    maximum_line = 4096 bytes
+    command_schema = module("examples.terminal.command_schema")
+  }
+
+  component server: TelnetServer {
+    listener = ingress
+    application = console
+    executable = "terminald"
+  }
+
+  component client: TelnetClient {
+    target = ingress
+    executable = "tn"
+  }
+}

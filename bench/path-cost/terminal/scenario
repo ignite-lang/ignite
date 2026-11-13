@@ -1,0 +1,9 @@
+frozen v0.16.2
+file terminal.ignite examples/terminal/terminal.ignite
+file commands.ignite examples/terminal/commands.ignite
+file command_schema.ignite examples/terminal/command_schema.ignite
+server terminal.ignite terminald
+targets llvm rust
+warm 5
+repeat 10
+op session telnet quit
