@@ -7,7 +7,7 @@ pub struct State {
 }
 
 pub fn fresh() -> State {
-    State { items: ::ignite_io::List::from_vec(vec![]), count: 0 }
+    State { items: ::ignite_io::List::new(), count: 0 }
 }
 
 pub fn step(state: State, x: &i64) -> State {

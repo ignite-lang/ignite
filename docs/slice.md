@@ -614,8 +614,12 @@ not at the start of its arm and again there (20.3.1).
 empty list, else an `Arc<Vec<T>>`, with an atomic count (values cross `spawn` and channels), no
 `DerefMut` and no `unsafe`. The declared type decides, before type arguments are substituted,
 so every instance of a generic declaration has one layout. Construction wraps the `Vec`
-(`Val::Rec(::ignite_io::List::from_vec(fields))`, also in record updates, defaults and
-assignments to the field); a read derefs (`(*r.items)`; a payload binding is `let l = &**l;`
+(`Val::Rec(::ignite_io::List::from_vec(fields))`, also in record updates and assignments to
+the field); the literal `[]` and `List.empty()` are `::ignite_io::List::new()`, no block and
+no test at run time, and every other literal is `::ignite_io::List::of(vec![..])`, one
+constructor without a test of emptiness (story `shared-list-costs-back`); the default fn of
+such a field returns the `List` itself (`List::new()` for `= []`), which the literal takes as
+it is; a read derefs (`(*r.items)`; a payload binding is `let l = &**l;`
 when the `match` lends its scrutinee, and `let l = &*l;`, read like a reference parameter,
 when the scrutinee is a value no local holds and the arm neither changes nor moves `l`; in an
 arm whose pattern becomes a guard, such as `Some(Tag("k", l))`, the same `l` is the `&Vec`
@@ -666,6 +670,29 @@ one `malloc` and one `free` more than a `Vec`. `terminald`, whose `echo` reply b
 instructions (+16.0 %) and from 10,016 to 11,551 allocations. `todod`'s `GET /todos/1`, which
 copies a header list, goes from 21,464 and 21,875 (two runs) to 19,219 instructions per
 round.
+
+Story `shared-list-costs-back` took back the bytes it could without an `unsafe` site: the
+empty literal and an empty default are `List::new()`, every other literal is `List::of`, and
+the count's block is built in one function per element type that is not inlined
+(`ignite_io::list::block`), so its allocation and unwind path are in a program once per
+element type, not at every literal. Release builds, stripped, against the story's base:
+`terminald` 600,192 to 600,048 bytes (its five reply literals: 401 bytes fewer in `respond`,
+207 bytes for `block::<String>`), `todod` 878,864 to 878,272. What stays, and why:
+
+- the second block, one `malloc` and one `free` more per non-empty list than a `Vec`
+  (`shared_list_costs::` counts 2 blocks per literal and per list built in a local, a `Vec`
+  1): a single block holding count, length, capacity and elements needs an allocation of its
+  own layout, an `unsafe` site that row 3.6 refuses, and it cannot be read as the `Vec` the
+  generated code reads (`&Vec<T>` parameters, `make_mut` returning `&mut Vec<T>`), since no
+  `Vec` points into a block it did not allocate;
+- the release code of the block per element type (`Arc<Vec<T>>::drop_slow`, 409 bytes for
+  `String`) and the unwind glue of `block` (the drop of `ArcInner<Vec<T>>`, 321 bytes for
+  `String`): a `Drop for List` that releases through `Arc::into_inner` made `todod` 4,928
+  bytes larger, and writing the elements into an empty block through `Arc::get_mut` made
+  `block` 75 bytes larger without removing the glue;
+- the call to `block`: `terminald`'s `echo` goes from 3,602 to 3,621 instructions per round
+  (callgrind, 200 rounds after 50), `todod`'s `GET /todos/1` from 15,178 to 15,219, the table
+  build at s1 from 7,436,884 to 7,462,310 instructions (11,561 allocations before and after).
 
 **Builtin methods** are lowered by name; the receiver type is not known, so each name has one
 meaning. The generator emits exactly the Rust on the right.

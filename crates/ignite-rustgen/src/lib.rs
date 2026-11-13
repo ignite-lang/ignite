@@ -52,7 +52,7 @@ use std::sync::OnceLock;
 
 use ignite_check::{BUILTIN_ENUMS, BUILTIN_STATICS, Symbols};
 use ignite_syntax::ast::{
-    AliasDecl, BinaryOp, Block, ComponentDecl, ConstDecl, Decl, EnumDecl, Expr, ExprKind,
+    AliasDecl, BinaryOp, Block, ComponentDecl, ConstDecl, Decl, EnumDecl, Expr, ExprKind, Field,
     FieldInit, FnDecl, Ident, Import, NodeId, Pattern, PatternKind, Program, ProtocolDecl,
     RecordDecl, ResourceDecl, Span, Stmt, StmtKind, SystemDecl, TestDecl, Type, UnaryOp,
 };
@@ -3149,7 +3149,9 @@ impl<'a> Generator<'a> {
 
     /// The defaults of a record's fields: `field: T = e` as
     /// `impl R { pub fn default_field() -> T { e } }`; a literal that omits
-    /// the field calls `R::default_field()`.
+    /// the field calls `R::default_field()`. The default of a shared list
+    /// field is the `ignite_io::List` itself ([`Generator::shared_value`]:
+    /// `List::new()` for `[]`), so the literal takes it as it is.
     fn defaults(&mut self, w: &mut Writer, record: &RecordDecl) {
         if record.fields.iter().all(|f| f.default.is_none()) {
             return;
@@ -3165,22 +3167,46 @@ impl<'a> Generator<'a> {
             let Some(default) = &field.default else {
                 continue;
             };
+            let shared = self.shared_field_type(record, field);
             self.scopes = vec![Vec::new()];
             self.indent = w.indent + 1;
             self.type_params = param_names(&record.type_params);
-            let value = self.value(default);
+            let value = if shared.is_some() {
+                self.shared_value(default)
+            } else {
+                self.value(default)
+            };
             self.type_params.clear();
             self.scopes.clear();
+            let ty = shared
+                .unwrap_or_else(|| rust_type_in(&field.ty, &param_names(&record.type_params)));
             w.line("#[allow(non_snake_case)]");
             w.open(&format!(
-                "pub fn {}() -> {} {{",
-                default_fn(&field.name.name),
-                rust_type_in(&field.ty, &param_names(&record.type_params))
+                "pub fn {}() -> {ty} {{",
+                default_fn(&field.name.name)
             ));
             w.line(&value);
             w.close("}");
         }
         w.close("}");
+    }
+
+    /// The Rust type of field `field` of `record` when the field shares
+    /// its storage ([`shares_storage`]): `::ignite_io::List<T>`; `None`
+    /// for every other field and without types.
+    fn shared_field_type(&mut self, record: &RecordDecl, field: &Field) -> Option<String> {
+        let q = self.own(&record.name)?;
+        let declared = self
+            .types?
+            .record_fields(&q)?
+            .iter()
+            .find(|(name, _)| *name == field.name.name)
+            .map(|(_, ty)| ty.clone())?;
+        if !shares_storage(&declared) {
+            return None;
+        }
+        let params = param_names(&record.type_params);
+        Some(self.shared_list_type(&field.ty, &declared, &params))
     }
 
     fn callee(&self, e: &Expr) -> Option<&'a Callee> {
@@ -3274,19 +3300,9 @@ impl<'a> Generator<'a> {
                 (Some(types), Some(q)) => types.boxed_field(q, &field.name.name),
                 _ => false,
             };
-            let declared = match (self.types, &q) {
-                (Some(types), Some(q)) => types
-                    .record_fields(q)
-                    .and_then(|fields| fields.iter().find(|(name, _)| *name == field.name.name))
-                    .map(|(_, ty)| ty.clone()),
-                _ => None,
-            };
-            let ty = match declared {
-                Some(declared) if shares_storage(&declared) => {
-                    self.shared_list_type(&field.ty, &declared, &params)
-                }
-                _ => rust_type_in(&field.ty, &params),
-            };
+            let ty = self
+                .shared_field_type(record, field)
+                .unwrap_or_else(|| rust_type_in(&field.ty, &params));
             let ty = if boxed { format!("Box<{ty}>") } else { ty };
             w.line(&format!("pub {}: {ty},", ident(&field.name.name)));
         }
@@ -4691,11 +4707,7 @@ impl<'a> Generator<'a> {
             for field in declared {
                 if !fields.iter().any(|f| f.name.name == *field) {
                     let value = format!("{record}{instance}::{}()", default_fn(field));
-                    let value = if self.is_shared_field(ty, field) {
-                        format!("::ignite_io::List::from_vec({value})")
-                    } else {
-                        boxed(self, field, value)
-                    };
+                    let value = boxed(self, field, value);
                     texts.push(format!("{}: {value}", ident(field)));
                 }
             }
@@ -4800,13 +4812,13 @@ impl<'a> Generator<'a> {
             if fields.iter().any(|(field, _)| field == name) {
                 continue;
             }
-            let text = match fixed.get(name) {
-                Some(text) => text.clone(),
-                None => format!("{path}::{}()", default_fn(name)),
+            let (text, given) = match fixed.get(name) {
+                Some(text) => (text.clone(), true),
+                None => (format!("{path}::{}()", default_fn(name)), false),
             };
             let text = if *boxed {
                 format!("Box::new({text})")
-            } else if self.is_shared_field(Some(ty), name) {
+            } else if given && self.is_shared_field(Some(ty), name) {
                 format!("::ignite_io::List::from_vec({text})")
             } else {
                 text
@@ -6818,8 +6830,11 @@ impl<'a> Generator<'a> {
     }
 
     /// The value of a shared list field or payload: a shared list place
-    /// copied by its count (or moved where the moves analysis says so),
-    /// any other value, a `Vec`, wrapped without a copy.
+    /// copied by its count (or moved where the moves analysis says so);
+    /// the empty literal `[]` or `List.empty()` the list without a block
+    /// (`List::new()`, no test at run time); a non-empty literal its
+    /// elements given to one constructor, `List::of`; any other value, a
+    /// `Vec`, wrapped without a copy.
     fn shared_value(&mut self, expr: &Expr) -> String {
         if self.shared_field_place(expr) {
             let text = self.shared_field_text(expr);
@@ -6827,6 +6842,28 @@ impl<'a> Generator<'a> {
                 return text;
             }
             return format!("{text}.clone()");
+        }
+        match &expr.kind {
+            ExprKind::List(items) if items.is_empty() => {
+                return "::ignite_io::List::new()".to_string();
+            }
+            ExprKind::List(items) => {
+                return format!(
+                    "::ignite_io::List::of(vec![{}])",
+                    self.args(items).join(", ")
+                );
+            }
+            ExprKind::Method {
+                receiver,
+                name,
+                args,
+            } if args.is_empty()
+                && name.name == "empty"
+                && self.qualifier(receiver) == Some("List") =>
+            {
+                return "::ignite_io::List::new()".to_string();
+            }
+            _ => {}
         }
         let value = self.value(expr);
         format!("::ignite_io::List::from_vec({value})")

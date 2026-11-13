@@ -8,7 +8,13 @@
 //!   two blocks, the count with the `Vec` and the `Vec`'s buffer. A single
 //!   block (count, length, capacity and elements together) needs an
 //!   allocation of its own layout, which safe Rust does not give, and the
-//!   substrate takes no new `unsafe` site.
+//!   substrate takes no new `unsafe` site; it would also end the reads as
+//!   a `Vec` below, since no `Vec` can point into a block it did not
+//!   allocate.
+//! - The count's block is built in one function per element type,
+//!   `block`, not inlined at each literal: a program pays the
+//!   allocation's code and its unwind path once per element type
+//!   (`docs/slice.md` section 6, "What a path that never shares pays").
 //! - The count is atomic: a value crosses `spawn` and channels, so the
 //!   list is `Send` and `Sync` when its elements are.
 //! - Reading derefs to the `Vec`, so a payload or field is read where the
@@ -25,6 +31,14 @@ use std::sync::Arc;
 /// A list whose copies share their elements until one of them changes.
 pub struct List<T>(Option<Arc<Vec<T>>>);
 
+/// The count's block of `elements`, taken without a copy. Not inlined:
+/// inlined at each literal it cost `terminald` 401 bytes in the fn that
+/// builds its five replies, out of line 207 bytes once.
+#[inline(never)]
+fn block<T>(elements: Vec<T>) -> Arc<Vec<T>> {
+    Arc::new(elements)
+}
+
 impl<T> List<T> {
     /// The empty list, which holds no block.
     #[inline]
@@ -39,8 +53,17 @@ impl<T> List<T> {
         if elements.is_empty() {
             List(None)
         } else {
-            List(Some(Arc::new(elements)))
+            List(Some(block(elements)))
         }
+    }
+
+    /// The list of a non-empty literal's elements, taken without a copy
+    /// and without a test: the generator writes the literal `[]` as
+    /// [`List::new`] and every other literal as `List::of(vec![..])`.
+    #[inline]
+    pub fn of(elements: Vec<T>) -> Self {
+        debug_assert!(!elements.is_empty(), "the empty literal is List::new");
+        List(Some(block(elements)))
     }
 
     /// Whether the elements are shared with another copy of the list.
@@ -148,6 +171,20 @@ mod tests {
         assert!(list.is_empty());
         assert_eq!(list.len(), 0);
         assert!(List::<String>::new().0.is_none());
+    }
+
+    #[test]
+    fn a_literal_takes_its_elements_without_a_copy_and_changes_like_any_list() {
+        let elements = vec![String::from("x"), String::from("y")];
+        let at = elements.as_ptr();
+        let a = List::of(elements);
+        assert_eq!(a.as_ptr(), at);
+        assert!(!a.is_shared());
+        let mut b = a.clone();
+        b.make_mut().push(String::from("z"));
+        assert_eq!(*a, ["x", "y"]);
+        assert_eq!(*b, ["x", "y", "z"]);
+        assert_eq!(List::of(vec![1]), List::from_vec(vec![1]));
     }
 
     #[test]

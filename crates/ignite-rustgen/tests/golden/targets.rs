@@ -43,7 +43,7 @@ pub fn pushed() -> Vec<Vec<i64>> {
 }
 
 pub fn held() -> Vec<Holder> {
-    let mut holders = vec![Holder { items: ::ignite_io::List::from_vec(vec![]) }];
+    let mut holders = vec![Holder { items: ::ignite_io::List::new() }];
     { let __p5 = 0; let __p6 = 7; (*(*::ignite_io::checked::at_mut(&mut holders, __p5, "crates/ignite-rustgen/tests/golden/targets.ignite", 31, 3)).items.make_mut()).push(__p6) };
     holders
 }

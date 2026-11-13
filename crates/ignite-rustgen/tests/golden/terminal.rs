@@ -22,10 +22,10 @@ pub mod commands {
 
     pub fn answer(command: &Command) -> Reply {
         match command {
-            Command::Help => Reply { lines: ::ignite_io::List::from_vec(vec![String::from("help"), String::from("echo <text>"), String::from("status"), String::from("quit")]), action: Reply::default_action() },
-            Command::Echo(text) => Reply { lines: ::ignite_io::List::from_vec(vec![text.clone()]), action: Reply::default_action() },
-            Command::Status => Reply { lines: ::ignite_io::List::from_vec(vec![String::from("ready")]), action: Reply::default_action() },
-            Command::Quit => Reply { lines: ::ignite_io::List::from_vec(vec![String::from("bye")]), action: Action::Close },
+            Command::Help => Reply { lines: ::ignite_io::List::of(vec![String::from("help"), String::from("echo <text>"), String::from("status"), String::from("quit")]), action: Reply::default_action() },
+            Command::Echo(text) => Reply { lines: ::ignite_io::List::of(vec![text.clone()]), action: Reply::default_action() },
+            Command::Status => Reply { lines: ::ignite_io::List::of(vec![String::from("ready")]), action: Reply::default_action() },
+            Command::Quit => Reply { lines: ::ignite_io::List::of(vec![String::from("bye")]), action: Action::Close },
         }
     }
 
@@ -42,11 +42,11 @@ pub mod commands {
     pub fn respond(line: &String) -> Reply {
         let trimmed = line.trim().to_string();
         if trimmed.is_empty() {
-            Reply { lines: ::ignite_io::List::from_vec(vec![]), action: Reply::default_action() }
+            Reply { lines: ::ignite_io::List::new(), action: Reply::default_action() }
         } else {
             match parse(&trimmed) {
                 Some(command) => answer(&command),
-                None => Reply { lines: ::ignite_io::List::from_vec(vec![format!("unknown command: {}", first_word(&trimmed))]), action: Reply::default_action() },
+                None => Reply { lines: ::ignite_io::List::of(vec![format!("unknown command: {}", first_word(&trimmed))]), action: Reply::default_action() },
             }
         }
     }
