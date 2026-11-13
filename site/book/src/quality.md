@@ -73,41 +73,41 @@ Current values: run `v0.16.4` on 2026-11-13, commit `3f221dfb`.
 |---|---|---|---|---|---|---|
 | 3.1 | copies in the generated code of the golden corpus | ratchet | llvm | 90 | 90 | = |
 | 3.1 | copies in the generated code of the golden corpus | ratchet | rust | 155 | 155 | −1 better |
-| 3.10 | cost of a frozen path: instructions and system calls | ratchet | all/design/check/instructions | 851984229 |  |  |
-| 3.10 | cost of a frozen path: instructions and system calls | ratchet | all/design/check/syscalls | 74 |  |  |
-| 3.10 | cost of a frozen path: instructions and system calls | ratchet | all/design/plan/instructions | 857679569 |  |  |
+| 3.10 | cost of a frozen path: instructions and system calls | ratchet | all/design/check/instructions | 853115818 |  |  |
+| 3.10 | cost of a frozen path: instructions and system calls | ratchet | all/design/check/syscalls | 75 |  |  |
+| 3.10 | cost of a frozen path: instructions and system calls | ratchet | all/design/plan/instructions | 858815028 |  |  |
 | 3.10 | cost of a frozen path: instructions and system calls | ratchet | all/design/plan/syscalls | 75 |  |  |
-| 3.10 | cost of a frozen path: instructions and system calls | ratchet | llvm/design/build/instructions | 2227556478 |  |  |
-| 3.10 | cost of a frozen path: instructions and system calls | ratchet | llvm/design/build/syscalls | 14934 |  |  |
-| 3.10 | cost of a frozen path: instructions and system calls | ratchet | llvm/terminal/session/instructions | 245028 |  |  |
+| 3.10 | cost of a frozen path: instructions and system calls | ratchet | llvm/design/build/instructions | 2236436054 |  |  |
+| 3.10 | cost of a frozen path: instructions and system calls | ratchet | llvm/design/build/syscalls | 14977 |  |  |
+| 3.10 | cost of a frozen path: instructions and system calls | ratchet | llvm/terminal/session/instructions | 245002 |  |  |
 | 3.10 | cost of a frozen path: instructions and system calls | ratchet | llvm/terminal/session/syscalls | 126 |  |  |
-| 3.10 | cost of a frozen path: instructions and system calls | ratchet | llvm/terminal/start/instructions | 304805 |  |  |
+| 3.10 | cost of a frozen path: instructions and system calls | ratchet | llvm/terminal/start/instructions | 304802 |  |  |
 | 3.10 | cost of a frozen path: instructions and system calls | ratchet | llvm/terminal/start/syscalls | 76 |  |  |
-| 3.10 | cost of a frozen path: instructions and system calls | ratchet | llvm/todo/connection/instructions | 469930 |  |  |
+| 3.10 | cost of a frozen path: instructions and system calls | ratchet | llvm/todo/connection/instructions | 469917 |  |  |
 | 3.10 | cost of a frozen path: instructions and system calls | ratchet | llvm/todo/connection/syscalls | 246 |  |  |
-| 3.10 | cost of a frozen path: instructions and system calls | ratchet | llvm/todo/delete/instructions | 636647 |  |  |
+| 3.10 | cost of a frozen path: instructions and system calls | ratchet | llvm/todo/delete/instructions | 636367 |  |  |
 | 3.10 | cost of a frozen path: instructions and system calls | ratchet | llvm/todo/delete/syscalls | 380 |  |  |
 | 3.10 | cost of a frozen path: instructions and system calls | ratchet | llvm/todo/get/instructions | 450236 |  |  |
 | 3.10 | cost of a frozen path: instructions and system calls | ratchet | llvm/todo/get/syscalls | 40 |  |  |
-| 3.10 | cost of a frozen path: instructions and system calls | ratchet | llvm/todo/patch/instructions | 930498 |  |  |
+| 3.10 | cost of a frozen path: instructions and system calls | ratchet | llvm/todo/patch/instructions | 930218 |  |  |
 | 3.10 | cost of a frozen path: instructions and system calls | ratchet | llvm/todo/patch/syscalls | 380 |  |  |
-| 3.10 | cost of a frozen path: instructions and system calls | ratchet | llvm/todo/start/instructions | 321822 |  |  |
+| 3.10 | cost of a frozen path: instructions and system calls | ratchet | llvm/todo/start/instructions | 321791 |  |  |
 | 3.10 | cost of a frozen path: instructions and system calls | ratchet | llvm/todo/start/syscalls | 80 |  |  |
-| 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/design/build/instructions | 1163103416 |  |  |
+| 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/design/build/instructions | 1165423497 |  |  |
 | 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/design/build/syscalls | 74 |  |  |
-| 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/terminal/session/instructions | 131735 |  |  |
+| 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/terminal/session/instructions | 131722 |  |  |
 | 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/terminal/session/syscalls | 120 |  |  |
-| 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/terminal/start/instructions | 369116 |  |  |
+| 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/terminal/start/instructions | 369121 |  |  |
 | 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/terminal/start/syscalls | 100 |  |  |
-| 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/todo/connection/instructions | 225727 |  |  |
+| 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/todo/connection/instructions | 225714 |  |  |
 | 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/todo/connection/syscalls | 227 |  |  |
-| 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/todo/delete/instructions | 532880 |  |  |
+| 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/todo/delete/instructions | 530585 |  |  |
 | 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/todo/delete/syscalls | 300 |  |  |
-| 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/todo/get/instructions | 303865 |  |  |
+| 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/todo/get/instructions | 303778 |  |  |
 | 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/todo/get/syscalls | 40 |  |  |
-| 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/todo/patch/instructions | 798633 |  |  |
+| 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/todo/patch/instructions | 789639 |  |  |
 | 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/todo/patch/syscalls | 300 |  |  |
-| 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/todo/start/instructions | 386829 |  |  |
+| 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/todo/start/instructions | 386833 |  |  |
 | 3.10 | cost of a frozen path: instructions and system calls | ratchet | rust/todo/start/syscalls | 104 |  |  |
 | 3.2 | binary size | ratchet | llvm/terminald/dev | 7264152 B | 7270968 B | +768 |
 | 3.2 | binary size | ratchet | llvm/terminald/release | 1394120 B | 1394120 B | −328 better |
