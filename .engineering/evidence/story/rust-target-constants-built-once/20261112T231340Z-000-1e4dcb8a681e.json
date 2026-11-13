@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-12T23:13:40Z",
+  "actor": "human:timo",
+  "artifact": "story:rust-target-constants-built-once",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "unit constants, merged as b111d72e: task gate on a77d0116 red in the test step only: check ok; suite main 814 passed, 2 failed, 16 ignored, both failures the pages generated from quality/baseline.json; 67168260 regenerates them; no third full gate; on that tree: the two tests 2 passed, cargo test --workspace --exclude ignite 1130 passed 0 failed 7 ignored, task test-ignite 517 passed 0 failed, task ux 389 passed"
+  }
+}

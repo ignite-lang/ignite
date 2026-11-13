@@ -343,7 +343,7 @@ release.
 
 | # | metric | kind | better | instrument | bar | target |
 |---|---|---|---|---|---|---|
-| 3.1 | copies in the generated code of the golden corpus | ratchet | lower | `quality::static_metrics_hold_the_bar`: `.clone()` in the Rust generator's goldens, calls of `copy.*` in the LLVM goldens | llvm 90, rust 163 |  |
+| 3.1 | copies in the generated code of the golden corpus | ratchet | lower | `quality::static_metrics_hold_the_bar`: `.clone()` in the Rust generator's goldens, calls of `copy.*` in the LLVM goldens | llvm 90, rust 156 |  |
 | 3.2 | binary size | ratchet | lower | `ignite-perf quality` (task quality): size of `todod` and `terminald` per target and profile | llvm/terminald/dev 7264152 B, llvm/terminald/release 1394536 B, llvm/todod/dev 7969480 B, llvm/todod/release 1967944 B, rust/terminald/dev 6344576 B, rust/terminald/release 743384 B, rust/todod/dev 7586840 B, rust/todod/release 1038712 B |  |
 | 3.3 | throughput against plain Rust | ratchet | higher | `ignite-perf quality-remote` with `ignite-load matrix` (`bench/native/`): replies per second of todod and terminald over the plain-Rust implementation's, per cell | llvm/terminal/connect-8 0.929×, llvm/terminal/rr-1 0.995×, llvm/terminal/rr-64 1.254×, llvm/todo/get-1 1.033×, llvm/todo/get-64 1.299×, llvm/todo/patch-16 1.203×, rust/terminal/connect-8 0.971×, rust/terminal/rr-1 0.972×, rust/terminal/rr-64 1.235×, rust/todo/get-1 0.990×, rust/todo/get-64 1.176×, rust/todo/patch-16 1.193× |  |
 | 3.4 | peak RSS, leaked handles and threads after a load run | gate | lower | `llvm_memory::` and `terminal::idle_terminald_runs_one_thread` (every merge) | unmeasured: no number: the named tests gate it in task gate |  |

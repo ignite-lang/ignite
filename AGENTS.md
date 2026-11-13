@@ -639,10 +639,8 @@ was open for three days; a coordinator does this instead of what cost them:
   batches, no A/B passes locally. A change records its cost as "not measured locally" and the
   next release's `task quality-remote` run measures it; the gate's own tests are not
   benchmarks.
-- Announce: send the release's tag, URL and notes to the `brain` session (Claude session named
-  `brain`, `SendMessage`), asking it to forward the announcement to AI autodev. Send the path of
-  a ready file, not the text: Slack mrkdwn (`<url|label>` links), every line at most 200
-  characters; `brain` posts it as is (asked by `brain`, 2026-11-07).
+- Announce: after a release, send the release facts to the operator's announcement route. Post
+  no announcement yourself.
 
 ## Lifecycle ownership
 
