@@ -7,7 +7,7 @@ title: The cost of an existing path is counted at every merge
 relations:
 - informed_by: story:release-refuses-every-worse-row
 - informed_by: story:size-rows-grow-with-a-decision
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-11T13:47:21Z", actor: "human:timo", revision: 2, executor: "agent:claude-coordinator", correlation: "accepted-2026-11-11"}
 - {from: "proposed", to: "active", at: "2026-11-11T13:47:21Z", actor: "human:timo", revision: 3, executor: "agent:claude-coordinator", correlation: "accepted-2026-11-11"}
@@ -55,3 +55,29 @@ Coordinator's reading, not Timo's words:
 ## Scope
 
 - `tools/ignite-perf/src` (the instrument), a new scenario directory under `bench/`, `crates/ignite/tests/quality.rs`, `quality/baseline.json`, `docs/quality.md`, `AGENTS.md`, `Taskfile.yml`, `tools/ignite-perf/src/remote.rs` (the gate on the dedicated host). Inferred.
+
+## Second part
+
+The first part is released with v0.16.3: `task path-cost` in `task gate`, the frozen scenarios, the counts of the last release, the bands, the frozen check (`docs/quality.md` "The path cost at every merge"). The second part was prepared on 2026-11-12 and is not started; no code exists for it.
+
+Bullets of the Acceptance that remain:
+
+1. **The decision (bullet 4).** A refused cell passes only with a `decision` on its bar in `quality/baseline.json` that cites a `host: ec2:*` record (`quality/history.jsonl`, the run id) in which the time rows of that scenario are not worse than at the last release. The size rows are the shape to follow (`tools/ignite-perf/src/remote.rs`; the tests `a_grown_cell_of_a_size_row_without_a_decision_is_refused`, `a_decision_on_a_size_cell_not_above_the_last_release_is_refused`, `a_grown_cell_held_by_the_last_releases_decision_is_refused` in `crates/ignite/tests/quality.rs`): the decision names the cell, the value it accepts, the run id and the story; a decision on a cell that is not above the release's count is refused; a decision whose run id is not in the history, is not `ec2:*`, or whose time rows for that scenario are worse, is refused; a decision carried over from the last release does not hold a new rise. `judge` in `tools/ignite-perf/src/path_cost.rs` is where a decision attaches. The docs state which time rows belong to which scenario (`todo`: the 3.7 and 3.8 rows of `todod`; `terminal`: the session rows; `design`: the 6.x build rows), held in one table in the code.
+2. **Compile rows per 1,000 lines (bullet 6).** The cells of the `design` scenario report instructions per 1,000 lines of compiled source beside the absolute value; the lines are those of every source file the compiler read for the command, counted by the compiler or the instrument. The refusal judges the per-1,000-lines value for these cells and prints both.
+3. **The cold gate on the dedicated host (bullet 7).** `ignite-perf quality-remote` gains a way to run `task gate` cold on the host it already starts and to bring back its result (exit code, result lines, the path-cost metrics). Reuse the launch, the upload of the tree and the cost record of `tools/ignite-perf/src/remote.rs`; no new AWS resource type; no credential or profile name in any file. The mode, its argument tests and a dry-run test that prints the commands it would send come first; the first real run is the coordinator's and needs the operator's word on its cost.
+4. **The two rules side by side (bullet 8)** in `AGENTS.md` § Releases and `docs/quality.md`: a frozen scenario may not cost more; a total over all code may grow with a decision that names the code.
+
+Handed over from the adversary pass on the first part:
+
+- **The counts and bars can be raised without a decision.** `--record` accepts any `v*` label from any commit; re-recording plus `IGNITE_BLESS=1` raises the bars of 3.10 in one merge and nothing refuses it (`against_main` is never called for the source `path-cost`). To do: `--record vX.Y.Z` runs only on the tree of that tag; a bar of 3.10 above `main`'s needs the decision of bullet 1; the release steps in `AGENTS.md` § Releases name `task path-cost RECORD=`.
+- **The counts depend on the machine.** Shares of the judged cells: start cells `ld-linux` 67 to 86 %, libc 5 to 28 %; request cells libc 15 to 44 %, Rust std 16 to 31 %; `design` check and plan Rust std 55 %; `llvm/design/build` ld-linux 12.7 %, libLLVM 11.3 %, lld 11.2 %. There is no `rust-toolchain` file. An update of glibc, Rust or LLVM, or another CPU and distribution, likely refuses merges that change no code, and the refusal's function names carry no object. To do: the `.counts` file names what it was recorded with (glibc, rustc, clang, valgrind, CPU model); when the machine differs from the recording, the mode says so before it judges and either measures the release again on this machine or refuses with the command that does; function lines carry their object.
+
+Found while v0.16.3 was cut (2026-11-13):
+
+- The release recorded the counts of v0.16.3 with three cells above v0.16.2 (story `path-cost-cells-above-v0-16-2`). At a release the rule "tracked, not refused" was applied to row 3.10; the row has no decision mechanism yet (bullet 1).
+- A server without `IGNITE_WORKERS` reads the caller's cgroup files, which moved the four `start` cells by 13 system calls and about 7,000 instructions between a session scope and the build pool; the servers now start with `IGNITE_WORKERS=2`. One system call of the `start` cells still differs between the build pool (76, 100, 80, 104) and outside it (75, 99, 79, 103); the cause is not known. The counts are recorded under the build pool.
+- `llvm/terminal/session` read 245,441 and 244,745 in two recordings of v0.16.2, each without spread; the cause is not known.
+- Whether two trees with paths of different length give the same counts is not known: the binaries embed paths of the tree.
+- `IGNITE_BLESS=1` on the three page tests at once (`quality::the_path_cost_bars_are_the_recorded_counts`, `quality::trend_and_docs_are_generated_from_quality`, `site::quality_page_is_generated`) failed once: the first writes the bars the second reads. With `--test-threads=1` they pass.
+
+Constraints: a bar of 3.10 does not move and the counts are not re-recorded by this unit; a change to the judgement gets a test with a fixture pair (`tools/ignite-perf/tests/path_cost.rs`, `tests/fixtures/path-cost/`); no test needs the network or AWS.

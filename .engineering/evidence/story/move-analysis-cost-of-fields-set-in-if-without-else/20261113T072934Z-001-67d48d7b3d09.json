@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-13T07:29:34Z",
+  "actor": "human:timo",
+  "artifact": "story:move-analysis-cost-of-fields-set-in-if-without-else",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "deviation from the acceptance: the 64-field case type-checks under a data limit of 512 MiB (prlimit --data), not 256 MB: the compile thread's stack is 256 MiB of it (moves_cost::sixty_four_fields_type_check_under_a_memory_limit)"
+  }
+}

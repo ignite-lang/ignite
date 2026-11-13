@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-13T07:29:33Z",
+  "actor": "human:timo",
+  "artifact": "story:move-analysis-cost-of-fields-set-in-if-without-else",
+  "kind": "story",
+  "revision": 4,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "released in v0.16.3, merged as 1f195cba: `task gate` on e1c3dfed: exit 0, 3148 passed, 0 failed, 23 ignored, 389 UI checks"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-13T07:29:34Z",
+  "actor": "human:timo",
+  "artifact": "story:path-cost-counted-at-every-merge",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task path-cost on the release head ed39b372 against the counts of v0.16.2: 3 of 36 cells above their band (rust/design/build, rust/todo/get, llvm/terminal/session), tracked by the release rule, story:path-cost-cells-above-v0-16-2; task path-cost RECORD=v0.16.3 exit 0"
+  }
+}

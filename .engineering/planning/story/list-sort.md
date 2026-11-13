@@ -2,12 +2,13 @@
 format: aep.planning-md/3
 id: story:list-sort
 kind: story
-status: active
+status: implemented
 title: A List is sorted with sort and sort_by
-revision: 6
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-12T20:26:59Z", actor: "human:timo", revision: 2, executor: "agent:claude-coordinator", correlation: "accepted-2026-11-12"}
 - {from: "proposed", to: "active", at: "2026-11-12T20:26:59Z", actor: "human:timo", revision: 3, executor: "agent:claude-coordinator", correlation: "accepted-2026-11-12"}
+- {from: "active", to: "implemented", at: "2026-11-13T07:29:34Z", actor: "human:timo", revision: 7, decided_on: {"recorded":{"test_result":2,"review_outcome":1}}, executor: "agent:claude-coordinator", correlation: "wave-15"}
 ---
 # Story: a List is sorted with sort and sort_by
 

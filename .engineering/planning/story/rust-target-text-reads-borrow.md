@@ -6,7 +6,7 @@ status: active
 title: A text or byte string that is only read is not copied on the Rust target
 relations:
 - informed_by: story:rust-target-shared-list-storage
-revision: 4
+revision: 5
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-12T12:37:04Z", actor: "human:timo", revision: 2, executor: "agent:claude-coordinator", correlation: "after-v0.16.2"}
 - {from: "proposed", to: "active", at: "2026-11-12T12:37:04Z", actor: "human:timo", revision: 3, executor: "agent:claude-coordinator", correlation: "after-v0.16.2"}
@@ -50,3 +50,29 @@ Forms 1, 2 and 5 are a read of a text's bytes; forms 3 and 4 are the choice betw
 - Sharing the storage of `Text` (a copy that increments a count): a design of its own, with the same trade as the shared lists (`story:rust-target-shared-list-storage`).
 - `let v = l[i]` that is only read, `m.get(k)`, `m.keys()` (`story:rust-target-read-only-bindings-borrow`).
 - Module constants (`story:rust-target-constants-built-once`).
+
+## Order of work
+
+Prepared on 2026-11-12 for wave 15 and not started; no code exists for it. The branch `wave/15-text-reads` holds no commit of the unit.
+
+Order of work for the implementor:
+
+1. The count test (Acceptance bullet 1), red first: the seven functions the story names (`escape_into`, `all_digits`, `decode_cell`, `dedupe`, `cells_to_row`, `bytes_of`, `slots_of`) as one synthetic program in the manner of `crates/ignite/tests/borrowed_reads.rs` (read it, `value_copies.rs` and `shared_lists.rs` first). Allocations per call at two sizes on the Rust target.
+2. Forms 1, 2 and 5 (a read of a text's bytes): `t.to_bytes()` whose result is only read reads the text in place; a payload of a lent `Option<Bytes>` that is only read is read in place; `b.to_text()` on a `Bytes` the function owns, at its last use, moves the buffer into the text when it is valid UTF-8. The guard of bullet 4 (a text changed or moved while its bytes binding lives gives the evaluator's value) gets its own test before the change.
+3. std's form 2 (bullet 2): the count test over the text cells of `std.protocol.mysql` (`string_value`, `take_bytes`) shows one allocation per cell less; extend the existing MySQL count test.
+4. Forms 3 and 4 (a by-value parameter moved into): decide the rule from the code, write it into `docs/slice.md` section 6, implement it for private functions. If a public function needs its callers, say so in the docs and stop there (the story allows it).
+5. The LLVM target (bullet 6): count the same functions there and write the numbers into the docs. No change to `crates/ignite-llvm`.
+6. Goldens under `crates/ignite-rustgen/tests/golden/` regenerated.
+
+Forms 1, 2 and 5 with std's form are worth a merge of their own; forms 3 and 4 can be a second unit.
+
+The coordinator's: `CODEGEN_REVISION`, `task gate`, the dedicated-host run (bullet 7).
+
+Constraints:
+
+- Rust must accept every program the checker accepts. Every new borrowed form gets a test with the binding alive across a call that takes the text by value, across a `spawn`, across a closure capture and across a loop that changes the text. When in doubt, keep the copy.
+- Row 3.1 counts `.clone()` in the Rust goldens with tolerance 0: count before and after (`quality::static_metrics_hold_the_bar`); where it falls, write the lower value into the bar with `IGNITE_BLESS=1`.
+- Rows 3.2 and 3.9 (stripped size of `todod` and `terminald` on the Rust target): measure before and after by the method of `ignite-perf quality`; a rise is reported.
+- Row 3.10 (`task path-cost`) now judges one GET of `examples/todo` on the Rust target at every merge.
+- After the generator change every module of `std/` must still build on both targets.
+- The meaning of `to_bytes`, `to_text` and a by-value parameter in the checker and the evaluator does not change.

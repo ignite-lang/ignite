@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-13T07:29:33Z",
+  "actor": "human:timo",
+  "artifact": "story:path-cost-counted-at-every-merge",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "release v0.16.3, dedicated-host comparison v0.16.2 against ed39b372, run iq-20261113t025512z-bc9c, 5 passes, exit 0: no row worse by the rule of docs/quality.md, 0 refused cells"
+  }
+}
