@@ -2091,6 +2091,10 @@ struct Generator<'a> {
     /// `for` elements that are references (`&T`) in their body, with the
     /// index of the scope that binds them ([`Generator::borrowed_for`]).
     borrowed_elements: Vec<(usize, String)>,
+    /// Set for the next [`match_expr`](Generator::match_expr) only: an arm
+    /// whose value is a lent binding gives the reference, not a copy
+    /// ([`lent_payload_let`](Generator::lent_payload_let)).
+    lent_arm_values: bool,
     /// Bindings of the native pattern being written that bind a shared
     /// list payload ([`Generator::is_shared_payload`]), an
     /// `ignite_io::List` in Rust; the arm reads each as the `Vec` behind
@@ -2223,6 +2227,7 @@ impl<'a> Generator<'a> {
             renamed_uses: BTreeSet::new(),
             borrowed: BTreeSet::new(),
             borrowed_elements: Vec::new(),
+            lent_arm_values: false,
             shared_bindings: Vec::new(),
             late: BTreeSet::new(),
             fn_body: false,
@@ -3737,7 +3742,11 @@ impl<'a> Generator<'a> {
                 StmtKind::Expr(expr) if tail && fn_body => self.final_conversion(expr),
                 _ => None,
             };
-            let text = match moved.or_else(|| self.lent_let(stmt, &block.stmts[index + 1..])) {
+            let rest = &block.stmts[index + 1..];
+            let text = match moved
+                .or_else(|| self.lent_let(stmt, rest))
+                .or_else(|| self.lent_payload_let(stmt, rest))
+            {
                 Some(text) => text,
                 None => self.stmt(stmt, tail),
             };
@@ -3782,6 +3791,114 @@ impl<'a> Generator<'a> {
         }
     }
 
+    /// The Rust name of the receiver of `b.to_text()` or `t.to_bytes()`
+    /// whose buffer the call takes: a variable this fn owns (not a
+    /// borrowed parameter or binding, not a capture) that the call reads
+    /// for the last time ([`TypedProgram::takes_buffer`]). `None` for any
+    /// other receiver, which the call copies.
+    fn taken_buffer(&mut self, receiver: &Expr) -> Option<String> {
+        let ExprKind::Name(id) = &receiver.kind else {
+            return None;
+        };
+        let takes = self.types?.takes_buffer(receiver)
+            && self.is_local(&id.name)
+            && !self.is_borrowed(&id.name)
+            && !self.is_captured(&id.name);
+        takes.then(|| self.local_name(&id.name))
+    }
+
+    /// `let b = match o { Some(x) => x  None => return .. }` as
+    /// `let b: &[u8] = match o { Some(x) => x, None => return .. };`: the
+    /// `Bytes` payload of a `match` that lends its scrutinee
+    /// ([`match_by_ref`](Self::match_by_ref)) is read where it is when
+    /// every arm's value is a lent binding of its own pattern or leaves
+    /// the block (`return`, `break`, `continue`), and the statements after
+    /// it read `b` as [`lent_let`](Self::lent_let) requires of the bytes
+    /// of a text: only as a slice, with no other `b` bound, the variable
+    /// of the scrutinee neither changed nor moved while `b` is read.
+    fn lent_payload_let(&mut self, stmt: &Stmt, rest: &[Stmt]) -> Option<String> {
+        let StmtKind::Let {
+            name,
+            ty: None,
+            value,
+            mutable: false,
+        } = &stmt.kind
+        else {
+            return None;
+        };
+        let ExprKind::Match { scrutinee, arms } = &value.kind else {
+            return None;
+        };
+        let types = self.types?;
+        let bytes =
+            |ty: Option<&Ty>| matches!(ty, Some(Ty::List(element)) if **element == Ty::Byte);
+        if !bytes(self.type_of(value)) {
+            return None;
+        }
+        let ty = self.type_of(scrutinee).cloned();
+        if !self.is_place(scrutinee)
+            || self.lent_tuple(scrutinee, ty.as_ref(), arms).is_some()
+            || !self.match_by_ref(scrutinee, ty.as_ref(), arms)
+        {
+            return None;
+        }
+        let lends = |arm: &ignite_syntax::ast::Arm| match &arm.body.kind {
+            ExprKind::Return(_) | ExprKind::Break | ExprKind::Continue => true,
+            ExprKind::Name(id) => {
+                self.is_native(&arm.pattern, ty.as_ref())
+                    && arm
+                        .pattern
+                        .bindings()
+                        .iter()
+                        .find(|b| b.name == id.name)
+                        .is_some_and(|b| bytes(types.binding_type(b.span)))
+            }
+            _ => false,
+        };
+        if !arms.iter().all(lends) {
+            return None;
+        }
+        let root = place_root(scrutinee)?;
+        if !self.lent_after(&name.name, root, rest) {
+            return None;
+        }
+        self.lent_arm_values = true;
+        let text = self.match_expr(value, scrutinee, arms);
+        self.bind(&name.name);
+        let scope = self.scopes.len() - 1;
+        self.borrowed_elements.push((scope, name.name.clone()));
+        Some(format!("let {}: &[u8] = {text};", ident(&name.name)))
+    }
+
+    /// Whether `rest`, the statements after a `let name` that lends bytes
+    /// read in place from the variable `root`, read `name` only as a slice
+    /// (`docs/slice.md` 20.3.7), neither change `root` nor bind `name`
+    /// again, and move `root` ([`TypedProgram::moves`], a late move
+    /// included, or a `to_text` or `to_bytes` that takes its buffer,
+    /// [`TypedProgram::takes_buffer`]) in no statement that reads `name` or
+    /// comes before one that does.
+    fn lent_after(&self, name: &str, root: &str, rest: &[Stmt]) -> bool {
+        let Some(types) = self.types else {
+            return false;
+        };
+        let rebinds = rest.iter().any(|s| match &s.kind {
+            StmtKind::Let { name: other, .. } => other.name == name,
+            StmtKind::LetPattern { pattern, .. } => pattern.binds(name),
+            _ => false,
+        });
+        let changed = ownership::changed_in_stmts(rest, Some(types)).contains(root);
+        if rebinds || changed || !types.reads_as_slice(rest, name) {
+            return false;
+        }
+        let mut read = false;
+        !rest.iter().rev().any(|stmt| {
+            let stmt = std::slice::from_ref(stmt);
+            read |= ownership::mentions_in_stmts(stmt, name);
+            read && (ownership::moved_in_stmts(stmt, types).contains(root)
+                || ownership::taken_in_stmts(stmt, types).contains(root))
+        })
+    }
+
     /// `let b = t.to_bytes()` as `let b: &[u8] = t.as_bytes();` when `t`
     /// is a `Text` place and `rest`, the statements after it in its block,
     /// read `b` only as a slice (`docs/slice.md` 20.3.7), neither change
@@ -3800,24 +3917,8 @@ impl<'a> Generator<'a> {
             return None;
         };
         let text = self.text_bytes_place(value)?;
-        let types = self.types?;
-        let rebinds = rest.iter().any(|s| match &s.kind {
-            StmtKind::Let { name: other, .. } => other.name == name.name,
-            StmtKind::LetPattern { pattern, .. } => pattern.binds(&name.name),
-            _ => false,
-        });
         let root = place_root(text)?;
-        let changed = ownership::changed_in_stmts(rest, Some(types)).contains(root);
-        if rebinds || changed || !types.reads_as_slice(rest, &name.name) {
-            return None;
-        }
-        let mut read = false;
-        let moved_while_read = rest.iter().rev().any(|stmt| {
-            let stmt = std::slice::from_ref(stmt);
-            read |= ownership::mentions_in_stmts(stmt, &name.name);
-            read && ownership::moved_in_stmts(stmt, types).contains(root)
-        });
-        if moved_while_read {
+        if !self.lent_after(&name.name, root, rest) {
             return None;
         }
         let text = self.receiver(text);
@@ -5643,6 +5744,16 @@ impl<'a> Generator<'a> {
                 if let Some(bytes) = self.checked_slice_ref(receiver) {
                     return format!("String::from_utf8_lossy({bytes}).into_owned()");
                 }
+                if let Some(bytes) = self.taken_buffer(receiver) {
+                    return format!(
+                        "String::from_utf8({bytes}).unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned())"
+                    );
+                }
+            }
+            Some(Callee::Builtin(Builtin::TextToBytes)) if args.is_empty() => {
+                if let Some(text) = self.taken_buffer(receiver) {
+                    return format!("{text}.into_bytes()");
+                }
             }
             Some(Callee::Builtin(
                 Builtin::SenderSend
@@ -5837,6 +5948,7 @@ impl<'a> Generator<'a> {
         scrutinee: &Expr,
         arms: &[ignite_syntax::ast::Arm],
     ) -> String {
+        let lent_values = std::mem::take(&mut self.lent_arm_values);
         let no_arm = self
             .fail_call(expr, "no arm matched")
             .unwrap_or_else(|| "unreachable!()".to_string());
@@ -5917,6 +6029,9 @@ impl<'a> Generator<'a> {
             };
             let mut body = match &arm.body.kind {
                 ExprKind::Block(block) => self.block(block, true),
+                ExprKind::Name(id) if lent_values && self.is_borrowed(&id.name) => {
+                    self.bare(&arm.body)
+                }
                 _ => self.result(&arm.body),
             };
             self.borrowed_elements.truncate(lent_before);
@@ -6019,6 +6134,7 @@ impl<'a> Generator<'a> {
         for arm in arms {
             touched.extend(ownership::changed_in(&arm.body, self.types));
             touched.extend(ownership::moved_in(&arm.body, types));
+            touched.extend(ownership::taken_in(&arm.body, types));
         }
         let mut lent = Vec::new();
         for (item, element) in items.iter().zip(elements) {
@@ -6082,12 +6198,13 @@ impl<'a> Generator<'a> {
         lets
     }
 
-    /// The names an arm `body` changes in place or moves: every name when
-    /// the types are not known.
+    /// The names an arm `body` changes in place or moves (a buffer taken
+    /// included): every name when the types are not known.
     fn touched_in<'e>(&self, body: &'e Expr) -> BTreeSet<&'e str> {
         let mut touched = ownership::changed_in(body, self.types);
         if let Some(types) = self.types {
             touched.extend(ownership::moved_in(body, types));
+            touched.extend(ownership::taken_in(body, types));
         }
         touched
     }

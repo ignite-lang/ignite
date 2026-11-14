@@ -874,13 +874,26 @@ fn is_integer(kind: Int) -> Bool = kind == 1 || kind == 2 || kind == 3 || kind =
 
 fn is_temporal(kind: Int) -> Bool = kind == 7 || kind == 10 || kind == 11 || kind == 12 || kind == 14
 
+// Whether the bytes of a column that is no number and no date are text:
+// JSON and a column with a character set, not a BIT.
+fn is_text(column: Column) -> Bool = column.kind != 16 && (column.kind == 245 || column.charset != BINARY_CHARSET)
+
+// Whether the text protocol sends `column` as a `Text` value
+// (`text_value`): a date or a time, or a column whose bytes are text. The
+// row readers turn such bytes into text themselves, where they own them,
+// so the text takes their buffer instead of a copy of it.
+fn text_cell(column: Column) -> Bool {
+  let kind = column.kind
+  !is_integer(kind) && kind != 0 && kind != 4 && kind != 5 && kind != 246 && (is_temporal(kind) || is_text(column))
+}
+
 // The bytes of a column that is no number and no date: a BIT(1) is a
 // `Bool`, a wider BIT its bytes, JSON and a column with a character set
 // text, a binary column its bytes.
-fn string_value(column: Column, bytes: Bytes) -> MysqlValue = if column.kind == 16 {
-  if column.length == 1 { Bool(bytes == b"\x01") } else { Bytes(bytes) }
-} else if column.kind == 245 || column.charset != BINARY_CHARSET {
+fn string_value(column: Column, bytes: Bytes) -> MysqlValue = if is_text(column) {
   Text(bytes.to_text())
+} else if column.kind == 16 && column.length == 1 {
+  Bool(bytes == b"\x01")
 } else {
   Bytes(bytes)
 }
@@ -947,7 +960,7 @@ fn binary_value(column: Column, payload: Bytes, at: Int) -> Outcome<(MysqlValue,
   }
   if kind == 0 || kind == 15 || kind == 16 || kind >= 245 && kind <= 255 {
     return match take_lenenc_bytes(payload, at)? {
-      (Some(bytes), end) => Ok((if kind == 0 || kind == 246 { Decimal(bytes.to_text()) } else { string_value(column, bytes) }, end))
+      (Some(bytes), end) => Ok((if kind == 0 || kind == 246 { Decimal(bytes.to_text()) } else if is_text(column) { Text(bytes.to_text()) } else { string_value(column, bytes) }, end))
       (None, _) => Err(Malformed("a NULL mark inside a binary row"))
     }
   }
@@ -960,11 +973,15 @@ fn read_text_row(columns: List<Column>, payload: Bytes) -> Outcome<List<Option<M
   var row: List<Option<MysqlValue>> = []
   var at = 0
   for column in columns {
-    let (field, end) = take_lenenc_bytes(payload, at)?
-    at = end
-    row.push(match field {
-      Some(bytes) => Some(text_value(column, bytes))
-      None => None
+    row.push(match take_lenenc_bytes(payload, at)? {
+      (Some(bytes), end) => {
+        at = end
+        Some(if text_cell(column) { Text(bytes.to_text()) } else { text_value(column, bytes) })
+      }
+      (None, end) => {
+        at = end
+        None
+      }
     })
   }
   if at != payload.len() {

@@ -1,15 +1,15 @@
 path-cost counts
 scenario todo
 target llvm
-release v0.16.3
+release v0.16.4
 script a963bf8d260693657584bedbd577aa633747ba799bb59244c4beaf3b71f759b8
 file 3a087990045833f926c8482f46856d0416efc8f7c7bb13e93f68557733dfaa9a todo.ignite
 file 5360068ac2768cf01929837c31548f975be297c24416b9d97d71ce4bfcc53e18 health.ignite
 op start
-instructions 321822 runs 321822 321822 321822 321822 321822
-syscalls 80 runs 80 80 80 80 79
-fn 284762 ??? ld-linux-x86-64.so.2
-fn 7974 ??? libc.so.6
+instructions 321791 runs 321791 321791 321791 321791 321791
+syscalls 80 runs 80 80 80 80 80
+fn 284744 ??? ld-linux-x86-64.so.2
+fn 7961 ??? libc.so.6
 fn 2325 <core::ops::range::Range<usize> as core::iter::traits::iterator::Iterator>::fold::<(), core::iter::adapters::map::map_fold<usize, ignite_rt::net::Slot, (), ignite_rt::net::slot_at::{closure#0}, core::iter::traits::iterator::Iterator::for_each::call<ignite_rt::net::Slot, <alloc::vec::Vec<ignite_rt::net::Slot>>::extend_trusted<core::iter::adapters::map::Map<core::ops::range::Range<usize>, ignite_rt::net::slot_at::{closure#0}>>::{closure#0}>::{closure#0}>::{closure#0}>
 fn 1744 ??? todod
 fn 1620 malloc
@@ -221,7 +221,7 @@ fn 6740 ignite_io::text::index_of::<&[u8], &[u8]>
 fn 6680 std.protocol.http.is_token_byte
 fn 5380 std.protocol.http.checked
 fn 4440 std.protocol.http.segments
-fn 4400 ignite.grow.llvm.16071189956402355218
+fn 4400 ignite.grow.llvm.711717171800036180
 fn 4320 ignite_rt::arena::with_task::<core::result::Result<*mut u8, alloc::string::String>, ignite_rt::arena::alloc_slow::{closure#0}>::{closure#0}
 fn 4220 std.protocol.http.asked
 fn 4200 core::slice::copy_from_slice_impl::<u8>
@@ -312,7 +312,7 @@ syscall 20 recvfrom
 syscall 20 sendto
 op patch
 times 20
-instructions 930498 runs 930498 930498 930498 930498 930498
+instructions 930218 runs 930218 930218 930218 930218 930218
 syscalls 380 runs 380 380 380 380 380
 fn 180376 ??? todod
 fn 140209 ??? libc.so.6
@@ -332,12 +332,12 @@ fn 12860 <core::str::pattern::CharSearcher as core::str::pattern::Searcher>::nex
 fn 12760 <ignite_io::report::CATCHING::{K#0}::{closure#1} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::Cell<usize>>>,)>>::call_once
 fn 9480 std.json.write_value
 fn 8680 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::text::ignite_rt_int_to_text::{closure#0}>, ()>
-fn 8600 <core::ffi::c_str::CStr>::from_bytes_with_nul
+fn 8400 <core::ffi::c_str::CStr>::from_bytes_with_nul
 fn 8340 ignite_io::text::index_of::<&[u8], &[u8]>
 fn 8320 std.json.write_value'2
 fn 8160 <ignite_rt::IgniteList>::from_bytes
 fn 8160 ignite_io::fs::check
-fn 7700 ignite.grow.llvm.16071189956402355218
+fn 7700 ignite.grow.llvm.711717171800036180
 fn 7640 std.protocol.http.render_fields
 fn 7260 free
 fn 7200 ignite_io::report::catch::<(), ignite_rt::text::ignite_rt_int_to_text::{closure#0}>
@@ -391,7 +391,7 @@ fn 1740 std.protocol.http.header
 fn 1720 ignite_io::report::catch::<(), ignite_rt::fail::ignite_rt_guard_callback::{closure#0}>
 fn 1720 std.protocol.http.render_framed
 fn 1680 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::text::ignite_rt_int_parse::{closure#0}>, i8>
-fn 1660 0x0000000000098350'2
+fn 1660 0x0000000000098320'2
 fn 1640 ignite_io::report::catch::<(), ignite_rt::fail::ignite_rt_guard_pop::{closure#0}>
 fn 1540 <ignite_io::fs::Checked>::through
 fn 1520 <ignite_io::net::Stream>::send
@@ -405,13 +405,13 @@ fn 1440 ignite_rt_bytes_index_of
 fn 1400 ignite_io::parse_int::<&[u8]>
 fn 1400 ignite_rt::fs::ignite_rt_directory_create_directory::{closure#0}::{closure#0}
 fn 1400 ignite_rt::fs::ignite_rt_directory_remove::{closure#0}::{closure#0}
-fn 1380 copy.std.json.Json.llvm.16071189956402355218
+fn 1380 copy.std.json.Json.llvm.711717171800036180
 fn 1380 std.protocol.http.head_authority
 fn 1320 <ignite_io::store::Store<ignite_rt::store::HeapValue>>::read::<(), ignite_rt::store::ignite_rt_store_get::{closure#0}::{closure#0}>
 fn 1320 <ignite_io::wait::LockGuard<ignite_io::net::Out> as core::ops::drop::Drop>::drop
-fn 1320 <u32 as core::fmt::Display>::fmt
 fn 1320 ignite_io::sched::block_alone
 fn 1280 <ignite_io::wait::Lock<ignite_io::net::Out>>::lock
+fn 1240 <u32 as core::fmt::Display>::fmt
 fn 1240 __sigsetjmp
 fn 1240 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::store::ignite_rt_store_update::{closure#0}>, core::option::Option<core::result::Result<(), ()>>>
 fn 1200 ignite_rt::status::<()>
@@ -468,7 +468,7 @@ fn 500 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertU
 fn 480 <alloc::vec::Vec<ignite_rt::fail::Handler>>::pop
 fn 480 ignite_rt_text_from_bytes_lossy
 fn 480 nix::fcntl::openat::<str, std::os::fd::owned::BorrowedFd>
-fn 460 0x0000000000093a50'2
+fn 460 0x0000000000093a20'2
 fn 460 ignite_rt::arena::alloc_slow
 fn 460 ignite_rt::net::with_stream::<(), ignite_rt::net::ignite_rt_tcp_write_all::{closure#0}::{closure#0}>::{closure#1}
 fn 460 ignite_rt::net::with_stream::<ignite_rt::IgniteInput, ignite_rt::net::ignite_rt_tcp_read::{closure#0}::{closure#0}>::{closure#1}
@@ -516,7 +516,7 @@ syscall 20 unlinkat
 syscall 20 write
 op delete
 times 20
-instructions 636647 runs 636647 636647 636647 636647 636647
+instructions 636367 runs 636367 636367 636367 636367 636367
 syscalls 380 runs 380 380 380 380 380
 fn 110096 ??? todod
 fn 78159 ??? libc.so.6
@@ -532,8 +532,8 @@ fn 11520 core::slice::raw::from_raw_parts::precondition_check
 fn 9900 core::slice::ascii::is_ascii::runtime
 fn 9900 ignite_io::report::catch::<(), ignite_rt::text::ignite_rt_text_from_bytes_lossy::{closure#0}>
 fn 9480 <ignite_io::report::CATCHING::{K#0}::{closure#1} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::Cell<usize>>>,)>>::call_once
-fn 8600 <core::ffi::c_str::CStr>::from_bytes_with_nul
 fn 8440 ignite_io::fs::check
+fn 8400 <core::ffi::c_str::CStr>::from_bytes_with_nul
 fn 8055 <ignite_rt::arena::STATE::{K#0}::{closure#1} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::UnsafeCell<ignite_rt::arena::State>>>,)>>::call_once
 fn 7260 free
 fn 6760 <core::str::lossy::Utf8Chunks as core::iter::traits::iterator::Iterator>::next
@@ -550,7 +550,7 @@ fn 5280 std.json.write_value'2
 fn 4800 <alloc::vec::Vec<&str> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<&str, core::iter::adapters::filter::Filter<core::str::iter::Split<char>, ignite_io::fs::check::{closure#1}>>>::from_iter
 fn 4760 <ignite_io::store::Store<ignite_rt::store::HeapValue>>::try_replace_with::<(), (), ignite_rt::store::ignite_rt_store_update::{closure#0}::{closure#0}, ignite_rt::store::ignite_rt_store_update::{closure#0}::{closure#1}>
 fn 4440 std.protocol.http.segments
-fn 4400 ignite.grow.llvm.16071189956402355218
+fn 4400 ignite.grow.llvm.711717171800036180
 fn 4340 <ignite_io::census::Counting as core::alloc::global::GlobalAlloc>::alloc
 fn 4320 ignite_rt::arena::with_task::<core::result::Result<*mut u8, alloc::string::String>, ignite_rt::arena::alloc_slow::{closure#0}>::{closure#0}
 fn 4220 std.protocol.http.asked
@@ -597,10 +597,10 @@ fn 1400 ignite_rt::fs::ignite_rt_directory_remove::{closure#0}::{closure#0}
 fn 1380 std.protocol.http.head_authority
 fn 1320 <ignite_io::store::Store<ignite_rt::store::HeapValue>>::read::<(), ignite_rt::store::ignite_rt_store_get::{closure#0}::{closure#0}>
 fn 1320 <ignite_io::wait::LockGuard<ignite_io::net::Out> as core::ops::drop::Drop>::drop
-fn 1320 <u32 as core::fmt::Display>::fmt
 fn 1320 ignite_io::sched::block_alone
 fn 1300 std.protocol.http.trimmed_in
 fn 1280 <ignite_io::wait::Lock<ignite_io::net::Out>>::lock
+fn 1240 <u32 as core::fmt::Display>::fmt
 fn 1240 __sigsetjmp
 fn 1240 std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<ignite_rt::store::ignite_rt_store_update::{closure#0}>, core::option::Option<core::result::Result<(), ()>>>
 fn 1200 ignite_rt::status::<()>
@@ -715,9 +715,9 @@ syscall 20 unlinkat
 syscall 20 write
 op connection
 times 20
-instructions 469930 runs 469930 469930 469930 469930 469930
+instructions 469917 runs 469917 469917 469917 469917 469917
 syscalls 246 runs 246 246 246 246 246
-fn 65499 ??? libc.so.6
+fn 65486 ??? libc.so.6
 fn 29435 ??? todod
 fn 13789 malloc
 fn 13280 <core::fmt::Formatter>::pad_integral

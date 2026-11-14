@@ -1,16 +1,16 @@
 path-cost counts
 scenario terminal
 target llvm
-release v0.16.3
+release v0.16.4
 script 615d4b71f44c5c7022bd4feb0ccab8d7be02c6e8aeae1059cd4606447f2c890d
 file 633057460dd46491e354fcd49de5c92e22a849641373bb5acdd15b52eeae5d3c terminal.ignite
 file 5f111eb1cf4e35d034dad2a3976a2292658fcb1b309d3b2719fc955d374fb862 commands.ignite
 file 43c2f9b1eac5848791a75884f8bbd7304c7ddd8bc028d8b4758743785ff802c0 command_schema.ignite
 op start
-instructions 304805 runs 304805 304805 304805 304805 304805
+instructions 304802 runs 304802 304802 304802 304802 304802
 syscalls 76 runs 76 76 76 76 76
-fn 274256 ??? ld-linux-x86-64.so.2
-fn 6416 ??? libc.so.6
+fn 274279 ??? ld-linux-x86-64.so.2
+fn 6390 ??? libc.so.6
 fn 2325 <core::ops::range::Range<usize> as core::iter::traits::iterator::Iterator>::fold::<(), core::iter::adapters::map::map_fold<usize, ignite_rt::net::Slot, (), ignite_rt::net::slot_at::{closure#0}, core::iter::traits::iterator::Iterator::for_each::call<ignite_rt::net::Slot, <alloc::vec::Vec<ignite_rt::net::Slot>>::extend_trusted<core::iter::adapters::map::Map<core::ops::range::Range<usize>, ignite_rt::net::slot_at::{closure#0}>>::{closure#0}>::{closure#0}>::{closure#0}>
 fn 1228 malloc
 fn 1183 ??? terminald
@@ -185,9 +185,9 @@ syscall 1 socket
 syscall 1 write
 op session
 times 10
-instructions 245028 runs 245028 245028 245028 245028 245028
+instructions 245002 runs 245002 245002 245002 245002 245002
 syscalls 126 runs 126 126 126 126 126
-fn 39751 ??? libc.so.6
+fn 39725 ??? libc.so.6
 fn 22257 ??? terminald
 fn 7193 malloc
 fn 6148 free

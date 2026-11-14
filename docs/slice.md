@@ -678,8 +678,8 @@ meaning. The generator emits exactly the Rust on the right.
 | `t.starts_with(p)` | `t.starts_with(&p)`; `t.starts_with("..")` for a literal (20.3.7) | |
 | `t.strip_prefix(p)` | `t.strip_prefix(&p).map(\|s\| s.to_string())`; a literal as a `&str` (20.3.7) | |
 | `t.concat(u)` | `format!("{}{}", t, u)` | |
-| `t.to_bytes()` | `t.clone().into_bytes()`; `t.into_bytes()` when `t` is a fresh text nothing else owns (a literal, a `+` chain or interpolation, `to_text` of Int, Byte or Bool, `concat`, `trim`) | `t.as_bytes()` to a lent bytes parameter and in the other borrowed forms of 20.3.7 |
-| `b.to_text()` | `String::from_utf8_lossy(&b).into_owned()` | |
+| `t.to_bytes()` | `t.clone().into_bytes()`; `t.into_bytes()` when `t` is a fresh text nothing else owns (a literal, a `+` chain or interpolation, `to_text` of Int, Byte or Bool, `concat`, `trim`) or a variable read for the last time ("Text and bytes read in place", below) | `t.as_bytes()` to a lent bytes parameter and in the other borrowed forms of 20.3.7 |
+| `b.to_text()` | `String::from_utf8_lossy(&b).into_owned()`; `String::from_utf8(b).unwrap_or_else(\|e\| String::from_utf8_lossy(e.as_bytes()).into_owned())` when `b` is a variable read for the last time (below) | |
 | `b.slice(i, j).to_text()` | `String::from_utf8_lossy(::ignite_io::checked::slice_ref(&b, i, j, <site>)).into_owned()`: the slice is borrowed, not copied, with the failure of `checked::slice` | Bytes |
 | `b.index_of(n, i) -> Option<Int>` | `::ignite_io::text::index_of(&b, &n, i)`: the offset of the first `n` at or after `i` (a negative `i` reads as 0; `None` when `i` is past the end, also for an empty `n`), by a scan for the first byte of `n` eight bytes at a time (a word XOR eight copies of the byte, then the zero-byte test) and a compare of the rest (story `unsafe-sites-back`; before, `memchr` or `memmem`: the word scan costs no more instructions per request of `todod`); `t.to_bytes()` and a checked `slice` are borrowed, not copied. The LLVM runtime's `bytes_index_of` calls the same function (-1 for `None`). Story `text-fast-search` | Bytes |
 | `t.pieces(s) -> List<Text>` | `::ignite_io::text::pieces(&t, &s)`: the texts between the separators, empty pieces kept, `[t]` for an empty `s`; no piece is checked for UTF-8 again, since valid text cut at a valid separator stays valid. `std.text.split` is this builtin. The LLVM runtime's `text_pieces` uses the same search. Story `text-fast-search` | Text |
@@ -799,6 +799,56 @@ count): that path reads no constant built once. A form that is cheaper still, a 
 str` or `&'static [u8]` Rust builds at compile time, was not taken: every reference parameter
 is a `&String` or `&Vec<u8>`, so such a constant would need a second calling convention or a
 copy at each use that passes it on. `CODEGEN_REVISION` is `ignite-codegen/0.1.0-54` since this unit.
+
+**Text and bytes read in place.** Story `rust-target-text-reads-borrow` (section 44 for its
+counts; `CODEGEN_REVISION` is `ignite-codegen/0.1.0-55` since this unit). Three forms that
+copied a `Text` or `Bytes` only to read it, or to turn it into the other, read it where it is:
+
+- *The bytes of a text, only read.* `let b = t.to_bytes()` is `let b: &[u8] = t.as_bytes();`
+  under the conditions of 20.3.7, and a read as a slice now includes the list of a `for`
+  (`for c in b`, `(b).iter().copied()`), so the reported loops over the bytes of a text and
+  over the bytes of a constant (`let digits = DIGITS.to_bytes()`, `DIGITS().as_bytes()`) copy
+  nothing. A `Bytes` parameter whose body iterates it is a lent bytes parameter for the same
+  reason (`ModuleTypes::lent_bytes`).
+- *The payload of a lent option, only read.* `let b = match o { Some(x) => x  None => return
+  .. }`, where `o` is a place the `match` lends ("`match` on a place", above), every arm's value
+  is a lent `Bytes` binding of its own pattern or leaves the block (`return`, `break`,
+  `continue`), and the statements after it read `b` as the `let` of `t.to_bytes()` must, is
+  `let b: &[u8] = match o { Some(x) => x, None => return .. };`, the binding not copied.
+- *A buffer taken at its last use.* `b.to_text()` on a `Bytes` variable, and `t.to_bytes()` on
+  a `Text` variable, that the fn owns (a local, a pattern binding of a value, a consumed
+  parameter; not a borrowed parameter or binding, not a capture) and that the call reads for
+  the last time hands the variable's buffer to the result: `String::from_utf8(b)`, which falls
+  back to the lossy copy only for bytes that are not UTF-8, and `t.into_bytes()`. The last use
+  is the moves analysis' (`TypedProgram::takes_buffer`, a set of its own beside the moves of
+  20.3: dead after the call, not pinned by an enclosing `match` or `for`, not held by an
+  operand of an enclosing call; a binding of a `match` on a place is not tracked there and is
+  not taken). The marks of `TypedProgram::moves` do not change. Where a `let` above lends
+  bytes out of such a variable and the take happens while they are still read, or a lent
+  tuple's arm takes an item's buffer, the lending form is not used and the bytes or the tuple
+  are copied as before (`ownership::taken_in`).
+
+Guards, each a test that gives the evaluator's value on both targets
+(`text_reads::a_text_or_payload_read_in_place_keeps_the_evaluator_value_on_both_targets`): a
+text changed, moved into a callee that changes it, given to `spawn`, captured by a closure that
+outlives a change, or changed by a loop while its bytes are read; an option replaced while its
+payload is read; bytes turned into text and changed after, and bytes that are not UTF-8.
+
+Not read in place, and what decides it (forms 3, 4 and 5 of the story, a unit of their own): a
+by-value parameter is lent (`&T`) unless its fn consumes it (20.3.3), whatever its callers
+pass. So `dedupe(cols: List<(Text, Val)>)` copies each element it keeps although its only
+caller builds the list for the call and never reads it again, `cells_to_row` copies the name
+of each lent `Cell` it keeps and passes its payload lent to `decode_cell`, and
+`bytes_of(w: Wire)` copies the text of `WTxt(t) => t.to_bytes()`. Taking such a parameter by
+value needs what every caller passes, and the analysis decides each fn from its body alone. A
+fn of the program's own module has every caller in that module (no module can import the
+program's module, E031 of 4.1, and the module is typed in one pass), so a rule over callers
+can decide it there; that rule is not written yet. A fn of `std` or of a sibling module of the
+package (4.1 exports every declaration) is called from modules compiled later, and a rule over
+the callers of its own module would leave those to copy where they do not pass a last use.
+`std.protocol.mysql`'s row readers turn a text cell's
+bytes into text themselves (`text_cell`, `is_text`), where they own the bytes, so the text
+takes the buffer `take_bytes` sliced out instead of a copy of it.
 
 The generator reads types (`generate_typed`, `generate_std_typed`) for UFCS, fn-field calls,
 `to_text`, `+` on `Text`, constant patterns and variants resolved by expected type; without
@@ -7369,7 +7419,8 @@ against the parameter, an extra copy and never a missed one.
   closure or a `spawn`, and that nothing assigns.
 - *Lent bytes* (`ModuleTypes::lent_bytes`, `TypedProgram::lent_bytes`): a `Bytes` parameter that
   is not consumed and that its body reads only as a slice (`TypedProgram::reads_as_slice`):
-  every use is the receiver of `len`, `is_empty`, `at`, `slice` or `to_text`, or a positional
+  every use is the receiver of `len`, `is_empty`, `at`, `slice` or `to_text`, the list of a
+  `for` (since story `rust-target-text-reads-borrow`), or a positional
   argument to a lent bytes parameter, outside any closure or `spawn`, never assigned. The
   greatest fixpoint over the module's fns, so a recursive call keeps it.
 
@@ -12077,3 +12128,72 @@ builtin methods of `List` nor `std` had a sort, and a `Map` orders only by a uni
   differential corpus.
 - `list::tests::merge_sort_is_stable_and_ascending` in `crates/ignite-rt`: every length up to
   69 with repeating keys.
+
+## 44 A text or byte string that is only read is not copied on the Rust target
+
+Story `rust-target-text-reads-borrow`. The first user of `std.protocol.mysql` (a read-only
+HTTP service backed by MySQL 8 over TLS, Rust target, release build) ranked copies of `Text`
+second among the allocations of its largest answer once lists were shared, and reduced its
+five functions to one synthetic program. The lowering is section 6, "Text and bytes read in
+place"; this section holds the counts.
+
+### 44.1 The reduced program
+
+`text_reads::PROGRAM` in `crates/ignite/tests/text_reads.rs`: `escape_into` and `all_digits`
+(form 1, the bytes of a text and of a constant read by a loop), `decode_cell` (form 2, the
+payload of a lent `Option<Bytes>` turned into text), `dedupe` and `cells_to_row` (forms 3 and
+4, lists their callers are done with), `bytes_of` (form 5, a text payload returned as bytes)
+and `slots_of`, which builds the cells of a row. Allocations per call on the Rust target
+(memcheck's `total heap usage`, a run of 1,001 calls less a run of 1, over 1,000; dev build),
+over a text of `M` = 10 and 200 bytes, and per element of a row between `slots_of` and the
+result of `cells_to_row` (the row of 200 less the row of 10, over 190):
+
+| form | count | before | after |
+|---|---|---|---|
+| 1 | `escape_into`, per call | 1.000, 1.006 | 0.000, 0.001 |
+| 1 | `all_digits` (a constant), per call | 2.005, 2.000 | 0.000, 0.000 |
+| 2 | `decode_cell`, per call | 2.000, 2.006 | 1.000, 1.001 (the text kept) |
+| 5 | `bytes_of`, per call | 1.000, 1.001 | 1.000, 1.001 |
+| 3, 4 | `slots_of` and `cells_to_row`, per element | 7.063 | 6.063 |
+
+Form 1 starts from one allocation less than the report said for the constant: it is built
+once (section 6, "Constants"). Forms 3, 4 and 5 keep their copies (section 6 says why): per
+element the name is copied by `slots_of`, by `cells_to_row` (`c.name.clone()`, the cell is
+lent) and by `dedupe` (`c.clone()`, the list is lent), the value by `bytes_of`, into text by
+`decode_cell` and again by `dedupe`. The story's bar for them, at most one copy per element,
+is not met here and is a unit of its own.
+
+`std.protocol.mysql`: a text cell of `read_text_row` and of `read_binary_row` went from 2.021
+to 1.021 allocations (a row of 200 cells of 8 bytes less a row of 10, over 190), the slice
+`take_bytes` makes, whose buffer the text now takes
+(`text_reads::a_text_cell_of_a_mysql_row_takes_the_buffer_of_its_bytes`).
+
+The LLVM target, unchanged: under 0.002 `malloc` calls per call for every form at both sizes
+and per row of cells, before and after; what a task's arena takes is not a `malloc` and is
+not in this count (as for `constants::`). Its values are the Rust target's and the
+evaluator's.
+
+`examples/` on the Rust target, release, the compiler and std of v0.16.3 against this change:
+`todod` stripped 878,752 to 878,832 bytes, `terminald` 600,176 both; a `GET /todos/1` of
+`todod` 19,173 to 19,195 instructions (callgrind, 200 replies after 50 on one connection,
+counters zeroed between), 0.12 % more; row 3.10 judges the frozen scenario of that path, with
+a band of a thousandth at least (`docs/quality.md`). Two golden lines changed: a reply
+handed to `write_all` without a copy (`modules.std.rs`) and a `Bytes` parameter a loop reads
+lent as `&[u8]` (`syntax.rs`); row 3.1 `rust` 156 to 155.
+
+### 44.2 Tests
+
+- `text_reads::` in `crates/ignite`: the counts above held (red first: 1, 2, 2 and 7.063 where
+  0, 0, 1 and 6 are held; 2.021 per MySQL cell where 1 is), the program's five inline tests on
+  the evaluator and both targets, and nine guards (section 6) on all three.
+- `text_reads::` in `crates/ignite-rustgen`: the emitted forms, and the copies a value read
+  after, a text changed while its bytes are read and a text taken while they are read keep.
+- `text_reads_adversary::` in both crates (the adversary pass): 7 programs with 33 inline tests
+  on the evaluator and both targets (the lent bytes alive across every way the text changes or
+  moves, buffers taken in loops, arms, closures and operands, a lent bytes parameter through
+  every kind of caller, text of bytes that are not UTF-8 in seven shapes, crafted text and
+  binary MySQL rows with the strings the decoder gave before the change) and 6 cases on the
+  emitted text. Eleven mutants of the checks: ten are killed, five of them only by these
+  cases; the eleventh (`taken_in` in `touched_in`) changes nothing, a shared binding is never
+  a `Text` or `Bytes`. `ignite check --json` over the 668 `.ignite` files of the repository
+  gives the same output before and after the unit.

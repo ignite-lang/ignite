@@ -412,7 +412,7 @@
           "value": 90
         },
         "rust": {
-          "value": 156
+          "value": 155
         }
       },
       "direction": "lower",
@@ -427,43 +427,43 @@
       "area": "Generated code and runtime behaviour",
       "bars": {
         "all/design/check/instructions": {
-          "value": 851984229
+          "value": 853115818
         },
         "all/design/check/syscalls": {
-          "value": 74
+          "value": 75
         },
         "all/design/plan/instructions": {
-          "value": 857679569
+          "value": 858815028
         },
         "all/design/plan/syscalls": {
           "value": 75
         },
         "llvm/design/build/instructions": {
-          "value": 2227556478
+          "value": 2236436054
         },
         "llvm/design/build/syscalls": {
-          "value": 14934
+          "value": 14977
         },
         "llvm/terminal/session/instructions": {
-          "value": 245028
+          "value": 245002
         },
         "llvm/terminal/session/syscalls": {
           "value": 126
         },
         "llvm/terminal/start/instructions": {
-          "value": 304805
+          "value": 304802
         },
         "llvm/terminal/start/syscalls": {
           "value": 76
         },
         "llvm/todo/connection/instructions": {
-          "value": 469930
+          "value": 469917
         },
         "llvm/todo/connection/syscalls": {
           "value": 246
         },
         "llvm/todo/delete/instructions": {
-          "value": 636647
+          "value": 636367
         },
         "llvm/todo/delete/syscalls": {
           "value": 380
@@ -475,61 +475,61 @@
           "value": 40
         },
         "llvm/todo/patch/instructions": {
-          "value": 930498
+          "value": 930218
         },
         "llvm/todo/patch/syscalls": {
           "value": 380
         },
         "llvm/todo/start/instructions": {
-          "value": 321822
+          "value": 321791
         },
         "llvm/todo/start/syscalls": {
           "value": 80
         },
         "rust/design/build/instructions": {
-          "value": 1163103416
+          "value": 1165423497
         },
         "rust/design/build/syscalls": {
           "value": 74
         },
         "rust/terminal/session/instructions": {
-          "value": 131735
+          "value": 131722
         },
         "rust/terminal/session/syscalls": {
           "value": 120
         },
         "rust/terminal/start/instructions": {
-          "value": 369116
+          "value": 369121
         },
         "rust/terminal/start/syscalls": {
           "value": 100
         },
         "rust/todo/connection/instructions": {
-          "value": 225727
+          "value": 225714
         },
         "rust/todo/connection/syscalls": {
           "value": 227
         },
         "rust/todo/delete/instructions": {
-          "value": 532880
+          "value": 530585
         },
         "rust/todo/delete/syscalls": {
           "value": 300
         },
         "rust/todo/get/instructions": {
-          "value": 303865
+          "value": 303778
         },
         "rust/todo/get/syscalls": {
           "value": 40
         },
         "rust/todo/patch/instructions": {
-          "value": 798633
+          "value": 789639
         },
         "rust/todo/patch/syscalls": {
           "value": 300
         },
         "rust/todo/start/instructions": {
-          "value": 386829
+          "value": 386833
         },
         "rust/todo/start/syscalls": {
           "value": 104
@@ -550,13 +550,13 @@
           "value": 7264152
         },
         "llvm/terminald/release": {
-          "value": 1394448
+          "value": 1394120
         },
         "llvm/todod/dev": {
           "value": 7969480
         },
         "llvm/todod/release": {
-          "value": 1967384
+          "value": 1967072
         },
         "rust/terminald/dev": {
           "value": 6344576
@@ -593,7 +593,7 @@
           "value": 1254
         },
         "llvm/todo/get-1": {
-          "value": 1033
+          "value": 1035
         },
         "llvm/todo/get-64": {
           "value": 1322
@@ -602,13 +602,13 @@
           "value": 1203
         },
         "rust/terminal/connect-8": {
-          "value": 971
+          "value": 974
         },
         "rust/terminal/rr-1": {
           "value": 974
         },
         "rust/terminal/rr-64": {
-          "value": 1235
+          "value": 1236
         },
         "rust/todo/get-1": {
           "value": 990
@@ -617,7 +617,7 @@
           "value": 1178
         },
         "rust/todo/patch-16": {
-          "value": 1193
+          "value": 1198
         }
       },
       "direction": "higher",
@@ -683,7 +683,7 @@
           "value": 992
         },
         "llvm/terminal/rr-64": {
-          "value": 397
+          "value": 383
         },
         "llvm/todo/get-1": {
           "value": 961
@@ -701,10 +701,10 @@
           "value": 980
         },
         "rust/terminal/rr-64": {
-          "value": 399
+          "value": 388
         },
         "rust/todo/get-1": {
-          "value": 1004
+          "value": 992
         },
         "rust/todo/get-64": {
           "value": 541
@@ -735,13 +735,13 @@
           "value": 1168
         },
         "llvm/todo/get-1": {
-          "value": 725
+          "value": 722
         },
         "llvm/todo/get-64": {
           "value": 1083
         },
         "llvm/todo/patch-16": {
-          "value": 800
+          "value": 789
         },
         "rust/terminal/connect-8": {
           "value": 912
@@ -750,16 +750,16 @@
           "value": 1058
         },
         "rust/terminal/rr-64": {
-          "value": 803
+          "value": 798
         },
         "rust/todo/get-1": {
-          "value": 750
+          "value": 748
         },
         "rust/todo/get-64": {
           "value": 770
         },
         "rust/todo/patch-16": {
-          "value": 766
+          "value": 757
         }
       },
       "direction": "lower",

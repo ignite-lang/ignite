@@ -15,4 +15,6 @@ mod slice10;
 mod slice16;
 mod slice9;
 mod streams;
+mod text_reads;
+mod text_reads_adversary;
 mod units;

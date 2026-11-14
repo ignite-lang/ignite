@@ -351,6 +351,37 @@ pub fn moved_in_stmts<'a>(
     moved(stack, types)
 }
 
+/// The names whose buffer a `to_text` or `to_bytes` in `e` takes
+/// ([`TypedProgram::takes_buffer`]), closure bodies included. A backend
+/// that hands the buffer on moves the variable there, as [`moved_in`]'s
+/// places move; neither the moves nor this set reads the other.
+pub fn taken_in<'a>(e: &'a Expr, types: &TypedProgram) -> BTreeSet<&'a str> {
+    taken(vec![Node::Expr(e)], types)
+}
+
+/// The names a run of statements takes the buffer of, as [`taken_in`].
+pub fn taken_in_stmts<'a>(
+    stmts: &'a [ignite_syntax::ast::Stmt],
+    types: &TypedProgram,
+) -> BTreeSet<&'a str> {
+    let mut stack = Vec::new();
+    stmts_children(stmts, &mut stack);
+    taken(stack, types)
+}
+
+fn taken<'a>(mut stack: Vec<Node<'a>>, types: &TypedProgram) -> BTreeSet<&'a str> {
+    let mut names = BTreeSet::new();
+    while let Some(node) = stack.pop() {
+        if let Node::Expr(e) = node {
+            if types.takes_buffer(e) {
+                names.extend(place_root(e));
+            }
+            expr_children(e, &mut stack);
+        }
+    }
+    names
+}
+
 fn moved<'a>(mut stack: Vec<Node<'a>>, types: &TypedProgram) -> BTreeSet<&'a str> {
     let mut names = BTreeSet::new();
     while let Some(node) = stack.pop() {

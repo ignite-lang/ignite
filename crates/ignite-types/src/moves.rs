@@ -47,6 +47,9 @@ pub(crate) struct Moves {
     /// The moves that wait for the later arguments of their call
     /// ([`Walk::late_moves`]).
     pub late: NodeMap<()>,
+    /// The receivers of `to_text` and `to_bytes` whose buffer the call may
+    /// take ([`Walk::record_taken`]).
+    pub taken: NodeMap<()>,
     pub consumed: BTreeMap<String, Vec<bool>>,
     pub closures: NodeMap<Vec<bool>>,
 }
@@ -81,7 +84,7 @@ pub(crate) fn analyse(program: &Program, types: &TypedProgram, modules: &TypedMo
         for (body, res) in bodies.iter().zip(&resolved) {
             let Some(key) = &body.key else { continue };
             let own = consumed[key].clone();
-            let (moved, _) = walk(body, res, types, modules, &consumed, &own, false);
+            let (moved, _, _) = walk(body, res, types, modules, &consumed, &own, false);
             let entry = consumed
                 .get_mut(key)
                 .expect("every keyed body has an entry");
@@ -97,6 +100,7 @@ pub(crate) fn analyse(program: &Program, types: &TypedProgram, modules: &TypedMo
         }
     }
     let mut marks: NodeMap<(bool, bool)> = NodeMap::default();
+    let mut taken: NodeMap<bool> = NodeMap::default();
     let mut closures: NodeMap<Vec<bool>> = NodeMap::default();
     for (body, res) in bodies.iter().zip(&resolved) {
         let own = match (&body.key, body.closure) {
@@ -107,7 +111,7 @@ pub(crate) fn analyse(program: &Program, types: &TypedProgram, modules: &TypedMo
             // the moved set; it does not depend on `own`.
             (None, Some(closure)) => {
                 let mut own = changed_params(body);
-                let (moved, _) = walk(body, res, types, modules, &consumed, &own, false);
+                let (moved, _, _) = walk(body, res, types, modules, &consumed, &own, false);
                 for i in moved {
                     own[i] = true;
                 }
@@ -116,8 +120,9 @@ pub(crate) fn analyse(program: &Program, types: &TypedProgram, modules: &TypedMo
             }
             (None, None) => Vec::new(),
         };
-        let (_, found) = walk(body, res, types, modules, &consumed, &own, true);
+        let (_, found, takes) = walk(body, res, types, modules, &consumed, &own, true);
         marks.extend(found);
+        taken.extend(takes.into_iter().filter(|&(_, takes)| takes));
     }
     let mut moves = NodeMap::default();
     let mut late = NodeMap::default();
@@ -132,6 +137,7 @@ pub(crate) fn analyse(program: &Program, types: &TypedProgram, modules: &TypedMo
     Moves {
         moves,
         late,
+        taken: taken.into_keys().map(|k| (k, ())).collect(),
         consumed,
         closures,
     }
@@ -349,7 +355,7 @@ pub(crate) fn lent_bytes(program: &Program, types: &TypedProgram) -> BTreeMap<St
 
 /// Whether `stmts` read the `Bytes` variable `name` only as a slice: every
 /// use is the receiver of `len`, `is_empty`, `at`, `slice`, `to_text` or
-/// `index_of`, or
+/// `index_of`, the list of a `for`, or
 /// an argument by position to a parameter `lends` says is a lent `Bytes`
 /// parameter, outside any closure or `spawn`, and nothing assigns it. A
 /// backend may then hold the bytes as a borrowed slice. Names are not
@@ -361,9 +367,8 @@ pub fn reads_as_slice(
     lends: &dyn Fn(&Callee, usize) -> bool,
 ) -> bool {
     let is_name = |e: &Expr| matches!(&e.kind, ExprKind::Name(id) if id.name == name);
-    let mut roots = Vec::new();
-    stmts_children(stmts, &mut roots);
-    let mut stack: Vec<(Node<'_>, bool)> = roots.into_iter().map(|n| (n, false)).collect();
+    let mut stack: Vec<(Node<'_>, bool)> = Vec::new();
+    slice_read_stmts(stmts, &is_name, false, &mut stack);
     let mut children = Vec::new();
     while let Some((node, nested)) = stack.pop() {
         let e = match node {
@@ -374,6 +379,25 @@ pub fn reads_as_slice(
         let callee = types.callee(e);
         match &e.kind {
             ExprKind::Name(id) if id.name == name => return false,
+            // A block's statements are walked here rather than by
+            // `expr_children`, so that a `for` over `name` inside one is
+            // seen as a statement.
+            ExprKind::Block(block) => {
+                slice_read_stmts(&block.stmts, &is_name, nested, &mut stack);
+                continue;
+            }
+            ExprKind::If {
+                cond,
+                then,
+                otherwise,
+            } => {
+                stack.push((Node::Expr(cond), nested));
+                if let Some(otherwise) = otherwise {
+                    stack.push((Node::Expr(otherwise), nested));
+                }
+                slice_read_stmts(&then.stmts, &is_name, nested, &mut stack);
+                continue;
+            }
             ExprKind::Method { receiver, args, .. } if !nested && is_name(receiver) => {
                 let read = match callee {
                     Some(Callee::Builtin(b)) => matches!(
@@ -431,6 +455,39 @@ pub fn reads_as_slice(
         stack.extend(children.drain(..).map(|n| (n, inner)));
     }
     true
+}
+
+/// The nodes of `stmts` for [`reads_as_slice`], each with `nested`: as
+/// [`stmts_children`], except that the bodies of loops are walked
+/// statement by statement and the list of a `for` that `is_name` (outside
+/// any closure or `spawn`) is left out, a slice read (the elements are
+/// `Byte`s, read out one at a time).
+fn slice_read_stmts<'a>(
+    stmts: &'a [Stmt],
+    is_name: &dyn Fn(&Expr) -> bool,
+    nested: bool,
+    out: &mut Vec<(Node<'a>, bool)>,
+) {
+    let mut children = Vec::new();
+    for stmt in stmts {
+        match &stmt.kind {
+            StmtKind::For { iter, body, .. } | StmtKind::ForPattern { iter, body, .. } => {
+                if nested || !is_name(iter) {
+                    out.push((Node::Expr(iter), nested));
+                }
+                slice_read_stmts(&body.stmts, is_name, nested, out);
+            }
+            StmtKind::While { cond, body } => {
+                out.push((Node::Expr(cond), nested));
+                slice_read_stmts(&body.stmts, is_name, nested, out);
+            }
+            StmtKind::Loop { body } => slice_read_stmts(&body.stmts, is_name, nested, out),
+            _ => {
+                stmts_children(std::slice::from_ref(stmt), &mut children);
+                out.extend(children.drain(..).map(|n| (n, nested)));
+            }
+        }
+    }
 }
 
 fn key(expr: &Expr) -> NodeId {
@@ -1203,6 +1260,9 @@ struct Walk<'a> {
     /// Parameters some path moves, from the settled round of every loop.
     any_move: BTreeSet<usize>,
     marks: Option<NodeMap<(bool, bool)>>,
+    /// With `marks`, every receiver [`Walk::record_taken`] decided on;
+    /// like `marks`, a later round of a loop overwrites an earlier one.
+    taken: Option<NodeMap<bool>>,
     /// The stack [`Walk::names`] reuses, so the test allocates nothing.
     stack: Vec<Node<'a>>,
 }
@@ -1228,7 +1288,7 @@ fn walk<'a>(
     consumed: &'a BTreeMap<String, Vec<bool>>,
     own: &'a [bool],
     record: bool,
-) -> (BTreeSet<usize>, NodeMap<(bool, bool)>) {
+) -> (BTreeSet<usize>, NodeMap<(bool, bool)>, NodeMap<bool>) {
     let mut w = Walk {
         types,
         modules,
@@ -1241,6 +1301,7 @@ fn walk<'a>(
         loops: Vec::new(),
         any_move: BTreeSet::new(),
         marks: record.then(NodeMap::default),
+        taken: record.then(NodeMap::default),
         stack: Vec::new(),
     };
     let entry = match body.root {
@@ -1253,7 +1314,11 @@ fn walk<'a>(
         .copied()
         .filter(|&i| res.vars.iter().any(|v| v.param == Some(i) && v.tracked))
         .collect();
-    (moved, w.marks.unwrap_or_default())
+    (
+        moved,
+        w.marks.unwrap_or_default(),
+        w.taken.unwrap_or_default(),
+    )
 }
 
 impl<'a> Walk<'a> {
@@ -1466,6 +1531,29 @@ impl<'a> Walk<'a> {
     fn record(&mut self, e: &Expr, moves: bool) {
         if let Some(marks) = &mut self.marks {
             marks.insert(key(e), (moves, false));
+        }
+    }
+
+    /// Decide whether the receiver of `b.to_text()` or `t.to_bytes()`, with
+    /// `st` the state after it, is a last use whose buffer the call may
+    /// take (`docs/slice.md` section 6, "Text and bytes read in place"): a
+    /// whole tracked variable (so no binding of a `match` on a place, 20.3.1),
+    /// a local or a consumed parameter, dead after the call, neither pinned
+    /// by an enclosing `match` or `for` nor held by an operand of an
+    /// enclosing call. A move position's rules, for a receiver, which is no
+    /// move position: the marks of [`record`](Self::record) do not change.
+    fn record_taken(&mut self, receiver: &Expr, st: &State) {
+        let takes = match self.var_place(receiver) {
+            Some(place) if matches!(receiver.kind, ExprKind::Name(_)) => {
+                let own = self.res.vars[place.var]
+                    .param
+                    .is_none_or(|i| self.own.get(i).copied().unwrap_or(false));
+                own && st.live.dead(&place) && !self.pinned(&place) && !self.held_overlaps(&place)
+            }
+            _ => false,
+        };
+        if let Some(taken) = &mut self.taken {
+            taken.insert(key(receiver), takes);
         }
     }
 
@@ -1863,6 +1951,16 @@ impl<'a> Walk<'a> {
                     field,
                     places: None,
                 });
+            }
+            if i == 0
+                && self.taken.is_some()
+                && matches!(e.kind, ExprKind::Method { .. })
+                && matches!(
+                    callee,
+                    Some(Callee::Builtin(Builtin::BytesToText | Builtin::TextToBytes))
+                )
+            {
+                self.record_taken(operand, &st);
             }
             st = match kind {
                 Operand::Read => self.expr(operand, st),

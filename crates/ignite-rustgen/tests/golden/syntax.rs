@@ -149,7 +149,7 @@ pub fn sign(n: &i64) -> String {
     s
 }
 
-pub fn count_spaces(bytes: &Vec<u8>) -> i64 {
+pub fn count_spaces(bytes: &[u8]) -> i64 {
     let mut n = 0;
     for c in (bytes).iter().copied() {
         match c.clone() {
