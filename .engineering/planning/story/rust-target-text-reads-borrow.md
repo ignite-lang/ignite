@@ -6,7 +6,7 @@ status: active
 title: A text or byte string that is only read is not copied on the Rust target
 relations:
 - informed_by: story:rust-target-shared-list-storage
-revision: 5
+revision: 6
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-12T12:37:04Z", actor: "human:timo", revision: 2, executor: "agent:claude-coordinator", correlation: "after-v0.16.2"}
 - {from: "proposed", to: "active", at: "2026-11-12T12:37:04Z", actor: "human:timo", revision: 3, executor: "agent:claude-coordinator", correlation: "after-v0.16.2"}
@@ -76,3 +76,29 @@ Constraints:
 - Row 3.10 (`task path-cost`) now judges one GET of `examples/todo` on the Rust target at every merge.
 - After the generator change every module of `std/` must still build on both targets.
 - The meaning of `to_bytes`, `to_text` and a by-value parameter in the checker and the evaluator does not change.
+
+## Second unit: where it stands
+
+The second unit (forms 3, 4 and 5) is unfinished work on branch `wave/15-text-reads-2`, one commit `26d63103` on top of the first unit (`6f42174a`), pushed. It is not reviewed, not gated and not for a merge as it is.
+
+What the commit holds:
+
+- The rule "By-value parameters given by every caller" (`docs/slice.md` section 6 on the branch; `crates/ignite-types/src/moves.rs`, `Given`): in the program's own module a by-value parameter is declared by value when its fn is only ever called, every call passes a last use or a value built for the call, and the body uses the parameter as an owner. On the Rust target a `for` or `match` over such a parameter at its last use takes it whole (`moves_owned`, `takes_whole`; the driver types the program with `type_program`).
+- Tests on the branch: `crates/ignite/tests/text_reads.rs` (the bars of the forms, a `wire` form, a guard program of 9 inline tests), `crates/ignite-rustgen/tests/text_reads.rs` (2 cases on the emitted text).
+
+What was run: `cargo build -p ignite` exit 0. One run of `cargo test -p ignite --test main text_reads`: 11 passed, 1 failed; the failure was the expected number of inline tests of the guard program in the test itself (10 where it has 9), corrected in the commit and not run again. In that run a row of the reduced program read 2.063 allocations per element (6.063 after the first unit, the unit's bar 2), `decode_cell` 1.000 and 1.001, the `wire` form 1.000 and 1.000, `bytes_of` 1.000 and 1.001.
+
+Not compiled: the tests of `ignite-rustgen` and `ignite-types`. Not run: fmt, clippy, the other lanes of `cargo test -p ignite --test main`, the goldens, row 3.1, the sizes and instruction counts of the head, `ignite check --json` and `ignite emit` over the files of the repository at base and head. `CODEGEN_REVISION` is not bumped for this change. `docs/slice.md` section 44.3 on the branch lacks its paragraph on sizes, instructions and goldens.
+
+To resume, in a managed worktree of the branch rebased on `main`, in this order:
+
+1. `cargo test -p ignite-rustgen --test main text_reads`, then `cargo test -p ignite --test main text_reads` (12 expected).
+2. `cargo test -p ignite-types` (at the base: 10 and 119 passed, 4 ignored) and `cargo test -p ignite-rustgen` (at the base: 180 passed, 1 ignored); bless the goldens and read every changed hunk.
+3. The lanes of `cargo test -p ignite --test main` that hold the moves: `borrowed_reads`, `borrowed_reads_adversary`, `call_moves_adversary`, `call_moves_adversary_pass2`, `moves_cost`, `moves_cost_adversary`, `slice16`, `typed_json`, `check_json`, `shared_lists`, `rust_memory`, `text_reads_adversary` (its programs unchanged).
+4. Row 3.1 (`quality::static_metrics_hold_the_bar`, 155 at the base), sizes of the stripped release binaries, one GET of the todo server, instructions of `ignite check` and `ignite emit` on `std/protocol/mysql.ignite` and the terminal design file at base and head. At the base: check 1,260,411,904 and 853,190,126, emit 1,612,540,075 and 1,164,687,672 (callgrind, debug driver); stripped `todod` 878,848 B, `terminald` 600,192 B.
+5. The marks: this unit changes `TypedProgram::moves`, so `ignite check --json` over every `.ignite` file of the repository at base and head, and the list of every file whose marks change, goes into the PR.
+6. fmt and clippy per crate, the paragraph of section 44.3, a bump of `CODEGEN_REVISION`, one adversary pass, a green `task gate`.
+
+The row of `crates/ignite-types/` in the layout table of `AGENTS.md` does not name the rule, `moves_owned` or `takes_whole`; the implementor's one-row change to that table is not in the commit, because a change to `AGENTS.md` is the operator's to accept. It goes up as its own PR when the unit is merged.
+
+For the adversary pass of this unit, the points the first pass and the implementation leave open: a fn that is called and also used as a value; a caller that passes the same binding twice; a parameter given by every caller and then lent to a `spawn` or captured by a fn value in the body; recursion (the fixpoint over given and consumed); a call inside a loop whose argument is a last use only on the last round; a parameter that the body reads after a `for` took it whole; a program of two modules where the sibling module's fn has the same name.
