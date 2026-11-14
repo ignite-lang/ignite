@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-14T01:25:51Z",
+  "actor": "human:timo",
+  "artifact": "story:rust-target-text-reads-borrow",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "first unit released in v0.16.4, merged as bcd0fd46 (PR 149): task gate on 04eab57b: exit 0, 30 test binaries, 3168 tests passed, none failed"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-14T01:25:51Z",
+  "actor": "human:timo",
+  "artifact": "story:dev-debug-test-and-the-compiler-cache",
+  "kind": "story",
+  "revision": 1,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "release gate of v0.16.4 on 04eab57b, first run: 845 passed, 1 failed, dev_build::dev_todod_links_no_third_party_debug_information, a .dwo file of ignite_rt missing in target/tmp/dev-runtime/configured (the runtime the test builds in its own cargo directory came out of the compiler cache); second run green after that directory was removed and the lane dev_build:: ran under SCCACHE_RECACHE=1"
+  }
+}

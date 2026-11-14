@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-14T01:25:51Z",
+  "actor": "human:timo",
+  "artifact": "story:rust-target-text-reads-borrow",
+  "kind": "story",
+  "revision": 6,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "release v0.16.4, dedicated-host comparison v0.16.3 against 3f221dfb, run iq-20261113t134302z-0527, 5 passes, exit 0: no row worse by the rule of docs/quality.md"
+  }
+}

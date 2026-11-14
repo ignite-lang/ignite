@@ -1,0 +1,12 @@
+{
+  "at": "2026-11-14T01:25:51Z",
+  "actor": "human:timo",
+  "artifact": "story:path-cost-cells-above-v0-16-3",
+  "kind": "story",
+  "revision": 1,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task path-cost on the release commit 3f221dfb against the counts of v0.16.3: 4 of 36 cells above their band (all/design/check, all/design/plan, llvm/design/build, rust/design/build), tracked and not refused; task path-cost RECORD=v0.16.4 wrote the v0.16.4 counts"
+  }
+}

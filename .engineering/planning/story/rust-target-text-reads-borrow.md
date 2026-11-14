@@ -6,7 +6,7 @@ status: active
 title: A text or byte string that is only read is not copied on the Rust target
 relations:
 - informed_by: story:rust-target-shared-list-storage
-revision: 6
+revision: 7
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-12T12:37:04Z", actor: "human:timo", revision: 2, executor: "agent:claude-coordinator", correlation: "after-v0.16.2"}
 - {from: "proposed", to: "active", at: "2026-11-12T12:37:04Z", actor: "human:timo", revision: 3, executor: "agent:claude-coordinator", correlation: "after-v0.16.2"}
@@ -102,3 +102,26 @@ To resume, in a managed worktree of the branch rebased on `main`, in this order:
 The row of `crates/ignite-types/` in the layout table of `AGENTS.md` does not name the rule, `moves_owned` or `takes_whole`; the implementor's one-row change to that table is not in the commit, because a change to `AGENTS.md` is the operator's to accept. It goes up as its own PR when the unit is merged.
 
 For the adversary pass of this unit, the points the first pass and the implementation leave open: a fn that is called and also used as a value; a caller that passes the same binding twice; a parameter given by every caller and then lent to a `spawn` or captured by a fn value in the body; recursion (the fixpoint over given and consumed); a call inside a loop whose argument is a last use only on the last round; a parameter that the body reads after a `for` took it whole; a program of two modules where the sibling module's fn has the same name.
+
+## After the first unit
+
+The first unit (released in v0.16.4, 2026-11-13) holds forms 1 and 2, the buffer taken at its last use and std's MySQL text cell. Its section in `docs/slice.md` is 44; the lowering is in section 6, "Text and bytes read in place".
+
+Met, with the test that holds each:
+
+- Form 1: `escape_into` 1.000 and 1.006 allocations per call to 0.000 and 0.001 (texts of 10 and 200 bytes), `all_digits` 2.005 and 2.000 to 0 (`text_reads::` in `crates/ignite/tests/text_reads.rs`).
+- Form 2: `decode_cell` 2.000 and 2.006 to 1.000 and 1.001, the text that is kept.
+- `b.to_text()` and `t.to_bytes()` on a buffer the fn owns, at its last use, take the buffer; bytes that are not UTF-8 give the evaluator's text.
+- std: a text cell of a MySQL row costs 1.021 allocations per cell where it cost 2.021 (`text_reads::a_text_cell_of_a_mysql_row_takes_the_buffer_of_its_bytes`).
+- The evaluator and the LLVM target give the same values; a text changed, moved, given to `spawn` or captured while its bytes are read gives the evaluator's value (nine guards of the unit, 7 programs of the adversary pass).
+- The LLVM target's counts are written down in `docs/slice.md` section 44: under 0.002 `malloc` calls per call for every form.
+- `CODEGEN_REVISION` is `ignite-codegen/0.1.0-55`.
+
+Not met, the second unit of this story:
+
+- Forms 3 and 4: a row of the reduced program costs 6.063 allocations per element (7.063 before) against the bar of at most one copy of an element between `slots_of` and the result of `cells_to_row`. Form 5 (`bytes_of`): 1.000 per call, unchanged.
+- The first unit left them out with the reason that Ignite has no private fn. The adversary pass showed the reason does not hold for the program's own module: no module can import it (E031), it is typed in one pass, so every caller of one of its fns is known. The rule of the second unit: a by-value parameter of a fn of the program's module is moved into when every call of the fn in that module passes a last use; a fn that is used as a value, and a fn of `std` or of a sibling module, keeps the lent parameter. The rule goes into `docs/slice.md` section 6 with the unit.
+- Whether the first user's five functions are in its program module or in a sibling module is not known; the reduced program has them in one module.
+- The dedicated-host run of the last acceptance bullet: the run of v0.16.4 (`iq-20261113t134302z-0527`, v0.16.3 against `3f221dfb`, 5 passes) shows no row worse by the rule of `docs/quality.md`. It runs no program that reads MySQL rows.
+
+What the adversary pass hands to the second unit: its programs `LIVENESS`, `PARAMETERS`, `OPERANDS`, `OWNED`, `PINNED`, `ESCAPING` in `crates/ignite/tests/text_reads_adversary.rs` must stay green and unchanged; a parameter rule changes the marks of `TypedProgram::moves`, which the first unit did not (`ignite check --json` over the 668 `.ignite` files of the repository gave the same output before and after it), so the second unit lists every file whose marks change.
