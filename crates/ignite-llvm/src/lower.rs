@@ -3420,6 +3420,13 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             };
             self.f.place(&rhs);
             let r = self.expr(right, true);
+            if self.f.is_terminated() {
+                // The right operand left (`return`, `break`, `continue`):
+                // only the short-circuit edge reaches `end`, so the value
+                // is the short-circuit constant and `end` takes no phi.
+                self.f.place(&end);
+                return Val::Scalar(short.to_string());
+            }
             let r = self.scalar(&r);
             let rhs_end = self.f.current().to_string();
             self.f.br(&end);
