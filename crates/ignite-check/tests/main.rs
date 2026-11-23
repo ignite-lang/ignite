@@ -9,6 +9,7 @@ mod layering;
 mod limits;
 mod modules;
 mod named_args;
+mod named_args_adversary;
 mod or_patterns;
 mod ownership_adversary;
 mod terminal;

@@ -56,6 +56,7 @@ mod moves_cost;
 mod moves_cost_adversary;
 mod mysql;
 mod mysql_adversary;
+mod named_args_adversary;
 mod nats;
 mod net_builtins;
 mod open_files_limit;
