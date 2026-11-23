@@ -1,0 +1,148 @@
+package fixtures.short_circuit_return
+
+// `&&` and `||` whose right operand returns, breaks or falls through
+// (story `llvm-short-circuit-with-returning-operand-verifies`, the
+// maintainer review of 2026-11-23). The differential runner
+// (crates/ignite/tests/differential.rs) runs every test on the evaluator
+// and both targets; the LLVM target emitted a phi that named the block the
+// right operand returned from, and the verifier refused the program.
+
+fn keep(p: Bool) -> Bool {
+  p && (return true)
+}
+
+fn keep_or(p: Bool) -> Bool {
+  p || (return false)
+}
+
+fn and_returns(p: Bool) -> Int {
+  if p && (return 7) { 1 } else { 0 }
+}
+
+fn or_returns(p: Bool) -> Int {
+  if p || (return 8) { 1 } else { 0 }
+}
+
+fn and_falls_through(p: Bool, q: Bool) -> Int {
+  if p && (if q { return 9 } else { true }) { 1 } else { 0 }
+}
+
+fn or_falls_through(p: Bool, q: Bool) -> Int {
+  if p || (if q { return 9 } else { false }) { 1 } else { 0 }
+}
+
+fn nested(a: Bool, b: Bool) -> Int {
+  if a && (b || (return 3)) { 1 } else { 0 }
+}
+
+fn nested_or(a: Bool, b: Bool) -> Int {
+  if a || (b && (return 4)) { 1 } else { 0 }
+}
+
+fn left_returns(p: Bool) -> Int {
+  if (return 5) && p { 1 } else { 0 }
+}
+
+fn left_returns_or(p: Bool) -> Int {
+  if (return 6) || p { 1 } else { 0 }
+}
+
+fn left_may_return(p: Bool, q: Bool) -> Int {
+  if (if p { return 2 } else { q }) && q { 1 } else { 0 }
+}
+
+fn left_returns_bool(a: Bool, p: Bool) -> Bool {
+  (return a) || p
+}
+
+fn left_breaks(p: Bool) -> Int {
+  var i = 0
+  while i < 5 {
+    if (break) && p { return 50 }
+    i = i + 1
+  }
+  i + 20
+}
+
+fn left_continues(p: Bool) -> Int {
+  var i = 0
+  var n = 0
+  while i < 5 {
+    i = i + 1
+    if (continue) || p { return 60 }
+    n = n + 1
+  }
+  n + 30
+}
+
+fn kept(p: Bool) -> Int {
+  let v = p && (return 10)
+  if v { 1 } else { 0 }
+}
+
+fn breaks(stop: Bool) -> Int {
+  var i = 0
+  while i < 5 {
+    if i == 2 && (stop || (break)) { return 100 + i }
+    i = i + 1
+  }
+  i
+}
+
+test "&& whose right operand returns" {
+  assert keep(true) == true
+  assert keep(false) == false
+  assert and_returns(true) == 7
+  assert and_returns(false) == 0
+  assert kept(true) == 10
+  assert kept(false) == 0
+}
+
+test "|| whose right operand returns" {
+  assert keep_or(true) == true
+  assert keep_or(false) == false
+  assert or_returns(true) == 1
+  assert or_returns(false) == 8
+}
+
+test "&& and || whose right operand falls through" {
+  assert and_falls_through(true, true) == 9
+  assert and_falls_through(true, false) == 1
+  assert and_falls_through(false, true) == 0
+  assert and_falls_through(false, false) == 0
+  assert or_falls_through(true, true) == 1
+  assert or_falls_through(true, false) == 1
+  assert or_falls_through(false, true) == 9
+  assert or_falls_through(false, false) == 0
+}
+
+test "a returning operand nested in the right operand" {
+  assert nested(true, true) == 1
+  assert nested(true, false) == 3
+  assert nested(false, true) == 0
+  assert nested(false, false) == 0
+  assert nested_or(true, true) == 1
+  assert nested_or(false, true) == 4
+  assert nested_or(false, false) == 0
+}
+
+test "a left operand that returns" {
+  assert left_returns(true) == 5
+  assert left_returns(false) == 5
+  assert left_returns_or(true) == 6
+  assert left_returns_or(false) == 6
+  assert left_may_return(true, true) == 2
+  assert left_may_return(false, true) == 1
+  assert left_may_return(false, false) == 0
+  assert left_returns_bool(false, true) == false
+  assert left_returns_bool(true, false) == true
+  assert left_breaks(true) == 20
+  assert left_breaks(false) == 20
+  assert left_continues(true) == 30
+  assert left_continues(false) == 30
+}
+
+test "a right operand that breaks" {
+  assert breaks(true) == 102
+  assert breaks(false) == 2
+}
