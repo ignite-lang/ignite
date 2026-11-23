@@ -839,17 +839,11 @@ fn run_daemon(file: &Path, executable: &str, program: &str, target: &str, name: 
 /// directory, each a copy of `run_gave_up.ignite` with its own package
 /// and a component executable `daemon` that prints `first` or `second`.
 /// Run through one `--build`, each starts its own executable: the build
-/// stamp holds the entry file. The same entry run twice reuses the build.
-/// The Rust target names the component `entry_daemon`: its executable
-/// lies in the cargo target directory every Rust-target run shares, where
-/// [`exhausted_restarts_give_up_and_stop_exits_1`] builds a `daemon` at
-/// the same time.
+/// stamp holds the entry file. The same entry run twice reuses the build:
+/// the executables the stamp lists, kept in `<build>/bin/`, are untouched
+/// although the Rust-target runs share one cargo target directory, where
+/// [`exhausted_restarts_give_up_and_stop_exits_1`] builds a `daemon` too.
 fn each_entry_file_runs_its_own_executable(target: &str) {
-    let executable = if target == "rust" {
-        "entry_daemon"
-    } else {
-        "daemon"
-    };
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("run-entries-{target}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -863,11 +857,8 @@ fn each_entry_file_runs_its_own_executable(target: &str) {
             .replace(
                 "-> Result<Unit, IoError> = Ok(Unit)",
                 &format!("-> Result<Unit, IoError> = Stdout.write_all(b\"{word}\\n\")"),
-            )
-            .replace("component daemon:", &format!("component {executable}:"))
-            .replace("S.daemon =", &format!("S.{executable} ="));
+            );
         assert_ne!(text, source);
-        assert_eq!(text.matches(executable).count(), 2, "{text}");
         let path = dir.join(format!("{word}.ignite"));
         std::fs::write(&path, text).unwrap();
         path
@@ -881,13 +872,7 @@ fn each_entry_file_runs_its_own_executable(target: &str) {
     }
 
     let run = |file: &Path, program: &str, name: &str| {
-        run_daemon(
-            file,
-            executable,
-            program,
-            target,
-            &format!("{name}-{target}"),
-        )
+        run_daemon(file, "daemon", program, target, &format!("{name}-{target}"))
     };
     let printed = run(&first, &shared, "entry-1");
     let built = stamped_executables(&build_dir(&shared, target));
