@@ -2,12 +2,13 @@
 format: aep.planning-md/3
 id: story:executable-names-unique-across-systems
 kind: story
-status: active
+status: implemented
 title: Two components of different systems cannot share one executable name
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-23T03:51:04Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-23T03:51:05Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-23T21:50:07Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: two components of different systems cannot share one executable name
 

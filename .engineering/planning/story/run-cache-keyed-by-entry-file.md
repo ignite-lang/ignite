@@ -2,12 +2,13 @@
 format: aep.planning-md/3
 id: story:run-cache-keyed-by-entry-file
 kind: story
-status: active
+status: implemented
 title: A shared build directory never starts the executable of another entry file
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-23T03:51:01Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-23T03:51:02Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-23T21:50:05Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: a shared build directory never starts the executable of another entry file
 

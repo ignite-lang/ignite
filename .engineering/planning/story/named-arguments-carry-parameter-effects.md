@@ -2,12 +2,13 @@
 format: aep.planning-md/3
 id: story:named-arguments-carry-parameter-effects
 kind: story
-status: active
+status: implemented
 title: A call with named arguments needs the same effects as the positional call
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-23T03:51:00Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-23T03:51:00Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-23T21:50:04Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: a call with named arguments needs the same effects as the positional call
 

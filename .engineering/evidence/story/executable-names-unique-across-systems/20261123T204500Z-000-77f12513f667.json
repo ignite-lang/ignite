@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-23T20:45:00Z",
+  "actor": "human:timo",
+  "artifact": "story:executable-names-unique-across-systems",
+  "kind": "story",
+  "revision": 3,
+  "change": {
+    "change": "evidence",
+    "kind": "test_result",
+    "source": "task gate, sharded, on e48f64a5 (wave 16); valgrind parts in the container",
+    "reference": "https://github.com/ignite-lang/ignite/pull/150"
+  }
+}
