@@ -6,7 +6,7 @@ status: draft
 title: A local module with a standard-library path in a combined test run
 relations:
 - informed_by: story:combined-test-runs-keep-every-sibling-suite
-revision: 1
+revision: 2
 ---
 # Story: a local module with a standard-library path in a combined test run
 
@@ -22,7 +22,7 @@ Traced: the grouping of test roots leaves standard-library modules out of the se
 
 ## Acceptance
 
-- The adversary's test `combined_tests_adversary::a_local_module_with_a_standard_library_path_keeps_both_suites` passes without its `#[ignore]`, on both targets.
+- The program of the adversary case `a_local_module_with_a_standard_library_path_keeps_both_suites`, in commit `95b030fd` of branch `wave/16-combined-tests`, file `crates/ignite/tests/combined_tests_adversary.rs` (removed from the tree in `865e8ae1` so the count of ignored tests stays at its bar), comes back as a test and passes on both targets.
 - A local root with a standard-library package path that nothing imports keeps its result.
 
 ## Scope

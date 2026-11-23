@@ -7,7 +7,7 @@ title: Arguments and views that a later argument replaces
 relations:
 - informed_by: story:place-receiver-read-before-index-and-prefix-argument
 - informed_by: story:temporary-receiver-evaluated-before-arguments
-revision: 1
+revision: 2
 ---
 # Story: arguments and views that a later argument replaces
 
@@ -25,7 +25,7 @@ Found by the adversary pass on the unit of `story:place-receiver-read-before-ind
 
 ## Acceptance
 
-- The three ignored tests of `crates/ignite/tests/receiver_order_adversary.rs` (`adversary_push_whose_argument_assigns_its_place`, `adversary_a_view_receiver_whose_argument_replaces_its_local`, `adversary_an_argument_replaced_by_a_later_argument`) pass without their `#[ignore]` on the evaluator and both targets.
+- The three adversary cases `adversary_push_whose_argument_assigns_its_place`, `adversary_a_view_receiver_whose_argument_replaces_its_local` and `adversary_an_argument_replaced_by_a_later_argument`, in commit `bc907c82` of branch `wave/16-receiver-order`, file `crates/ignite/tests/receiver_order_adversary.rs` (removed from the tree afterwards so the count of ignored tests stays at its bar), come back as tests and pass on the evaluator and both targets.
 - A call whose arguments cannot change each other emits no new copy on either target (a count test).
 
 ## Scope
