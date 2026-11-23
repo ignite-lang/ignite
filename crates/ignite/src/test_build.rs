@@ -4,12 +4,16 @@
 //! Every file named shares one test executable per target: the standard-
 //! library modules among them and every program, each program in a
 //! namespace of its own (Rust: the module of its module path; LLVM: its
-//! module path, which prefixes every symbol). Only two programs with one
-//! module path (two files without a `package` line are both `main`) cannot
-//! share one, because the runner names a test by `<module>/<name>`; the
-//! second goes into a further executable. Every other module (the standard
-//! library a program loads) is built normally, with its tests dropped. The
-//! executables run one after another, each printing its own report.
+//! module path, which prefixes every symbol). Two programs with one module
+//! path (two files without a `package` line are both `main`) cannot share
+//! one, because the runner names a test by `<module>/<name>`; nor can two
+//! programs whose own and sibling modules give one module path to two
+//! different source files, because an executable holds one module of a
+//! path. The second goes into a further executable; a sibling module file
+//! several executables build runs its tests in one ([`SiblingTests`]).
+//! Every other module (the standard library a program loads) is built
+//! normally, with its tests dropped. The executables run one after another,
+//! each printing its own report.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
@@ -23,8 +27,7 @@ use ignite_types::{TestInfo, TypedModules, TypedProgram};
 
 use crate::{
     BuildOptions, Error, ParsedFile, StdLibrary, Target, diagnostics, io_error, load_std_reachable,
-    module_path, parse, parse_program, program_module, read_source, std_root, type_parsed_with,
-    type_std,
+    module_path, parse_program, std_root, type_parsed_with, type_std,
 };
 
 /// Options of `ignite test`.
@@ -53,44 +56,103 @@ pub struct TestGroup {
 
 /// Split `files` into test groups: each file under the standard library's
 /// root is that module and goes into the first group; every other file is
-/// a program and goes into the first group without a program of its module
-/// path. Programs are read and parsed for their `package` line.
+/// a program and goes into the first group that holds neither a program of
+/// its module path nor a module of one of its module paths (its own and
+/// its siblings', `docs/slice.md` 25.6) from another source file. Programs
+/// are read and parsed with their siblings.
 pub fn test_groups(files: &[PathBuf], library: &StdLibrary) -> Result<Vec<TestGroup>, Error> {
     group_files(files, &library.root, |file| {
-        Ok(program_module(&parse(&read_source(file)?)?))
+        Ok(program_modules(file, &parse_program(file)?))
     })
 }
 
-/// [`test_groups`] over the canonical standard-library `root`, the module
-/// path of a program file given by `module_of`.
+/// A program file's module path and the source file of every module it
+/// builds with, by module path: its own and its siblings'.
+type ProgramModules = (String, BTreeMap<String, PathBuf>);
+
+/// The [`ProgramModules`] of the program `parsed` from `file`, each source
+/// path canonical where it resolves.
+fn program_modules(file: &Path, parsed: &ParsedFile) -> ProgramModules {
+    let module = parsed.module();
+    let mut sources: BTreeMap<String, PathBuf> = parsed
+        .sibling_sources()
+        .map(|(path, source)| (path.to_string(), canonical(source)))
+        .collect();
+    sources.insert(module.clone(), canonical(file));
+    (module, sources)
+}
+
+/// `path` canonical, or as given when it does not resolve.
+fn canonical(path: &Path) -> PathBuf {
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+}
+
+/// Which executable runs the tests of a sibling module (`docs/slice.md`
+/// 12.7): a module file named on the command line runs them in its own
+/// group; every other sibling module file in the first group that builds
+/// it, so one file shared by roots that must build apart runs them once.
+#[derive(Default)]
+struct SiblingTests {
+    /// The module path and canonical file of every program named.
+    named: BTreeSet<(String, PathBuf)>,
+    /// Those of every sibling module whose tests a group already runs.
+    selected: BTreeSet<(String, PathBuf)>,
+}
+
+impl SiblingTests {
+    /// Whether the group being prepared runs the tests of the sibling
+    /// `module` from `source`; a yes holds for no later group.
+    fn run_here(&mut self, module: &str, source: &Path) -> bool {
+        let key = (module.to_string(), canonical(source));
+        !self.named.contains(&key) && self.selected.insert(key)
+    }
+}
+
+/// [`test_groups`] over the canonical standard-library `root`, the
+/// [`ProgramModules`] of a program file given by `modules_of`.
 fn group_files(
     files: &[PathBuf],
     root: &Path,
-    mut module_of: impl FnMut(&Path) -> Result<String, Error>,
+    mut modules_of: impl FnMut(&Path) -> Result<ProgramModules, Error>,
 ) -> Result<Vec<TestGroup>, Error> {
     let mut groups: Vec<TestGroup> = Vec::new();
+    // Per group, the source file of every program module it builds.
+    let mut held: Vec<BTreeMap<String, PathBuf>> = Vec::new();
     for file in files {
         let canonical = file.canonicalize().map_err(io_error(file))?;
         let (module, program) = match canonical.strip_prefix(root) {
             Ok(_) => (module_path(root, &canonical), None),
-            Err(_) => (module_of(file)?, Some(file.clone())),
+            Err(_) => {
+                let (module, sources) = modules_of(file)?;
+                (module, Some((file.clone(), sources)))
+            }
         };
         let index = match &program {
             None => 0,
-            Some(_) => groups
+            Some((_, sources)) => groups
                 .iter()
-                .position(|group| !group.modules.contains(&module))
+                .zip(&held)
+                .position(|(group, held)| {
+                    !group.modules.contains(&module)
+                        && sources
+                            .iter()
+                            .all(|(path, source)| held.get(path).is_none_or(|s| s == source))
+                })
                 .unwrap_or(groups.len()),
         };
         if index == groups.len() {
             groups.push(TestGroup::default());
+            held.push(BTreeMap::new());
         }
         let group = &mut groups[index];
         if group.modules.contains(&module) {
             continue;
         }
         match program {
-            Some(file) => group.programs.push(file),
+            Some((file, sources)) => {
+                group.programs.push(file);
+                held[index].extend(sources);
+            }
             None => group.std_modules.push(module.clone()),
         }
         group.modules.push(module);
@@ -147,7 +209,9 @@ fn prepare_tests(files: &[PathBuf], options: &TestOptions) -> Result<PreparedTes
         }
     }
     let library = load_std_reachable(&root, &roots)?;
-    let groups = group_files(files, &root, |file| Ok(parsed[file].module()))?;
+    let groups = group_files(files, &root, |file| {
+        Ok(program_modules(file, &parsed[file]))
+    })?;
     let (std_types, modules) = type_std(&library)?;
     let std = TypedStd {
         library: &library,
@@ -155,9 +219,24 @@ fn prepare_tests(files: &[PathBuf], options: &TestOptions) -> Result<PreparedTes
         modules: &modules,
     };
     let mut used = BTreeSet::new();
+    let mut siblings = SiblingTests::default();
+    for file in groups.iter().flat_map(|group| &group.programs) {
+        siblings
+            .named
+            .insert((parsed[file].module(), canonical(file)));
+    }
     let groups = groups
         .into_iter()
-        .map(|group| prepare_group(&std, group, &mut parsed, &options.build, &mut used))
+        .map(|group| {
+            prepare_group(
+                &std,
+                group,
+                &mut parsed,
+                &options.build,
+                &mut used,
+                &mut siblings,
+            )
+        })
         .collect::<Result<_, _>>()?;
     Ok(PreparedTests {
         library,
@@ -284,7 +363,8 @@ struct TestProgram {
 /// Add the parsed program and its sibling modules (`docs/slice.md`
 /// section 14.4), checked and typed, to `programs`; a module whose path
 /// `programs` already holds (a sibling also named on the command line, or
-/// named by two programs) is added once.
+/// named by two programs) is added once: [`group_files`] keeps a module
+/// path of two source files out of one group.
 fn type_test_programs(
     parsed: ParsedFile,
     std: &TypedStd<'_>,
@@ -320,6 +400,7 @@ fn prepare_group(
     parsed: &mut BTreeMap<PathBuf, ParsedFile>,
     build: &BuildOptions,
     used: &mut BTreeSet<String>,
+    siblings: &mut SiblingTests,
 ) -> Result<PreparedGroup, Error> {
     let library = std.library;
     let mut programs: Vec<TestProgram> = Vec::new();
@@ -337,11 +418,15 @@ fn prepare_group(
         .chain(programs.iter().map(|p| (p.types.module.as_str(), &p.types)))
         .collect();
     // The tests of the named files, then those of their sibling modules
-    // not named themselves (`docs/slice.md` 25.6).
+    // not named themselves (`docs/slice.md` 25.6) and not run by an
+    // earlier group.
     let mut test_modules = group.modules;
     for program in &programs {
-        if !test_modules.contains(&program.types.module) {
-            test_modules.push(program.types.module.clone());
+        let module = &program.types.module;
+        if !test_modules.contains(module)
+            && siblings.run_here(module, Path::new(&program.source.path))
+        {
+            test_modules.push(module.clone());
         }
     }
     let tests: Vec<TestInfo> = test_modules
@@ -430,6 +515,7 @@ fn build_group(
                 })?;
             ignite_rustgen::write_project(&project, &out).map_err(io_error(&out))?;
             let std_out = out.join("std");
+            ignite_rustgen::own_dir(&std_out).map_err(io_error(&std_out))?;
             ignite_rustgen::write_project(&std_project, &std_out).map_err(io_error(&std_out))?;
             crate::seed_lock(&options.substrate_path, &out)?;
             let target_dir = build
@@ -573,6 +659,60 @@ fn check_runner(runtime: &Path) -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Programs whose module paths, their own and their siblings', name
+    /// different source files go into groups of their own, in either
+    /// order, a named file included; programs sharing a sibling file share
+    /// a group. Real files of this crate stand in for the programs, since
+    /// grouping resolves each named file.
+    #[test]
+    fn a_module_path_of_two_source_files_splits_the_group() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let [one, two, three, shared] =
+            ["src/lib.rs", "src/main.rs", "src/musl.rs", "build.rs"].map(|f| dir.join(f));
+        let (first, second) = (dir.join("a/shared.ignite"), shared.canonicalize().unwrap());
+        let modules = |file: &Path| -> Result<ProgramModules, Error> {
+            let file = file.canonicalize().unwrap();
+            let program = |module: &str, sibling: Option<&PathBuf>| {
+                let mut sources = BTreeMap::from([(module.to_string(), file.clone())]);
+                if let Some(sibling) = sibling {
+                    sources.insert("p.shared".to_string(), sibling.clone());
+                }
+                Ok((module.to_string(), sources))
+            };
+            match file {
+                _ if file == one.canonicalize().unwrap() => program("p.one", Some(&first)),
+                _ if file == three.canonicalize().unwrap() => program("p.three", Some(&first)),
+                _ if file == two.canonicalize().unwrap() => program("p.two", Some(&second)),
+                _ => program("p.shared", None),
+            }
+        };
+        let groups = |files: &[&PathBuf]| -> Vec<Vec<PathBuf>> {
+            let files: Vec<PathBuf> = files.iter().map(|f| (*f).clone()).collect();
+            group_files(&files, &dir.join("no-std"), modules)
+                .unwrap()
+                .into_iter()
+                .map(|group| group.programs)
+                .collect()
+        };
+        assert_eq!(
+            groups(&[&one, &two]),
+            [vec![one.clone()], vec![two.clone()]]
+        );
+        assert_eq!(
+            groups(&[&two, &one]),
+            [vec![two.clone()], vec![one.clone()]]
+        );
+        assert_eq!(
+            groups(&[&one, &shared]),
+            [vec![one.clone()], vec![shared.clone()]]
+        );
+        assert_eq!(
+            groups(&[&two, &shared]),
+            [vec![two.clone(), shared.clone()]]
+        );
+        assert_eq!(groups(&[&one, &three]), [vec![one.clone(), three.clone()]]);
+    }
 
     #[test]
     fn runner_symbol_is_found_across_chunks_and_after_other_members() {

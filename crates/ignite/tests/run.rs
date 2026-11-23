@@ -801,6 +801,107 @@ fn exhausted_restarts_give_up_and_stop_exits_1() {
     run.replay();
 }
 
+/// The executables a build directory's `stamp` lists, each with its inode
+/// and modification time: equal lists before and after a run mean the run
+/// reused the build.
+fn stamped_executables(build: &Path) -> Vec<(PathBuf, u64, std::time::SystemTime)> {
+    use std::os::unix::fs::MetadataExt;
+    let stamp = std::fs::read_to_string(build.join("stamp")).expect("read the build stamp");
+    stamp
+        .lines()
+        .skip(1)
+        .map(|line| {
+            let path = PathBuf::from(line);
+            let metadata = std::fs::metadata(&path).unwrap_or_else(|e| panic!("{line}: {e}"));
+            (path, metadata.ino(), metadata.modified().unwrap())
+        })
+        .collect()
+}
+
+/// One `ignite run` of `file` with `--clock manual` until the supervisor
+/// schedules its first restart, then `stop`; what the run's copied
+/// `<state>/bin/1/<executable>` prints.
+fn run_daemon(file: &Path, executable: &str, program: &str, target: &str, name: &str) -> String {
+    let mut run = Run::start(file, program, target, name, &["--clock", "manual"]);
+    run.wait_note("restart attempt 1 delay 100 ms");
+    let code = run.stop();
+    assert_eq!(code, 0, "stderr:\n{}", run.stderr());
+    run.replay();
+    let daemon = run.state.join("bin/1").join(executable);
+    let output = Command::new(&daemon)
+        .output()
+        .unwrap_or_else(|e| panic!("{}: {e}", daemon.display()));
+    assert!(output.status.success(), "{}", text(&output.stderr));
+    text(&output.stdout)
+}
+
+/// IG-04 (the maintainer review of 2026-11-23): two entry files of one
+/// directory, each a copy of `run_gave_up.ignite` with its own package
+/// and a component executable `daemon` that prints `first` or `second`.
+/// Run through one `--build`, each starts its own executable: the build
+/// stamp holds the entry file. The same entry run twice reuses the build:
+/// the executables the stamp lists, kept in `<build>/bin/`, are untouched
+/// although the Rust-target runs share one cargo target directory, where
+/// [`exhausted_restarts_give_up_and_stop_exits_1`] builds a `daemon` too.
+fn each_entry_file_runs_its_own_executable(target: &str) {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("run-entries-{target}"));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let source = std::fs::read_to_string(fixture("run_gave_up.ignite")).unwrap();
+    let entry = |word: &str| {
+        let text = source
+            .replace(
+                "package fixture_run_gave_up",
+                &format!("package fixture_run_entry_{word}"),
+            )
+            .replace(
+                "-> Result<Unit, IoError> = Ok(Unit)",
+                &format!("-> Result<Unit, IoError> = Stdout.write_all(b\"{word}\\n\")"),
+            );
+        assert_ne!(text, source);
+        let path = dir.join(format!("{word}.ignite"));
+        std::fs::write(&path, text).unwrap();
+        path
+    };
+    let first = entry("first");
+    let second = entry("second");
+    let shared = format!("entries-{target}");
+    let empty = format!("entries-empty-{target}");
+    for program in [&shared, &empty] {
+        let _ = std::fs::remove_dir_all(build_dir(program, target));
+    }
+
+    let run = |file: &Path, program: &str, name: &str| {
+        run_daemon(file, "daemon", program, target, &format!("{name}-{target}"))
+    };
+    let printed = run(&first, &shared, "entry-1");
+    let built = stamped_executables(&build_dir(&shared, target));
+    let again = run(&first, &shared, "entry-1-again");
+    assert_eq!(again, "first\n");
+    assert_eq!(
+        stamped_executables(&build_dir(&shared, target)),
+        built,
+        "the same entry with unchanged sources rebuilt"
+    );
+
+    let printed = [
+        printed,
+        run(&second, &shared, "entry-2"),
+        run(&second, &empty, "entry-2-empty"),
+    ];
+    assert_eq!(printed, ["first\n", "second\n", "second\n"]);
+}
+
+#[test]
+fn each_entry_file_of_one_directory_runs_its_own_executable() {
+    each_entry_file_runs_its_own_executable("llvm");
+}
+
+#[test]
+fn each_entry_file_of_one_directory_runs_its_own_executable_on_the_rust_target() {
+    each_entry_file_runs_its_own_executable("rust");
+}
+
 /// 21.20: under `--clock manual` a member's `Clock.sleep` and `Clock.now`
 /// are real. The member of `run_clock.ignite` sleeps 400 ms of real time,
 /// reads a wall clock after 2026 although the run's epoch is 2000, and

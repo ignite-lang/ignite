@@ -1,0 +1,298 @@
+{
+  "assembly": null,
+  "components": [
+    {
+      "declaration": "component",
+      "defaults": [],
+      "executable": null,
+      "id": "U.argument",
+      "kind": "uses_edges.Sized",
+      "outputs": {},
+      "properties": {
+        "size": 7
+      }
+    },
+    {
+      "declaration": "component",
+      "defaults": [],
+      "executable": null,
+      "id": "U.arm",
+      "kind": "uses_edges.Sized",
+      "outputs": {},
+      "properties": {
+        "size": 7
+      }
+    },
+    {
+      "declaration": "component",
+      "defaults": [],
+      "executable": null,
+      "id": "U.base",
+      "kind": "uses_edges.Box",
+      "outputs": {},
+      "properties": {
+        "size": 7
+      }
+    },
+    {
+      "declaration": "component",
+      "defaults": [],
+      "executable": null,
+      "id": "U.block",
+      "kind": "uses_edges.Sized",
+      "outputs": {},
+      "properties": {
+        "size": 7
+      }
+    },
+    {
+      "declaration": "component",
+      "defaults": [],
+      "executable": null,
+      "id": "U.branch",
+      "kind": "uses_edges.Sized",
+      "outputs": {},
+      "properties": {
+        "size": 7
+      }
+    },
+    {
+      "declaration": "component",
+      "defaults": [],
+      "executable": null,
+      "id": "U.closure",
+      "kind": "uses_edges.Sized",
+      "outputs": {},
+      "properties": {
+        "size": 7
+      }
+    },
+    {
+      "declaration": "component",
+      "defaults": [],
+      "executable": null,
+      "id": "U.condition",
+      "kind": "uses_edges.Sized",
+      "outputs": {},
+      "properties": {
+        "size": 7
+      }
+    },
+    {
+      "declaration": "component",
+      "defaults": [],
+      "executable": null,
+      "id": "U.direct",
+      "kind": "uses_edges.Sized",
+      "outputs": {},
+      "properties": {
+        "size": 7
+      }
+    },
+    {
+      "declaration": "component",
+      "defaults": [],
+      "executable": null,
+      "id": "U.index",
+      "kind": "uses_edges.Sized",
+      "outputs": {},
+      "properties": {
+        "size": 7
+      }
+    },
+    {
+      "declaration": "component",
+      "defaults": [],
+      "executable": null,
+      "id": "U.list",
+      "kind": "uses_edges.Sized",
+      "outputs": {},
+      "properties": {
+        "size": 1
+      }
+    },
+    {
+      "declaration": "component",
+      "defaults": [],
+      "executable": null,
+      "id": "U.nested",
+      "kind": "uses_edges.Sized",
+      "outputs": {},
+      "properties": {
+        "size": 7
+      }
+    },
+    {
+      "declaration": "component",
+      "defaults": [],
+      "executable": null,
+      "id": "U.otherwise",
+      "kind": "uses_edges.Sized",
+      "outputs": {},
+      "properties": {
+        "size": 7
+      }
+    },
+    {
+      "declaration": "component",
+      "defaults": [],
+      "executable": null,
+      "id": "U.plain",
+      "kind": "uses_edges.Sized",
+      "outputs": {},
+      "properties": {
+        "size": 7
+      }
+    },
+    {
+      "declaration": "component",
+      "defaults": [],
+      "executable": null,
+      "id": "U.pointer",
+      "kind": "uses_edges.Pointer",
+      "outputs": {},
+      "properties": {
+        "target": {
+          "ref": "U.base",
+          "type": "Ref"
+        }
+      }
+    },
+    {
+      "declaration": "component",
+      "defaults": [],
+      "executable": null,
+      "id": "U.scrutinee",
+      "kind": "uses_edges.Sized",
+      "outputs": {},
+      "properties": {
+        "size": 7
+      }
+    },
+    {
+      "declaration": "component",
+      "defaults": [],
+      "executable": null,
+      "id": "U.tuple",
+      "kind": "uses_edges.Sized",
+      "outputs": {},
+      "properties": {
+        "size": 7
+      }
+    }
+  ],
+  "contracts": [],
+  "edges": [
+    {
+      "from": "U.argument",
+      "kind": "uses",
+      "to": "U.base"
+    },
+    {
+      "from": "U.arm",
+      "kind": "uses",
+      "to": "U.base"
+    },
+    {
+      "from": "U.block",
+      "kind": "uses",
+      "to": "U.base"
+    },
+    {
+      "from": "U.branch",
+      "kind": "uses",
+      "to": "U.base"
+    },
+    {
+      "from": "U.closure",
+      "kind": "uses",
+      "to": "U.base"
+    },
+    {
+      "from": "U.condition",
+      "kind": "uses",
+      "to": "U.base"
+    },
+    {
+      "from": "U.direct",
+      "kind": "uses",
+      "to": "U.base"
+    },
+    {
+      "from": "U.index",
+      "kind": "uses",
+      "to": "U.base"
+    },
+    {
+      "from": "U.list",
+      "kind": "uses",
+      "to": "U.base"
+    },
+    {
+      "from": "U.nested",
+      "kind": "uses",
+      "to": "U.base"
+    },
+    {
+      "from": "U.otherwise",
+      "kind": "uses",
+      "to": "U.base"
+    },
+    {
+      "from": "U.pointer",
+      "kind": "references",
+      "to": "U.base"
+    },
+    {
+      "from": "U.scrutinee",
+      "kind": "uses",
+      "to": "U.base"
+    },
+    {
+      "from": "U.tuple",
+      "kind": "uses",
+      "to": "U.base"
+    }
+  ],
+  "formatVersion": "ignite-model/0.1",
+  "machines": [],
+  "observations": [],
+  "policies": [],
+  "resources": [],
+  "sourceMap": {
+    "U": "uses_edges.ignite:27:1",
+    "U.argument": "uses_edges.ignite:52:3",
+    "U.argument.size": "uses_edges.ignite:52:38",
+    "U.arm": "uses_edges.ignite:34:3",
+    "U.arm.size": "uses_edges.ignite:35:12",
+    "U.base": "uses_edges.ignite:28:3",
+    "U.base.size": "uses_edges.ignite:28:32",
+    "U.block": "uses_edges.ignite:46:3",
+    "U.block.size": "uses_edges.ignite:47:12",
+    "U.branch": "uses_edges.ignite:30:3",
+    "U.branch.size": "uses_edges.ignite:30:36",
+    "U.closure": "uses_edges.ignite:53:3",
+    "U.closure.size": "uses_edges.ignite:53:37",
+    "U.condition": "uses_edges.ignite:31:3",
+    "U.condition.size": "uses_edges.ignite:31:39",
+    "U.direct": "uses_edges.ignite:29:3",
+    "U.direct.size": "uses_edges.ignite:29:36",
+    "U.index": "uses_edges.ignite:55:3",
+    "U.index.size": "uses_edges.ignite:55:35",
+    "U.list": "uses_edges.ignite:54:3",
+    "U.list.size": "uses_edges.ignite:54:34",
+    "U.nested": "uses_edges.ignite:33:3",
+    "U.nested.size": "uses_edges.ignite:33:36",
+    "U.otherwise": "uses_edges.ignite:32:3",
+    "U.otherwise.size": "uses_edges.ignite:32:39",
+    "U.plain": "uses_edges.ignite:57:3",
+    "U.plain.size": "uses_edges.ignite:57:35",
+    "U.pointer": "uses_edges.ignite:58:3",
+    "U.pointer.target": "uses_edges.ignite:58:41",
+    "U.scrutinee": "uses_edges.ignite:40:3",
+    "U.scrutinee.size": "uses_edges.ignite:41:12",
+    "U.tuple": "uses_edges.ignite:56:3",
+    "U.tuple.size": "uses_edges.ignite:56:35"
+  },
+  "systemId": "U"
+}

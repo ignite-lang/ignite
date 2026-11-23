@@ -305,6 +305,53 @@ fn studio_model_matches_golden() {
     compare(&golden_dir().join("studio.model.json"), &model);
 }
 
+/// `docs/slice.md` 15.5 (the maintainer review of 2026-11-23): a bare
+/// member name read in a property gives its `uses` edge through every form
+/// of expression, not only the direct read. Each component of
+/// `uses_edges.ignite` but two reads `base.size` through another form;
+/// `plain` reads no member and gets no edge, `pointer` names `U.base`
+/// qualified and gets a `references` edge, not `uses`.
+#[test]
+fn a_member_read_in_any_expression_gives_its_uses_edge() {
+    let fixture = fixtures_dir().join("uses_edges.ignite");
+    let model = success(&ignite(&["plan", fixture.to_str().unwrap()]));
+    let json = Json::parse(&model);
+    let edges: Vec<(String, String, String)> = json.object()["edges"]
+        .array()
+        .iter()
+        .map(Json::object)
+        .map(|edge| {
+            (
+                edge["from"].string().to_string(),
+                edge["kind"].string().to_string(),
+                edge["to"].string().to_string(),
+            )
+        })
+        .collect();
+    let mut expected: Vec<(String, String, String)> = [
+        "argument",
+        "arm",
+        "block",
+        "branch",
+        "closure",
+        "condition",
+        "direct",
+        "index",
+        "list",
+        "nested",
+        "otherwise",
+        "scrutinee",
+        "tuple",
+    ]
+    .iter()
+    .map(|from| (format!("U.{from}"), "uses".into(), "U.base".into()))
+    .collect();
+    expected.push(("U.pointer".into(), "references".into(), "U.base".into()));
+    expected.sort();
+    assert_eq!(edges, expected, "{model}");
+    compare(&golden_dir().join("uses_edges.model.json"), &model);
+}
+
 /// Slice 17: only a `TcpListener` provisions the executable that binds it
 /// (16.14). The studio's capability resources, among them `Studio.entropy`,
 /// which sorts before its listener `Studio.ingress`, are created by the
@@ -423,8 +470,9 @@ fn explain_unknown_path_is_e119() {
 }
 
 /// Every `tests/fixtures/e11*.ignite`, `e12*`, `e15*` (`docs/slice.md`
-/// 22.10) and `e090` to `e092` (the
-/// claim model, `docs/slice.md` 19.12) run through `ignite check` (or the
+/// 22.10), `e090` to `e092` (the
+/// claim model, `docs/slice.md` 19.12) and `e108` (a bindings key of
+/// another system, written or returned by a fn, 14.7) run through `ignite check` (or the
 /// subcommand its first line names, `// ignite plan` or `// ignite explain
 /// <path>`, the file name inserted after the subcommand) from the fixtures
 /// directory; stderr must equal the `.expected` file beside it.
@@ -438,7 +486,7 @@ fn fixtures_match_expected() {
             (name.starts_with("e11")
                 || name.starts_with("e12")
                 || name.starts_with("e15")
-                || ["e090", "e091", "e092"].contains(&name.get(..4).unwrap_or("")))
+                || ["e090", "e091", "e092", "e108"].contains(&name.get(..4).unwrap_or("")))
                 && name.ends_with(".ignite")
                 && !["e125", "e126", "e127", "e128"].contains(&&name[..4])
         })
@@ -495,6 +543,37 @@ fn complete_claim_fixture_is_silent() {
     assert_eq!(output.status.code(), Some(0), "{}", text(&output.stderr));
     assert!(output.stdout.is_empty(), "{}", text(&output.stdout));
     assert!(output.stderr.is_empty(), "{}", text(&output.stderr));
+}
+
+/// `docs/slice.md` 14.7 and 15.6: a `bindings` map returned by a fn is
+/// checked like a literal one. `ignite check` resolves every assembly, so
+/// the key of system `T` in assembly `foreign` is E108 at its `bindings`
+/// property; `plan --assembly own`, whose map holds members of `S` only,
+/// resolves each member by its own key.
+#[test]
+fn evaluated_bindings_keys_are_checked_against_the_system() {
+    let fixture = "e108_evaluated_binding_key.ignite";
+    let output = ignite_in(&fixtures_dir(), &["check", fixture]);
+    assert_eq!(output.status.code(), Some(1), "{}", text(&output.stderr));
+    assert_eq!(
+        text(&output.stderr),
+        "e108_evaluated_binding_key.ignite:33:14: error[E108]: `T.other` is not a member of \
+         system `S`, the system of this assembly\n"
+    );
+    let json = Json::parse(&success(&ignite_in(
+        &fixtures_dir(),
+        &["plan", fixture, "--assembly", "own"],
+    )));
+    let resolution: Vec<(&str, &str)> = json.object()["assembly"].object()["resolution"]
+        .array()
+        .iter()
+        .map(Json::object)
+        .map(|entry| (entry["member"].string(), entry["via"].string()))
+        .collect();
+    assert_eq!(
+        resolution,
+        [("S.egress", "S.egress"), ("S.ingress", "S.ingress")]
+    );
 }
 
 #[test]

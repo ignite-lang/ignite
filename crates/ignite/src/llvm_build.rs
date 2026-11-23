@@ -176,7 +176,7 @@ fn probe(
     {
         return Ok((spec, llvm_major(version)));
     }
-    std::fs::create_dir_all(ir_dir).map_err(io_error(ir_dir))?;
+    own_dir(ir_dir)?;
     let output = Command::new(&clang_path)
         .args(&args)
         .stderr(std::process::Stdio::inherit())
@@ -212,7 +212,7 @@ fn probe(
         "{key}target triple = \"{}\"\ntarget datalayout = \"{}\"\n{CLANG_VERSION}{version}\n",
         spec.triple, spec.datalayout
     );
-    std::fs::write(&stamp_path, text).map_err(io_error(&stamp_path))?;
+    write_if_changed(&stamp_path, &text)?;
     Ok((spec, llvm_major(&version)))
 }
 
@@ -516,6 +516,7 @@ fn run_stamped(
     stamp_path: &Path,
     expected: &str,
 ) -> Result<bool, Error> {
+    remove_link(output)?;
     if up_to_date(output, stamp_path, expected) {
         return Ok(false);
     }
@@ -552,8 +553,21 @@ fn runtime_identity(runtime: &Path) -> Result<String, Error> {
     ))
 }
 
-/// Write `contents` to `path` unless the file already holds it.
+/// Remove `path` when it is a symbolic link: what the build writes there
+/// next does not go through it (`docs/slice.md` 14, rule 12).
+fn remove_link(path: &Path) -> Result<(), Error> {
+    ignite_rustgen::remove_link(path).map_err(io_error(path))
+}
+
+/// `dir` as a directory of its own, a symbolic link there replaced.
+fn own_dir(dir: &Path) -> Result<(), Error> {
+    ignite_rustgen::own_dir(dir).map_err(io_error(dir))
+}
+
+/// Write `contents` to `path` unless the file already holds it; a
+/// symbolic link at `path` is replaced by the file.
 fn write_if_changed(path: &Path, contents: &str) -> Result<(), Error> {
+    remove_link(path)?;
     if std::fs::read(path).is_ok_and(|current| current == contents.as_bytes()) {
         return Ok(());
     }
@@ -599,11 +613,27 @@ pub(crate) fn link(
     generated: &ignite_llvm::Generated,
     options: &BuildOptions,
 ) -> Result<BuildOutput, Error> {
+    let out = out_dir(package, options);
+    if let Some(main) = generated
+        .mains
+        .iter()
+        .find(|main| !ignite_types::is_executable_name(&main.executable))
+    {
+        return Err(Error::Io {
+            path: out.join("bin"),
+            error: std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!(
+                    "executable name {:?} is not one file name; nothing was written",
+                    main.executable
+                ),
+            ),
+        });
+    }
     let kit = match crate::musl::triple(options)? {
         Some(triple) => Some(crate::musl::kit(options, &triple)?),
         None => None,
     };
-    let out = out_dir(package, options);
     let ir_dir = out.join("llvm");
     let (spec, clang_major) = probe(options, &ir_dir)?;
     let lto = lto_runtime(options, clang_major);
@@ -618,7 +648,7 @@ pub(crate) fn link(
     check_runtime_target(&runtime, &spec.triple)?;
     let bin_dir = out.join("bin");
     for dir in [&ir_dir, &bin_dir] {
-        std::fs::create_dir_all(dir).map_err(io_error(dir))?;
+        own_dir(dir)?;
     }
     let mut units = vec![
         ("std".to_string(), &generated.std),
@@ -749,5 +779,53 @@ mod archive_tests {
         }
         archive[8 + 48..8 + 58].fill(b'?');
         assert_eq!(archive_machine(&mut Cursor::new(archive)).unwrap(), None);
+    }
+}
+
+#[cfg(test)]
+mod executable_name_tests {
+    use super::*;
+
+    /// `link` refuses a main whose executable name is not one file name
+    /// before it touches the disk, whatever name reaches it (the
+    /// maintainer review of 2026-11-23, IG-01): the output directory is
+    /// never created.
+    #[test]
+    fn a_name_that_is_not_one_file_name_is_refused_before_anything_is_written() {
+        let dir = std::env::temp_dir().join(format!(
+            "ignite-llvm-executable-names-{}",
+            std::process::id()
+        ));
+        let absolute = dir.join("absolute");
+        for name in [
+            "../escape",
+            "../../escape",
+            "a/b",
+            absolute.to_str().unwrap(),
+            "",
+            ".",
+            "..",
+        ] {
+            let generated = ignite_llvm::Generated {
+                std: String::new(),
+                program: String::new(),
+                mains: vec![ignite_llvm::Main {
+                    executable: name.to_string(),
+                    ir: String::new(),
+                }],
+            };
+            let options = BuildOptions {
+                out: Some(dir.join("out")),
+                ..Default::default()
+            };
+            match link("names", &generated, &options) {
+                Err(Error::Io { error, .. }) => {
+                    assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput, "{name:?}");
+                    assert!(error.to_string().contains("not one file name"), "{error}");
+                }
+                other => panic!("{name:?}: {other:?}"),
+            }
+            assert!(!dir.exists(), "{name:?}");
+        }
     }
 }

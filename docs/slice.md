@@ -1245,7 +1245,7 @@ Codes of the syntax and name stages (`ignite-syntax`, `ignite-check`):
 | E015 | constant cycle |
 | E016 | effect missing from `requires` (section 5.1); a closure's effects not on its own parameters are charged where it is created (section 13.3) |
 | E017 | effectful function used as a value where no effectful fn type covering its effects is expected (section 4.5); reported by the type checker since slice 7; also a fn passed to `List.map` or `List.sort_by` with an effect on its parameter or one the caller's `requires` does not cover (20.4.3) |
-| E020 | unsupported or malformed resource, component, contract, policy or assembly (also: a kind that is no record type, two components with one executable name, a `system` in a std module); reported by the type checker since slice 10. The Rust backend keeps E020 for a malformed resource and, when it runs without the typed program, for every component (a component is executable only through the type checker) |
+| E020 | unsupported or malformed resource, component, contract, policy or assembly (also: a kind that is no record type, two components of the program with one executable name, an `executable` that is not one portable file name, a `system` in a std module); reported by the type checker since slice 10, and by the model check of `ignite check` for an `executable` value that is not a string literal. The Rust backend keeps E020 for a malformed resource and, when it runs without the typed program, for every component (a component is executable only through the type checker) |
 | E021 | reserved (unused since slice 1) |
 | E030 | protocol role missing or malformed, a role without `requires`, a call to a role the protocol lacks (the component rules of slices 1 to 9, `Client` without `connect` and `Service` without `serve`, retired with those kinds in slice 10: a kind's `main` calls the role, and a missing role is this E030 at the call); since slice 14 a `serve` role takes 2 parameters `(stream, application)` or 3 `(stream, limits, application)` (section 18.6) |
 | E031 | unknown module or imported name (including a name imported from `std.net` or `std.io` that is neither a builtin nor declared in that module's file), or an import from a module that is neither `std.*` nor a sibling of the program's package (section 14.4) |
@@ -1472,6 +1472,36 @@ Settled by the frontend (S1); the backends rely on exactly this.
 
 `Callee::Fn` on a `Method` node only ever names a module-level fn (own or imported), never a
 local. `type_of(method_expr)` is the callee's return type in all three cases.
+
+**Receiver first.** A builtin method's receiver is evaluated before its arguments, and an
+index's list before the index, on the evaluator and both targets alike:
+
+- A receiver the builtin only reads (`l[i]`, `l.at(i)`, `t.starts_with(p)`,
+  `t.strip_prefix(p)`, `m.get(k)`, `m.contains(k)`, `concat`, `join`, `pieces`, `index_of`)
+  gives the value it had before the arguments ran. When an argument assigns or changes the
+  variable the receiver is rooted at (`l[if c { l = [20]; 0 } else { 0 }]`), the receiver is
+  copied before the arguments run (the Rust target would otherwise hold a borrow across the
+  assignment, E0506). A receiver no argument changes is read where it is, without a copy, and
+  so is one whose arguments change only a sibling field of its local
+  (`r.items[if c { r.n = 2; 1 } else { 0 }]`): a change overlaps the receiver when one field
+  path is a prefix of the other.
+- A receiver that is a temporary (no place of a local: a call, a block, an `if`) runs before
+  the arguments for a builtin that changes it (`push`, `set`, `append`, `put`, `remove`) as for
+  one that only reads it: `(if c { order = 1; [0] } else { [0] }).push(x)` runs the receiver's
+  side effects first.
+- A receiver that is a place of a local and that a builtin changes (`l.push(x)`) is changed
+  where it is after the arguments; the indexes of the place (`l[i].push(x)`,
+  `l[i].items.push(x)`) run before the arguments. On the evaluator and the LLVM target the
+  change applies to the value the arguments left. An argument that assigns that local
+  (`l.push(if c { l = [4, 5]; 6 } else { 6 })`) is refused by rustc on the Rust target
+  (E0506); that form is open (story `arguments-and-views-replaced-by-a-later-argument`).
+
+Story `place-receiver-read-before-index-and-prefix-argument` and story
+`temporary-receiver-evaluated-before-arguments`, from the maintainer review of 2026-11-23
+(`differential::a_local_receiver_is_read_before_an_index_or_prefix_that_replaces_it`,
+`differential::a_temporary_receiver_runs_before_the_arguments`,
+`receiver_order_adversary::`); `CODEGEN_REVISION` is `ignite-codegen/0.1.0-57` since these
+stories.
 
 **Field defaults.** The default is `Field.default: Some(expr)` in the `RecordDecl` of the
 module that declares the record. That module's `TypedProgram` types it: `type_of(expr)` is
@@ -1957,11 +1987,17 @@ own. Rust: one crate `ignite-tests` whose `lib.rs` holds each program as the mod
 module path (`examples.todo` is `pub mod examples { pub mod todo { .. } }`), beside the
 `ignite-std` crate; generator API `ignite_rustgen::generate_tests`. LLVM: every program in one
 `program.ll`, separated by the module path that prefixes every symbol (`"<module>.<name>"`);
-`ignite_llvm::generate_tests`. The one exception: two programs with one module path (two files
+`ignite_llvm::generate_tests`. Two exceptions: two programs with one module path (two files
 without a `package` line are both `main`) cannot share an executable, because the runner names
-a test `<module>/<name>`; the later one goes into a further executable (directories `tests`,
-`tests-2`, … under `--out`). An executable holds its modules' tests in the command-line order
-of their files, then declaration order. `ignite test` runs the executables one after another;
+a test `<module>/<name>`; nor can two programs whose modules, their own and their sibling
+modules (25.6), give one module path to two different source files (`a/one.ignite` and
+`b/two.ignite` each importing `p.shared` from the `shared.ignite` beside it), because one
+executable holds one module of a path. The later one goes into a further executable
+(directories `tests`, `tests-2`, … under `--out`), so every copy's tests run. A sibling module
+file runs its tests once per invocation, wherever several executables build it (two program
+files of one package beside it): in the executable of the file named on the command line when
+it is named, else in the first executable that builds it. An executable holds its modules'
+tests in the command-line order of their files, then declaration order. `ignite test` runs the executables one after another;
 each prints its own report (so one `test result:` line per executable), and `ignite test`
 exits with the largest status of them.
 
@@ -2468,7 +2504,11 @@ work.
   the same rules as `component` but never executable.
 - `assembly name: K { … }` is a top-level declaration whose kind is a record type
   (`Deployment`). `system = Terminal` is a `SystemRef`.
-- Every `bindings` key must be a component or resource of that system, otherwise E108.
+- Every `bindings` key must be a component or resource of that system, otherwise E108. This
+  holds for a key written in the `bindings` literal, which the type checker reports at the
+  key, and for a key of a map a fn returns, which `ignite check` and `ignite plan` report
+  after evaluation at the `bindings` property, for an assembly of any kind, resolvable
+  (15.6) or not; no key is dropped.
 - `ignite build` does not read assemblies in slice 10 (O8); slice 11 resolves them.
 - `system`, `component` and `resource` are keywords already. `contract`, `policy` and
   `assembly` become keywords, which takes the keyword count from 29 to 32. Check `std/` and
@@ -2639,12 +2679,28 @@ differs from 14.1 to 14.11 or refines them:
     written as `Loopback`; `backlog: Int` is the fourth `TcpListener` property; `address`
     and `port` are required. A `Store<T>` resource takes no properties (E047).
 12. The executable's name is the string literal of the component's `executable` property,
-    else the component's name. `ExecutableInfo.resources` lists the resources the component
-    and its embedded components use through bare names, `embedded` the components in an
-    order where each follows the components it uses. A kind without `K.main` is a plain
-    component. Unknown kinds, `Service` without `application`, two components with one
-    executable name and a `system` in a `std.*` module are E020 from the type checker, so
-    `ignite check` reports them without a backend.
+    else the component's name. The name is one portable file name: one or more of the ASCII
+    letters, the digits, `.`, `-` and `_`, other than `.`, `..` and the names cargo keeps
+    for its own directories (`build`, `deps`, `examples`, `incremental`); a string literal
+    `executable`, or a component name used in its place, that is not is E020 from the type
+    checker, at the property's value or the component's name. The value of an executable
+    component's `executable` written any other way (a constant, an expression, the kind's
+    field default) is evaluated by `ignite check`'s model check (15.3) and is E020 there
+    when it is not one portable file name, at the property's value or, for a default, at
+    the component; such a value does not name the executable. The Rust project writer
+    (`write_project`) and the LLVM link step refuse any name that is not one before they
+    write anything, and neither writes through a symbolic link already in its output
+    directory (`src`, `src/bin`, `std`, `Cargo.lock` and the files written there; `llvm`,
+    `bin` and the IR, object, stamp and executable files): such a link is replaced and what
+    it points to is left as it was. So no build writes outside its output directory, save
+    what cargo writes into its target directory.
+    `ExecutableInfo.resources` lists the resources the component and its embedded
+    components use through bare names, `embedded` the components in an order where each
+    follows the components it uses. A kind without `K.main` is a plain component. Unknown
+    kinds, `Service` without `application`, two components with one executable name, in one
+    system or in two systems of the program (at the later component, naming the earlier),
+    and a `system` in a `std.*` module are E020 from the type checker, so `ignite check`
+    reports them without a backend.
 13. Sibling modules (14.4): the files `<name>.ignite` beside the program whose first
     declaration is `package <program package>.<name>`, loaded, checked and typed in import
     order before the program; they may import `std.*` and each other, and the program may
@@ -2914,7 +2970,7 @@ Top-level keys. Where design 6.2's envelope has a key, the model keeps its name;
 | `assembly` | the selected assembly (15.6), or `null` when the program declares none; design 6.2's `bindings` is `assembly.resolution` |
 | `components` | every `component` of the system |
 | `contracts` | every `contract` |
-| `edges` | `{"from", "kind", "to"}`: `uses` (a bare member name in a property), `references` (a `Ref` value), `observes` (a `Signal` value), `hosts` (from the resolution) |
+| `edges` | `{"from", "kind", "to"}`: `uses` (a bare member name read in a property, through every form of expression: an `if` condition or branch, a block and its `let`s, a `match` scrutinee or arm, a call argument, a closure body, a list, an index; a name where a `Ref` is expected and a qualified `System.member` are `references` instead), `references` (a `Ref` value), `observes` (a `Signal` value), `hosts` (from the resolution) |
 | `formatVersion` | `"ignite-model/0.1"`; a change that removes or reinterprets a key bumps it, an added key does not |
 | `policies` | every `policy` |
 | `resources` | every `resource` |
@@ -2983,6 +3039,7 @@ The design 6.2 envelope's `machines`, `observations`, `artifacts`, `stateSchema`
 
 | rule | diagnostic |
 |---|---|
+| every key of the evaluated `bindings` map is a member of the assembly's system | E108 (14.7), at the `bindings` property for a key no literal entry writes |
 | every resource and component of the system is a `bindings` key, in exactly one binding's `includes`, or a capability resource hosted implicitly (below) | E110 when none of the three |
 | no member is both a key and included, or included by two bindings | E111 |
 | `admits(binding, member)` returns `Some(reason)` for a key | E112 with that reason |
@@ -3537,7 +3594,12 @@ reducer steps only; property expressions keep the default fuel (15.3).
 Paths and builds:
 
 - `<state>` defaults to `target/ignite-run/<assembly>/` under the working directory.
-- Builds with unchanged sources are a no-op in `<build>`. Tests pass one shared `--build`
+- Builds of the same entry file with unchanged sources are a no-op in `<build>`. The stamp
+  in `<build>/stamp` holds the entry file's canonical path and contents, so another entry
+  file of the same directory run through the same `<build>` rebuilds. The executables a run
+  copies into `<state>/bin/` come from `<build>/bin/`; the Rust target's are copied there
+  from the cargo target directory, which a `--target-dir` may share with other builds.
+  Tests pass one shared `--build`
   per target and never rebuild; each test has its own `--state`, because the journal lock
   (E126) admits one run per state directory (A2).
 

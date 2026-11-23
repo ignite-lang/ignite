@@ -430,28 +430,39 @@ fn group_project(out: &Path, index: usize) -> PathBuf {
     out.join(dir).join("rust")
 }
 
-/// The groups `ignite::build_tests` builds `entries` into, in its order
-/// (`test_build::group_files`): the standard-library modules in the first,
-/// every program in the first group that does not hold its module path yet.
-/// Two programs with one module path (every file without a `module` line is
-/// `main`) are in two groups, so two executables.
+/// The groups `ignite::build_tests` builds `entries` into, in its order:
+/// `ignite::test_groups`, the grouping `build_tests` itself uses, mapped
+/// back to the entries. Two programs with one module path (every file
+/// without a `module` line is `main`), or whose sibling modules give one
+/// module path to two files, are in two groups, so two executables. Empty
+/// when a file does not parse, as `build_tests` then fails too.
 fn test_groups<'a>(entries: &[&'a Entry]) -> Vec<Vec<&'a Entry>> {
-    let mut groups: Vec<Vec<&Entry>> = Vec::new();
-    for entry in entries {
-        let index = if entry.std {
-            0
-        } else {
-            groups
-                .iter()
-                .position(|g| g.iter().all(|e| e.module != entry.module))
-                .unwrap_or(groups.len())
-        };
-        if index == groups.len() {
-            groups.push(Vec::new());
-        }
-        groups[index].push(entry);
-    }
+    let files: Vec<PathBuf> = entries.iter().map(|e| e.path.clone()).collect();
+    let library = ignite::StdLibrary {
+        root: ignite::default_std_path()
+            .canonicalize()
+            .expect("the standard library"),
+        modules: Vec::new(),
+    };
+    let Ok(groups) = ignite::test_groups(&files, &library) else {
+        return Vec::new();
+    };
     groups
+        .into_iter()
+        .map(|group| {
+            entries
+                .iter()
+                .copied()
+                .filter(|e| {
+                    if e.std {
+                        group.std_modules.contains(&e.module)
+                    } else {
+                        group.programs.contains(&e.path)
+                    }
+                })
+                .collect()
+        })
+        .collect()
 }
 
 /// A test executable with the entries whose tests it holds.
@@ -1226,6 +1237,255 @@ fn the_evaluator_reads_a_receiver_before_its_arguments() {
     }
 }
 
+/// `story:place-receiver-read-before-index-and-prefix-argument` (the
+/// maintainer review of 2026-11-23): a receiver that is a local is read
+/// before an index or a prefix argument that replaces it. Before, the
+/// LLVM target read the replaced list's element and the replaced text,
+/// the Rust target refused the index form with E0506, and the evaluator
+/// read the index before the list. The controls change no variable in the
+/// argument, or a variable other than the receiver.
+const PLACE_RECEIVER: &str = r#"package place_receiver
+
+fn index_replaced() -> Int {
+  var l = [10]
+  l[if true {
+    l = [20]
+    0
+  } else {
+    0
+  }]
+}
+
+fn at_replaced() -> Int {
+  var l = [10, 11]
+  l.at(if true {
+    l = [20, 21]
+    1
+  } else {
+    1
+  })
+}
+
+fn prefix_replaced() -> Bool {
+  var t = "cat"
+  t.starts_with(if true {
+    t = "dog"
+    "c"
+  } else {
+    "c"
+  })
+}
+
+fn strip_replaced() -> Text {
+  var t = "cat"
+  match t.strip_prefix(if true {
+    t = "dog"
+    "c"
+  } else {
+    "c"
+  }) {
+    Some(rest) => rest
+    None => "none"
+  }
+}
+
+fn get_replaced() -> Int {
+  var m: Map<Text, Int> = Map.empty()
+  m.put("a", 7)
+  match m.get(if true {
+    m = Map.empty()
+    "a"
+  } else {
+    "a"
+  }) {
+    Some(v) => v
+    None => -1
+  }
+}
+
+type Holder {
+  n: Int
+  items: List<Int>
+}
+
+fn sibling_changed() -> Int {
+  var r = Holder { n = 1, items = [10, 11] }
+  r.items[if true {
+    r.n = 2
+    1
+  } else {
+    0
+  }] + r.n
+}
+
+fn index_unchanged() -> Int {
+  var l = [10, 11]
+  var i = 0
+  l[if true {
+    i = 1
+    i
+  } else {
+    0
+  }] + l[0]
+}
+
+fn prefix_unchanged() -> Bool {
+  var t = "cat"
+  var n = 0
+  t.starts_with(if true {
+    n = 1
+    "c"
+  } else {
+    "d"
+  }) && t.starts_with("ca")
+}
+
+test "an index is taken of the list before the index replaces it" {
+  assert index_replaced() == 10
+}
+
+test "an at is taken of the list before the index replaces it" {
+  assert at_replaced() == 11
+}
+
+test "a prefix is checked on the text before the prefix replaces it" {
+  assert prefix_replaced()
+}
+
+test "a prefix is stripped from the text before the prefix replaces it" {
+  assert strip_replaced() == "at"
+}
+
+test "a map is searched before the key replaces it" {
+  assert get_replaced() == 7
+}
+
+test "an index that changes a sibling field reads the list where it is" {
+  assert sibling_changed() == 13
+}
+
+test "an index that changes another variable reads the list as before" {
+  assert index_unchanged() == 21
+}
+
+test "a prefix that changes another variable checks the text as before" {
+  assert prefix_unchanged()
+}
+"#;
+
+#[test]
+fn a_local_receiver_is_read_before_an_index_or_prefix_that_replaces_it() {
+    crate::borrowed_reads_adversary::agree("place_receiver", PLACE_RECEIVER, 8);
+}
+
+/// `story:temporary-receiver-evaluated-before-arguments` (the maintainer
+/// review of 2026-11-23): a builtin's receiver that is a temporary runs
+/// before its arguments, for builtins that change the receiver and for
+/// those that only read it. Each receiver appends digit 1 to `order` and
+/// the argument digit 2. Before, the evaluator ran the argument of `push`
+/// and `put` first and the LLVM target that of all four; the Rust target
+/// ran the receiver first.
+const TEMPORARY_RECEIVER: &str = r#"package temporary_receiver
+
+fn table() -> Map<Text, Int> {
+  var m: Map<Text, Int> = Map.empty()
+  m.put("a", 7)
+  m
+}
+
+fn push_order() -> Int {
+  var order = 0
+  let _ = (if true {
+    order = order * 10 + 1
+    [0]
+  } else {
+    [0]
+  }).push(if true {
+    order = order * 10 + 2
+    5
+  } else {
+    5
+  })
+  order
+}
+
+fn put_order() -> Int {
+  var order = 0
+  let _ = (if true {
+    order = order * 10 + 1
+    table()
+  } else {
+    table()
+  }).put(if true {
+    order = order * 10 + 2
+    "b"
+  } else {
+    "b"
+  }, 2)
+  order
+}
+
+fn get_order() -> Int {
+  var order = 0
+  let found = (if true {
+    order = order * 10 + 1
+    table()
+  } else {
+    table()
+  }).get(if true {
+    order = order * 10 + 2
+    "a"
+  } else {
+    "a"
+  })
+  match found {
+    Some(v) => order * 10 + v
+    None => -1
+  }
+}
+
+fn contains_order() -> Int {
+  var order = 0
+  let found = (if true {
+    order = order * 10 + 1
+    table()
+  } else {
+    table()
+  }).contains(if true {
+    order = order * 10 + 2
+    "a"
+  } else {
+    "a"
+  })
+  if found {
+    order
+  } else {
+    -1
+  }
+}
+
+test "push runs a temporary receiver before its argument" {
+  assert push_order() == 12
+}
+
+test "put runs a temporary receiver before its arguments" {
+  assert put_order() == 12
+}
+
+test "get runs a temporary receiver before its argument" {
+  assert get_order() == 127
+}
+
+test "contains runs a temporary receiver before its argument" {
+  assert contains_order() == 12
+}
+"#;
+
+#[test]
+fn a_temporary_receiver_runs_before_the_arguments() {
+    crate::borrowed_reads_adversary::agree("temporary_receiver", TEMPORARY_RECEIVER, 4);
+}
+
 /// Adversary (story quality-ratchet, pass 1): two fixtures without a
 /// `module` declaration both have the module path `main`. `run_tests` keys
 /// a listed test by the first entry of its module, so every test of the
@@ -1321,6 +1581,98 @@ fn adversary2_a_test_the_executable_does_not_hold_is_not_a_run() {
         counted.len(),
         &counted[..counted.len().min(3)]
     );
+}
+
+/// Story combined-test-runs-keep-every-sibling-suite: two roots whose own
+/// module paths differ but whose sibling `p.shared` comes from two files
+/// (`a/shared.ignite`, `b/shared.ignite`) are two executables of
+/// `ignite::build_tests`. The runner's `test_groups` pairs the same two
+/// groups with them, in either order, and each root's test runs in the
+/// executable that holds it. Written under the target's temporary
+/// directory, so the corpus never holds the layout.
+#[test]
+fn the_runner_groups_roots_with_differing_siblings_as_build_tests_does() {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("differential-sibling-groups");
+    for (name, text) in [
+        (
+            "a/one.ignite",
+            "package p.one\nimport p.shared.pick\ntest \"first root\" { assert pick() == 1 }\n",
+        ),
+        (
+            "a/shared.ignite",
+            "package p.shared\nfn pick() -> Int = 1\ntest \"shared first\" { assert true }\n",
+        ),
+        (
+            "b/two.ignite",
+            "package p.two\nimport p.shared.pick\ntest \"second root\" { assert pick() == 2 }\n",
+        ),
+        (
+            "b/shared.ignite",
+            "package p.shared\nfn pick() -> Int = 2\ntest \"shared second\" { assert true }\n",
+        ),
+    ] {
+        let path = dir.join(name);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        if std::fs::read_to_string(&path).ok().as_deref() != Some(text) {
+            std::fs::write(&path, text).unwrap();
+        }
+    }
+    let entry = |name: &str| {
+        let path = dir.join(name);
+        let loaded = ignite::load(&path, None).unwrap_or_else(|e| panic!("{e}"));
+        Entry {
+            rel: relative(&path),
+            module: loaded.types().module.clone(),
+            tests: test_names(loaded.program()),
+            mains: Vec::new(),
+            mains_not_run: None,
+            std: false,
+            path,
+        }
+    };
+    let (one, two) = (entry("a/one.ignite"), entry("b/two.ignite"));
+    for entries in [[&one, &two], [&two, &one]] {
+        let groups = test_groups(&entries);
+        assert_eq!(
+            groups
+                .iter()
+                .map(|group| group.iter().map(|e| e.rel.as_str()).collect::<Vec<_>>())
+                .collect::<Vec<_>>(),
+            [[entries[0].rel.as_str()], [entries[1].rel.as_str()]]
+        );
+        // `test_executables` pairs them the same way, but in the output
+        // directory the other cases of this file share while they run.
+        let files: Vec<PathBuf> = entries.iter().map(|e| e.path.clone()).collect();
+        let options = ignite::TestOptions {
+            build: build_options(Target::Llvm, dir.join("out")),
+            runner: Vec::new(),
+        };
+        let executables = ignite::build_tests(&files, &options).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(executables.len(), groups.len());
+        let mut jobs = BTreeMap::new();
+        for (exe, held) in executables.iter().zip(&groups) {
+            for e in held {
+                for name in &e.tests {
+                    jobs.insert(
+                        format!("{}::{name}", e.rel),
+                        Job {
+                            program: exe.clone(),
+                            args: vec!["--run-one".to_string(), format!("{}/{name}", e.module)],
+                            scratch: scratch_root()
+                                .join("sibling-groups")
+                                .join(jobs.len().to_string()),
+                            test: true,
+                        },
+                    );
+                }
+            }
+        }
+        let runs = run_all(&jobs);
+        assert_eq!(runs.len(), 2, "{runs:?}");
+        for (key, run) in &runs {
+            assert_eq!(run.status, "0", "{key}: {run:?}");
+        }
+    }
 }
 
 /// Adversary (story quality-ratchet, pass 2): the gate stays off the

@@ -1512,7 +1512,8 @@ edition = \"2024\"
 /// itself. A release build that failed with the script builds the two to
 /// tell a linker that refuses the script from any other failure.
 pub fn write_layout_probe(out: &Path, layout: bool) -> io::Result<()> {
-    fs::create_dir_all(out.join("src"))?;
+    fs::create_dir_all(out)?;
+    own_dir(&out.join("src"))?;
     let manifest = if layout {
         release_manifest(PROBE_MANIFEST)
     } else {
@@ -1545,9 +1546,26 @@ pub fn release_layout_config(triple: &str, out: &Path) -> io::Result<String> {
     ))
 }
 
-/// [`write_project`] with `manifest` as `Cargo.toml`.
+/// [`write_project`] with `manifest` as `Cargo.toml`. An executable name
+/// that is not one file name ([`ignite_types::is_executable_name`]) is
+/// refused before anything is written, so no file outside `out` is.
 fn write_with_manifest(project: &GeneratedProject, manifest: &str, out: &Path) -> io::Result<()> {
-    fs::create_dir_all(out.join("src"))?;
+    if let Some(executable) = project
+        .executables
+        .iter()
+        .find(|executable| !ignite_types::is_executable_name(&executable.name))
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "executable name {:?} is not one file name; nothing was written to {}",
+                executable.name,
+                out.display()
+            ),
+        ));
+    }
+    fs::create_dir_all(out)?;
+    own_dir(&out.join("src"))?;
     write_if_changed(out.join("Cargo.toml"), manifest)?;
     write_if_changed(out.join("src").join("lib.rs"), &project.lib_rs)?;
     let bin = out.join("src").join("bin");
@@ -1556,6 +1574,7 @@ fn write_with_manifest(project: &GeneratedProject, manifest: &str, out: &Path) -
         .iter()
         .map(|executable| format!("{}.rs", executable.name))
         .collect();
+    remove_link(&bin)?;
     if bin.is_dir() {
         for entry in fs::read_dir(&bin)? {
             let path = entry?.path();
@@ -1583,9 +1602,28 @@ fn write_with_manifest(project: &GeneratedProject, manifest: &str, out: &Path) -
     Ok(())
 }
 
-/// Write `contents` to `path` unless the file already holds it.
+/// Remove `path` when it is a symbolic link, so that what is written
+/// there next does not go through it to where it points (`docs/slice.md`
+/// 14, rule 12: no build writes outside its output directory).
+pub fn remove_link(path: &Path) -> io::Result<()> {
+    if fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
+        fs::remove_file(path)?;
+    }
+    Ok(())
+}
+
+/// `dir` as a directory of its own: a symbolic link there is replaced
+/// ([`remove_link`]), not followed.
+pub fn own_dir(dir: &Path) -> io::Result<()> {
+    remove_link(dir)?;
+    fs::create_dir_all(dir)
+}
+
+/// Write `contents` to `path` unless the file already holds it. A
+/// symbolic link at `path` is replaced by the file ([`remove_link`]).
 fn write_if_changed(path: impl AsRef<Path>, contents: &str) -> io::Result<()> {
     let path = path.as_ref();
+    remove_link(path)?;
     if fs::read(path).is_ok_and(|current| current == contents.as_bytes()) {
         return Ok(());
     }
@@ -2710,7 +2748,7 @@ impl<'a> Generator<'a> {
             .zip(modified)
             .enumerate()
             .map(|(index, (arg, modified))| {
-                if self.consumes(callee, index) {
+                if self.consumes(callee, index) || self.diverges(arg) {
                     return self.value(arg);
                 }
                 if self.lends_fn(callee, index) {
@@ -2775,7 +2813,42 @@ impl<'a> Generator<'a> {
             })
     }
 
+    /// Whether `receiver`, a place a builtin only reads, is rooted at a
+    /// local that one of `args` changes: the receiver is read before the
+    /// arguments (`docs/slice.md` 10.1, "Receiver first"), so it is copied
+    /// then instead of borrowed across them, which rustc refuses (E0506).
+    /// A receiver no argument changes is borrowed as before, and so is one
+    /// whose arguments change only a sibling field of the same local
+    /// (`r.items[if c { r.n = 2; 1 } else { 0 }]`), which rustc accepts:
+    /// a change overlaps the receiver when one field path is a prefix of
+    /// the other ([`ownership::field_path`]).
+    fn replaced_by(&self, receiver: &Expr, args: &[Expr]) -> bool {
+        let Some(root) = place_root(receiver).filter(|_| self.is_place(receiver)) else {
+            return false;
+        };
+        let path = ownership::field_path(receiver);
+        args.iter().any(|arg| {
+            ownership::changed_places_in(arg, self.types)
+                .iter()
+                .any(|(changed, fields)| {
+                    *changed == root && (fields.starts_with(&path) || path.starts_with(fields))
+                })
+        })
+    }
+
+    /// The receiver of a builtin that only reads it: as written, or a copy
+    /// when an argument changes it ([`replaced_by`](Self::replaced_by)).
+    fn read_receiver(&mut self, receiver: &Expr, args: &[Expr]) -> String {
+        if self.replaced_by(receiver, args) {
+            return format!("({})", self.value(receiver));
+        }
+        self.receiver(receiver)
+    }
+
     fn ref_arg(&mut self, arg: &Expr) -> String {
+        if self.diverges(arg) {
+            return self.value(arg);
+        }
         if let ExprKind::Name(id) = &arg.kind
             && self.is_borrowed(&id.name)
         {
@@ -2803,6 +2876,16 @@ impl<'a> Generator<'a> {
         borrow(arg, text)
     }
 
+    /// `&text` ([`borrow`]), or `text` alone when `expr`
+    /// [diverges](Self::diverges).
+    fn borrowed(&self, expr: &Expr, text: String) -> String {
+        if self.diverges(expr) {
+            text
+        } else {
+            borrow(expr, text)
+        }
+    }
+
     /// `&text`, the argument `expr` already written as `text`, read by
     /// reference; a `Text` literal is a `static`.
     fn borrow_arg(&mut self, expr: &Expr, text: String) -> String {
@@ -2811,7 +2894,7 @@ impl<'a> Generator<'a> {
         }
         match self.text_literal(expr) {
             Some(literal) => borrowed_text_literal(literal),
-            None => borrow(expr, text),
+            None => self.borrowed(expr, text),
         }
     }
 
@@ -3613,10 +3696,46 @@ impl<'a> Generator<'a> {
         }
     }
 
-    /// Whether `expr` has type `Never` (`Process.exit(c)`, whose Rust form
-    /// `ignite_io::exit` returns `!`), so `expr?` lowers to `expr` alone.
-    /// Without types only a `Process.exit` call is recognised.
+    /// Whether the operand or argument `expr` leaves before it has a
+    /// value ([`leaving_head`](Self::leaving_head)). Rust types such an
+    /// expression `!`, which coerces to any type but has no operator, and
+    /// `&!` coerces to no other reference; so it is written on its own:
+    /// an operator expression, an argument ([`borrowed`](Self::borrowed)).
     fn diverges(&self, expr: &Expr) -> bool {
+        self.leaving_head(expr).is_some()
+    }
+
+    /// The operand that leaves at the head of the first-operand spine of
+    /// `expr` (`(return a) == p`: `return a`), never itself an operator
+    /// expression: `return`, `break`, `continue`, or a `match`, `if`,
+    /// block or `Process.exit` call of type `Never` (`e?` leaves when `e`
+    /// does, and is then written as `e`). Asked of every operand and
+    /// argument, so it looks a type up only for those heads, which alone
+    /// can have type `Never` there; walked in a loop, as a chain of
+    /// 100,000 terms is (`docs/slice.md` section 13.1, row 14).
+    fn leaving_head<'e>(&self, expr: &'e Expr) -> Option<&'e Expr> {
+        let mut at = expr;
+        loop {
+            match &at.kind {
+                ExprKind::Return(_) | ExprKind::Break | ExprKind::Continue => return Some(at),
+                ExprKind::Binary { left, .. } => at = left,
+                ExprKind::Unary { operand, .. } => at = operand,
+                ExprKind::Try(inner) => at = inner,
+                ExprKind::Match { .. } | ExprKind::If { .. } | ExprKind::Block(_) => {
+                    return self.never(at).then_some(at);
+                }
+                ExprKind::Method { name, .. } if name.name == "exit" => {
+                    return self.never(at).then_some(at);
+                }
+                _ => return None,
+            }
+        }
+    }
+
+    /// Whether `expr` has type `Never` (`Process.exit(c)`, whose Rust form
+    /// `ignite_io::exit` returns `!`; a `match` whose every arm leaves).
+    /// Without types only a `Process.exit` call is recognised.
+    fn never(&self, expr: &Expr) -> bool {
         if let Some(ty) = self.type_of(expr) {
             return matches!(ty, Ty::Never);
         }
@@ -4194,6 +4313,15 @@ impl<'a> Generator<'a> {
             ExprKind::TupleField { receiver, index } => {
                 format!("{}.{index}", self.mutable_place(receiver, lets))
             }
+            // A temporary (`(if c { [0] } else { [1] }).set(i, x)`) is bound
+            // before the indexes and arguments, which run after it
+            // (`docs/slice.md` 10.1, "Receiver first").
+            _ if place_root(expr).is_none() => {
+                let value = self.value(expr);
+                let temp = self.fresh();
+                lets.push(format!("let mut {temp} = {value};"));
+                temp
+            }
             _ => self.receiver(expr),
         }
     }
@@ -4340,7 +4468,7 @@ impl<'a> Generator<'a> {
                     self.element_clone(expr)
                 )
             }
-            ExprKind::Try(inner) if self.diverges(inner) => self.value(inner),
+            ExprKind::Try(inner) if self.never(inner) => self.value(inner),
             ExprKind::Try(inner) if self.types.and_then(|t| t.test_try(expr)).is_some() => {
                 let test_try = self.types.and_then(|t| t.test_try(expr)).expect("checked");
                 self.test_try(expr, inner, test_try)
@@ -4348,6 +4476,14 @@ impl<'a> Generator<'a> {
             ExprKind::Try(inner) => format!("({})?", self.value(inner)),
             ExprKind::Await(inner) => format!("({})", self.value(inner)),
             ExprKind::Spawn(operand) => self.spawn(operand),
+            // A first operand that leaves is the whole expression: the
+            // rest is never evaluated, and `!` has no operator.
+            ExprKind::Unary { .. } | ExprKind::Binary { .. }
+                if self.leaving_head(expr).is_some() =>
+            {
+                let head = self.leaving_head(expr).expect("checked");
+                self.value(head)
+            }
             ExprKind::Unary {
                 op: UnaryOp::Neg,
                 operand,
@@ -4623,7 +4759,13 @@ impl<'a> Generator<'a> {
             | ExprKind::If { .. }
             | ExprKind::Match { .. }
             | ExprKind::Block(_)
-            | ExprKind::Record { .. } => format!("({text})"),
+            | ExprKind::Record { .. }
+            // Rust's `return`, `break` and `continue` take the rest of the
+            // operator chain: `(return a) || p` written bare is
+            // `return (a || p)`.
+            | ExprKind::Return(_)
+            | ExprKind::Break
+            | ExprKind::Continue => format!("({text})"),
             _ => self.deref_if_borrowed(expr, text),
         }
     }
@@ -4979,7 +5121,9 @@ impl<'a> Generator<'a> {
 
     /// `ignite_io::checked::at(list, index, site)`: a `&T` into the list.
     fn checked_at_call(&mut self, receiver: &Expr, index: &Expr, site: FailureSite) -> String {
-        let list = if self.lent_across(receiver, std::slice::from_ref(index)) {
+        let list = if self.replaced_by(receiver, std::slice::from_ref(index)) {
+            format!("&{}", self.value(receiver))
+        } else if self.lent_across(receiver, std::slice::from_ref(index)) {
             self.element_at(receiver)
         } else {
             self.ref_arg(receiver)
@@ -5389,7 +5533,7 @@ impl<'a> Generator<'a> {
                 let endpoint = self.enum_name(&ignite_types::endpoint_name());
                 format!(
                     "::ignite_io::endpoint_of({}).map(|(address, port)| {endpoint} {{ address, port }})",
-                    borrow(&args[0], reference.clone())
+                    self.borrowed(&args[0], reference.clone())
                 )
             }
             (owner, _, _) if SUBSTRATE_OWNERS.contains(&owner) => {
@@ -5662,7 +5806,7 @@ impl<'a> Generator<'a> {
                 );
             }
             Some(Callee::Builtin(Builtin::MapGet)) => {
-                let r = self.receiver(receiver);
+                let r = self.read_receiver(receiver, args);
                 let a = self.args(args);
                 return format!(
                     "{r}.get({}).cloned()",
@@ -5684,7 +5828,7 @@ impl<'a> Generator<'a> {
                 };
             }
             Some(Callee::Builtin(Builtin::MapContains)) => {
-                let r = self.receiver(receiver);
+                let r = self.read_receiver(receiver, args);
                 let a = self.args(args);
                 return format!(
                     "{r}.contains_key({})",
@@ -5769,13 +5913,21 @@ impl<'a> Generator<'a> {
                 return format!("{r}.{}({})", ident(&name.name), a.join(", "));
             }
             Some(Callee::Builtin(Builtin::BytesIndexOf)) if args.len() == 2 => {
-                let haystack = self.read_bytes(receiver);
+                let haystack = if self.replaced_by(receiver, args) {
+                    format!("&{}", self.value(receiver))
+                } else {
+                    self.read_bytes(receiver)
+                };
                 let needle = self.read_bytes(&args[0]);
                 let start = self.value(&args[1]);
                 return format!("::ignite_io::text::index_of({haystack}, {needle}, {start})");
             }
             Some(Callee::Builtin(Builtin::TextPieces)) if args.len() == 1 => {
-                let text = self.ref_arg(receiver);
+                let text = if self.replaced_by(receiver, args) {
+                    format!("&{}", self.value(receiver))
+                } else {
+                    self.ref_arg(receiver)
+                };
                 let separator = self.ref_arg(&args[0]);
                 return format!("::ignite_io::text::pieces({text}, {separator})");
             }
@@ -5856,6 +6008,8 @@ impl<'a> Generator<'a> {
         }
         let r = if self.reads_element_in_place(receiver, name, args) {
             format!("(*{})", self.element_at(receiver))
+        } else if matches!(self.callee(expr), Some(Callee::Builtin(b)) if !ownership::mutates(*b)) {
+            self.read_receiver(receiver, args)
         } else {
             self.receiver(receiver)
         };
@@ -5887,7 +6041,7 @@ impl<'a> Generator<'a> {
         let arg = |i: usize, a: &[String]| match (&literals[i], &statics[i]) {
             (Some(text), _) => format!("\"{text}\""),
             (None, Some(read)) => read.clone(),
-            (None, None) => borrow(&args[i], a[i].clone()),
+            (None, None) => self.borrowed(&args[i], a[i].clone()),
         };
         match (name.name.as_str(), a.len()) {
             ("map", 1) => format!(
@@ -5929,7 +6083,7 @@ impl<'a> Generator<'a> {
             ("to_bytes", 0) => format!("{r}.clone().into_bytes()"),
             ("to_text", 0) => format!(
                 "String::from_utf8_lossy({}).into_owned()",
-                borrow(receiver, r.clone())
+                self.borrowed(receiver, r.clone())
             ),
             ("at", 1) => format!("{r}[({}) as usize]{}", a[0], self.element_clone(expr)),
             ("slice", 2) => format!("{r}[({}) as usize..({}) as usize].to_vec()", a[0], a[1]),

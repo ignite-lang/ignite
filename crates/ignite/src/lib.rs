@@ -1087,6 +1087,13 @@ impl ParsedFile {
         program_module(&self.program)
     }
 
+    /// The source file of every sibling module, by module path.
+    pub(crate) fn sibling_sources(&self) -> impl Iterator<Item = (&str, &Path)> + '_ {
+        self.siblings
+            .iter()
+            .map(|(path, sibling)| (path.as_str(), Path::new(&sibling.source.path)))
+    }
+
     /// Every module the program and its siblings import, standard-library
     /// or not; the loader skips the ones that are no standard-library file.
     fn std_modules(&self) -> impl Iterator<Item = String> + '_ {
@@ -1607,14 +1614,20 @@ fn run_members(model: &ignite_eval::Model) -> (BTreeMap<String, String>, Vec<Str
 }
 
 /// A hash of everything a build of `file` reads: the target and profile,
-/// every `.ignite` file of the program's directory and the standard
-/// library, the driver's own executable and the runtime archive (LLVM) or
-/// the substrate's path (Rust). Equal
-/// stamps mean an unchanged build (16.3).
+/// the canonical path and the contents of the entry file (whatever its
+/// extension), every `.ignite` file of the program's directory and the
+/// standard library, the driver's own executable and the runtime archive
+/// (LLVM) or the substrate's path (Rust). Equal stamps mean an unchanged
+/// build (16.3); two entry files of one directory never share one.
 fn build_stamp(file: &Path, options: &RunOptions) -> Result<u64, Error> {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::hash::DefaultHasher::new();
     format!("{:?} {}", options.target, options.release).hash(&mut hasher);
+    let entry = std::fs::canonicalize(file).map_err(io_error(file))?;
+    entry.hash(&mut hasher);
+    std::fs::read(&entry)
+        .map_err(io_error(&entry))?
+        .hash(&mut hasher);
     let mut files = Vec::new();
     if let Some(dir) = file.parent() {
         ignite_files(dir, &mut files)?;
@@ -1658,8 +1671,11 @@ fn build_stamp(file: &Path, options: &RunOptions) -> Result<u64, Error> {
 /// Build every buildable member of `file` into `build_dir` (16.3): a
 /// no-op when the stamp of the last build equals the current one and its
 /// executables exist. One build at a time per directory (a lock file), so
-/// concurrent runs sharing a `--build` wait for the first. Returns member
-/// id to the built executable.
+/// concurrent runs sharing a `--build` wait for the first. The executables
+/// are kept in `build_dir/bin/`, copied there when the build wrote them
+/// elsewhere (the Rust target's cargo directory, which `--target-dir` may
+/// share with other builds), so a reused build never starts what another
+/// build wrote since. Returns member id to the kept executable.
 fn build_members(
     file: &Path,
     options: &RunOptions,
@@ -1719,7 +1735,26 @@ fn build_members(
         ..BuildOptions::default()
     };
     let output = build(file, &build_options)?;
-    let built = by_name(&output.executables);
+    let bin_dir = build_dir.join("bin");
+    let mut kept = Vec::new();
+    for path in &output.executables {
+        if path.parent() == Some(bin_dir.as_path()) {
+            kept.push(path.clone());
+            continue;
+        }
+        let Some(name) = path.file_name() else {
+            continue;
+        };
+        std::fs::create_dir_all(&bin_dir).map_err(io_error(&bin_dir))?;
+        let copy = bin_dir.join(name);
+        let mut partial = name.to_os_string();
+        partial.push(".partial");
+        let partial = bin_dir.join(partial);
+        std::fs::copy(path, &partial).map_err(io_error(path))?;
+        std::fs::rename(&partial, &copy).map_err(io_error(&copy))?;
+        kept.push(copy);
+    }
+    let built = by_name(&kept);
     if built.len() != executables.len() {
         let missing: Vec<&str> = executables
             .iter()
@@ -1735,7 +1770,7 @@ fn build_members(
         });
     }
     let mut record = stamp.to_string();
-    for path in &output.executables {
+    for path in &kept {
         record.push('\n');
         record.push_str(&path.to_string_lossy());
     }
@@ -2125,6 +2160,7 @@ pub fn build(file: &Path, options: &BuildOptions) -> Result<BuildOutput, Error> 
         None
     };
     let std_out = out.join("std");
+    ignite_rustgen::own_dir(&std_out).map_err(io_error(&std_out))?;
     ignite_rustgen::write_project(&emitted.std, &std_out).map_err(io_error(&std_out))?;
     seed_lock(&substrate, &out)?;
     prebuild.finish();
@@ -2261,6 +2297,7 @@ fn host_triple() -> String {
 /// that has a lock keeps it.
 pub(crate) fn seed_lock(substrate: &Path, out: &Path) -> Result<(), Error> {
     let lock = out.join("Cargo.lock");
+    ignite_rustgen::remove_link(&lock).map_err(io_error(&lock))?;
     let workspace = substrate.join("../../Cargo.lock");
     if lock.exists() || !workspace.is_file() {
         return Ok(());
