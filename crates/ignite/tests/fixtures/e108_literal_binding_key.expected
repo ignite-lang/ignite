@@ -1,0 +1,1 @@
+e108_literal_binding_key.ignite:20:5: error[E108]: `T.other` is not a member of system `S`, the system of this assembly

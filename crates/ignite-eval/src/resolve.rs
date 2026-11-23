@@ -154,11 +154,54 @@ fn member_id(value: &Value) -> Option<String> {
     }
 }
 
+/// E108 for each key of `assembly`'s evaluated `bindings` map that is not
+/// a member of `system` (14.7), for an assembly of any kind, resolvable or
+/// not: a key of a map a fn returns is never seen by the type checker,
+/// which reports the written ones. At the key's entry in the `bindings`
+/// literal, else at the `bindings` property.
+pub(crate) fn foreign_keys(
+    evaluator: &Evaluator<'_>,
+    program: &TypedProgram,
+    system: &SystemInfo,
+    assembly: &AssemblyInfo,
+    bindings: &Value,
+) -> Vec<Diagnostic> {
+    let Value::Map(entries) = bindings else {
+        return Vec::new();
+    };
+    let (key_spans, fallback) = binding_key_spans(evaluator, program, assembly);
+    let named = &system.name;
+    entries
+        .iter()
+        .filter_map(|(key, _)| member_id(key))
+        .filter(|id| {
+            id.strip_prefix(named.as_str())
+                .and_then(|rest| rest.strip_prefix('.'))
+                .and_then(|name| system.member(name))
+                .is_none()
+        })
+        .map(|id| {
+            let message = match id.split_once('.') {
+                Some((of, _)) if of == named => {
+                    format!("`{id}` is not a member of system `{named}`")
+                }
+                _ => format!(
+                    "`{id}` is not a member of system `{named}`, the system of this assembly"
+                ),
+            };
+            let span = key_spans.get(&id).copied().unwrap_or(fallback);
+            Diagnostic::new("E108", span, message)
+        })
+        .collect()
+}
+
 /// Resolve `assembly` of `system`, whose evaluated `bindings` map is
 /// `bindings`: one entry per resource and component, sorted by member id,
 /// or the E110 to E113 diagnostics of the rules table in 15.6. E111 to
-/// E113 are reported at the key's entry in the `bindings` literal, E110 at
-/// the `bindings` property.
+/// E113 are reported at the key's entry in the `bindings` literal, else
+/// (a map a fn returns) at the `bindings` property; E110 at the
+/// `bindings` property. A key that is not a member of `system` is skipped
+/// here: [`foreign_keys`] reports it.
 pub fn resolve(
     evaluator: &mut Evaluator<'_>,
     program: &TypedProgram,
@@ -188,6 +231,7 @@ pub fn resolve(
             .and_then(|rest| rest.strip_prefix('.'))
             .and_then(|name| system.member(name))
         else {
+            // E108, reported by `foreign_keys` before resolution.
             continue;
         };
         let span = span_of(&id);

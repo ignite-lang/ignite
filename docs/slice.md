@@ -2504,7 +2504,11 @@ work.
   the same rules as `component` but never executable.
 - `assembly name: K { … }` is a top-level declaration whose kind is a record type
   (`Deployment`). `system = Terminal` is a `SystemRef`.
-- Every `bindings` key must be a component or resource of that system, otherwise E108.
+- Every `bindings` key must be a component or resource of that system, otherwise E108. This
+  holds for a key written in the `bindings` literal, which the type checker reports at the
+  key, and for a key of a map a fn returns, which `ignite check` and `ignite plan` report
+  after evaluation at the `bindings` property, for an assembly of any kind, resolvable
+  (15.6) or not; no key is dropped.
 - `ignite build` does not read assemblies in slice 10 (O8); slice 11 resolves them.
 - `system`, `component` and `resource` are keywords already. `contract`, `policy` and
   `assembly` become keywords, which takes the keyword count from 29 to 32. Check `std/` and
@@ -3035,6 +3039,7 @@ The design 6.2 envelope's `machines`, `observations`, `artifacts`, `stateSchema`
 
 | rule | diagnostic |
 |---|---|
+| every key of the evaluated `bindings` map is a member of the assembly's system | E108 (14.7), at the `bindings` property for a key no literal entry writes |
 | every resource and component of the system is a `bindings` key, in exactly one binding's `includes`, or a capability resource hosted implicitly (below) | E110 when none of the three |
 | no member is both a key and included, or included by two bindings | E111 |
 | `admits(binding, member)` returns `Some(reason)` for a key | E112 with that reason |
