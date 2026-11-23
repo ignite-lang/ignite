@@ -66,6 +66,7 @@ mod plan;
 mod process_builtins;
 mod quality;
 mod reachability;
+mod receiver_order_adversary;
 mod reply_cost;
 mod resp;
 mod rfc;

@@ -2813,6 +2813,38 @@ impl<'a> Generator<'a> {
             })
     }
 
+    /// Whether `receiver`, a place a builtin only reads, is rooted at a
+    /// local that one of `args` changes: the receiver is read before the
+    /// arguments (`docs/slice.md` 10.1, "Receiver first"), so it is copied
+    /// then instead of borrowed across them, which rustc refuses (E0506).
+    /// A receiver no argument changes is borrowed as before, and so is one
+    /// whose arguments change only a sibling field of the same local
+    /// (`r.items[if c { r.n = 2; 1 } else { 0 }]`), which rustc accepts:
+    /// a change overlaps the receiver when one field path is a prefix of
+    /// the other ([`ownership::field_path`]).
+    fn replaced_by(&self, receiver: &Expr, args: &[Expr]) -> bool {
+        let Some(root) = place_root(receiver).filter(|_| self.is_place(receiver)) else {
+            return false;
+        };
+        let path = ownership::field_path(receiver);
+        args.iter().any(|arg| {
+            ownership::changed_places_in(arg, self.types)
+                .iter()
+                .any(|(changed, fields)| {
+                    *changed == root && (fields.starts_with(&path) || path.starts_with(fields))
+                })
+        })
+    }
+
+    /// The receiver of a builtin that only reads it: as written, or a copy
+    /// when an argument changes it ([`replaced_by`](Self::replaced_by)).
+    fn read_receiver(&mut self, receiver: &Expr, args: &[Expr]) -> String {
+        if self.replaced_by(receiver, args) {
+            return format!("({})", self.value(receiver));
+        }
+        self.receiver(receiver)
+    }
+
     fn ref_arg(&mut self, arg: &Expr) -> String {
         if let ExprKind::Name(id) = &arg.kind
             && self.is_borrowed(&id.name)
@@ -4232,6 +4264,15 @@ impl<'a> Generator<'a> {
             ExprKind::TupleField { receiver, index } => {
                 format!("{}.{index}", self.mutable_place(receiver, lets))
             }
+            // A temporary (`(if c { [0] } else { [1] }).set(i, x)`) is bound
+            // before the indexes and arguments, which run after it
+            // (`docs/slice.md` 10.1, "Receiver first").
+            _ if place_root(expr).is_none() => {
+                let value = self.value(expr);
+                let temp = self.fresh();
+                lets.push(format!("let mut {temp} = {value};"));
+                temp
+            }
             _ => self.receiver(expr),
         }
     }
@@ -5017,7 +5058,9 @@ impl<'a> Generator<'a> {
 
     /// `ignite_io::checked::at(list, index, site)`: a `&T` into the list.
     fn checked_at_call(&mut self, receiver: &Expr, index: &Expr, site: FailureSite) -> String {
-        let list = if self.lent_across(receiver, std::slice::from_ref(index)) {
+        let list = if self.replaced_by(receiver, std::slice::from_ref(index)) {
+            format!("&{}", self.value(receiver))
+        } else if self.lent_across(receiver, std::slice::from_ref(index)) {
             self.element_at(receiver)
         } else {
             self.ref_arg(receiver)
@@ -5700,7 +5743,7 @@ impl<'a> Generator<'a> {
                 );
             }
             Some(Callee::Builtin(Builtin::MapGet)) => {
-                let r = self.receiver(receiver);
+                let r = self.read_receiver(receiver, args);
                 let a = self.args(args);
                 return format!(
                     "{r}.get({}).cloned()",
@@ -5722,7 +5765,7 @@ impl<'a> Generator<'a> {
                 };
             }
             Some(Callee::Builtin(Builtin::MapContains)) => {
-                let r = self.receiver(receiver);
+                let r = self.read_receiver(receiver, args);
                 let a = self.args(args);
                 return format!(
                     "{r}.contains_key({})",
@@ -5807,13 +5850,21 @@ impl<'a> Generator<'a> {
                 return format!("{r}.{}({})", ident(&name.name), a.join(", "));
             }
             Some(Callee::Builtin(Builtin::BytesIndexOf)) if args.len() == 2 => {
-                let haystack = self.read_bytes(receiver);
+                let haystack = if self.replaced_by(receiver, args) {
+                    format!("&{}", self.value(receiver))
+                } else {
+                    self.read_bytes(receiver)
+                };
                 let needle = self.read_bytes(&args[0]);
                 let start = self.value(&args[1]);
                 return format!("::ignite_io::text::index_of({haystack}, {needle}, {start})");
             }
             Some(Callee::Builtin(Builtin::TextPieces)) if args.len() == 1 => {
-                let text = self.ref_arg(receiver);
+                let text = if self.replaced_by(receiver, args) {
+                    format!("&{}", self.value(receiver))
+                } else {
+                    self.ref_arg(receiver)
+                };
                 let separator = self.ref_arg(&args[0]);
                 return format!("::ignite_io::text::pieces({text}, {separator})");
             }
@@ -5894,6 +5945,8 @@ impl<'a> Generator<'a> {
         }
         let r = if self.reads_element_in_place(receiver, name, args) {
             format!("(*{})", self.element_at(receiver))
+        } else if matches!(self.callee(expr), Some(Callee::Builtin(b)) if !ownership::mutates(*b)) {
+            self.read_receiver(receiver, args)
         } else {
             self.receiver(receiver)
         };

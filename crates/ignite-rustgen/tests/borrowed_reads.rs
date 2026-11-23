@@ -388,3 +388,137 @@ fn a_parameter_moved_late_is_taken_by_value() {
         "renamed_twice copies: {text}"
     );
 }
+
+/// Story `place-receiver-read-before-index-and-prefix-argument`: a local
+/// receiver of an index, a prefix check or a map lookup is read before the
+/// argument (`docs/slice.md` 10.1, "Receiver first"). It is copied when
+/// the argument assigns it, which rustc would otherwise refuse (E0506),
+/// and borrowed as before when the argument changes another variable.
+const RECEIVERS: &str = "fn index_kept(i: Int) -> Int {
+  var l = [i, i + 1]
+  var n = 0
+  l[if true {
+    n = 1
+    n
+  } else {
+    0
+  }]
+}
+
+fn index_replaced(i: Int) -> Int {
+  var l = [i, i + 1]
+  l[if true {
+    l = [i]
+    0
+  } else {
+    0
+  }]
+}
+
+fn prefix_kept(t: Text) -> Bool {
+  var s = t
+  var n = 0
+  s.starts_with(if true {
+    n = 1
+    \"c\"
+  } else {
+    \"d\"
+  })
+}
+
+fn prefix_replaced(t: Text) -> Bool {
+  var s = t
+  s.starts_with(if true {
+    s = \"dog\"
+    \"c\"
+  } else {
+    \"d\"
+  })
+}
+
+fn get_kept(m: Map<Text, Int>) -> Option<Int> {
+  var k = m
+  var n = 0
+  k.get(if true {
+    n = 1
+    \"a\"
+  } else {
+    \"b\"
+  })
+}
+
+fn get_replaced(m: Map<Text, Int>) -> Option<Int> {
+  var k = m
+  k.get(if true {
+    k = Map.empty()
+    \"a\"
+  } else {
+    \"b\"
+  })
+}
+
+type Holder {
+  n: Int
+  items: List<Int>
+}
+
+fn sibling_kept(r: Holder) -> Int {
+  var h = r
+  h.items[if true {
+    h.n = 2
+    1
+  } else {
+    0
+  }]
+}
+
+fn field_replaced(r: Holder) -> Int {
+  var h = r
+  h.items[if true {
+    h.items = [1]
+    0
+  } else {
+    0
+  }]
+}
+";
+
+/// A field receiver whose index changes a sibling field of the same local
+/// (`h.items[if c { h.n = 2; 1 } else { 0 }]`) is borrowed, not copied:
+/// rustc accepts a borrow of `h.items` across an assignment to `h.n`. One
+/// that changes the field itself is copied.
+#[test]
+fn a_field_receiver_whose_index_changes_a_sibling_field_is_not_copied() {
+    let lib = common::generate_source(RECEIVERS, &common::repository_std())
+        .unwrap_or_else(|d| panic!("{d:?}"))
+        .lib_rs;
+    let text = section(&lib, "pub fn sibling_kept(");
+    assert_eq!(
+        text.matches("h.items).clone()").count() + text.matches("h.clone()").count(),
+        0,
+        "sibling_kept: {text}"
+    );
+    let text = section(&lib, "pub fn field_replaced(");
+    assert_eq!(
+        text.matches("h.items).clone()").count(),
+        1,
+        "field_replaced: {text}"
+    );
+}
+
+#[test]
+fn a_receiver_is_copied_only_when_its_argument_replaces_it() {
+    let lib = common::generate_source(RECEIVERS, &common::repository_std())
+        .unwrap_or_else(|d| panic!("{d:?}"))
+        .lib_rs;
+    for (kept, replaced, copy) in [
+        ("index_kept", "index_replaced", "l.clone()"),
+        ("prefix_kept", "prefix_replaced", "s.clone()"),
+        ("get_kept", "get_replaced", "k.clone()"),
+    ] {
+        let text = section(&lib, &format!("pub fn {kept}("));
+        assert_eq!(text.matches(copy).count(), 0, "{kept} copies: {text}");
+        let text = section(&lib, &format!("pub fn {replaced}("));
+        assert_eq!(text.matches(copy).count(), 1, "{replaced}: {text}");
+    }
+}

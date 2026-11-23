@@ -160,6 +160,34 @@ fn a_parameter_moved_late_is_not_copied() {
     assert_eq!(body.matches(glue).count(), 0, "{body}");
 }
 
+/// Story `place-receiver-read-before-index-and-prefix-argument`: a local
+/// receiver of an index or a prefix check is read before the argument
+/// (`docs/slice.md` 10.1, "Receiver first"). It is copied once when the
+/// argument replaces it and not copied when the argument changes another
+/// variable; the test of the same name runs both forms.
+#[test]
+fn a_receiver_is_copied_only_when_its_argument_replaces_it() {
+    let (generated, _) = lower_with("copies", true);
+    let program = &generated.program;
+    let copies = |symbol: &str| {
+        let body = function(program, &format!("tests.copies.{symbol}"));
+        body.matches("call void @\"copy.").count() + body.matches("call void @copy.").count()
+    };
+    for (kept, replaced) in [
+        ("index_kept", "index_replaced"),
+        ("prefix_kept", "prefix_replaced"),
+    ] {
+        assert_eq!(
+            copies(replaced),
+            copies(kept) + 1,
+            "{kept}:\n{}\n{replaced}:\n{}",
+            function(program, &format!("tests.copies.{kept}")),
+            function(program, &format!("tests.copies.{replaced}"))
+        );
+    }
+    assert_eq!(copies("index_kept"), 0);
+}
+
 #[test]
 fn every_copies_test_runs() {
     let (generated, tests) = lower_with("copies", true);

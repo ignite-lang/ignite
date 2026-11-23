@@ -1226,6 +1226,255 @@ fn the_evaluator_reads_a_receiver_before_its_arguments() {
     }
 }
 
+/// `story:place-receiver-read-before-index-and-prefix-argument` (the
+/// maintainer review of 2026-11-23): a receiver that is a local is read
+/// before an index or a prefix argument that replaces it. Before, the
+/// LLVM target read the replaced list's element and the replaced text,
+/// the Rust target refused the index form with E0506, and the evaluator
+/// read the index before the list. The controls change no variable in the
+/// argument, or a variable other than the receiver.
+const PLACE_RECEIVER: &str = r#"package place_receiver
+
+fn index_replaced() -> Int {
+  var l = [10]
+  l[if true {
+    l = [20]
+    0
+  } else {
+    0
+  }]
+}
+
+fn at_replaced() -> Int {
+  var l = [10, 11]
+  l.at(if true {
+    l = [20, 21]
+    1
+  } else {
+    1
+  })
+}
+
+fn prefix_replaced() -> Bool {
+  var t = "cat"
+  t.starts_with(if true {
+    t = "dog"
+    "c"
+  } else {
+    "c"
+  })
+}
+
+fn strip_replaced() -> Text {
+  var t = "cat"
+  match t.strip_prefix(if true {
+    t = "dog"
+    "c"
+  } else {
+    "c"
+  }) {
+    Some(rest) => rest
+    None => "none"
+  }
+}
+
+fn get_replaced() -> Int {
+  var m: Map<Text, Int> = Map.empty()
+  m.put("a", 7)
+  match m.get(if true {
+    m = Map.empty()
+    "a"
+  } else {
+    "a"
+  }) {
+    Some(v) => v
+    None => -1
+  }
+}
+
+type Holder {
+  n: Int
+  items: List<Int>
+}
+
+fn sibling_changed() -> Int {
+  var r = Holder { n = 1, items = [10, 11] }
+  r.items[if true {
+    r.n = 2
+    1
+  } else {
+    0
+  }] + r.n
+}
+
+fn index_unchanged() -> Int {
+  var l = [10, 11]
+  var i = 0
+  l[if true {
+    i = 1
+    i
+  } else {
+    0
+  }] + l[0]
+}
+
+fn prefix_unchanged() -> Bool {
+  var t = "cat"
+  var n = 0
+  t.starts_with(if true {
+    n = 1
+    "c"
+  } else {
+    "d"
+  }) && t.starts_with("ca")
+}
+
+test "an index is taken of the list before the index replaces it" {
+  assert index_replaced() == 10
+}
+
+test "an at is taken of the list before the index replaces it" {
+  assert at_replaced() == 11
+}
+
+test "a prefix is checked on the text before the prefix replaces it" {
+  assert prefix_replaced()
+}
+
+test "a prefix is stripped from the text before the prefix replaces it" {
+  assert strip_replaced() == "at"
+}
+
+test "a map is searched before the key replaces it" {
+  assert get_replaced() == 7
+}
+
+test "an index that changes a sibling field reads the list where it is" {
+  assert sibling_changed() == 13
+}
+
+test "an index that changes another variable reads the list as before" {
+  assert index_unchanged() == 21
+}
+
+test "a prefix that changes another variable checks the text as before" {
+  assert prefix_unchanged()
+}
+"#;
+
+#[test]
+fn a_local_receiver_is_read_before_an_index_or_prefix_that_replaces_it() {
+    crate::borrowed_reads_adversary::agree("place_receiver", PLACE_RECEIVER, 8);
+}
+
+/// `story:temporary-receiver-evaluated-before-arguments` (the maintainer
+/// review of 2026-11-23): a builtin's receiver that is a temporary runs
+/// before its arguments, for builtins that change the receiver and for
+/// those that only read it. Each receiver appends digit 1 to `order` and
+/// the argument digit 2. Before, the evaluator ran the argument of `push`
+/// and `put` first and the LLVM target that of all four; the Rust target
+/// ran the receiver first.
+const TEMPORARY_RECEIVER: &str = r#"package temporary_receiver
+
+fn table() -> Map<Text, Int> {
+  var m: Map<Text, Int> = Map.empty()
+  m.put("a", 7)
+  m
+}
+
+fn push_order() -> Int {
+  var order = 0
+  let _ = (if true {
+    order = order * 10 + 1
+    [0]
+  } else {
+    [0]
+  }).push(if true {
+    order = order * 10 + 2
+    5
+  } else {
+    5
+  })
+  order
+}
+
+fn put_order() -> Int {
+  var order = 0
+  let _ = (if true {
+    order = order * 10 + 1
+    table()
+  } else {
+    table()
+  }).put(if true {
+    order = order * 10 + 2
+    "b"
+  } else {
+    "b"
+  }, 2)
+  order
+}
+
+fn get_order() -> Int {
+  var order = 0
+  let found = (if true {
+    order = order * 10 + 1
+    table()
+  } else {
+    table()
+  }).get(if true {
+    order = order * 10 + 2
+    "a"
+  } else {
+    "a"
+  })
+  match found {
+    Some(v) => order * 10 + v
+    None => -1
+  }
+}
+
+fn contains_order() -> Int {
+  var order = 0
+  let found = (if true {
+    order = order * 10 + 1
+    table()
+  } else {
+    table()
+  }).contains(if true {
+    order = order * 10 + 2
+    "a"
+  } else {
+    "a"
+  })
+  if found {
+    order
+  } else {
+    -1
+  }
+}
+
+test "push runs a temporary receiver before its argument" {
+  assert push_order() == 12
+}
+
+test "put runs a temporary receiver before its arguments" {
+  assert put_order() == 12
+}
+
+test "get runs a temporary receiver before its argument" {
+  assert get_order() == 127
+}
+
+test "contains runs a temporary receiver before its argument" {
+  assert contains_order() == 12
+}
+"#;
+
+#[test]
+fn a_temporary_receiver_runs_before_the_arguments() {
+    crate::borrowed_reads_adversary::agree("temporary_receiver", TEMPORARY_RECEIVER, 4);
+}
+
 /// Adversary (story quality-ratchet, pass 1): two fixtures without a
 /// `module` declaration both have the module path `main`. `run_tests` keys
 /// a listed test by the first entry of its module, so every test of the

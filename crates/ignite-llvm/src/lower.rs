@@ -4112,7 +4112,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             Ty::Text => Ty::Byte,
             other => panic!("index into {other:?}"),
         };
-        let r = self.expr(receiver, true);
+        let r = self.read_receiver(receiver, args);
         let (rp, owned) = match &r {
             Val::Ptr(p, owned) => (p.clone(), *owned),
             _ => return Val::Never,
@@ -4248,7 +4248,76 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     /// as unmodified (`docs/vision.md` section 10.1, M1).
     fn mutable_receiver(&mut self, receiver: &Expr) -> Val {
         let r = self.expr(receiver, true);
-        if ownership::place_root(receiver).is_some_and(|n| self.lookup(n).is_some()) {
+        if self.local_place(receiver) {
+            return r;
+        }
+        let ty = self.ty(receiver);
+        self.owned(&ty, r)
+    }
+
+    /// Whether `receiver` is a place rooted at a local, which a builtin
+    /// that changes it changes in place ([`Self::mutable_receiver`]).
+    fn local_place(&self, receiver: &Expr) -> bool {
+        ownership::place_root(receiver).is_some_and(|n| self.lookup(n).is_some())
+    }
+
+    /// The receiver of a builtin that changes it, evaluated before the
+    /// arguments when it is a temporary (no [`Self::local_place`]), as on
+    /// the Rust target and the evaluator (`docs/slice.md` 10.1, "Receiver
+    /// first"), and when it is a place whose index changes a variable
+    /// (`l[{ n = n + 1; 0 }].push(x)`), so the index runs first, unless an
+    /// argument changes the place's local; `None` for any other place,
+    /// which is changed where it is after the arguments
+    /// ([`Self::changed_receiver`]).
+    fn temporary_receiver(&mut self, receiver: &Expr, args: &[Expr]) -> Option<Val> {
+        let early = !self.local_place(receiver)
+            || (Self::index_changes(receiver, self.cx.types)
+                && ownership::place_root(receiver).is_some_and(|root| {
+                    !args
+                        .iter()
+                        .any(|arg| ownership::changed_in(arg, Some(self.cx.types)).contains(root))
+                }));
+        early.then(|| self.mutable_receiver(receiver))
+    }
+
+    /// Whether an index of the place `e` (`l[i]`, `l[i].f`, `l[i][j]`)
+    /// changes a variable.
+    fn index_changes(e: &Expr, types: &TypedProgram) -> bool {
+        match &e.kind {
+            ExprKind::Index { receiver, index } => {
+                !ownership::changed_in(index, Some(types)).is_empty()
+                    || Self::index_changes(receiver, types)
+            }
+            ExprKind::Field { receiver, .. } | ExprKind::TupleField { receiver, .. } => {
+                Self::index_changes(receiver, types)
+            }
+            _ => false,
+        }
+    }
+
+    /// The receiver [`Self::temporary_receiver`] evaluated, or the place
+    /// it left for after the arguments.
+    fn changed_receiver(&mut self, early: Option<Val>, receiver: &Expr) -> Val {
+        match early {
+            Some(r) => r,
+            None => self.mutable_receiver(receiver),
+        }
+    }
+
+    /// The receiver of a builtin that only reads it, evaluated before the
+    /// arguments (`docs/slice.md` 10.1, "Receiver first"). It is read where
+    /// it is, not copied, unless an argument changes a variable it may
+    /// point into (`t.starts_with(if c { t = ..; "a" } else { "b" })`):
+    /// then a borrowed receiver is copied before the arguments run, as
+    /// [`Self::list_slice`] does, so the builtin reads the value it had.
+    fn read_receiver(&mut self, receiver: &Expr, args: &[Expr]) -> Val {
+        let r = self.expr(receiver, true);
+        let root = ownership::memory_root(receiver, Some(self.cx.types));
+        let replaced = args.iter().any(|arg| {
+            let changed = ownership::changed_in(arg, Some(self.cx.types));
+            !changed.is_empty() && root.is_none_or(|root| changed.contains(root))
+        });
+        if !replaced {
             return r;
         }
         let ty = self.ty(receiver);
@@ -4669,6 +4738,11 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             let r = receiver.expect("a method has a receiver");
             this.expr(r, true)
         };
+        // A receiver the builtin only reads, before its arguments.
+        let read = |this: &mut Self| -> Val {
+            let r = receiver.expect("a method has a receiver");
+            this.read_receiver(r, args)
+        };
         match b {
             MapEmpty => self.empty_list(),
             MapLen => {
@@ -4678,15 +4752,15 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             }
             MapGet => {
                 let (key, value) = self.map_kv(receiver.expect("receiver"));
+                let r = read(self);
                 let k = self.map_key_arg(&key, &args[0]);
-                let r = recv(self);
                 let m = self.ptr(&r);
                 self.map_get(&key, &value, &m, &k)
             }
             MapContains => {
                 let (key, value) = self.map_kv(receiver.expect("receiver"));
+                let r = read(self);
                 let k = self.map_key_arg(&key, &args[0]);
-                let r = recv(self);
                 let m = self.ptr(&r);
                 let index = self.map_find(&key, &value, &m, &k);
                 Val::Scalar(self.f.val(format!("icmp sge i64 {index}, 0")))
@@ -4698,7 +4772,9 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 self.map_keys(&key, &value, &m)
             }
             MapPut => {
-                let (key, value) = self.map_kv(receiver.expect("receiver"));
+                let rexpr = receiver.expect("receiver");
+                let (key, value) = self.map_kv(rexpr);
+                let early = self.temporary_receiver(rexpr, args);
                 let k = self.map_key_arg(&key, &args[0]);
                 let v = self.expr(&args[1], true);
                 if v == Val::Never {
@@ -4706,15 +4782,17 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 }
                 let have = self.ty(&args[1]);
                 let v = self.coerce(&value, &have, v);
-                let r = self.mutable_receiver(receiver.expect("receiver"));
+                let r = self.changed_receiver(early, rexpr);
                 let m = self.ptr(&r);
                 self.map_put(&key, &value, &m, k, v);
                 Val::Unit
             }
             MapRemove => {
-                let (key, value) = self.map_kv(receiver.expect("receiver"));
+                let rexpr = receiver.expect("receiver");
+                let (key, value) = self.map_kv(rexpr);
+                let early = self.temporary_receiver(rexpr, args);
                 let k = self.map_key_arg(&key, &args[0]);
-                let r = self.mutable_receiver(receiver.expect("receiver"));
+                let r = self.changed_receiver(early, rexpr);
                 let m = self.ptr(&r);
                 self.map_remove(&key, &value, &m, &k)
             }
@@ -4768,7 +4846,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 self.rt_out("text_trim", &Ty::Text, &[format!("ptr {p}")])
             }
             TextStartsWith => {
-                let r = recv(self);
+                let r = read(self);
                 let p = self.ptr(&r);
                 let prefix = self.read_arg(&args[0]);
                 let v = self.f.val(format!(
@@ -4779,7 +4857,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             TextStripPrefix => self.strip_prefix(receiver.expect("receiver"), &args[0]),
             TextConcat if self.concat_parts(e).is_some() => self.text_chain(e),
             TextConcat => {
-                let r = recv(self);
+                let r = read(self);
                 let p = self.ptr(&r);
                 let a = self.text_piece(&p);
                 let other = self.read_arg(&args[0]);
@@ -4812,7 +4890,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                     "i64",
                     &["ptr".to_string(), "ptr".to_string(), "i64".to_string()],
                 );
-                let r = recv(self);
+                let r = read(self);
                 let p = self.ptr(&r);
                 let needle = self.read_arg(&args[0]);
                 let start = self.scalar_arg(&args[1]);
@@ -4837,7 +4915,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                     "void",
                     &["ptr".to_string(), "ptr".to_string(), "ptr".to_string()],
                 );
-                let r = recv(self);
+                let r = read(self);
                 let p = self.ptr(&r);
                 let separator = self.read_arg(&args[0]);
                 self.rt_out(
@@ -4859,11 +4937,12 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                     Ty::List(t) => *t,
                     _ => Ty::Byte,
                 };
+                let early = self.temporary_receiver(rexpr, args);
                 let x = self.expr(&args[0], true);
                 let have = self.ty(&args[0]);
                 let x = self.coerce(&element, &have, x);
                 let x = self.owned(&element, x);
-                let r = self.mutable_receiver(receiver.expect("receiver"));
+                let r = self.changed_receiver(early, rexpr);
                 let p = self.ptr(&r);
                 let layout = self.layout(&element);
                 self.f.ins(format!(
@@ -4888,12 +4967,13 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                     Ty::List(t) => *t,
                     _ => Ty::Byte,
                 };
+                let early = self.temporary_receiver(rexpr, args);
                 let i = self.scalar_arg(&args[0]);
                 let x = self.expr(&args[1], true);
                 let have = self.ty(&args[1]);
                 let x = self.coerce(&element, &have, x);
                 let x = self.owned(&element, x);
-                let r = self.mutable_receiver(rexpr);
+                let r = self.changed_receiver(early, rexpr);
                 let p = self.ptr(&r);
                 let len = self.list_len(&p);
                 let oob = self.f.val(format!("icmp uge i64 {i}, {len}"));
@@ -4914,6 +4994,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                     Ty::List(t) => (**t).clone(),
                     _ => Ty::Byte,
                 };
+                let early = self.temporary_receiver(rexpr, args);
                 let c = self.expr(&args[0], true);
                 let c = if self.env.needs_glue(&element) {
                     self.owned(&ty, c)
@@ -4921,7 +5002,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                     c
                 };
                 let cp = self.ptr(&c);
-                let r = self.mutable_receiver(receiver.expect("receiver"));
+                let r = self.changed_receiver(early, rexpr);
                 let p = self.ptr(&r);
                 let layout = self.layout(&element);
                 let clen = self.list_len(&cp);
@@ -4953,7 +5034,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                 Val::Unit
             }
             ListJoin => {
-                let r = recv(self);
+                let r = read(self);
                 let p = self.ptr(&r);
                 let sep = self.read_arg(&args[0]);
                 self.rt_out(
@@ -5820,7 +5901,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     fn strip_prefix(&mut self, receiver: &Expr, prefix: &Expr) -> Val {
         let ty = Ty::Option(Box::new(Ty::Text));
         let layout = self.env.enum_layout(&ty);
-        let r = self.expr(receiver, true);
+        let r = self.read_receiver(receiver, std::slice::from_ref(prefix));
         let p = self.ptr(&r);
         let pre = self.read_arg(prefix);
         let result = self.temp(&ty);

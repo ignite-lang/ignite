@@ -710,19 +710,41 @@ impl<'p> Evaluator<'p> {
                 args,
             } => self.method(cx, e, receiver, &name.name, args),
             ExprKind::Field { receiver, name } => self.field(cx, e, receiver, &name.name),
+            // The list before the index, as both targets read it
+            // (`docs/slice.md` 10.1, "Receiver first"). A local the index
+            // does not change reads the same before and after it, so it is
+            // read in place after it, without a copy; any other receiver is
+            // evaluated first. A name or a literal index changes nothing and
+            // is not walked.
             ExprKind::Index { receiver, index } => {
-                let index = self.expr(cx, index)?;
-                let Value::Int(i) = index else {
-                    return Err(internal("index is not an Int"));
-                };
-                let found = self.with_receiver(cx, receiver, |_, list| match list {
+                let element = |list: &Value, i: i64| match list {
                     Value::List(items) => Ok(usize::try_from(i)
                         .ok()
                         .and_then(|i| items.get(i))
                         .cloned()
                         .ok_or(items.len())),
                     _ => Err(internal("indexed value is not a list")),
-                })?;
+                };
+                let in_place = match &receiver.kind {
+                    ExprKind::Name(name) if self.is_local(cx, &name.name) => {
+                        matches!(index.kind, ExprKind::Name(_) | ExprKind::Int(_))
+                            || !ignite_types::ownership::changed_in(index, Some(cx.types()))
+                                .contains(name.name.as_str())
+                    }
+                    _ => false,
+                };
+                let list = if in_place {
+                    None
+                } else {
+                    Some(self.expr(cx, receiver)?)
+                };
+                let Value::Int(i) = self.expr(cx, index)? else {
+                    return Err(internal("index is not an Int"));
+                };
+                let found = match &list {
+                    Some(list) => element(list, i)?,
+                    None => self.with_receiver(cx, receiver, |_, list| element(list, i))?,
+                };
                 match found {
                     Ok(item) => Ok(item),
                     Err(len) => Err(self.fail(
@@ -1610,7 +1632,8 @@ impl<'p> Evaluator<'p> {
 
     /// `push`, `append`, `clear`, `put` and `remove`: write through the
     /// receiver's place; a receiver that is no place (a temporary) is
-    /// changed and dropped, as on the targets.
+    /// evaluated before the arguments, changed and dropped, as on the
+    /// targets (`docs/slice.md` 10.1, "Receiver first").
     fn mutating(
         &mut self,
         cx: &Cx<'p>,
@@ -1620,11 +1643,14 @@ impl<'p> Evaluator<'p> {
         args: &[Expr],
     ) -> Eval<Value> {
         let path = self.place_path(cx, receiver)?;
+        let mut temporary = match path {
+            Some(_) => Value::Unit,
+            None => self.expr(cx, receiver)?,
+        };
         let values = self.exprs(cx, args)?;
         let modules = self.modules;
         let unit_result = matches!(cx.types().try_type_of(e), Some(Ty::Unit));
         let mut out_of_range = None;
-        let mut temporary;
         let target: &mut Value = match path {
             Some((base, steps)) => {
                 let root = self
@@ -1637,10 +1663,7 @@ impl<'p> Evaluator<'p> {
                     }
                 }
             }
-            None => {
-                temporary = self.expr(cx, receiver)?;
-                &mut temporary
-            }
+            None => &mut temporary,
         };
         let mut values = values.into_iter();
         let (result, nodes) = match (builtin, target) {
