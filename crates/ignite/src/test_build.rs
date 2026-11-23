@@ -9,10 +9,11 @@
 //! one, because the runner names a test by `<module>/<name>`; nor can two
 //! programs whose own and sibling modules give one module path to two
 //! different source files, because an executable holds one module of a
-//! path. The second goes into a further executable. Every other module
-//! (the standard library a program loads) is built normally, with its tests
-//! dropped. The executables run one after another, each printing its own
-//! report.
+//! path. The second goes into a further executable; a sibling module file
+//! several executables build runs its tests in one ([`SiblingTests`]).
+//! Every other module (the standard library a program loads) is built
+//! normally, with its tests dropped. The executables run one after another,
+//! each printing its own report.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
@@ -72,7 +73,6 @@ type ProgramModules = (String, BTreeMap<String, PathBuf>);
 /// The [`ProgramModules`] of the program `parsed` from `file`, each source
 /// path canonical where it resolves.
 fn program_modules(file: &Path, parsed: &ParsedFile) -> ProgramModules {
-    let canonical = |path: &Path| path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
     let module = parsed.module();
     let mut sources: BTreeMap<String, PathBuf> = parsed
         .sibling_sources()
@@ -80,6 +80,32 @@ fn program_modules(file: &Path, parsed: &ParsedFile) -> ProgramModules {
         .collect();
     sources.insert(module.clone(), canonical(file));
     (module, sources)
+}
+
+/// `path` canonical, or as given when it does not resolve.
+fn canonical(path: &Path) -> PathBuf {
+    path.canonicalize().unwrap_or_else(|_| path.to_path_buf())
+}
+
+/// Which executable runs the tests of a sibling module (`docs/slice.md`
+/// 12.7): a module file named on the command line runs them in its own
+/// group; every other sibling module file in the first group that builds
+/// it, so one file shared by roots that must build apart runs them once.
+#[derive(Default)]
+struct SiblingTests {
+    /// The module path and canonical file of every program named.
+    named: BTreeSet<(String, PathBuf)>,
+    /// Those of every sibling module whose tests a group already runs.
+    selected: BTreeSet<(String, PathBuf)>,
+}
+
+impl SiblingTests {
+    /// Whether the group being prepared runs the tests of the sibling
+    /// `module` from `source`; a yes holds for no later group.
+    fn run_here(&mut self, module: &str, source: &Path) -> bool {
+        let key = (module.to_string(), canonical(source));
+        !self.named.contains(&key) && self.selected.insert(key)
+    }
 }
 
 /// [`test_groups`] over the canonical standard-library `root`, the
@@ -193,9 +219,24 @@ fn prepare_tests(files: &[PathBuf], options: &TestOptions) -> Result<PreparedTes
         modules: &modules,
     };
     let mut used = BTreeSet::new();
+    let mut siblings = SiblingTests::default();
+    for file in groups.iter().flat_map(|group| &group.programs) {
+        siblings
+            .named
+            .insert((parsed[file].module(), canonical(file)));
+    }
     let groups = groups
         .into_iter()
-        .map(|group| prepare_group(&std, group, &mut parsed, &options.build, &mut used))
+        .map(|group| {
+            prepare_group(
+                &std,
+                group,
+                &mut parsed,
+                &options.build,
+                &mut used,
+                &mut siblings,
+            )
+        })
         .collect::<Result<_, _>>()?;
     Ok(PreparedTests {
         library,
@@ -359,6 +400,7 @@ fn prepare_group(
     parsed: &mut BTreeMap<PathBuf, ParsedFile>,
     build: &BuildOptions,
     used: &mut BTreeSet<String>,
+    siblings: &mut SiblingTests,
 ) -> Result<PreparedGroup, Error> {
     let library = std.library;
     let mut programs: Vec<TestProgram> = Vec::new();
@@ -376,11 +418,15 @@ fn prepare_group(
         .chain(programs.iter().map(|p| (p.types.module.as_str(), &p.types)))
         .collect();
     // The tests of the named files, then those of their sibling modules
-    // not named themselves (`docs/slice.md` 25.6).
+    // not named themselves (`docs/slice.md` 25.6) and not run by an
+    // earlier group.
     let mut test_modules = group.modules;
     for program in &programs {
-        if !test_modules.contains(&program.types.module) {
-            test_modules.push(program.types.module.clone());
+        let module = &program.types.module;
+        if !test_modules.contains(module)
+            && siblings.run_here(module, Path::new(&program.source.path))
+        {
+            test_modules.push(module.clone());
         }
     }
     let tests: Vec<TestInfo> = test_modules

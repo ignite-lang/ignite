@@ -1963,9 +1963,11 @@ a test `<module>/<name>`; nor can two programs whose modules, their own and thei
 modules (25.6), give one module path to two different source files (`a/one.ignite` and
 `b/two.ignite` each importing `p.shared` from the `shared.ignite` beside it), because one
 executable holds one module of a path. The later one goes into a further executable
-(directories `tests`, `tests-2`, … under `--out`), so every copy's tests run; programs sharing
-one sibling file share an executable and run its tests once. An executable holds its modules' tests in the command-line order
-of their files, then declaration order. `ignite test` runs the executables one after another;
+(directories `tests`, `tests-2`, … under `--out`), so every copy's tests run. A sibling module
+file runs its tests once per invocation, wherever several executables build it (two program
+files of one package beside it): in the executable of the file named on the command line when
+it is named, else in the first executable that builds it. An executable holds its modules'
+tests in the command-line order of their files, then declaration order. `ignite test` runs the executables one after another;
 each prints its own report (so one `test result:` line per executable), and `ignite test`
 exits with the largest status of them.
 

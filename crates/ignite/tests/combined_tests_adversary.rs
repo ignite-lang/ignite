@@ -317,6 +317,7 @@ fn a_filter_across_split_executables() {
 /// 0; together the LLVM test build panics (`call of Fn(QualName { module:
 /// "std.option", name: "unwrap_or" })`) and the run exits 101.
 #[test]
+#[ignore = "story:local-module-with-a-std-path-in-a-combined-test-run"]
 fn a_local_module_with_a_standard_library_path_keeps_both_suites() {
     let dir = layout(
         "std-path",

@@ -423,6 +423,69 @@ fn combined_roots_run_every_sibling_suite() {
     });
 }
 
+/// One sibling file that two executables build runs its tests once:
+/// `b/x.ignite` links to `a/x.ignite`, which imports `p.shared` from the
+/// root's directory, where the two copies differ, so the roots build
+/// apart and both build `p.x`. LLVM only: the grouping is the target's
+/// input, not its output.
+#[cfg(unix)]
+#[test]
+fn a_sibling_file_built_twice_runs_its_tests_once() {
+    let dir = out_dir().join("sibling-built-twice");
+    for (name, text) in [
+        (
+            "a/one.ignite",
+            "package p.one\nimport p.x.get\ntest \"first root\" { assert get() == 1 }\n",
+        ),
+        (
+            "a/x.ignite",
+            "package p.x\nimport p.shared.pick\nfn get() -> Int = pick()\ntest \"x own\" { assert true }\n",
+        ),
+        (
+            "a/shared.ignite",
+            "package p.shared\nfn pick() -> Int = 1\ntest \"shared first\" { assert true }\n",
+        ),
+        (
+            "b/two.ignite",
+            "package p.two\nimport p.x.get\ntest \"second root\" { assert get() == 1 }\n",
+        ),
+        (
+            "b/shared.ignite",
+            "package p.shared\nfn pick() -> Int = 1\ntest \"shared second\" { assert false }\n",
+        ),
+    ] {
+        let path = dir.join(name);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        if std::fs::read_to_string(&path).ok().as_deref() != Some(text) {
+            std::fs::write(&path, text).unwrap();
+        }
+    }
+    let link = dir.join("b/x.ignite");
+    if std::fs::symlink_metadata(&link).is_err() {
+        std::os::unix::fs::symlink("../a/x.ignite", &link).unwrap();
+    }
+    let (one, two) = (dir.join("a/one.ignite"), dir.join("b/two.ignite"));
+    let (one, two) = (one.to_str().unwrap(), two.to_str().unwrap());
+    for args in [[one, two], [two, one]] {
+        let run = ignite_test(Chain::Groups, "llvm", &args);
+        assert_eq!(
+            ran(&run.stdout),
+            [
+                "p.one/first root ... ok",
+                "p.shared/shared first ... ok",
+                "p.shared/shared second ... FAILED",
+                "p.two/second root ... ok",
+                "p.x/x own ... ok",
+            ],
+            "{args:?}: {}\n{}",
+            run.stdout,
+            run.stderr
+        );
+        assert_eq!(run.status, 1, "{args:?}: {}", run.stdout);
+        assert_eq!(run.stdout.matches("test result: ").count(), 2);
+    }
+}
+
 /// `--timeout 1` kills `slow`'s `never ends` after a second and reports
 /// it; the run's other tests are untouched ([`fixtures_run`]).
 #[test]

@@ -430,28 +430,39 @@ fn group_project(out: &Path, index: usize) -> PathBuf {
     out.join(dir).join("rust")
 }
 
-/// The groups `ignite::build_tests` builds `entries` into, in its order
-/// (`test_build::group_files`): the standard-library modules in the first,
-/// every program in the first group that does not hold its module path yet.
-/// Two programs with one module path (every file without a `module` line is
-/// `main`) are in two groups, so two executables.
+/// The groups `ignite::build_tests` builds `entries` into, in its order:
+/// `ignite::test_groups`, the grouping `build_tests` itself uses, mapped
+/// back to the entries. Two programs with one module path (every file
+/// without a `module` line is `main`), or whose sibling modules give one
+/// module path to two files, are in two groups, so two executables. Empty
+/// when a file does not parse, as `build_tests` then fails too.
 fn test_groups<'a>(entries: &[&'a Entry]) -> Vec<Vec<&'a Entry>> {
-    let mut groups: Vec<Vec<&Entry>> = Vec::new();
-    for entry in entries {
-        let index = if entry.std {
-            0
-        } else {
-            groups
-                .iter()
-                .position(|g| g.iter().all(|e| e.module != entry.module))
-                .unwrap_or(groups.len())
-        };
-        if index == groups.len() {
-            groups.push(Vec::new());
-        }
-        groups[index].push(entry);
-    }
+    let files: Vec<PathBuf> = entries.iter().map(|e| e.path.clone()).collect();
+    let library = ignite::StdLibrary {
+        root: ignite::default_std_path()
+            .canonicalize()
+            .expect("the standard library"),
+        modules: Vec::new(),
+    };
+    let Ok(groups) = ignite::test_groups(&files, &library) else {
+        return Vec::new();
+    };
     groups
+        .into_iter()
+        .map(|group| {
+            entries
+                .iter()
+                .copied()
+                .filter(|e| {
+                    if e.std {
+                        group.std_modules.contains(&e.module)
+                    } else {
+                        group.programs.contains(&e.path)
+                    }
+                })
+                .collect()
+        })
+        .collect()
 }
 
 /// A test executable with the entries whose tests it holds.
@@ -1321,6 +1332,98 @@ fn adversary2_a_test_the_executable_does_not_hold_is_not_a_run() {
         counted.len(),
         &counted[..counted.len().min(3)]
     );
+}
+
+/// Story combined-test-runs-keep-every-sibling-suite: two roots whose own
+/// module paths differ but whose sibling `p.shared` comes from two files
+/// (`a/shared.ignite`, `b/shared.ignite`) are two executables of
+/// `ignite::build_tests`. The runner's `test_groups` pairs the same two
+/// groups with them, in either order, and each root's test runs in the
+/// executable that holds it. Written under the target's temporary
+/// directory, so the corpus never holds the layout.
+#[test]
+fn the_runner_groups_roots_with_differing_siblings_as_build_tests_does() {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("differential-sibling-groups");
+    for (name, text) in [
+        (
+            "a/one.ignite",
+            "package p.one\nimport p.shared.pick\ntest \"first root\" { assert pick() == 1 }\n",
+        ),
+        (
+            "a/shared.ignite",
+            "package p.shared\nfn pick() -> Int = 1\ntest \"shared first\" { assert true }\n",
+        ),
+        (
+            "b/two.ignite",
+            "package p.two\nimport p.shared.pick\ntest \"second root\" { assert pick() == 2 }\n",
+        ),
+        (
+            "b/shared.ignite",
+            "package p.shared\nfn pick() -> Int = 2\ntest \"shared second\" { assert true }\n",
+        ),
+    ] {
+        let path = dir.join(name);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        if std::fs::read_to_string(&path).ok().as_deref() != Some(text) {
+            std::fs::write(&path, text).unwrap();
+        }
+    }
+    let entry = |name: &str| {
+        let path = dir.join(name);
+        let loaded = ignite::load(&path, None).unwrap_or_else(|e| panic!("{e}"));
+        Entry {
+            rel: relative(&path),
+            module: loaded.types().module.clone(),
+            tests: test_names(loaded.program()),
+            mains: Vec::new(),
+            mains_not_run: None,
+            std: false,
+            path,
+        }
+    };
+    let (one, two) = (entry("a/one.ignite"), entry("b/two.ignite"));
+    for entries in [[&one, &two], [&two, &one]] {
+        let groups = test_groups(&entries);
+        assert_eq!(
+            groups
+                .iter()
+                .map(|group| group.iter().map(|e| e.rel.as_str()).collect::<Vec<_>>())
+                .collect::<Vec<_>>(),
+            [[entries[0].rel.as_str()], [entries[1].rel.as_str()]]
+        );
+        // `test_executables` pairs them the same way, but in the output
+        // directory the other cases of this file share while they run.
+        let files: Vec<PathBuf> = entries.iter().map(|e| e.path.clone()).collect();
+        let options = ignite::TestOptions {
+            build: build_options(Target::Llvm, dir.join("out")),
+            runner: Vec::new(),
+        };
+        let executables = ignite::build_tests(&files, &options).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(executables.len(), groups.len());
+        let mut jobs = BTreeMap::new();
+        for (exe, held) in executables.iter().zip(&groups) {
+            for e in held {
+                for name in &e.tests {
+                    jobs.insert(
+                        format!("{}::{name}", e.rel),
+                        Job {
+                            program: exe.clone(),
+                            args: vec!["--run-one".to_string(), format!("{}/{name}", e.module)],
+                            scratch: scratch_root()
+                                .join("sibling-groups")
+                                .join(jobs.len().to_string()),
+                            test: true,
+                        },
+                    );
+                }
+            }
+        }
+        let runs = run_all(&jobs);
+        assert_eq!(runs.len(), 2, "{runs:?}");
+        for (key, run) in &runs {
+            assert_eq!(run.status, "0", "{key}: {run:?}");
+        }
+    }
 }
 
 /// Adversary (story quality-ratchet, pass 2): the gate stays off the
