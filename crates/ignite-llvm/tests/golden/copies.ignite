@@ -598,3 +598,52 @@ test "a parameter moved late is the callee's to move on" {
   assert d.inputs == [("k", Num(1))] && e.inputs == [("b", Num(7)), ("k", Num(2))]
   assert c.inputs.len() == 1 && e.label == "c"
 }
+
+test fn index_kept(i: Int) -> Int {
+  var l = [i, i + 1]
+  var m = [i]
+  l[if true {
+    m = [i + 10, i + 11]
+    1
+  } else {
+    0
+  }] + m.len()
+}
+
+test fn index_replaced(i: Int) -> Int {
+  var l = [i, i + 1]
+  var m = [i]
+  l[if true {
+    l = [i + 10, i + 11]
+    1
+  } else {
+    0
+  }] + m.len()
+}
+
+test fn prefix_kept(t: Text) -> Bool {
+  var s = t
+  var u = t
+  s.starts_with(if true {
+    u = "dog"
+    "c"
+  } else {
+    "d"
+  }) && u.len() == 3
+}
+
+test fn prefix_replaced(t: Text) -> Bool {
+  var s = t
+  var u = t
+  s.starts_with(if true {
+    s = "dog"
+    "c"
+  } else {
+    "d"
+  }) && u.len() == 3
+}
+
+test "a receiver is read before an index or a prefix that replaces it" {
+  assert index_kept(5) == 8 && index_replaced(5) == 7
+  assert prefix_kept("cat") && prefix_replaced("cat")
+}

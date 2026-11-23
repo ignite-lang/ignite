@@ -388,3 +388,89 @@ fn a_parameter_moved_late_is_taken_by_value() {
         "renamed_twice copies: {text}"
     );
 }
+
+/// Story `place-receiver-read-before-index-and-prefix-argument`: a local
+/// receiver of an index, a prefix check or a map lookup is read before the
+/// argument (`docs/slice.md` 10.1, "Receiver first"). It is copied when
+/// the argument assigns it, which rustc would otherwise refuse (E0506),
+/// and borrowed as before when the argument changes another variable.
+const RECEIVERS: &str = "fn index_kept(i: Int) -> Int {
+  var l = [i, i + 1]
+  var n = 0
+  l[if true {
+    n = 1
+    n
+  } else {
+    0
+  }]
+}
+
+fn index_replaced(i: Int) -> Int {
+  var l = [i, i + 1]
+  l[if true {
+    l = [i]
+    0
+  } else {
+    0
+  }]
+}
+
+fn prefix_kept(t: Text) -> Bool {
+  var s = t
+  var n = 0
+  s.starts_with(if true {
+    n = 1
+    \"c\"
+  } else {
+    \"d\"
+  })
+}
+
+fn prefix_replaced(t: Text) -> Bool {
+  var s = t
+  s.starts_with(if true {
+    s = \"dog\"
+    \"c\"
+  } else {
+    \"d\"
+  })
+}
+
+fn get_kept(m: Map<Text, Int>) -> Option<Int> {
+  var k = m
+  var n = 0
+  k.get(if true {
+    n = 1
+    \"a\"
+  } else {
+    \"b\"
+  })
+}
+
+fn get_replaced(m: Map<Text, Int>) -> Option<Int> {
+  var k = m
+  k.get(if true {
+    k = Map.empty()
+    \"a\"
+  } else {
+    \"b\"
+  })
+}
+";
+
+#[test]
+fn a_receiver_is_copied_only_when_its_argument_replaces_it() {
+    let lib = common::generate_source(RECEIVERS, &common::repository_std())
+        .unwrap_or_else(|d| panic!("{d:?}"))
+        .lib_rs;
+    for (kept, replaced, copy) in [
+        ("index_kept", "index_replaced", "l.clone()"),
+        ("prefix_kept", "prefix_replaced", "s.clone()"),
+        ("get_kept", "get_replaced", "k.clone()"),
+    ] {
+        let text = section(&lib, &format!("pub fn {kept}("));
+        assert_eq!(text.matches(copy).count(), 0, "{kept} copies: {text}");
+        let text = section(&lib, &format!("pub fn {replaced}("));
+        assert_eq!(text.matches(copy).count(), 1, "{replaced}: {text}");
+    }
+}
