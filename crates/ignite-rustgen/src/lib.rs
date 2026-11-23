@@ -4623,7 +4623,13 @@ impl<'a> Generator<'a> {
             | ExprKind::If { .. }
             | ExprKind::Match { .. }
             | ExprKind::Block(_)
-            | ExprKind::Record { .. } => format!("({text})"),
+            | ExprKind::Record { .. }
+            // Rust's `return`, `break` and `continue` take the rest of the
+            // operator chain: `(return a) || p` written bare is
+            // `return (a || p)`.
+            | ExprKind::Return(_)
+            | ExprKind::Break
+            | ExprKind::Continue => format!("({text})"),
             _ => self.deref_if_borrowed(expr, text),
         }
     }
