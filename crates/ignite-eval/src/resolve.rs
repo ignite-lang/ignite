@@ -156,8 +156,9 @@ fn member_id(value: &Value) -> Option<String> {
 
 /// Resolve `assembly` of `system`, whose evaluated `bindings` map is
 /// `bindings`: one entry per resource and component, sorted by member id,
-/// or the E110 to E113 diagnostics of the rules table in 15.6. E111 to
-/// E113 are reported at the key's entry in the `bindings` literal, E110 at
+/// or the E108 and E110 to E113 diagnostics of the rules table in 15.6.
+/// E108 and E111 to E113 are reported at the key's entry in the `bindings`
+/// literal, else (a map a fn returns) at the `bindings` property; E110 at
 /// the `bindings` property.
 pub fn resolve(
     evaluator: &mut Evaluator<'_>,
@@ -188,6 +189,18 @@ pub fn resolve(
             .and_then(|rest| rest.strip_prefix('.'))
             .and_then(|name| system.member(name))
         else {
+            // A key of a map a fn returned, which the type checker never
+            // saw: E108 as for a written key (14.7), never dropped.
+            let named = &system.name;
+            let message = match id.split_once('.') {
+                Some((of, _)) if of == named => {
+                    format!("`{id}` is not a member of system `{named}`")
+                }
+                _ => format!(
+                    "`{id}` is not a member of system `{named}`, the system of this assembly"
+                ),
+            };
+            diagnostics.push(Diagnostic::new("E108", span_of(&id), message));
             continue;
         };
         let span = span_of(&id);

@@ -1,0 +1,34 @@
+// ignite plan --assembly foreign
+package fixture_e108_evaluated_unknown
+
+import std.deploy.{Binding, Deployment, localSocket}
+
+system S {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 0 }
+  resource egress: TcpListener { address = "127.0.0.1", port = 0 }
+}
+
+system T {
+  resource other: TcpListener { address = "127.0.0.1", port = 0 }
+}
+
+fn own_bindings() -> Map<Ref, Binding> = {
+  S.ingress = localSocket()
+  S.egress = localSocket()
+}
+
+fn foreign_bindings() -> Map<Ref, Binding> = {
+  S.ingress = localSocket()
+  S.egress = localSocket()
+  S.nowhere = localSocket()
+}
+
+assembly own: Deployment {
+  system = S
+  bindings = own_bindings()
+}
+
+assembly foreign: Deployment {
+  system = S
+  bindings = foreign_bindings()
+}

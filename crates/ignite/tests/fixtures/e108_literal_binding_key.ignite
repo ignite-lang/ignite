@@ -1,0 +1,22 @@
+// ignite plan --assembly literal
+package fixture_e108_literal
+
+import std.deploy.{Deployment, localSocket}
+
+system S {
+  resource ingress: TcpListener { address = "127.0.0.1", port = 0 }
+  resource egress: TcpListener { address = "127.0.0.1", port = 0 }
+}
+
+system T {
+  resource other: TcpListener { address = "127.0.0.1", port = 0 }
+}
+
+assembly literal: Deployment {
+  system = S
+  bindings = {
+    S.ingress = localSocket()
+    S.egress = localSocket()
+    T.other = localSocket()
+  }
+}

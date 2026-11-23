@@ -1343,7 +1343,7 @@ impl Model {
     /// The evaluation and resolution `ignite check` runs (O20): every
     /// property of every system and assembly of `program` is evaluated,
     /// and every assembly whose `system` names a system of the program is
-    /// resolved; E110 to E113, E115, E117 and E118 as `model` reports them,
+    /// resolved; E108, E110 to E113, E115, E117 and E118 as `model` reports them,
     /// never E114. First, for any program, the claim model of its
     /// protocols (`docs/slice.md` 19.7): E090, E092 and E091's second
     /// trigger, from [`crate::Claims::of`].
@@ -2101,7 +2101,7 @@ fn write_string(out: &mut String, text: &str) {
 
 /// The model of the program `program` was typed from, with the assembly
 /// named by `assembly` or the program's only one (15.6); E114 when none
-/// or several are selectable, E110 to E113 from the resolution, E115,
+/// or several are selectable, E108 and E110 to E113 from the resolution, E115,
 /// E117 and E118 from the evaluation, each at its property expression in
 /// the program file (a defaulted property's at its declaration).
 pub fn model(
