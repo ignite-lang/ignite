@@ -1957,10 +1957,14 @@ own. Rust: one crate `ignite-tests` whose `lib.rs` holds each program as the mod
 module path (`examples.todo` is `pub mod examples { pub mod todo { .. } }`), beside the
 `ignite-std` crate; generator API `ignite_rustgen::generate_tests`. LLVM: every program in one
 `program.ll`, separated by the module path that prefixes every symbol (`"<module>.<name>"`);
-`ignite_llvm::generate_tests`. The one exception: two programs with one module path (two files
+`ignite_llvm::generate_tests`. Two exceptions: two programs with one module path (two files
 without a `package` line are both `main`) cannot share an executable, because the runner names
-a test `<module>/<name>`; the later one goes into a further executable (directories `tests`,
-`tests-2`, … under `--out`). An executable holds its modules' tests in the command-line order
+a test `<module>/<name>`; nor can two programs whose modules, their own and their sibling
+modules (25.6), give one module path to two different source files (`a/one.ignite` and
+`b/two.ignite` each importing `p.shared` from the `shared.ignite` beside it), because one
+executable holds one module of a path. The later one goes into a further executable
+(directories `tests`, `tests-2`, … under `--out`), so every copy's tests run; programs sharing
+one sibling file share an executable and run its tests once. An executable holds its modules' tests in the command-line order
 of their files, then declaration order. `ignite test` runs the executables one after another;
 each prints its own report (so one `test result:` line per executable), and `ignite test`
 exits with the largest status of them.

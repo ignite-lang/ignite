@@ -1087,6 +1087,13 @@ impl ParsedFile {
         program_module(&self.program)
     }
 
+    /// The source file of every sibling module, by module path.
+    pub(crate) fn sibling_sources(&self) -> impl Iterator<Item = (&str, &Path)> + '_ {
+        self.siblings
+            .iter()
+            .map(|(path, sibling)| (path.as_str(), Path::new(&sibling.source.path)))
+    }
+
     /// Every module the program and its siblings import, standard-library
     /// or not; the loader skips the ones that are no standard-library file.
     fn std_modules(&self) -> impl Iterator<Item = String> + '_ {

@@ -311,6 +311,118 @@ fn each_unnamed_file_runs_its_own_tests() {
     });
 }
 
+/// The reproducer of the maintainer review of 2026-11-23: `a/one.ignite`
+/// and `b/two.ignite` each import `p.shared` from the `shared.ignite`
+/// beside them, and only `b`'s copy has a failing test. `a/three.ignite`
+/// shares `a`'s copy with `a/one.ignite`. Written under the target's
+/// temporary directory, so the differential corpus never sees them.
+fn sibling_suites() -> (PathBuf, PathBuf) {
+    let dir = out_dir().join("sibling-suites");
+    let files = [
+        (
+            "a/one.ignite",
+            "package p.one\nimport p.shared.pick\ntest \"first root\" { assert pick() == 1 }\n",
+        ),
+        (
+            "a/three.ignite",
+            "package p.three\nimport p.shared.pick\ntest \"third root\" { assert pick() == 1 }\n",
+        ),
+        (
+            "a/shared.ignite",
+            "package p.shared\nfn pick() -> Int = 1\ntest \"shared first\" { assert true }\n",
+        ),
+        (
+            "b/two.ignite",
+            "package p.two\nimport p.shared.pick\ntest \"second root\" { assert pick() == 1 }\n",
+        ),
+        (
+            "b/shared.ignite",
+            "package p.shared\nfn pick() -> Int = 1\ntest \"shared second\" { assert false }\n",
+        ),
+    ];
+    for (name, text) in files {
+        let path = dir.join(name);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        if std::fs::read_to_string(&path).ok().as_deref() != Some(text) {
+            std::fs::write(&path, text).unwrap();
+        }
+    }
+    (dir.join("a"), dir.join("b"))
+}
+
+/// The result lines of the tests a report ran, sorted.
+fn ran(report: &str) -> Vec<&str> {
+    let mut tests: Vec<&str> = report
+        .lines()
+        .filter_map(|line| line.strip_prefix("test "))
+        .filter(|line| !line.starts_with("result: "))
+        .collect();
+    tests.sort_unstable();
+    tests
+}
+
+/// Roots whose sibling modules share a module path but come from different
+/// files run in executables of their own, in either argument order: every
+/// test of both copies of `p.shared` runs and the failing one fails the
+/// run. One root alone keeps its result, and two roots sharing one physical
+/// sibling still run its tests once, in one executable.
+#[test]
+fn combined_roots_run_every_sibling_suite() {
+    let (a, b) = sibling_suites();
+    let one = a.join("one.ignite").display().to_string();
+    let three = a.join("three.ignite").display().to_string();
+    let two = b.join("two.ignite").display().to_string();
+    on_both_targets(|target| {
+        for args in [[one.as_str(), two.as_str()], [two.as_str(), one.as_str()]] {
+            let run = ignite_test(Chain::Groups, target, &args);
+            assert_eq!(
+                ran(&run.stdout),
+                [
+                    "p.one/first root ... ok",
+                    "p.shared/shared first ... ok",
+                    "p.shared/shared second ... FAILED",
+                    "p.two/second root ... ok",
+                ],
+                "{target} {args:?}: {}\n{}",
+                run.stdout,
+                run.stderr
+            );
+            assert_eq!(run.status, 1, "{target} {args:?}: {}", run.stdout);
+        }
+        let alone = ignite_test(Chain::Groups, target, &[&two]);
+        assert_eq!(
+            ran(&alone.stdout),
+            [
+                "p.shared/shared second ... FAILED",
+                "p.two/second root ... ok"
+            ],
+            "{target}: {}\n{}",
+            alone.stdout,
+            alone.stderr
+        );
+        assert_eq!(alone.status, 1, "{target}: {}", alone.stdout);
+        let shared = ignite_test(Chain::Groups, target, &[&one, &three]);
+        assert_eq!(
+            ran(&shared.stdout),
+            [
+                "p.one/first root ... ok",
+                "p.shared/shared first ... ok",
+                "p.three/third root ... ok",
+            ],
+            "{target}: {}\n{}",
+            shared.stdout,
+            shared.stderr
+        );
+        assert_eq!(shared.status, 0, "{target}: {}", shared.stdout);
+        assert_eq!(
+            shared.stdout.matches("test result: ").count(),
+            1,
+            "{target}: one executable for one shared sibling: {}",
+            shared.stdout
+        );
+    });
+}
+
 /// `--timeout 1` kills `slow`'s `never ends` after a second and reports
 /// it; the run's other tests are untouched ([`fixtures_run`]).
 #[test]
