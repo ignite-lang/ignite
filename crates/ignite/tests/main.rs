@@ -72,6 +72,7 @@ mod rust_memory;
 mod rust_memory_adversary;
 mod shared_lists;
 mod shared_lists_adversary;
+mod short_circuit_adversary;
 mod siblings;
 mod site;
 mod size_adversary;
