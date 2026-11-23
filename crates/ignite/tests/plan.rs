@@ -305,6 +305,53 @@ fn studio_model_matches_golden() {
     compare(&golden_dir().join("studio.model.json"), &model);
 }
 
+/// `docs/slice.md` 15.5 (the maintainer review of 2026-11-23): a bare
+/// member name read in a property gives its `uses` edge through every form
+/// of expression, not only the direct read. Each component of
+/// `uses_edges.ignite` but two reads `base.size` through another form;
+/// `plain` reads no member and gets no edge, `pointer` names `U.base`
+/// qualified and gets a `references` edge, not `uses`.
+#[test]
+fn a_member_read_in_any_expression_gives_its_uses_edge() {
+    let fixture = fixtures_dir().join("uses_edges.ignite");
+    let model = success(&ignite(&["plan", fixture.to_str().unwrap()]));
+    let json = Json::parse(&model);
+    let edges: Vec<(String, String, String)> = json.object()["edges"]
+        .array()
+        .iter()
+        .map(Json::object)
+        .map(|edge| {
+            (
+                edge["from"].string().to_string(),
+                edge["kind"].string().to_string(),
+                edge["to"].string().to_string(),
+            )
+        })
+        .collect();
+    let mut expected: Vec<(String, String, String)> = [
+        "argument",
+        "arm",
+        "block",
+        "branch",
+        "closure",
+        "condition",
+        "direct",
+        "index",
+        "list",
+        "nested",
+        "otherwise",
+        "scrutinee",
+        "tuple",
+    ]
+    .iter()
+    .map(|from| (format!("U.{from}"), "uses".into(), "U.base".into()))
+    .collect();
+    expected.push(("U.pointer".into(), "references".into(), "U.base".into()));
+    expected.sort();
+    assert_eq!(edges, expected, "{model}");
+    compare(&golden_dir().join("uses_edges.model.json"), &model);
+}
+
 /// Slice 17: only a `TcpListener` provisions the executable that binds it
 /// (16.14). The studio's capability resources, among them `Studio.entropy`,
 /// which sorts before its listener `Studio.ingress`, are created by the

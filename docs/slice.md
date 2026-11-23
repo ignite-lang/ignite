@@ -2914,7 +2914,7 @@ Top-level keys. Where design 6.2's envelope has a key, the model keeps its name;
 | `assembly` | the selected assembly (15.6), or `null` when the program declares none; design 6.2's `bindings` is `assembly.resolution` |
 | `components` | every `component` of the system |
 | `contracts` | every `contract` |
-| `edges` | `{"from", "kind", "to"}`: `uses` (a bare member name in a property), `references` (a `Ref` value), `observes` (a `Signal` value), `hosts` (from the resolution) |
+| `edges` | `{"from", "kind", "to"}`: `uses` (a bare member name read in a property, through every form of expression: an `if` condition or branch, a block and its `let`s, a `match` scrutinee or arm, a call argument, a closure body, a list, an index; a name where a `Ref` is expected and a qualified `System.member` are `references` instead), `references` (a `Ref` value), `observes` (a `Signal` value), `hosts` (from the resolution) |
 | `formatVersion` | `"ignite-model/0.1"`; a change that removes or reinterprets a key bumps it, an added key does not |
 | `policies` | every `policy` |
 | `resources` | every `resource` |
