@@ -1245,7 +1245,7 @@ Codes of the syntax and name stages (`ignite-syntax`, `ignite-check`):
 | E015 | constant cycle |
 | E016 | effect missing from `requires` (section 5.1); a closure's effects not on its own parameters are charged where it is created (section 13.3) |
 | E017 | effectful function used as a value where no effectful fn type covering its effects is expected (section 4.5); reported by the type checker since slice 7; also a fn passed to `List.map` or `List.sort_by` with an effect on its parameter or one the caller's `requires` does not cover (20.4.3) |
-| E020 | unsupported or malformed resource, component, contract, policy or assembly (also: a kind that is no record type, two components with one executable name, a `system` in a std module); reported by the type checker since slice 10. The Rust backend keeps E020 for a malformed resource and, when it runs without the typed program, for every component (a component is executable only through the type checker) |
+| E020 | unsupported or malformed resource, component, contract, policy or assembly (also: a kind that is no record type, two components of the program with one executable name, an `executable` that is not one portable file name, a `system` in a std module); reported by the type checker since slice 10. The Rust backend keeps E020 for a malformed resource and, when it runs without the typed program, for every component (a component is executable only through the type checker) |
 | E021 | reserved (unused since slice 1) |
 | E030 | protocol role missing or malformed, a role without `requires`, a call to a role the protocol lacks (the component rules of slices 1 to 9, `Client` without `connect` and `Service` without `serve`, retired with those kinds in slice 10: a kind's `main` calls the role, and a missing role is this E030 at the call); since slice 14 a `serve` role takes 2 parameters `(stream, application)` or 3 `(stream, limits, application)` (section 18.6) |
 | E031 | unknown module or imported name (including a name imported from `std.net` or `std.io` that is neither a builtin nor declared in that module's file), or an import from a module that is neither `std.*` nor a sibling of the program's package (section 14.4) |
@@ -2639,12 +2639,18 @@ differs from 14.1 to 14.11 or refines them:
     written as `Loopback`; `backlog: Int` is the fourth `TcpListener` property; `address`
     and `port` are required. A `Store<T>` resource takes no properties (E047).
 12. The executable's name is the string literal of the component's `executable` property,
-    else the component's name. `ExecutableInfo.resources` lists the resources the component
-    and its embedded components use through bare names, `embedded` the components in an
-    order where each follows the components it uses. A kind without `K.main` is a plain
-    component. Unknown kinds, `Service` without `application`, two components with one
-    executable name and a `system` in a `std.*` module are E020 from the type checker, so
-    `ignite check` reports them without a backend.
+    else the component's name. The name is one portable file name: one or more of the ASCII
+    letters, the digits, `.`, `-` and `_`, other than `.` and `..`; an `executable` that is
+    empty, holds a path separator or is an absolute path is E020 at the property's value.
+    The Rust project writer (`write_project`) and the LLVM link step refuse any other name
+    before they write anything, so no build writes outside its output directory.
+    `ExecutableInfo.resources` lists the resources the component and its embedded
+    components use through bare names, `embedded` the components in an order where each
+    follows the components it uses. A kind without `K.main` is a plain component. Unknown
+    kinds, `Service` without `application`, two components with one executable name, in one
+    system or in two systems of the program (at the later component, naming the earlier),
+    and a `system` in a `std.*` module are E020 from the type checker, so `ignite check`
+    reports them without a backend.
 13. Sibling modules (14.4): the files `<name>.ignite` beside the program whose first
     declaration is `package <program package>.<name>`, loaded, checked and typed in import
     order before the program; they may import `std.*` and each other, and the program may

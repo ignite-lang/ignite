@@ -7,6 +7,7 @@ mod allocations;
 mod borrowed_reads;
 mod common;
 mod compiles;
+mod executable_names;
 mod golden;
 mod lent_rebinding;
 mod names;

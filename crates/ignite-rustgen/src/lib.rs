@@ -1545,8 +1545,24 @@ pub fn release_layout_config(triple: &str, out: &Path) -> io::Result<String> {
     ))
 }
 
-/// [`write_project`] with `manifest` as `Cargo.toml`.
+/// [`write_project`] with `manifest` as `Cargo.toml`. An executable name
+/// that is not one file name ([`ignite_types::is_executable_name`]) is
+/// refused before anything is written, so no file outside `out` is.
 fn write_with_manifest(project: &GeneratedProject, manifest: &str, out: &Path) -> io::Result<()> {
+    if let Some(executable) = project
+        .executables
+        .iter()
+        .find(|executable| !ignite_types::is_executable_name(&executable.name))
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "executable name {:?} is not one file name; nothing was written to {}",
+                executable.name,
+                out.display()
+            ),
+        ));
+    }
     fs::create_dir_all(out.join("src"))?;
     write_if_changed(out.join("Cargo.toml"), manifest)?;
     write_if_changed(out.join("src").join("lib.rs"), &project.lib_rs)?;

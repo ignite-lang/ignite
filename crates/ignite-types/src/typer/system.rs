@@ -1262,7 +1262,6 @@ impl Typer<'_> {
             })
             .collect();
         let mut reported: BTreeSet<String> = BTreeSet::new();
-        let mut executables: Vec<(String, Span)> = Vec::new();
         for (decl, ty) in typed {
             let order = match embedded_order(&decl.name.name, &component_edges) {
                 Ok(order) => order,
@@ -1281,17 +1280,21 @@ impl Typer<'_> {
                     continue;
                 }
             };
-            if let Some(executable) = self.executable(&name, decl, &ty, &order, &uses, &members) {
-                if let Some((other, _)) = executables.iter().find(|(e, _)| *e == executable) {
-                    self.error(
-                        "E020",
-                        decl.name.span,
-                        format!(
-                            "two components produce the executable `{other}`; give each its own `executable`"
-                        ),
-                    );
-                }
-                executables.push((executable, decl.name.span));
+            let earlier = self.system.executables.len();
+            if let Some(executable) = self.executable(&name, decl, &ty, &order, &uses, &members)
+                && let Some(first) = self.system.executables[..earlier]
+                    .iter()
+                    .find(|e| e.executable == executable)
+            {
+                let first = format!("{}.{}", first.system, first.component);
+                self.error(
+                    "E020",
+                    decl.name.span,
+                    format!(
+                        "`{name}.{}` produces the executable `{executable}`, as `{first}` does; give each its own `executable`",
+                        decl.name.name
+                    ),
+                );
             }
         }
         let mut infos = Vec::new();
@@ -1775,15 +1778,27 @@ impl Typer<'_> {
             );
             return None;
         }
-        let executable = decl
+        let written = decl
             .properties
             .iter()
             .find(|p| p.name.name == "executable")
             .and_then(|p| match &p.value.kind {
-                ExprKind::Str(text) => Some(text.clone()),
+                ExprKind::Str(text) => Some((text.clone(), p.value.span)),
                 _ => None,
-            })
-            .unwrap_or_else(|| decl.name.name.clone());
+            });
+        if let Some((text, span)) = &written
+            && !crate::is_executable_name(text)
+        {
+            self.error(
+                "E020",
+                *span,
+                format!(
+                    "executable {text:?} is not one file name; use ASCII letters, digits, `.`, `-` and `_`, other than `.` and `..`"
+                ),
+            );
+            return None;
+        }
+        let executable = written.map_or_else(|| decl.name.name.clone(), |(text, _)| text);
         let mut resources: Vec<(String, Ty)> = Vec::new();
         let chain = embedded.iter().chain(std::iter::once(&decl.name.name));
         for component in chain {

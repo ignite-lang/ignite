@@ -599,11 +599,27 @@ pub(crate) fn link(
     generated: &ignite_llvm::Generated,
     options: &BuildOptions,
 ) -> Result<BuildOutput, Error> {
+    let out = out_dir(package, options);
+    if let Some(main) = generated
+        .mains
+        .iter()
+        .find(|main| !ignite_types::is_executable_name(&main.executable))
+    {
+        return Err(Error::Io {
+            path: out.join("bin"),
+            error: std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!(
+                    "executable name {:?} is not one file name; nothing was written",
+                    main.executable
+                ),
+            ),
+        });
+    }
     let kit = match crate::musl::triple(options)? {
         Some(triple) => Some(crate::musl::kit(options, &triple)?),
         None => None,
     };
-    let out = out_dir(package, options);
     let ir_dir = out.join("llvm");
     let (spec, clang_major) = probe(options, &ir_dir)?;
     let lto = lto_runtime(options, clang_major);
@@ -749,5 +765,53 @@ mod archive_tests {
         }
         archive[8 + 48..8 + 58].fill(b'?');
         assert_eq!(archive_machine(&mut Cursor::new(archive)).unwrap(), None);
+    }
+}
+
+#[cfg(test)]
+mod executable_name_tests {
+    use super::*;
+
+    /// `link` refuses a main whose executable name is not one file name
+    /// before it touches the disk, whatever name reaches it (the
+    /// maintainer review of 2026-11-23, IG-01): the output directory is
+    /// never created.
+    #[test]
+    fn a_name_that_is_not_one_file_name_is_refused_before_anything_is_written() {
+        let dir = std::env::temp_dir().join(format!(
+            "ignite-llvm-executable-names-{}",
+            std::process::id()
+        ));
+        let absolute = dir.join("absolute");
+        for name in [
+            "../escape",
+            "../../escape",
+            "a/b",
+            absolute.to_str().unwrap(),
+            "",
+            ".",
+            "..",
+        ] {
+            let generated = ignite_llvm::Generated {
+                std: String::new(),
+                program: String::new(),
+                mains: vec![ignite_llvm::Main {
+                    executable: name.to_string(),
+                    ir: String::new(),
+                }],
+            };
+            let options = BuildOptions {
+                out: Some(dir.join("out")),
+                ..Default::default()
+            };
+            match link("names", &generated, &options) {
+                Err(Error::Io { error, .. }) => {
+                    assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput, "{name:?}");
+                    assert!(error.to_string().contains("not one file name"), "{error}");
+                }
+                other => panic!("{name:?}: {other:?}"),
+            }
+            assert!(!dir.exists(), "{name:?}");
+        }
     }
 }

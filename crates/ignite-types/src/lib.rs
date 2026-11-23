@@ -1257,6 +1257,21 @@ pub struct ExecutableInfo {
     pub embedded: Vec<(String, Ty)>,
 }
 
+/// Whether `name` may be an executable's name (`docs/slice.md` 14, rule
+/// 12): one portable file name, one or more of the ASCII letters, the
+/// digits, `.`, `-` and `_`, other than `.` and `..`. Such a name joined
+/// to a directory names a file in that directory; the type checker
+/// refuses any other `executable` (E020) and both writers refuse any
+/// other [`ExecutableInfo::executable`] before they touch the disk.
+pub fn is_executable_name(name: &str) -> bool {
+    !name.is_empty()
+        && name != "."
+        && name != ".."
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_'))
+}
+
 /// The operation that failed at a [`FailureSite`] (`docs/slice.md`
 /// section 14.8).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
