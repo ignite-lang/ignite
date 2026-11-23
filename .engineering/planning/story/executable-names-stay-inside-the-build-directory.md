@@ -2,12 +2,13 @@
 format: aep.planning-md/3
 id: story:executable-names-stay-inside-the-build-directory
 kind: story
-status: active
+status: implemented
 title: A component's executable name cannot write outside the build directory
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-23T03:50:59Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-23T03:50:59Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-23T21:50:03Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: a component's executable name cannot write outside the build directory
 

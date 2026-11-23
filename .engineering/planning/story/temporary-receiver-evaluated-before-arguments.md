@@ -2,15 +2,16 @@
 format: aep.planning-md/3
 id: story:temporary-receiver-evaluated-before-arguments
 kind: story
-status: active
+status: implemented
 title: A temporary receiver is evaluated before the arguments on every target
 relations:
 - informed_by: story:element-receiver-read-before-arguments
 - informed_by: story:eval-receiver-order
-revision: 3
+revision: 4
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-23T03:51:03Z", actor: "human:timo", revision: 2}
 - {from: "proposed", to: "active", at: "2026-11-23T03:51:03Z", actor: "human:timo", revision: 3}
+- {from: "active", to: "implemented", at: "2026-11-23T21:50:06Z", actor: "human:timo", revision: 4, decided_on: {"recorded":{"test_result":1}}}
 ---
 # Story: a temporary receiver is evaluated before the arguments on every target
 

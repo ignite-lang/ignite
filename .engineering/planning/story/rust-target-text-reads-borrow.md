@@ -6,7 +6,32 @@ status: active
 title: A text or byte string that is only read is not copied on the Rust target
 relations:
 - informed_by: story:rust-target-shared-list-storage
-revision: 7
+scope:
+- confidence: cited
+  path: crates/ignite-rustgen/src/lib.rs
+- confidence: cited
+  path: crates/ignite-rustgen/tests/common/mod.rs
+- confidence: cited
+  path: crates/ignite-rustgen/tests/golden/
+- confidence: cited
+  path: crates/ignite-rustgen/tests/text_reads.rs
+- confidence: cited
+  path: crates/ignite-types/src/lib.rs
+- confidence: cited
+  path: crates/ignite-types/src/moves.rs
+- confidence: cited
+  path: crates/ignite-types/src/ownership.rs
+- confidence: cited
+  path: crates/ignite/src/apply/plan.rs
+- confidence: cited
+  path: crates/ignite/src/lib.rs
+- confidence: cited
+  path: crates/ignite/tests/text_reads.rs
+- confidence: cited
+  path: crates/ignite/tests/text_reads_adversary.rs
+- confidence: cited
+  path: docs/slice.md
+revision: 20
 transitions:
 - {from: "draft", to: "proposed", at: "2026-11-12T12:37:04Z", actor: "human:timo", revision: 2, executor: "agent:claude-coordinator", correlation: "after-v0.16.2"}
 - {from: "proposed", to: "active", at: "2026-11-12T12:37:04Z", actor: "human:timo", revision: 3, executor: "agent:claude-coordinator", correlation: "after-v0.16.2"}
@@ -43,7 +68,19 @@ Forms 1, 2 and 5 are a read of a text's bytes; forms 3 and 4 are the choice betw
 
 ## Scope
 
-- `crates/ignite-rustgen/src/lib.rs` (`to_bytes` and `to_text` receivers, the arm bindings of a lent option, the parameter modes), `crates/ignite-types/src/moves.rs` (last uses at call sites, if the parameter rule needs them), `crates/ignite-rustgen/tests/golden/`, `crates/ignite/tests/` (count test), `docs/slice.md` section 6. Inferred.
+Derived 2026-11-23 by `story-scoper`, for the second unit (forms 3, 4 and 5) only, from branch `wave/15-text-reads-2` (`26d63103`, one work-in-progress commit) read against `wave/16`. Every line is **cited** (read from the story or the tree) or **inferred**. Line numbers are those of `wave/16`.
+
+- **Primary surface:** `crates/ignite-types/src/moves.rs`: the rule "By-value parameters given by every caller" (`Given`, `analyse(.., root)`, the owned/whole marks) — cited
+- `crates/ignite-types/src/lib.rs:1584` (`TypedProgram`, fields `moves_owned`, `taken_whole`), `:2306` (`type_module` split into `type_module`/`type_program`/`type_any`) — cited
+- `crates/ignite-types/src/ownership.rs` (`moved` gains a `rust` flag; new `moved_on_rust_in`, `moved_on_rust_in_stmts`) — cited
+- `crates/ignite-rustgen/src/lib.rs:2481` (`Generator::moves`, new `takes_whole`), `:2629` (`lent_iterable`), `:4016` (`moved_in_stmts` caller), `:6290`, `:6357` (`touched_in`), the lent-match predicate near `:6220` — cited
+- `crates/ignite/src/lib.rs:1282` (`type_parsed_with` calls `type_program`) — cited; `:1026`, `:1252` (sibling and std modules) stay on `type_module` — inferred
+- Tests: `crates/ignite-rustgen/tests/common/mod.rs`, `crates/ignite-rustgen/tests/text_reads.rs`, `crates/ignite/tests/text_reads.rs`, goldens under `crates/ignite-rustgen/tests/golden/` (re-blessed); `crates/ignite/tests/text_reads_adversary.rs` read and unchanged — cited
+- `crates/ignite/src/apply/plan.rs:18` `CODEGEN_REVISION` — cited
+- Documents: `docs/slice.md` section 6 (new subsection "By-value parameters given by every caller") and section 44 (44.3) — cited; the `AGENTS.md` layout row `crates/ignite-types/` as its own PR after the merge — cited
+- **Confidence:** high for the files; the final shape after the six resume steps is open.
+- **Collides with:** a unit touching the last-use move analysis, `TypedProgram` construction, the move helpers of `ownership.rs`, the move and lend predicates of the Rust generator, the driver's program typing, the Rust goldens, `docs/slice.md` sections 6 and 44, `CODEGEN_REVISION`.
+- **Overlap with wave 16** since the branch's merge base: `crates/ignite-rustgen/src/lib.rs`, `crates/ignite-types/src/lib.rs`, `crates/ignite-types/src/ownership.rs` (`changed_places_in` above `moved_in`), `crates/ignite/src/lib.rs`, `docs/slice.md`; an in-memory `git merge-tree` shows no conflict. Not `moves.rs`, not the branch's test files.
 
 ## Not in this story
 
