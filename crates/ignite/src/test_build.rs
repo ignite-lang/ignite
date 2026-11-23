@@ -358,27 +358,42 @@ struct TestProgram {
     program: Program,
     symbols: Symbols,
     types: TypedProgram,
+    /// Typed as a sibling module (`ignite_types::type_module`), not as the
+    /// program's own module (`type_program`).
+    sibling: bool,
 }
 
 /// Add the parsed program and its sibling modules (`docs/slice.md`
 /// section 14.4), checked and typed, to `programs`; a module whose path
 /// `programs` already holds (a sibling also named on the command line, or
 /// named by two programs) is added once: [`group_files`] keeps a module
-/// path of two source files out of one group.
+/// path of two source files out of one group. A module that is a sibling
+/// of a program of the group keeps its typing as a sibling, whatever the
+/// order of the files: the program imports that typing, and the one as a
+/// program may take parameters by value that the importer lends
+/// (`docs/slice.md` section 6, "By-value parameters given by every
+/// caller").
 fn type_test_programs(
     parsed: ParsedFile,
     std: &TypedStd<'_>,
     programs: &mut Vec<TestProgram>,
 ) -> Result<(), Error> {
     let typed = type_parsed_with(parsed, std.library, std.modules)?;
-    let mut add = |source, program, symbols, types: TypedProgram| {
-        if !programs.iter().any(|p| p.types.module == types.module) {
-            programs.push(TestProgram {
-                source,
-                program,
-                symbols,
-                types,
-            });
+    let mut add = |source, program, symbols, types: TypedProgram, sibling: bool| {
+        let added = TestProgram {
+            source,
+            program,
+            symbols,
+            types,
+            sibling,
+        };
+        match programs
+            .iter_mut()
+            .find(|p| p.types.module == added.types.module)
+        {
+            None => programs.push(added),
+            Some(held) if sibling && !held.sibling => *held = added,
+            Some(_) => {}
         }
     };
     for sibling in typed.siblings {
@@ -387,9 +402,16 @@ fn type_test_programs(
             sibling.program,
             sibling.symbols,
             sibling.types,
+            true,
         );
     }
-    add(typed.source, typed.program, typed.symbols, typed.types);
+    add(
+        typed.source,
+        typed.program,
+        typed.symbols,
+        typed.types,
+        false,
+    );
     Ok(())
 }
 

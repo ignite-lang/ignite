@@ -120,73 +120,131 @@ pub(crate) fn analyse(
             }
             own
         };
+    // Which walks read which entries: the bodies that name a fn or role of
+    // the module ([`named`]), by the body of that fn or role. A walk reads
+    // the consumed set of every callee it names and its own, and nothing
+    // else of `consumed` or `given`, so a body is walked again only when
+    // one of those grows.
+    let index: BTreeMap<&str, usize> = bodies
+        .iter()
+        .enumerate()
+        .filter_map(|(i, b)| b.key.as_deref().map(|k| (k, i)))
+        .collect();
+    let mut readers: Vec<Vec<usize>> = vec![Vec::new(); bodies.len()];
+    // The bodies the rule walks for their calls ([`Given`]): a candidate's
+    // own body and every body that names a candidate.
+    let mut in_rule = vec![false; bodies.len()];
+    for (i, body) in bodies.iter().enumerate() {
+        let mut names_candidate = false;
+        for callee in named(body, types, &index) {
+            if readers[callee].last() != Some(&i) {
+                readers[callee].push(i);
+            }
+            names_candidate |= bodies[callee]
+                .key
+                .as_ref()
+                .is_some_and(|k| candidates.contains_key(k));
+        }
+        in_rule[i] = names_candidate
+            || body
+                .key
+                .as_ref()
+                .is_some_and(|k| candidates.contains_key(k));
+    }
+    // The uses of each fn of the module, for the decision of [`Given`].
+    let mut uses: BTreeMap<&str, Vec<NodeId>> = BTreeMap::new();
+    if !candidates.is_empty() {
+        for (id, callee) in &types.callees {
+            if let Callee::Fn(q) = callee
+                && q.module == types.module
+            {
+                uses.entry(q.name.as_str()).or_default().push(*id);
+            }
+        }
+    }
+    // A worklist to the least fixpoint of the consumed sets (20.3.3) and,
+    // in the program's module, of the given parameters ([`Given`]): a body
+    // is walked first in order, and again only when its own entry or the
+    // entry of a callee it names grows. Entries are never cleared, so each
+    // body is walked at most once per entry growth it reads. When no walk
+    // is pending, the candidates whose calls or body a walk saw are
+    // decided; a parameter given there grows two entries and the walks
+    // that read them are pending again.
+    let mut pending: std::collections::VecDeque<usize> = std::collections::VecDeque::new();
+    let mut queued = vec![false; bodies.len()];
+    for (i, body) in bodies.iter().enumerate() {
+        if body.key.is_some() || in_rule[i] {
+            pending.push_back(i);
+            queued[i] = true;
+        }
+    }
+    let mut found = Given::default();
+    let mut dirty: BTreeSet<String> = BTreeSet::new();
     loop {
-        // Each round that changes something sets at least one more entry
-        // and none is ever cleared, so the fixpoint is reached within one
-        // round per parameter of the module, plus the round that sees no
-        // change.
-        let rounds = consumed.values().map(Vec::len).sum::<usize>() + 1;
-        for _ in 0..rounds {
-            let mut changed = false;
-            for (body, res) in bodies.iter().zip(&resolved) {
-                let Some(key) = &body.key else { continue };
-                let own = consumed[key].clone();
-                let out = walk(body, res, types, modules, &consumed, &own, Collect::Moved);
-                let entry = consumed
-                    .get_mut(key)
-                    .expect("every keyed body has an entry");
-                for i in out.moved {
-                    if !entry[i] {
-                        entry[i] = true;
-                        changed = true;
-                    }
-                }
-            }
-            if !changed {
-                break;
-            }
-        }
-        // The parameters every caller gives up ([`Given`]), added to the
-        // consumed sets: each addition may let another caller give one up
-        // and the consumed sets of 20.3.3 grow, so both are iterated again
-        // until neither changes. Never cleared: a least fixpoint.
-        let mut open: Vec<(String, usize)> = Vec::new();
-        for (k, params) in &candidates {
-            for (i, &candidate) in params.iter().enumerate() {
-                if candidate && !consumed[k][i] {
-                    open.push((k.clone(), i));
-                }
-            }
-        }
-        if open.is_empty() {
-            break;
-        }
-        let mut found = Given::default();
-        for (body, res) in bodies.iter().zip(&resolved) {
+        while let Some(i) = pending.pop_front() {
+            queued[i] = false;
+            let (body, res) = (&bodies[i], &resolved[i]);
             let own = match (&body.key, body.closure) {
                 (Some(key), _) => consumed[key].clone(),
                 (None, Some(_)) => closure_own(body, res, &consumed),
                 (None, None) => Vec::new(),
             };
-            let mine = given_of(&given, body);
-            let out = walk(
-                body,
-                res,
-                types,
-                modules,
-                &consumed,
-                &own,
-                Collect::Calls(&candidates),
-            );
-            found.add(body, out, &mine);
+            let collect = if in_rule[i] {
+                Collect::Calls(&candidates)
+            } else {
+                Collect::Moved
+            };
+            let out = walk(body, res, types, modules, &consumed, &own, collect);
+            let mut grew = false;
+            if let Some(key) = &body.key {
+                let entry = consumed
+                    .get_mut(key)
+                    .expect("every keyed body has an entry");
+                for &p in &out.moved {
+                    if !entry[p] {
+                        entry[p] = true;
+                        grew = true;
+                    }
+                }
+            }
+            if in_rule[i] {
+                dirty.extend(out.calls.values().map(|(name, _)| name.clone()));
+                if let Some(key) = body.key.as_ref().filter(|k| candidates.contains_key(*k)) {
+                    dirty.insert(key.clone());
+                }
+                let mine = given_of(&given, body);
+                found.add(body, out, &mine);
+            }
+            if grew {
+                for &j in std::iter::once(&i).chain(&readers[i]) {
+                    if !queued[j] {
+                        queued[j] = true;
+                        pending.push_back(j);
+                    }
+                }
+            }
         }
-        let added = found.given(types, &open);
+        let mut added: Vec<(String, usize)> = Vec::new();
+        for name in std::mem::take(&mut dirty) {
+            for (p, &candidate) in candidates[&name].iter().enumerate() {
+                if candidate && !consumed[&name][p] && found.gives(&name, p, &uses) {
+                    added.push((name.clone(), p));
+                }
+            }
+        }
         if added.is_empty() {
             break;
         }
-        for (key, i) in added {
-            consumed.get_mut(&key).expect("a candidate is keyed")[i] = true;
-            given.get_mut(&key).expect("a candidate is keyed")[i] = true;
+        for (key, p) in added {
+            consumed.get_mut(&key).expect("a candidate is keyed")[p] = true;
+            given.get_mut(&key).expect("a candidate is keyed")[p] = true;
+            let i = index[key.as_str()];
+            for &j in std::iter::once(&i).chain(&readers[i]) {
+                if !queued[j] {
+                    queued[j] = true;
+                    pending.push_back(j);
+                }
+            }
         }
     }
     let mut marks: NodeMap<(bool, bool)> = NodeMap::default();
@@ -247,6 +305,31 @@ pub(crate) fn analyse(
         owned,
         whole,
     }
+}
+
+/// The bodies (by their place in `index`) of the fns and roles of the
+/// module that `body` names anywhere, the closures inside it included: the
+/// entries of `consumed` a walk of it may read ([`Walk::consumed_by`]).
+fn named(body: &Body<'_>, types: &TypedProgram, index: &BTreeMap<&str, usize>) -> Vec<usize> {
+    let mut stack = Vec::new();
+    match body.root {
+        Root::Block(block) => block_children(block, &mut stack),
+        Root::Expr(e) => stack.push(Node::Expr(e)),
+    }
+    let mut out = Vec::new();
+    while let Some(node) = stack.pop() {
+        let Node::Expr(e) = node else { continue };
+        let found = match types.callee(e) {
+            Some(Callee::Fn(q)) if q.module == types.module => index.get(q.name.as_str()).copied(),
+            Some(Callee::Role { protocol, role }) if protocol.module == types.module => index
+                .get(format!("{}.{role}", protocol.name).as_str())
+                .copied(),
+            _ => None,
+        };
+        out.extend(found);
+        expr_children(e, &mut stack);
+    }
+    out
 }
 
 /// What a body consists of: the block of a fn, role or test, or the
@@ -1560,8 +1643,8 @@ fn walk<'a>(
 /// 6, "By-value parameters given by every caller"): in the program's own
 /// module, a parameter of a fn every use of which is a walked call that
 /// passes it a last use or a value built for the call, and whose body
-/// would use it as an owner, is consumed too. What the walks of one round
-/// found, and the decision.
+/// would use it as an owner, is consumed too. What the latest walk of each
+/// body found, and the decision.
 #[derive(Default)]
 struct Given {
     /// Every walked call of a candidate fn: its key and, per parameter,
@@ -1629,34 +1712,22 @@ impl Given {
         }
     }
 
-    /// The parameters of `open` (candidates not consumed yet) that the
-    /// rule gives: every use of the fn in the module (`types`' callees) is
-    /// a walked call, there is one, none is spawned, each passes the
-    /// parameter a given argument, and the body would use it as an owner.
-    fn given(&self, types: &TypedProgram, open: &[(String, usize)]) -> Vec<(String, usize)> {
-        let mut uses: BTreeMap<&str, Vec<NodeId>> = BTreeMap::new();
-        for (id, callee) in &types.callees {
-            if let Callee::Fn(q) = callee
-                && q.module == types.module
-            {
-                uses.entry(q.name.as_str()).or_default().push(*id);
-            }
-        }
-        open.iter()
-            .filter(|(name, i)| {
-                !self.spawned.contains(name)
-                    && self.owner.get(name).is_some_and(|o| o.contains(i))
-                    && uses.get(name.as_str()).is_some_and(|ids| {
-                        !ids.is_empty()
-                            && ids.iter().all(|id| {
-                                self.calls
-                                    .get(id)
-                                    .is_some_and(|(_, v)| v.get(*i).copied() == Some(true))
-                            })
+    /// Whether the rule gives parameter `i` of the candidate `name`, not
+    /// consumed yet: every use of the fn in the module (`uses`, from the
+    /// module's callees) is a walked call, there is one, none is spawned,
+    /// each passes the parameter a given argument, and the body would use
+    /// it as an owner.
+    fn gives(&self, name: &str, i: usize, uses: &BTreeMap<&str, Vec<NodeId>>) -> bool {
+        !self.spawned.contains(name)
+            && self.owner.get(name).is_some_and(|o| o.contains(&i))
+            && uses.get(name).is_some_and(|ids| {
+                !ids.is_empty()
+                    && ids.iter().all(|id| {
+                        self.calls
+                            .get(id)
+                            .is_some_and(|(_, v)| v.get(i).copied() == Some(true))
                     })
             })
-            .cloned()
-            .collect()
     }
 }
 

@@ -844,7 +844,11 @@ second unit (forms 3, 4 and 5; section 44.3 for the counts). A by-value paramete
 A fn of the *program's own module* (the module of the file `ignite` checks, builds, emits or
 tests; never a module of `std`, never a sibling module of the package, typed with
 `ignite_types::type_program`) has every caller in that module: no module can import it (E031,
-4.1) and the module is typed in one pass. There a parameter `p` of a fn `f` is also consumed,
+4.1) and the module is typed in one pass. A file `ignite test` is given beside a program of
+whose package it is a sibling module is typed as that sibling, whatever the order of the
+files (`test_build.rs`, `type_test_programs`). The module's fixpoint is a worklist: a body is
+walked again only when the consumed or given set of itself or of a fn it names grows, so a
+chain of fns each given once its caller's parameter is costs work linear in its length. There a parameter `p` of a fn `f` is also consumed,
 so declared `p: T` and moved into, when all of these hold (`moves.rs`, `Given`):
 
 - `f` is a fn of the module, not an associated fn (`Owner.f`: the generated mains, interface
@@ -12373,14 +12377,20 @@ module of `std` in the `ignite-std` crate, are emitted as before.
 
 Sizes, release, Rust target: `todod` 1,066,504 to 1,065,960 bytes as built (stripped
 878,880 to 878,336), `terminald` 744,456 both (stripped 600,224 both). Instructions of the
-debug driver (`perf stat -e instructions:u`, the median of three; valgrind did not start on
-the machine of this measurement): `ignite check` of `std/protocol/mysql.ignite` 1,259,928,876
-to 1,392,948,745 (+10.6 %), of `examples/terminal/terminal.design.ignite` 852,607,409 to
-858,065,894 (+0.6 %); `ignite emit` 1,616,115,194 to 1,749,205,759 (+8.2 %) and 1,165,106,364
-to 1,171,514,613 (+0.5 %). The rise is the rule's own walks over the program's module, which
-`mysql.ignite` checked as the program has many of: its fns with a parameter of an aggregate
-type are candidates. Built as part of `std` for another program it is typed by `type_module`
-and costs what it did. The allocations of the forms at this base, counted by a preloaded count
+debug driver (`perf stat -e instructions:u`; valgrind did not start on the machine of this
+measurement): of `examples/terminal/terminal.design.ignite`, the median of three, `ignite
+check` 852,612,303 to 851,650,241 (-0.11 %), `ignite plan` 858,347,696 to 857,358,644
+(-0.12 %), `ignite emit` 1,165,125,885 to 1,163,557,445 (-0.13 %); of
+`std/protocol/mysql.ignite`, one run, `ignite check` 1,259,534,207 to 1,310,720,821 (+4.1 %)
+and `ignite emit` 1,629,849,102 to 1,681,303,483 (+3.2 %). The module's fixpoint is a
+worklist, which walks a body again only when an input of it grew and so drops the confirming
+round of the round-robin it replaces; that pays for the rule where no parameter is given. The
+rise on `mysql.ignite` is the rule's own walks over the program's module, which it has many of
+when checked as the program: its fns with a parameter of an aggregate type are candidates.
+Built as part of `std` for another program it is typed by `type_module` and costs no more than
+it did. A chain of fns each given once its caller's parameter is costs `ignite check` 23,941,556,
+45,622,894, 91,164,487 and 182,016,438 instructions at 25, 50, 100 and 200 fns (17,810,167 to
+125,988,865 at the base): linear in its length. The allocations of the forms at this base, counted by a preloaded count
 of `malloc`, `calloc`, `posix_memalign`, `aligned_alloc` and `realloc` of no buffer instead
 of memcheck: `decode` 2.005 and 2.000 per call to 1.000 and 1.000, `wire` 2.000 and 2.000 to
 1.000 and 1.000, `bytes` 1.000 and 1.000 to 1.000 and 0.995, `row` 6.000 per element to
