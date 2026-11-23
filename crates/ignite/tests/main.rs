@@ -94,6 +94,7 @@ mod tls;
 mod tls_adversary;
 mod todo;
 mod typed_json;
+mod uses_edge_adversary;
 mod value_copies;
 mod version_adversary;
 mod version_adversary_pass2;
