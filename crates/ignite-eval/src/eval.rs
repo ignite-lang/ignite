@@ -714,7 +714,8 @@ impl<'p> Evaluator<'p> {
             // (`docs/slice.md` 10.1, "Receiver first"). A local the index
             // does not change reads the same before and after it, so it is
             // read in place after it, without a copy; any other receiver is
-            // evaluated first.
+            // evaluated first. A name or a literal index changes nothing and
+            // is not walked.
             ExprKind::Index { receiver, index } => {
                 let element = |list: &Value, i: i64| match list {
                     Value::List(items) => Ok(usize::try_from(i)
@@ -726,8 +727,9 @@ impl<'p> Evaluator<'p> {
                 };
                 let in_place = match &receiver.kind {
                     ExprKind::Name(name) if self.is_local(cx, &name.name) => {
-                        !ignite_types::ownership::changed_in(index, Some(cx.types()))
-                            .contains(name.name.as_str())
+                        matches!(index.kind, ExprKind::Name(_) | ExprKind::Int(_))
+                            || !ignite_types::ownership::changed_in(index, Some(cx.types()))
+                                .contains(name.name.as_str())
                     }
                     _ => false,
                 };
