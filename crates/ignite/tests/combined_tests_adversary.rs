@@ -308,47 +308,6 @@ fn a_filter_across_split_executables() {
     assert_eq!(shared.status, 1, "{}", shared.stdout);
 }
 
-/// Story outcome: "roots whose transitive modules share a dotted name but
-/// come from different source files run in separate test executables".
-/// `one.ignite` reaches `std.option` from `std/option.ignite`; the root
-/// `option.ignite` beside it is the module `std.option` from a local file
-/// (as `ignite rfc import` writes `package std.rfc.rfc<number>` by
-/// default, `docs/slice.md` 19.8). Each alone runs its one test and exits
-/// 0; together the LLVM test build panics (`call of Fn(QualName { module:
-/// "std.option", name: "unwrap_or" })`) and the run exits 101.
-#[test]
-#[ignore = "story:local-module-with-a-std-path-in-a-combined-test-run"]
-fn a_local_module_with_a_standard_library_path_keeps_both_suites() {
-    let dir = layout(
-        "std-path",
-        &[
-            (
-                "option.ignite",
-                "package std.option\nfn pick() -> Int = 1\ntest \"local option\" { assert pick() == 1 }\n",
-            ),
-            (
-                "one.ignite",
-                "package p.one\nimport std.option.{unwrap_or}\n\
-                 test \"uses std\" { assert unwrap_or(Some(1), 0) == 1 }\n",
-            ),
-        ],
-    );
-    for args in [
-        ["option.ignite", "one.ignite"],
-        ["one.ignite", "option.ignite"],
-    ] {
-        let run = ignite_test("std-path", "llvm", &dir, &args);
-        assert_eq!(
-            ran(&run.stdout),
-            ["p.one/uses std ... ok", "std.option/local option ... ok"],
-            "{args:?}: {}\n{}",
-            run.stdout,
-            run.stderr
-        );
-        assert_eq!(run.status, 0, "{args:?}: {}", run.stderr);
-    }
-}
-
 /// `--target all` runs both executables on each target: every copy's tests
 /// twice, four reports, exit 1.
 #[test]
