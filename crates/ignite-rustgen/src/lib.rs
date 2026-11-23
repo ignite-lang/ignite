@@ -2873,7 +2873,7 @@ impl<'a> Generator<'a> {
             return borrowed_text_literal(text);
         }
         let text = self.value(arg);
-        self.borrowed(arg, text)
+        borrow(arg, text)
     }
 
     /// `&text` ([`borrow`]), or `text` alone when `expr`
@@ -3696,22 +3696,23 @@ impl<'a> Generator<'a> {
         }
     }
 
-    /// Whether `expr` leaves before it has a value: `return`, `break`,
-    /// `continue`, an operator whose first operand leaves
-    /// ([`leaving_head`](Self::leaving_head)), or an expression of type
-    /// `Never` ([`never`](Self::never)). Rust types such an expression
-    /// `!`, which coerces to any type but has no operator, and `&!`
-    /// coerces to no other reference; so it is written on its own:
-    /// `expr?`, an operator expression, an argument
-    /// ([`borrowed`](Self::borrowed)).
+    /// Whether the operand or argument `expr` leaves before it has a
+    /// value ([`leaving_head`](Self::leaving_head)). Rust types such an
+    /// expression `!`, which coerces to any type but has no operator, and
+    /// `&!` coerces to no other reference; so it is written on its own:
+    /// an operator expression, an argument ([`borrowed`](Self::borrowed)).
     fn diverges(&self, expr: &Expr) -> bool {
-        self.leaving_head(expr).is_some() || self.never(expr)
+        self.leaving_head(expr).is_some()
     }
 
     /// The operand that leaves at the head of the first-operand spine of
     /// `expr` (`(return a) == p`: `return a`), never itself an operator
-    /// expression; walked in a loop, as a chain of 100,000 terms is
-    /// (`docs/slice.md` section 13.1, row 14).
+    /// expression: `return`, `break`, `continue`, or a `match`, `if`,
+    /// block or `Process.exit` call of type `Never` (`e?` leaves when `e`
+    /// does, and is then written as `e`). Asked of every operand and
+    /// argument, so it looks a type up only for those heads, which alone
+    /// can have type `Never` there; walked in a loop, as a chain of
+    /// 100,000 terms is (`docs/slice.md` section 13.1, row 14).
     fn leaving_head<'e>(&self, expr: &'e Expr) -> Option<&'e Expr> {
         let mut at = expr;
         loop {
@@ -3719,7 +3720,14 @@ impl<'a> Generator<'a> {
                 ExprKind::Return(_) | ExprKind::Break | ExprKind::Continue => return Some(at),
                 ExprKind::Binary { left, .. } => at = left,
                 ExprKind::Unary { operand, .. } => at = operand,
-                _ => return self.never(at).then_some(at),
+                ExprKind::Try(inner) => at = inner,
+                ExprKind::Match { .. } | ExprKind::If { .. } | ExprKind::Block(_) => {
+                    return self.never(at).then_some(at);
+                }
+                ExprKind::Method { name, .. } if name.name == "exit" => {
+                    return self.never(at).then_some(at);
+                }
+                _ => return None,
             }
         }
     }
@@ -4460,7 +4468,7 @@ impl<'a> Generator<'a> {
                     self.element_clone(expr)
                 )
             }
-            ExprKind::Try(inner) if self.diverges(inner) => self.value(inner),
+            ExprKind::Try(inner) if self.never(inner) => self.value(inner),
             ExprKind::Try(inner) if self.types.and_then(|t| t.test_try(expr)).is_some() => {
                 let test_try = self.types.and_then(|t| t.test_try(expr)).expect("checked");
                 self.test_try(expr, inner, test_try)
