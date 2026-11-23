@@ -1056,6 +1056,24 @@ impl<'a, 'p> Builder<'a, 'p> {
                 self.uses(&member.id, system, expr);
             }
             match self.property(&member.id, &member.name, field, source, set, member.offset) {
+                Some((Value::Text(text), _))
+                    if field == "executable"
+                        && !ignite_types::is_executable_name(&text)
+                        && executables
+                            .iter()
+                            .any(|e| e.system == system.name && e.component == member.name) =>
+                {
+                    // `docs/slice.md` 14, rule 12: the value however it is
+                    // written (a constant, an expression, the kind's field
+                    // default); a string literal is the type checker's.
+                    let span = set.map_or(Span::new(member.offset, member.offset), |e| e.span);
+                    self.diagnostics.push(Diagnostic::new(
+                        "E020",
+                        span,
+                        ignite_types::not_an_executable_name(&text),
+                    ));
+                    complete = false;
+                }
                 Some((value, defaulted)) => {
                     value_edges(&member.id, &value, &mut self.edges);
                     if defaulted {

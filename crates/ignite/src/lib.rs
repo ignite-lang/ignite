@@ -2125,6 +2125,7 @@ pub fn build(file: &Path, options: &BuildOptions) -> Result<BuildOutput, Error> 
         None
     };
     let std_out = out.join("std");
+    ignite_rustgen::own_dir(&std_out).map_err(io_error(&std_out))?;
     ignite_rustgen::write_project(&emitted.std, &std_out).map_err(io_error(&std_out))?;
     seed_lock(&substrate, &out)?;
     prebuild.finish();
@@ -2261,6 +2262,7 @@ fn host_triple() -> String {
 /// that has a lock keeps it.
 pub(crate) fn seed_lock(substrate: &Path, out: &Path) -> Result<(), Error> {
     let lock = out.join("Cargo.lock");
+    ignite_rustgen::remove_link(&lock).map_err(io_error(&lock))?;
     let workspace = substrate.join("../../Cargo.lock");
     if lock.exists() || !workspace.is_file() {
         return Ok(());

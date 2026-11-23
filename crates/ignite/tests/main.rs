@@ -39,6 +39,8 @@ mod drain;
 mod eval;
 mod eval_model;
 mod eval_model_adversary;
+mod executable_names;
+mod executable_names_adversary;
 mod failover;
 mod file_ids;
 mod file_ids_adversary;
