@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::path::Path;
 
-use ignite_syntax::ast::{Decl, Expr, ExprKind, Span, SystemDecl};
+use ignite_syntax::ast::{Block, Decl, Expr, ExprKind, Span, StmtKind, SystemDecl};
 use ignite_syntax::diagnostic::Diagnostic;
 use ignite_types::{
     AssemblyInfo, ExecutableInfo, LAUNCHER_DEFAULT_MAXIMUM_CHILDREN, MemberDeclaration, MemberInfo,
@@ -120,7 +120,8 @@ pub struct Edge {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EdgeKind {
-    /// A bare member name in a property.
+    /// A bare member name read in a property, through every form of
+    /// expression (`docs/slice.md` 15.5).
     Uses,
     /// A `Ref` value.
     References,
@@ -822,6 +823,93 @@ fn unencodable(value: &Value) -> Option<String> {
     }
 }
 
+/// Pushes every direct sub-expression of `expr` onto `out`: operands,
+/// arguments, callees, receivers, `if` conditions and branches, `match`
+/// scrutinees and arms, closure bodies and every expression of a block's
+/// statements. The match names each kind, so a new kind of expression
+/// cannot hide a read from `Builder::uses`.
+fn children<'e>(expr: &'e Expr, out: &mut Vec<&'e Expr>) {
+    fn block<'e>(b: &'e Block, out: &mut Vec<&'e Expr>) {
+        for stmt in &b.stmts {
+            match &stmt.kind {
+                StmtKind::Let { value, .. }
+                | StmtKind::LetPattern { value, .. }
+                | StmtKind::Assign { value, .. }
+                | StmtKind::Expr(value) => out.push(value),
+                StmtKind::Return(value) => out.extend(value.iter()),
+                StmtKind::While { cond, body } => {
+                    out.push(cond);
+                    block(body, out);
+                }
+                StmtKind::Loop { body } => block(body, out),
+                StmtKind::For { iter, body, .. } | StmtKind::ForPattern { iter, body, .. } => {
+                    out.push(iter);
+                    block(body, out);
+                }
+                StmtKind::Assert { cond, message } => {
+                    out.push(cond);
+                    out.extend(message.iter());
+                }
+                StmtKind::Break | StmtKind::Continue => {}
+            }
+        }
+    }
+    match &expr.kind {
+        ExprKind::Int(_)
+        | ExprKind::Str(_)
+        | ExprKind::Bool(_)
+        | ExprKind::Name(_)
+        | ExprKind::Break
+        | ExprKind::Continue
+        | ExprKind::Quantity { .. } => {}
+        ExprKind::Record { fields, .. } => out.extend(fields.iter().map(|f| &f.value)),
+        ExprKind::RecordUpdate { fields, base, .. } => {
+            out.extend(fields.iter().map(|f| &f.value));
+            out.push(base);
+        }
+        ExprKind::Brace { entries } => out.extend(entries.iter().map(|e| &e.value)),
+        ExprKind::List(items) | ExprKind::Tuple(items) => out.extend(items.iter()),
+        ExprKind::Return(value) => out.extend(value.iter().map(|v| &**v)),
+        ExprKind::Call { callee, args } => {
+            out.push(callee);
+            out.extend(args.iter());
+        }
+        ExprKind::Method { receiver, args, .. } => {
+            out.push(receiver);
+            out.extend(args.iter());
+        }
+        ExprKind::Field { receiver, .. } | ExprKind::TupleField { receiver, .. } => {
+            out.push(receiver);
+        }
+        ExprKind::Index { receiver, index } => {
+            out.push(receiver);
+            out.push(index);
+        }
+        ExprKind::Try(inner) | ExprKind::Await(inner) | ExprKind::Spawn(inner) => out.push(inner),
+        ExprKind::NamedArg { value, .. } => out.push(value),
+        ExprKind::Unary { operand, .. } => out.push(operand),
+        ExprKind::Binary { left, right, .. } => {
+            out.push(left);
+            out.push(right);
+        }
+        ExprKind::Match { scrutinee, arms } => {
+            out.push(scrutinee);
+            out.extend(arms.iter().map(|arm| &arm.body));
+        }
+        ExprKind::If {
+            cond,
+            then,
+            otherwise,
+        } => {
+            out.push(cond);
+            block(then, out);
+            out.extend(otherwise.iter().map(|o| &**o));
+        }
+        ExprKind::Block(b) => block(b, out),
+        ExprKind::Closure(closure) => out.push(&closure.body),
+    }
+}
+
 /// The `references` and `observes` edges from `from` to the references in
 /// `value`, and `uses` for the members it embeds (15.4, 15.5).
 fn value_edges(from: &str, value: &Value, edges: &mut BTreeSet<Edge>) {
@@ -977,62 +1065,26 @@ impl<'a, 'p> Builder<'a, 'p> {
         Some((value, defaulted))
     }
 
-    /// `uses` edges from `from` for every bare member name of `system` in
-    /// `expr` that is not a reference (a reference is an edge of its value).
+    /// `uses` edges from `from` for every bare member name of `system` read
+    /// anywhere in `expr`, whatever expression encloses it (15.5), that is
+    /// not a reference (a reference is an edge of its value).
     fn uses(&mut self, from: &str, system: &SystemInfo, expr: &Expr) {
         let types = self.module.types;
-        match &expr.kind {
-            ExprKind::Name(name) => {
-                if types.reference(expr).is_none() && system.member(&name.name).is_some() {
-                    self.edges.insert(Edge {
-                        from: from.to_string(),
-                        kind: EdgeKind::Uses,
-                        to: format!("{}.{}", system.name, name.name),
-                    });
+        let mut pending = vec![expr];
+        while let Some(expr) = pending.pop() {
+            match &expr.kind {
+                ExprKind::Name(name) => {
+                    if types.reference(expr).is_none() && system.member(&name.name).is_some() {
+                        self.edges.insert(Edge {
+                            from: from.to_string(),
+                            kind: EdgeKind::Uses,
+                            to: format!("{}.{}", system.name, name.name),
+                        });
+                    }
                 }
+                ExprKind::Field { .. } if types.reference(expr).is_some() => {}
+                _ => children(expr, &mut pending),
             }
-            ExprKind::Record { fields, .. } => {
-                for field in fields {
-                    self.uses(from, system, &field.value);
-                }
-            }
-            ExprKind::RecordUpdate { fields, base, .. } => {
-                for field in fields {
-                    self.uses(from, system, &field.value);
-                }
-                self.uses(from, system, base);
-            }
-            ExprKind::Brace { entries } => {
-                for entry in entries {
-                    self.uses(from, system, &entry.value);
-                }
-            }
-            ExprKind::List(items) | ExprKind::Tuple(items) => {
-                for item in items {
-                    self.uses(from, system, item);
-                }
-            }
-            ExprKind::Call { args, .. } => {
-                for arg in args {
-                    self.uses(from, system, arg);
-                }
-            }
-            ExprKind::Method { receiver, args, .. } => {
-                self.uses(from, system, receiver);
-                for arg in args {
-                    self.uses(from, system, arg);
-                }
-            }
-            ExprKind::NamedArg { value, .. } => self.uses(from, system, value),
-            ExprKind::Field { receiver, .. } if types.reference(expr).is_none() => {
-                self.uses(from, system, receiver);
-            }
-            ExprKind::Unary { operand, .. } => self.uses(from, system, operand),
-            ExprKind::Binary { left, right, .. } => {
-                self.uses(from, system, left);
-                self.uses(from, system, right);
-            }
-            _ => {}
         }
     }
 

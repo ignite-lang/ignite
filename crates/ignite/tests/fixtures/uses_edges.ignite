@@ -1,0 +1,59 @@
+package uses_edges
+
+// `docs/slice.md` 15.5: a bare member name read in a property gives a
+// `uses` edge whatever expression encloses the read (the maintainer review
+// of 2026-11-23). Every component but `plain` and `pointer` reads
+// `base.size` once, each through another form of expression; `plain`
+// reads no member and `pointer` names `U.base` qualified, a reference.
+
+type Box {
+  size: Int
+}
+
+type Sized {
+  size: Int
+}
+
+type Pointer {
+  target: Ref<Box>
+}
+
+enum Pick { First, Second }
+
+fn apply(f: fn(Int) -> Int, x: Int) -> Int = f(x)
+
+fn first() -> Pick = First
+
+system U {
+  component base: Box { size = 7 }
+  component direct: Sized { size = base.size }
+  component branch: Sized { size = if true { base.size } else { 0 } }
+  component condition: Sized { size = if base.size > 0 { 7 } else { 0 } }
+  component otherwise: Sized { size = if false { 0 } else if true { base.size } else { 1 } }
+  component nested: Sized { size = if true { if true { base.size } else { 0 } } else { 1 } }
+  component arm: Sized {
+    size = match first() {
+      First => base.size
+      Second => 0
+    }
+  }
+  component scrutinee: Sized {
+    size = match base.size {
+      7 => 7
+      _ => 0
+    }
+  }
+  component block: Sized {
+    size = if false { 0 } else {
+      let n = base.size
+      n
+    }
+  }
+  component argument: Sized { size = apply(|x| x, base.size) }
+  component closure: Sized { size = apply(|x| x + base.size, 0) }
+  component list: Sized { size = [base.size].len() }
+  component index: Sized { size = [7, 8][base.size - 7] }
+  component tuple: Sized { size = (base.size, 0).0 }
+  component plain: Sized { size = if true { 7 } else { 0 } }
+  component pointer: Pointer { target = U.base }
+}
