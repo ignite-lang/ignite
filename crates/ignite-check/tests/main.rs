@@ -8,6 +8,7 @@ mod fixtures;
 mod layering;
 mod limits;
 mod modules;
+mod named_args;
 mod or_patterns;
 mod ownership_adversary;
 mod terminal;
