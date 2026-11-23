@@ -4264,10 +4264,35 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
     /// The receiver of a builtin that changes it, evaluated before the
     /// arguments when it is a temporary (no [`Self::local_place`]), as on
     /// the Rust target and the evaluator (`docs/slice.md` 10.1, "Receiver
-    /// first"); `None` for a place, which is changed where it is after
-    /// the arguments ([`Self::changed_receiver`]).
-    fn temporary_receiver(&mut self, receiver: &Expr) -> Option<Val> {
-        (!self.local_place(receiver)).then(|| self.mutable_receiver(receiver))
+    /// first"), and when it is a place whose index changes a variable
+    /// (`l[{ n = n + 1; 0 }].push(x)`), so the index runs first, unless an
+    /// argument changes the place's local; `None` for any other place,
+    /// which is changed where it is after the arguments
+    /// ([`Self::changed_receiver`]).
+    fn temporary_receiver(&mut self, receiver: &Expr, args: &[Expr]) -> Option<Val> {
+        let early = !self.local_place(receiver)
+            || (Self::index_changes(receiver, self.cx.types)
+                && ownership::place_root(receiver).is_some_and(|root| {
+                    !args
+                        .iter()
+                        .any(|arg| ownership::changed_in(arg, Some(self.cx.types)).contains(root))
+                }));
+        early.then(|| self.mutable_receiver(receiver))
+    }
+
+    /// Whether an index of the place `e` (`l[i]`, `l[i].f`, `l[i][j]`)
+    /// changes a variable.
+    fn index_changes(e: &Expr, types: &TypedProgram) -> bool {
+        match &e.kind {
+            ExprKind::Index { receiver, index } => {
+                !ownership::changed_in(index, Some(types)).is_empty()
+                    || Self::index_changes(receiver, types)
+            }
+            ExprKind::Field { receiver, .. } | ExprKind::TupleField { receiver, .. } => {
+                Self::index_changes(receiver, types)
+            }
+            _ => false,
+        }
     }
 
     /// The receiver [`Self::temporary_receiver`] evaluated, or the place
@@ -4749,7 +4774,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             MapPut => {
                 let rexpr = receiver.expect("receiver");
                 let (key, value) = self.map_kv(rexpr);
-                let early = self.temporary_receiver(rexpr);
+                let early = self.temporary_receiver(rexpr, args);
                 let k = self.map_key_arg(&key, &args[0]);
                 let v = self.expr(&args[1], true);
                 if v == Val::Never {
@@ -4765,7 +4790,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
             MapRemove => {
                 let rexpr = receiver.expect("receiver");
                 let (key, value) = self.map_kv(rexpr);
-                let early = self.temporary_receiver(rexpr);
+                let early = self.temporary_receiver(rexpr, args);
                 let k = self.map_key_arg(&key, &args[0]);
                 let r = self.changed_receiver(early, rexpr);
                 let m = self.ptr(&r);
@@ -4912,7 +4937,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                     Ty::List(t) => *t,
                     _ => Ty::Byte,
                 };
-                let early = self.temporary_receiver(rexpr);
+                let early = self.temporary_receiver(rexpr, args);
                 let x = self.expr(&args[0], true);
                 let have = self.ty(&args[0]);
                 let x = self.coerce(&element, &have, x);
@@ -4942,7 +4967,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                     Ty::List(t) => *t,
                     _ => Ty::Byte,
                 };
-                let early = self.temporary_receiver(rexpr);
+                let early = self.temporary_receiver(rexpr, args);
                 let i = self.scalar_arg(&args[0]);
                 let x = self.expr(&args[1], true);
                 let have = self.ty(&args[1]);
@@ -4969,7 +4994,7 @@ impl<'a, 'm, 'e> Lower<'a, 'm, 'e> {
                     Ty::List(t) => (**t).clone(),
                     _ => Ty::Byte,
                 };
-                let early = self.temporary_receiver(rexpr);
+                let early = self.temporary_receiver(rexpr, args);
                 let c = self.expr(&args[0], true);
                 let c = if self.env.needs_glue(&element) {
                     self.owned(&ty, c)

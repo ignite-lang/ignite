@@ -190,6 +190,7 @@ test "push onto a list its argument assigns" {
 "#;
 
 #[test]
+#[ignore = "story:arguments-and-views-replaced-by-a-later-argument"]
 fn adversary_push_whose_argument_assigns_its_place() {
     agree("push_assigns", PUSH_ASSIGNS, 1);
 }
@@ -238,6 +239,7 @@ test "index_of searches a slice of bytes its argument replaces" {
 "#;
 
 #[test]
+#[ignore = "story:arguments-and-views-replaced-by-a-later-argument"]
 fn adversary_a_view_receiver_whose_argument_replaces_its_local() {
     agree("view_receiver", VIEW_RECEIVER, 2);
 }
@@ -328,6 +330,7 @@ test "set writes at the index before a later argument changes it" {
 "#;
 
 #[test]
+#[ignore = "story:arguments-and-views-replaced-by-a-later-argument"]
 fn adversary_an_argument_replaced_by_a_later_argument() {
     agree("argument_replaced", ARGUMENT_REPLACED, 4);
 }

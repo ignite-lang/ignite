@@ -456,7 +456,55 @@ fn get_replaced(m: Map<Text, Int>) -> Option<Int> {
     \"b\"
   })
 }
+
+type Holder {
+  n: Int
+  items: List<Int>
+}
+
+fn sibling_kept(r: Holder) -> Int {
+  var h = r
+  h.items[if true {
+    h.n = 2
+    1
+  } else {
+    0
+  }]
+}
+
+fn field_replaced(r: Holder) -> Int {
+  var h = r
+  h.items[if true {
+    h.items = [1]
+    0
+  } else {
+    0
+  }]
+}
 ";
+
+/// A field receiver whose index changes a sibling field of the same local
+/// (`h.items[if c { h.n = 2; 1 } else { 0 }]`) is borrowed, not copied:
+/// rustc accepts a borrow of `h.items` across an assignment to `h.n`. One
+/// that changes the field itself is copied.
+#[test]
+fn a_field_receiver_whose_index_changes_a_sibling_field_is_not_copied() {
+    let lib = common::generate_source(RECEIVERS, &common::repository_std())
+        .unwrap_or_else(|d| panic!("{d:?}"))
+        .lib_rs;
+    let text = section(&lib, "pub fn sibling_kept(");
+    assert_eq!(
+        text.matches("h.items).clone()").count() + text.matches("h.clone()").count(),
+        0,
+        "sibling_kept: {text}"
+    );
+    let text = section(&lib, "pub fn field_replaced(");
+    assert_eq!(
+        text.matches("h.items).clone()").count(),
+        1,
+        "field_replaced: {text}"
+    );
+}
 
 #[test]
 fn a_receiver_is_copied_only_when_its_argument_replaces_it() {

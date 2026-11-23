@@ -1292,6 +1292,21 @@ fn get_replaced() -> Int {
   }
 }
 
+type Holder {
+  n: Int
+  items: List<Int>
+}
+
+fn sibling_changed() -> Int {
+  var r = Holder { n = 1, items = [10, 11] }
+  r.items[if true {
+    r.n = 2
+    1
+  } else {
+    0
+  }] + r.n
+}
+
 fn index_unchanged() -> Int {
   var l = [10, 11]
   var i = 0
@@ -1334,6 +1349,10 @@ test "a map is searched before the key replaces it" {
   assert get_replaced() == 7
 }
 
+test "an index that changes a sibling field reads the list where it is" {
+  assert sibling_changed() == 13
+}
+
 test "an index that changes another variable reads the list as before" {
   assert index_unchanged() == 21
 }
@@ -1345,7 +1364,7 @@ test "a prefix that changes another variable checks the text as before" {
 
 #[test]
 fn a_local_receiver_is_read_before_an_index_or_prefix_that_replaces_it() {
-    crate::borrowed_reads_adversary::agree("place_receiver", PLACE_RECEIVER, 7);
+    crate::borrowed_reads_adversary::agree("place_receiver", PLACE_RECEIVER, 8);
 }
 
 /// `story:temporary-receiver-evaluated-before-arguments` (the maintainer

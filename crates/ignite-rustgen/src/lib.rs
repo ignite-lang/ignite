@@ -2779,13 +2779,23 @@ impl<'a> Generator<'a> {
     /// local that one of `args` changes: the receiver is read before the
     /// arguments (`docs/slice.md` 10.1, "Receiver first"), so it is copied
     /// then instead of borrowed across them, which rustc refuses (E0506).
-    /// A receiver no argument changes is borrowed as before.
+    /// A receiver no argument changes is borrowed as before, and so is one
+    /// whose arguments change only a sibling field of the same local
+    /// (`r.items[if c { r.n = 2; 1 } else { 0 }]`), which rustc accepts:
+    /// a change overlaps the receiver when one field path is a prefix of
+    /// the other ([`ownership::field_path`]).
     fn replaced_by(&self, receiver: &Expr, args: &[Expr]) -> bool {
-        self.is_place(receiver)
-            && place_root(receiver).is_some_and(|root| {
-                args.iter()
-                    .any(|arg| ownership::changed_in(arg, self.types).contains(root))
-            })
+        let Some(root) = place_root(receiver).filter(|_| self.is_place(receiver)) else {
+            return false;
+        };
+        let path = ownership::field_path(receiver);
+        args.iter().any(|arg| {
+            ownership::changed_places_in(arg, self.types)
+                .iter()
+                .any(|(changed, fields)| {
+                    *changed == root && (fields.starts_with(&path) || path.starts_with(fields))
+                })
+        })
     }
 
     /// The receiver of a builtin that only reads it: as written, or a copy
@@ -4215,6 +4225,15 @@ impl<'a> Generator<'a> {
             }
             ExprKind::TupleField { receiver, index } => {
                 format!("{}.{index}", self.mutable_place(receiver, lets))
+            }
+            // A temporary (`(if c { [0] } else { [1] }).set(i, x)`) is bound
+            // before the indexes and arguments, which run after it
+            // (`docs/slice.md` 10.1, "Receiver first").
+            _ if place_root(expr).is_none() => {
+                let value = self.value(expr);
+                let temp = self.fresh();
+                lets.push(format!("let mut {temp} = {value};"));
+                temp
             }
             _ => self.receiver(expr),
         }

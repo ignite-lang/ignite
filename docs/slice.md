@@ -1481,22 +1481,27 @@ index's list before the index, on the evaluator and both targets alike:
   gives the value it had before the arguments ran. When an argument assigns or changes the
   variable the receiver is rooted at (`l[if c { l = [20]; 0 } else { 0 }]`), the receiver is
   copied before the arguments run (the Rust target would otherwise hold a borrow across the
-  assignment, E0506). A receiver no argument changes is read where it is, without a copy.
+  assignment, E0506). A receiver no argument changes is read where it is, without a copy, and
+  so is one whose arguments change only a sibling field of its local
+  (`r.items[if c { r.n = 2; 1 } else { 0 }]`): a change overlaps the receiver when one field
+  path is a prefix of the other.
 - A receiver that is a temporary (no place of a local: a call, a block, an `if`) runs before
   the arguments for a builtin that changes it (`push`, `set`, `append`, `put`, `remove`) as for
   one that only reads it: `(if c { order = 1; [0] } else { [0] }).push(x)` runs the receiver's
   side effects first.
 - A receiver that is a place of a local and that a builtin changes (`l.push(x)`) is changed
-  where it is after the arguments: on the evaluator and the LLVM target the change applies to
-  the value the arguments left. An argument that assigns that local
+  where it is after the arguments; the indexes of the place (`l[i].push(x)`,
+  `l[i].items.push(x)`) run before the arguments. On the evaluator and the LLVM target the
+  change applies to the value the arguments left. An argument that assigns that local
   (`l.push(if c { l = [4, 5]; 6 } else { 6 })`) is refused by rustc on the Rust target
-  (E0506); that form is open.
+  (E0506); that form is open (story `arguments-and-views-replaced-by-a-later-argument`).
 
 Story `place-receiver-read-before-index-and-prefix-argument` and story
 `temporary-receiver-evaluated-before-arguments`, from the maintainer review of 2026-11-23
 (`differential::a_local_receiver_is_read_before_an_index_or_prefix_that_replaces_it`,
-`differential::a_temporary_receiver_runs_before_the_arguments`); `CODEGEN_REVISION` is
-`ignite-codegen/0.1.0-56` since these stories.
+`differential::a_temporary_receiver_runs_before_the_arguments`,
+`receiver_order_adversary::`); `CODEGEN_REVISION` is `ignite-codegen/0.1.0-57` since these
+stories.
 
 **Field defaults.** The default is `Field.default: Some(expr)` in the `RecordDecl` of the
 module that declares the record. That module's `TypedProgram` types it: `type_of(expr)` is

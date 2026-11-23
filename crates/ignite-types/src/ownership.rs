@@ -335,6 +335,78 @@ pub fn changed_in<'a>(e: &'a Expr, types: Option<&TypedProgram>) -> BTreeSet<&'a
     changed(vec![Node::Expr(e)], types)
 }
 
+/// The places `e` changes, as [`changed_in`] finds them, each as its
+/// variable and the fields below it ([`field_path`]): `r.n = 2` is
+/// `("r", ["n"])`, `r.items.push(x)` is `("r", ["items"])`, `r = s` and a
+/// change through an index or a view are `("r", [])`, the whole variable.
+pub fn changed_places_in<'a>(
+    e: &'a Expr,
+    types: Option<&TypedProgram>,
+) -> Vec<(&'a str, Vec<&'a str>)> {
+    let mut stack = vec![Node::Expr(e)];
+    let mut places = Vec::new();
+    while let Some(node) = stack.pop() {
+        match node {
+            Node::Target(target) => places.push((
+                target.base.name.as_str(),
+                target.fields.iter().map(|f| f.name.as_str()).collect(),
+            )),
+            Node::Expr(e) => {
+                let builtin = calls_in_place(e, types);
+                let receiver = match &e.kind {
+                    ExprKind::Method { receiver, name, .. }
+                        if builtin || BY_NAME.contains(&name.name.as_str()) =>
+                    {
+                        Some(&**receiver)
+                    }
+                    ExprKind::Call { callee, .. } if builtin => match &callee.kind {
+                        ExprKind::Field { receiver, .. } => Some(&**receiver),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                if let Some(receiver) = receiver
+                    && let Some(root) = memory_root(receiver, types)
+                {
+                    let path = match place_root(receiver) {
+                        Some(_) => field_path(receiver),
+                        None => Vec::new(),
+                    };
+                    places.push((root, path));
+                }
+                expr_children(e, &mut stack);
+            }
+        }
+    }
+    places
+}
+
+/// The fields a place `x.a.b` names below its variable, up to its first
+/// step that is not a field: `["a", "b"]` for `x.a.b`, `["a"]` for
+/// `x.a[i].b`, none for `x` and `x[i].a`.
+pub fn field_path(e: &Expr) -> Vec<&str> {
+    fn fields(e: &Expr) -> Option<Vec<&str>> {
+        match &e.kind {
+            ExprKind::Name(_) => Some(Vec::new()),
+            ExprKind::Field { receiver, name } => {
+                let mut path = fields(receiver)?;
+                path.push(&name.name);
+                Some(path)
+            }
+            _ => None,
+        }
+    }
+    if let Some(path) = fields(e) {
+        return path;
+    }
+    match &e.kind {
+        ExprKind::Field { receiver, .. }
+        | ExprKind::TupleField { receiver, .. }
+        | ExprKind::Index { receiver, .. } => field_path(receiver),
+        _ => Vec::new(),
+    }
+}
+
 /// The [`place_root`] of every place that moves in `e`
 /// ([`TypedProgram::moves`]), closure bodies included, by name.
 pub fn moved_in<'a>(e: &'a Expr, types: &TypedProgram) -> BTreeSet<&'a str> {
