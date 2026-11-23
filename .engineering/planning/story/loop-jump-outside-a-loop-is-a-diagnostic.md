@@ -4,7 +4,7 @@ id: story:loop-jump-outside-a-loop-is-a-diagnostic
 kind: story
 status: draft
 title: '`break` or `continue` outside a loop is a front-end diagnostic'
-revision: 1
+revision: 2
 ---
 # Story: `break` or `continue` outside a loop is a front-end diagnostic
 
@@ -23,6 +23,7 @@ The type checker marks the innermost loop if there is one and types the jump `Ne
 ## Acceptance
 
 - Fixtures, red first: statement `break`, statement `continue`, `None => break` and `None => continue` in a fn without a loop, and `break` in a closure body defined inside a loop: each is a diagnostic from `ignite check`, with its code listed in `docs/slice.md`.
+- The programs of the adversary cases `break_or_continue_in_a_nested_while_condition_builds` (Rust E0590) and `break_outside_a_loop_is_refused_or_builds` (checks; LLVM panics at `lower.rs:694`; rustc E0268), in commit `65ea0106` of branch `wave/16-short-circuit`, file `crates/ignite/tests/short_circuit_adversary.rs` (removed from the tree in `9f38fb6e` so the count of ignored tests stays at its bar), come back as tests: each is a diagnostic from `ignite check` or builds and gives the evaluator's value on both targets.
 - Controls: `loop { break }`, `continue` in a `while`, `None => break` inside a `for`; `task gate` green.
 
 ## Scope
