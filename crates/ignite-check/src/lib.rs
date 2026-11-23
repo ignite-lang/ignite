@@ -2323,6 +2323,7 @@ impl Checker {
                 _ => self.arg_roots(args.iter()),
             },
             ExprKind::Closure(closure) => self.roots(&closure.body),
+            ExprKind::NamedArg { value, .. } => self.roots(value),
             _ => BTreeSet::new(),
         }
     }
@@ -2372,7 +2373,11 @@ impl Checker {
     /// substrate handle; an argument of a declared type that cannot
     /// (`Int`, `Text`, ..) adds none.
     fn arg_roots<'e>(&self, args: impl Iterator<Item = &'e Expr>) -> BTreeSet<String> {
-        args.filter(|arg| {
+        args.map(|arg| match &arg.kind {
+            ExprKind::NamedArg { value, .. } => &**value,
+            _ => arg,
+        })
+        .filter(|arg| {
             self.static_type(arg)
                 .is_none_or(|ty| self.can_hold_handle(&ty, 0))
         })
@@ -2553,6 +2558,7 @@ impl Checker {
         let Some(sig) = self.symbols.effects.get(key) else {
             return Vec::new();
         };
+        let args = in_param_order(sig.params.iter().map(String::as_str), args);
         let mut needed = Vec::new();
         for requirement in &sig.requires {
             let on_param = requirement.split_once('.').and_then(|(head, op)| {
@@ -2561,7 +2567,7 @@ impl Checker {
             });
             match on_param {
                 Some((index, op)) => {
-                    let roots = args.get(index).map(|a| self.roots(a)).unwrap_or_default();
+                    let roots = args[index].map(|a| self.roots(a)).unwrap_or_default();
                     for root in roots {
                         needed.push(format!("{root}.{op}"));
                     }
@@ -3567,6 +3573,7 @@ impl Checker {
             return None;
         }
         let requires = ty.requires.as_ref()?;
+        let args = in_param_order(ty.fn_names.iter().map(|n| n.name.as_str()), args);
         let mut needed = Vec::new();
         for effect in requires {
             let dotted = effect.dotted();
@@ -3576,7 +3583,7 @@ impl Checker {
             });
             match on_param {
                 Some((index, op)) => {
-                    let roots = args.get(index).map(|a| self.roots(a)).unwrap_or_default();
+                    let roots = args[index].map(|a| self.roots(a)).unwrap_or_default();
                     needed.extend(roots.into_iter().map(|root| format!("{root}.{op}")));
                 }
                 None => needed.push(dotted),
@@ -4372,6 +4379,35 @@ fn components(edges: &[Vec<usize>]) -> Vec<Vec<usize>> {
         }
     }
     out
+}
+
+/// The argument a call passes for each of the parameters `params`, in
+/// parameter order (`docs/slice.md` 14.2): each positional argument at its
+/// own position, the value of each named argument at the position of the
+/// parameter it names; `None` where no argument covers a parameter.
+fn in_param_order<'e, 'p>(
+    params: impl Iterator<Item = &'p str>,
+    args: &[&'e Expr],
+) -> Vec<Option<&'e Expr>> {
+    let params: Vec<&str> = params.collect();
+    let mut ordered = vec![None; params.len()];
+    let mut positional = 0;
+    for &arg in args {
+        match &arg.kind {
+            ExprKind::NamedArg { name, value } => {
+                if let Some(index) = params.iter().position(|p| *p == name.name) {
+                    ordered[index].get_or_insert(&**value);
+                }
+            }
+            _ => {
+                if let Some(slot) = ordered.get_mut(positional) {
+                    *slot = Some(arg);
+                }
+                positional += 1;
+            }
+        }
+    }
+    ordered
 }
 
 /// The address of an expression, a key for [`Checker::tail_roots`].
