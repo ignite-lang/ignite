@@ -23,6 +23,7 @@ mod channels;
 mod check_json;
 mod clauses;
 mod cli;
+mod combined_tests_adversary;
 mod common;
 mod conformance;
 mod constants;
