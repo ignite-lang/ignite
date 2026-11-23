@@ -147,6 +147,24 @@ invocation in automation sets `CARGO_INCREMENTAL=0`. `task test-ignite` honours
 `task compile-todo-llvm` build and pass the runtime under it too, and write their programs to
 `target/ignite-llvm/` regardless.
 
+On a machine where valgrind cannot start (`valgrind -q true` fails: a stripped loader whose
+debug file the distribution no longer serves, so the `memcmp` redirection in
+`ld-linux-x86-64.so.2` cannot be set up), the valgrind parts of `task gate` run in a container
+instead, as for v0.16.5: the image `ghcr.io/ignite-lang/ignite-toolchain:<release>` with
+`apt-get install valgrind strace git libc6-dbg`, run with the user's uid, `--network host`, the
+tree mounted, `CARGO_TARGET_DIR` outside the tree and the main repository's `.git` mounted at
+its own path for a `--shared` clone. Path cost compares two commits under one loader, never a
+container's counts with a machine's: in the container, `ignite-perf path-cost --record <last
+release> --runs 5` on a clone of the last release's tag, then the clone of the candidate with
+those count files copied into `bench/path-cost/counts/` (not committed) and `ignite-perf
+path-cost` judging it; a cell above its band refuses the merge as on the machine. The
+valgrind tests (`cargo test -p ignite --test main --` with the modules of
+`crates/ignite/tests` that run `valgrind`) run in the same container; `static_link::` needs
+the musl targets the image does not have, so its cases run on the machine. A release cut
+this way keeps the counts of the last release in `bench/path-cost/counts/` and does not
+record its own: they are recorded on the machine once valgrind starts there
+(`story:path-cost-counts-recorded-where-valgrind-starts`).
+
 ## Gate time
 
 The budget of `docs/vision.md` invariant 9; each slice re-measures and adds its row. 2026-11-01,
