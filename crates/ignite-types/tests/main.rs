@@ -12,6 +12,7 @@ mod common;
 mod effectful_map_adversary;
 mod fixtures;
 mod generics;
+mod given;
 mod infer_adversary;
 mod infer_adversary2;
 mod infer_imports;

@@ -38,10 +38,10 @@ pub fn swap<A: Clone + Send + Sync + 'static, B: Clone + Send + Sync + 'static>(
     Pair { first: p.second, second: p.first }
 }
 
-pub fn or<T: Clone + Send + Sync + 'static>(value: &::std::option::Option<T>, fallback: &T) -> T {
+pub fn or<T: Clone + Send + Sync + 'static>(value: &::std::option::Option<T>, fallback: T) -> T {
     match value {
         Some(present) => present.clone(),
-        None => fallback.clone(),
+        None => fallback,
     }
 }
 
@@ -99,7 +99,7 @@ pub fn respond(mut counts: ::ignite_io::Store<i64>, line: &String) -> String {
         return generic_line();
     };
     match number(line, { static TEXT: ::std::sync::LazyLock<String> = ::std::sync::LazyLock::new(|| String::from("inc ")); &*TEXT }) {
-        Some(id) => return show(&or(&counts.update(id.clone(), &*(::std::sync::Arc::new(|__a0: i64| bump(&__a0)) as ::std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync>)), &(::ignite_io::checked::neg(1, "crates/ignite-rustgen/tests/golden/generics.ignite", 73, 57)))),
+        Some(id) => return show(&or(&counts.update(id.clone(), &*(::std::sync::Arc::new(|__a0: i64| bump(&__a0)) as ::std::sync::Arc<dyn Fn(i64) -> i64 + Send + Sync>)), ::ignite_io::checked::neg(1, "crates/ignite-rustgen/tests/golden/generics.ignite", 73, 57))),
         None => {
         },
     };

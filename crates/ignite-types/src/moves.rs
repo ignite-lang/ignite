@@ -52,13 +52,36 @@ pub(crate) struct Moves {
     pub taken: NodeMap<()>,
     pub consumed: BTreeMap<String, Vec<bool>>,
     pub closures: NodeMap<Vec<bool>>,
+    /// The Rust target's moves of the elements and bindings of a `for` or
+    /// `match` that takes a given parameter whole ([`Given`]).
+    pub owned: NodeMap<()>,
+    /// The iterables and scrutinees those take whole.
+    pub whole: NodeMap<()>,
 }
 
 /// Analyse every fn, role, test and closure body of `program`, typed as
-/// `types` against the imported `modules`.
-pub(crate) fn analyse(program: &Program, types: &TypedProgram, modules: &TypedModules) -> Moves {
+/// `types` against the imported `modules`. `root` for the program's own
+/// module, whose fns no other module calls: there a parameter every caller
+/// gives up is consumed too ([`Given`]).
+pub(crate) fn analyse(
+    program: &Program,
+    types: &TypedProgram,
+    modules: &TypedModules,
+    root: bool,
+) -> Moves {
     let bodies = bodies(program, types);
-    let resolved: Vec<Resolved> = bodies.iter().map(|b| resolve(b, types)).collect();
+    let candidates = if root {
+        Given::candidates(program, types)
+    } else {
+        BTreeMap::new()
+    };
+    let resolved: Vec<Resolved> = bodies
+        .iter()
+        .map(|b| {
+            let sites = b.key.as_ref().is_some_and(|k| candidates.contains_key(k));
+            resolve(b, types, sites)
+        })
+        .collect();
     let changed_params = |body: &Body<'_>| -> Vec<bool> {
         let names = match body.root {
             Root::Block(block) => crate::ownership::changed_in_block(block, Some(types)),
@@ -70,59 +93,140 @@ pub(crate) fn analyse(program: &Program, types: &TypedProgram, modules: &TypedMo
             .collect()
     };
     let mut consumed: BTreeMap<String, Vec<bool>> = BTreeMap::new();
+    let mut given: BTreeMap<String, Vec<bool>> = BTreeMap::new();
     for body in &bodies {
         if let Some(key) = &body.key {
             consumed.insert(key.clone(), changed_params(body));
+            given.insert(key.clone(), vec![false; body.params.len()]);
         }
     }
-    // Each round that changes something sets at least one more entry and
-    // none is ever cleared, so the fixpoint is reached within one round
-    // per parameter of the module, plus the round that sees no change.
-    let rounds = consumed.values().map(Vec::len).sum::<usize>() + 1;
-    for _ in 0..rounds {
-        let mut changed = false;
-        for (body, res) in bodies.iter().zip(&resolved) {
-            let Some(key) = &body.key else { continue };
-            let own = consumed[key].clone();
-            let (moved, _, _) = walk(body, res, types, modules, &consumed, &own, false);
-            let entry = consumed
-                .get_mut(key)
-                .expect("every keyed body has an entry");
-            for i in moved {
-                if !entry[i] {
-                    entry[i] = true;
-                    changed = true;
+    let given_of = |given: &BTreeMap<String, Vec<bool>>, body: &Body<'_>| -> Vec<bool> {
+        body.key
+            .as_ref()
+            .and_then(|k| given.get(k))
+            .cloned()
+            .unwrap_or_default()
+    };
+    // A closure's parameter is consumed as a fn's is (20.3.3): changed in
+    // place, or moved on every path to the end of the body. A closure
+    // calls nothing of its own, so one walk gives the moved set; it does
+    // not depend on `own`.
+    let closure_own =
+        |body: &Body<'_>, res: &Resolved, consumed: &BTreeMap<String, Vec<bool>>| -> Vec<bool> {
+            let mut own = changed_params(body);
+            let out = walk(body, res, types, modules, consumed, &own, Collect::Moved);
+            for i in out.moved {
+                own[i] = true;
+            }
+            own
+        };
+    loop {
+        // Each round that changes something sets at least one more entry
+        // and none is ever cleared, so the fixpoint is reached within one
+        // round per parameter of the module, plus the round that sees no
+        // change.
+        let rounds = consumed.values().map(Vec::len).sum::<usize>() + 1;
+        for _ in 0..rounds {
+            let mut changed = false;
+            for (body, res) in bodies.iter().zip(&resolved) {
+                let Some(key) = &body.key else { continue };
+                let own = consumed[key].clone();
+                let out = walk(body, res, types, modules, &consumed, &own, Collect::Moved);
+                let entry = consumed
+                    .get_mut(key)
+                    .expect("every keyed body has an entry");
+                for i in out.moved {
+                    if !entry[i] {
+                        entry[i] = true;
+                        changed = true;
+                    }
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+        // The parameters every caller gives up ([`Given`]), added to the
+        // consumed sets: each addition may let another caller give one up
+        // and the consumed sets of 20.3.3 grow, so both are iterated again
+        // until neither changes. Never cleared: a least fixpoint.
+        let mut open: Vec<(String, usize)> = Vec::new();
+        for (k, params) in &candidates {
+            for (i, &candidate) in params.iter().enumerate() {
+                if candidate && !consumed[k][i] {
+                    open.push((k.clone(), i));
                 }
             }
         }
-        if !changed {
+        if open.is_empty() {
             break;
+        }
+        let mut found = Given::default();
+        for (body, res) in bodies.iter().zip(&resolved) {
+            let own = match (&body.key, body.closure) {
+                (Some(key), _) => consumed[key].clone(),
+                (None, Some(_)) => closure_own(body, res, &consumed),
+                (None, None) => Vec::new(),
+            };
+            let mine = given_of(&given, body);
+            let out = walk(
+                body,
+                res,
+                types,
+                modules,
+                &consumed,
+                &own,
+                Collect::Calls(&candidates),
+            );
+            found.add(body, out, &mine);
+        }
+        let added = found.given(types, &open);
+        if added.is_empty() {
+            break;
+        }
+        for (key, i) in added {
+            consumed.get_mut(&key).expect("a candidate is keyed")[i] = true;
+            given.get_mut(&key).expect("a candidate is keyed")[i] = true;
         }
     }
     let mut marks: NodeMap<(bool, bool)> = NodeMap::default();
     let mut taken: NodeMap<bool> = NodeMap::default();
     let mut closures: NodeMap<Vec<bool>> = NodeMap::default();
+    let mut owned: NodeMap<()> = NodeMap::default();
+    let mut whole: NodeMap<()> = NodeMap::default();
     for (body, res) in bodies.iter().zip(&resolved) {
         let own = match (&body.key, body.closure) {
             (Some(key), _) => consumed[key].clone(),
-            // A closure's parameter is consumed as a fn's is (20.3.3):
-            // changed in place, or moved on every path to the end of the
-            // body. A closure calls nothing of its own, so one walk gives
-            // the moved set; it does not depend on `own`.
             (None, Some(closure)) => {
-                let mut own = changed_params(body);
-                let (moved, _, _) = walk(body, res, types, modules, &consumed, &own, false);
-                for i in moved {
-                    own[i] = true;
-                }
+                let own = closure_own(body, res, &consumed);
                 closures.insert(key(closure), own.clone());
                 own
             }
             (None, None) => Vec::new(),
         };
-        let (_, found, takes) = walk(body, res, types, modules, &consumed, &own, true);
-        marks.extend(found);
-        taken.extend(takes.into_iter().filter(|&(_, takes)| takes));
+        let mine = given_of(&given, body);
+        let out = walk(body, res, types, modules, &consumed, &own, Collect::Marks);
+        marks.extend(out.marks);
+        taken.extend(out.taken.into_iter().filter(|&(_, takes)| takes));
+        // A `for` or `match` takes its given parameter whole when it would
+        // and an element or binding then moves or gives its buffer.
+        let takes_site = |site: &NodeId| {
+            out.sites
+                .get(site)
+                .is_some_and(|&(param, would)| would && mine.get(param).copied().unwrap_or(false))
+        };
+        for (e, (site, moves)) in out.cond_marks.iter() {
+            if *moves && takes_site(site) {
+                owned.insert(*e, ());
+                whole.insert(*site, ());
+            }
+        }
+        for (e, (site, takes)) in out.cond_taken.iter() {
+            if *takes && takes_site(site) {
+                taken.insert(*e, true);
+                whole.insert(*site, ());
+            }
+        }
     }
     let mut moves = NodeMap::default();
     let mut late = NodeMap::default();
@@ -140,6 +244,8 @@ pub(crate) fn analyse(program: &Program, types: &TypedProgram, modules: &TypedMo
         taken: taken.into_keys().map(|k| (k, ())).collect(),
         consumed,
         closures,
+        owned,
+        whole,
     }
 }
 
@@ -575,6 +681,21 @@ struct Var {
     tracked: bool,
     param: Option<usize>,
     handle: bool,
+    /// For a binding of a `for` or `match` over a parameter of a
+    /// candidate fn ([`Given`]): the iterable or scrutinee whose take makes
+    /// it owned. Its moves are recorded apart and kept only for a site that
+    /// takes its parameter whole.
+    cond: Option<NodeId>,
+}
+
+/// How a pattern's bindings hold the matched value: borrowed from a
+/// place, owned (a fresh value), or owned when the site takes its given
+/// parameter whole.
+#[derive(Clone, Copy)]
+enum Own {
+    Borrowed,
+    Owned,
+    Cond(NodeId),
 }
 
 /// The bindings of one body and what each name use resolves to.
@@ -593,19 +714,26 @@ struct Resolved {
     /// or the arms of a `match` that is that value): the binding's scope
     /// ends there.
     tails: NodeMap<()>,
+    /// The iterables and scrutinees that name a parameter of a candidate
+    /// fn ([`Given`]), with the parameter's variable: their bindings are
+    /// [`Var::cond`].
+    sites: NodeMap<usize>,
 }
 
 struct Resolver<'a> {
     types: &'a TypedProgram,
     scopes: Vec<Vec<(&'a str, usize)>>,
     out: Resolved,
+    /// Whether a `for` or `match` over a parameter makes a site.
+    sites: bool,
 }
 
-fn resolve(body: &Body<'_>, types: &TypedProgram) -> Resolved {
+fn resolve(body: &Body<'_>, types: &TypedProgram, sites: bool) -> Resolved {
     let mut r = Resolver {
         types,
         scopes: vec![Vec::new()],
         out: Resolved::default(),
+        sites,
     };
     let closure = body.closure.and_then(|c| types.closure(c));
     for (i, name) in body.params.iter().enumerate() {
@@ -628,6 +756,7 @@ impl<'a> Resolver<'a> {
             tracked,
             param,
             handle,
+            cond: None,
         });
         self.out.decls.insert(name.span, id);
         if let Some(scope) = self.scopes.last_mut() {
@@ -641,6 +770,49 @@ impl<'a> Resolver<'a> {
         let ty = self.types.binding_type(name.span);
         let handle = ty.is_some_and(handle);
         self.bind(name, ty.is_some_and(aggregate) || handle, None, handle);
+    }
+
+    /// Bind a name as `own` says.
+    fn bind_as(&mut self, name: &'a Ident, own: Own) {
+        match own {
+            Own::Owned => self.bind_owned(name),
+            Own::Borrowed => self.bind(name, false, None, false),
+            Own::Cond(site) => {
+                let tracked = self.types.binding_type(name.span).is_some_and(aggregate);
+                self.bind(name, tracked, None, false);
+                if let Some(var) = self.out.vars.last_mut() {
+                    var.cond = tracked.then_some(site);
+                }
+            }
+        }
+    }
+
+    /// How the bindings of a `for` over `iter` (`list`) or of a `match`
+    /// on it hold their value: owned when it is fresh, else a site of a
+    /// parameter of a candidate fn when it names one ([`Given`]), else
+    /// borrowed.
+    fn own_of(&mut self, iter: &Expr, list: bool) -> Own {
+        if !self.borrowed(iter) {
+            return Own::Owned;
+        }
+        if !self.sites || !matches!(iter.kind, ExprKind::Name(_)) {
+            return Own::Borrowed;
+        }
+        let Some(&var) = self.out.refs.get(&key(iter)) else {
+            return Own::Borrowed;
+        };
+        let v = &self.out.vars[var];
+        let ty = self.types.try_type_of(iter);
+        let fits = if list {
+            matches!(ty, Some(Ty::List(element)) if aggregate(element))
+        } else {
+            ty.is_some_and(aggregate)
+        };
+        if v.param.is_none() || !v.tracked || v.cond.is_some() || !fits {
+            return Own::Borrowed;
+        }
+        self.out.sites.insert(key(iter), var);
+        Own::Cond(key(iter))
     }
 
     /// Whether the value of `e` may point into a binding or a constant:
@@ -753,19 +925,15 @@ impl<'a> Resolver<'a> {
         &mut self,
         pattern: Option<&'a Pattern>,
         name: Option<&'a Ident>,
-        owned: bool,
+        own: Own,
         body: &'a Block,
     ) {
         self.scopes.push(Vec::new());
         if let Some(pattern) = pattern {
-            self.pattern(pattern, owned);
+            self.pattern(pattern, own);
         }
         if let Some(name) = name {
-            if owned {
-                self.bind_owned(name);
-            } else {
-                self.bind(name, false, None, false);
-            }
+            self.bind_as(name, own);
         }
         self.block(body);
         self.scopes.pop();
@@ -779,8 +947,12 @@ impl<'a> Resolver<'a> {
             }
             StmtKind::LetPattern { pattern, value, .. } => {
                 self.expr(value);
-                let owned = !self.borrowed(value);
-                self.pattern(pattern, owned);
+                let own = if self.borrowed(value) {
+                    Own::Borrowed
+                } else {
+                    Own::Owned
+                };
+                self.pattern(pattern, own);
             }
             StmtKind::Assign { target, value } => {
                 self.expr(value);
@@ -800,8 +972,8 @@ impl<'a> Resolver<'a> {
             StmtKind::Loop { body } => self.block(body),
             StmtKind::For { name, iter, body } => {
                 self.expr(iter);
-                let owned = !self.borrowed(iter);
-                self.scoped(None, Some(name), owned, body);
+                let own = self.own_of(iter, true);
+                self.scoped(None, Some(name), own, body);
             }
             StmtKind::ForPattern {
                 pattern,
@@ -809,8 +981,8 @@ impl<'a> Resolver<'a> {
                 body,
             } => {
                 self.expr(iter);
-                let owned = !self.borrowed(iter);
-                self.scoped(Some(pattern), None, owned, body);
+                let own = self.own_of(iter, true);
+                self.scoped(Some(pattern), None, own, body);
             }
             StmtKind::Break | StmtKind::Continue => {}
             StmtKind::Expr(e) => self.expr(e),
@@ -827,25 +999,23 @@ impl<'a> Resolver<'a> {
     /// fresh value ([`Resolver::borrowed`]), so its bindings own their
     /// parts. Bindings under a list pattern are never owned: a list pattern
     /// takes its elements out of a slice.
-    fn pattern(&mut self, pattern: &'a Pattern, owned: bool) {
+    fn pattern(&mut self, pattern: &'a Pattern, own: Own) {
         match &pattern.kind {
-            PatternKind::Binding(name) if owned => self.bind_owned(name),
-            PatternKind::Binding(name) | PatternKind::Rest(Some(name)) => {
-                self.bind(name, false, None, false)
-            }
+            PatternKind::Binding(name) => self.bind_as(name, own),
+            PatternKind::Rest(Some(name)) => self.bind(name, false, None, false),
             PatternKind::Or(items) | PatternKind::Tuple(items) => {
                 for item in items {
-                    self.pattern(item, owned);
+                    self.pattern(item, own);
                 }
             }
             PatternKind::List(items) => {
                 for item in items {
-                    self.pattern(item, false);
+                    self.pattern(item, Own::Borrowed);
                 }
             }
             PatternKind::Variant { args, .. } => {
                 for arg in args {
-                    self.pattern(arg, owned);
+                    self.pattern(arg, own);
                 }
             }
             PatternKind::Range { .. }
@@ -866,11 +1036,11 @@ impl<'a> Resolver<'a> {
             }
             ExprKind::Match { scrutinee, arms } => {
                 self.expr(scrutinee);
-                let owned = !self.borrowed(scrutinee);
+                let own = self.own_of(scrutinee, false);
                 for arm in arms {
                     self.scopes.push(Vec::new());
                     let start = self.out.vars.len();
-                    self.pattern(&arm.pattern, owned);
+                    self.pattern(&arm.pattern, own);
                     self.expr(&arm.body);
                     self.tail(&arm.body, start);
                     self.scopes.pop();
@@ -1265,6 +1435,64 @@ struct Walk<'a> {
     taken: Option<NodeMap<bool>>,
     /// The stack [`Walk::names`] reuses, so the test allocates nothing.
     stack: Vec<Node<'a>>,
+    /// The candidate fns whose calls get a verdict, when collected.
+    candidates: Option<&'a BTreeMap<String, Vec<bool>>>,
+    /// What [`Given`] reads of the walk.
+    out: WalkOut,
+}
+
+/// What [`walk`] collects besides the moved parameters.
+#[derive(Clone, Copy)]
+enum Collect<'a> {
+    /// The moved parameters only.
+    Moved,
+    /// Every move position's decision.
+    Marks,
+    /// The verdicts on the arguments of the calls of `candidates`.
+    Calls(&'a BTreeMap<String, Vec<bool>>),
+}
+
+/// How an argument of a call of a candidate fn would be passed to its
+/// parameter if that were consumed ([`Walk::verdict`]).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Verdict {
+    /// A last use or a value built for the call.
+    Given,
+    /// Anything else: the parameter stays lent.
+    Kept,
+    /// A last use of an element or binding of the site, given when the
+    /// site takes its parameter whole.
+    IfSite(NodeId),
+}
+
+/// The result of one [`walk`].
+#[derive(Default)]
+struct WalkOut {
+    /// The parameters every path to an exit moves.
+    moved: BTreeSet<usize>,
+    /// The parameters some path moves.
+    any_move: BTreeSet<usize>,
+    marks: NodeMap<(bool, bool)>,
+    taken: NodeMap<bool>,
+    /// The moves of [`Var::cond`] bindings: the expression, its site and
+    /// whether it would move.
+    cond_marks: NodeMap<(NodeId, bool)>,
+    /// The buffers of [`Var::cond`] bindings: the receiver, its site and
+    /// whether the call would take it.
+    cond_taken: NodeMap<(NodeId, bool)>,
+    /// The sites where a [`Var::cond`] binding would move or give its
+    /// buffer.
+    hits: BTreeSet<NodeId>,
+    /// Per site: its parameter and whether it would take it whole (dead
+    /// after the `for` or `match`, not pinned, not held), the parameter
+    /// given or not.
+    sites: NodeMap<(usize, bool)>,
+    /// The parameters whose buffer a `to_text` or `to_bytes` would take.
+    buffers: BTreeSet<usize>,
+    /// Per call of a candidate fn: its key and a verdict per parameter.
+    calls: NodeMap<(String, Vec<Verdict>)>,
+    /// The candidate fns a `spawn` calls.
+    spawned: BTreeSet<String>,
 }
 
 /// An operand of an enclosing call that the call holds while a later
@@ -1278,8 +1506,8 @@ struct Held<'a> {
 }
 
 /// Walk one body whose consumed parameters are `own`; the parameters it
-/// moves on every path to an exit (and on some path), and when `record`,
-/// every move position's decision.
+/// moves on every path to an exit (and on some path), and what `collect`
+/// asks for.
 fn walk<'a>(
     body: &Body<'a>,
     res: &'a Resolved,
@@ -1287,8 +1515,9 @@ fn walk<'a>(
     modules: &'a TypedModules,
     consumed: &'a BTreeMap<String, Vec<bool>>,
     own: &'a [bool],
-    record: bool,
-) -> (BTreeSet<usize>, NodeMap<(bool, bool)>, NodeMap<bool>) {
+    collect: Collect<'a>,
+) -> WalkOut {
+    let record = matches!(collect, Collect::Marks);
     let mut w = Walk {
         types,
         modules,
@@ -1303,6 +1532,11 @@ fn walk<'a>(
         marks: record.then(NodeMap::default),
         taken: record.then(NodeMap::default),
         stack: Vec::new(),
+        candidates: match collect {
+            Collect::Calls(candidates) => Some(candidates),
+            _ => None,
+        },
+        out: WalkOut::default(),
     };
     let entry = match body.root {
         Root::Block(block) => w.block(block, body.used, State::exit()),
@@ -1314,11 +1548,116 @@ fn walk<'a>(
         .copied()
         .filter(|&i| res.vars.iter().any(|v| v.param == Some(i) && v.tracked))
         .collect();
-    (
-        moved,
-        w.marks.unwrap_or_default(),
-        w.taken.unwrap_or_default(),
-    )
+    let mut out = std::mem::take(&mut w.out);
+    out.moved = moved;
+    out.any_move = std::mem::take(&mut w.any_move);
+    out.marks = w.marks.unwrap_or_default();
+    out.taken = w.taken.unwrap_or_default();
+    out
+}
+
+/// The by-value parameters every caller gives up (`docs/slice.md` section
+/// 6, "By-value parameters given by every caller"): in the program's own
+/// module, a parameter of a fn every use of which is a walked call that
+/// passes it a last use or a value built for the call, and whose body
+/// would use it as an owner, is consumed too. What the walks of one round
+/// found, and the decision.
+#[derive(Default)]
+struct Given {
+    /// Every walked call of a candidate fn: its key and, per parameter,
+    /// whether the argument is given.
+    calls: NodeMap<(String, Vec<bool>)>,
+    /// The candidate fns a `spawn` calls.
+    spawned: BTreeSet<String>,
+    /// Per fn, the parameters its body would use as an owner.
+    owner: BTreeMap<String, BTreeSet<usize>>,
+}
+
+impl Given {
+    /// The fns of `program` the rule may apply to, by key, with the
+    /// parameters of an aggregate type (20.3.1): not an associated fn,
+    /// which the generated mains and the runtime call, not a protocol role
+    /// and not `to_text`, which the generator calls for `assert` and `?`
+    /// reports.
+    fn candidates(program: &Program, types: &TypedProgram) -> BTreeMap<String, Vec<bool>> {
+        let mut out = BTreeMap::new();
+        for decl in &program.decls {
+            let Decl::Fn(f) = decl else { continue };
+            let key = f.qualified_name();
+            if key.contains('.') || f.name.name == "to_text" {
+                continue;
+            }
+            let params: Vec<bool> = f
+                .params
+                .iter()
+                .map(|p| types.binding_type(p.name.span).is_some_and(aggregate))
+                .collect();
+            if params.iter().any(|&p| p) {
+                out.insert(key, params);
+            }
+        }
+        out
+    }
+
+    /// Add the walk `out` of `body`, whose given parameters are `given`.
+    fn add(&mut self, body: &Body<'_>, out: WalkOut, given: &[bool]) {
+        let takes = |site: &NodeId| {
+            out.sites
+                .get(site)
+                .is_some_and(|&(param, would)| would && given.get(param).copied().unwrap_or(false))
+        };
+        for (id, (name, verdicts)) in &out.calls {
+            let verdicts = verdicts
+                .iter()
+                .map(|v| match v {
+                    Verdict::Given => true,
+                    Verdict::Kept => false,
+                    Verdict::IfSite(site) => takes(site),
+                })
+                .collect();
+            self.calls.insert(*id, (name.clone(), verdicts));
+        }
+        self.spawned.extend(out.spawned.iter().cloned());
+        if let Some(key) = &body.key {
+            let mut owner: BTreeSet<usize> = out.any_move.union(&out.buffers).copied().collect();
+            for (site, &(param, would)) in &out.sites {
+                if would && out.hits.contains(site) {
+                    owner.insert(param);
+                }
+            }
+            self.owner.insert(key.clone(), owner);
+        }
+    }
+
+    /// The parameters of `open` (candidates not consumed yet) that the
+    /// rule gives: every use of the fn in the module (`types`' callees) is
+    /// a walked call, there is one, none is spawned, each passes the
+    /// parameter a given argument, and the body would use it as an owner.
+    fn given(&self, types: &TypedProgram, open: &[(String, usize)]) -> Vec<(String, usize)> {
+        let mut uses: BTreeMap<&str, Vec<NodeId>> = BTreeMap::new();
+        for (id, callee) in &types.callees {
+            if let Callee::Fn(q) = callee
+                && q.module == types.module
+            {
+                uses.entry(q.name.as_str()).or_default().push(*id);
+            }
+        }
+        open.iter()
+            .filter(|(name, i)| {
+                !self.spawned.contains(name)
+                    && self.owner.get(name).is_some_and(|o| o.contains(i))
+                    && uses.get(name.as_str()).is_some_and(|ids| {
+                        !ids.is_empty()
+                            && ids.iter().all(|id| {
+                                self.calls
+                                    .get(id)
+                                    .is_some_and(|(_, v)| v.get(*i).copied() == Some(true))
+                            })
+                    })
+            })
+            .cloned()
+            .collect()
+    }
 }
 
 impl<'a> Walk<'a> {
@@ -1528,6 +1867,25 @@ impl<'a> Walk<'a> {
         }
     }
 
+    /// Decide a site ([`Resolved::sites`]): the iterable of a `for` or the
+    /// scrutinee of a `match` that names a parameter, with `st` the state
+    /// after it (the loop head, the start of the arms). It would take the
+    /// parameter whole when the parameter is dead there (so neither the
+    /// body, the arms nor anything after read it), not pinned by an
+    /// enclosing `match` or `for` and not held by an operand of an
+    /// enclosing call.
+    fn site(&mut self, e: &Expr, st: &State) {
+        let Some(&var) = self.res.sites.get(&key(e)) else {
+            return;
+        };
+        let Some(param) = self.res.vars[var].param else {
+            return;
+        };
+        let place = Place::whole(var);
+        let would = st.live.dead(&place) && !self.pinned(&place) && !self.held_overlaps(&place);
+        self.out.sites.insert(key(e), (param, would));
+    }
+
     fn record(&mut self, e: &Expr, moves: bool) {
         if let Some(marks) = &mut self.marks {
             marks.insert(key(e), (moves, false));
@@ -1545,10 +1903,24 @@ impl<'a> Walk<'a> {
     fn record_taken(&mut self, receiver: &Expr, st: &State) {
         let takes = match self.var_place(receiver) {
             Some(place) if matches!(receiver.kind, ExprKind::Name(_)) => {
-                let own = self.res.vars[place.var]
-                    .param
-                    .is_none_or(|i| self.own.get(i).copied().unwrap_or(false));
-                own && st.live.dead(&place) && !self.pinned(&place) && !self.held_overlaps(&place)
+                let var = &self.res.vars[place.var];
+                let (param, cond) = (var.param, var.cond);
+                let would =
+                    st.live.dead(&place) && !self.pinned(&place) && !self.held_overlaps(&place);
+                if let Some(site) = cond {
+                    if would {
+                        self.out.hits.insert(site);
+                    }
+                    if self.taken.is_some() {
+                        self.out.cond_taken.insert(key(receiver), (site, would));
+                    }
+                    return;
+                }
+                if would && let Some(i) = param {
+                    self.out.buffers.insert(i);
+                }
+                let own = param.is_none_or(|i| self.own.get(i).copied().unwrap_or(false));
+                own && would
             }
             _ => false,
         };
@@ -1606,6 +1978,20 @@ impl<'a> Walk<'a> {
         if would && let Some(i) = param {
             st.moved.insert(i);
             self.any_move.insert(i);
+        }
+        if let Some(site) = self.res.vars[place.var].cond {
+            // A binding of a site moves only on the Rust target and only
+            // where the site takes its parameter whole: apart from the
+            // marks, decided after the walk.
+            let would = would && !spawned;
+            if would {
+                self.out.hits.insert(site);
+            }
+            if self.marks.is_some() {
+                self.out.cond_marks.insert(key(e), (site, would));
+            }
+            st.live.read(place);
+            return st;
         }
         let own = param.is_none_or(|i| self.own.get(i).copied().unwrap_or(false));
         self.record(e, would && own);
@@ -1734,7 +2120,9 @@ impl<'a> Walk<'a> {
                         Some(j) => j.join(&before),
                     });
                 }
-                self.expr(scrutinee, joined.unwrap_or(st))
+                let joined = joined.unwrap_or(st);
+                self.site(scrutinee, &joined);
+                self.expr(scrutinee, joined)
             }
             ExprKind::If {
                 cond,
@@ -1821,6 +2209,7 @@ impl<'a> Walk<'a> {
                     }
                     exit.join(&body)
                 });
+                self.site(iter, &head);
                 self.expr(iter, head)
             }
             StmtKind::Break => self.loops.last().map_or(st, |(brk, _)| brk.clone()),
@@ -1930,6 +2319,23 @@ impl<'a> Walk<'a> {
         } else {
             Vec::new()
         };
+        // The call of a candidate fn ([`Given`]), when its verdicts are
+        // collected: every such call has an entry, a `spawn` disqualifies.
+        let candidate = match (self.candidates, &callee) {
+            (Some(candidates), Some(Callee::Fn(q))) if q.module == self.types.module => candidates
+                .get(&q.name)
+                .map(|params| (q.name.clone(), params)),
+            _ => None,
+        };
+        if let Some((name, params)) = &candidate {
+            if spawned {
+                self.out.spawned.insert(name.clone());
+            }
+            self.out
+                .calls
+                .entry(key(e))
+                .or_insert_with(|| (name.clone(), vec![Verdict::Kept; params.len()]));
+        }
         for (i, &(operand, kind)) in operands.iter().enumerate().rev() {
             // While operand `i` runs, the call holds the operands before
             // it that it reads in place (borrowed arguments, builtin
@@ -1953,7 +2359,7 @@ impl<'a> Walk<'a> {
                 });
             }
             if i == 0
-                && self.taken.is_some()
+                && (self.taken.is_some() || self.candidates.is_some())
                 && matches!(e.kind, ExprKind::Method { .. })
                 && matches!(
                     callee,
@@ -1961,6 +2367,18 @@ impl<'a> Walk<'a> {
                 )
             {
                 self.record_taken(operand, &st);
+            }
+            if let Some((_, params)) = &candidate
+                && matches!(kind, Operand::Read)
+                && let Some(p) = self.param_index(e, i)
+                && params.get(p).copied().unwrap_or(false)
+            {
+                let verdict = self.verdict(operand, &operands, i, &st);
+                if let Some((_, verdicts)) = self.out.calls.get_mut(&key(e))
+                    && let Some(slot) = verdicts.get_mut(p)
+                {
+                    *slot = verdict;
+                }
             }
             st = match kind {
                 Operand::Read => self.expr(operand, st),
@@ -2027,6 +2445,88 @@ impl<'a> Walk<'a> {
             None => false,
         };
         if moves { Operand::Move } else { Operand::Read }
+    }
+
+    /// The parameter operand `i` of the fn call or UFCS call `call` is
+    /// passed to, as [`argument`](Self::argument) decides it; `None` for
+    /// the callee of a call.
+    fn param_index(&self, call: &Expr, i: usize) -> Option<usize> {
+        let (j, offset) = match &call.kind {
+            ExprKind::Call { .. } => (i.checked_sub(1)?, 0),
+            ExprKind::Method { .. } if i == 0 => return Some(0),
+            ExprKind::Method { .. } => (i - 1, 1),
+            _ => return None,
+        };
+        let param = match self.types.named_args(call) {
+            Some(perm) => perm.iter().position(|&a| a == j).unwrap_or(j),
+            None => j,
+        };
+        Some(param + offset)
+    }
+
+    /// How operand `i` of a call of a candidate fn would reach its
+    /// parameter if that were consumed ([`Given`]): a value built for the
+    /// call, or a place that would move there (dead after the call, not
+    /// pinned, not held, mentioned by no other operand) and that the body
+    /// owns, is given; a binding of a site is given when the site takes its
+    /// parameter whole; anything else is kept. `st` is the state after the
+    /// operand.
+    fn verdict(
+        &mut self,
+        operand: &'a Expr,
+        operands: &[(&'a Expr, Operand<'a>)],
+        i: usize,
+        st: &State,
+    ) -> Verdict {
+        let inner = unnamed(operand);
+        if self.built_for_call(inner) {
+            return Verdict::Given;
+        }
+        let Some(place) = self.movable(inner) else {
+            return Verdict::Kept;
+        };
+        if !self.aggregate_expr(inner)
+            || !st.live.dead(&place)
+            || self.pinned(&place)
+            || self.held_overlaps(&place)
+            || self.mentioned_by_others(operands, i, &place)
+        {
+            return Verdict::Kept;
+        }
+        let var = &self.res.vars[place.var];
+        match (var.cond, var.param) {
+            (Some(site), _) => Verdict::IfSite(site),
+            (None, None) => Verdict::Given,
+            (None, Some(j)) if self.own.get(j).copied().unwrap_or(false) => Verdict::Given,
+            (None, Some(_)) => Verdict::Kept,
+        }
+    }
+
+    /// Whether `e` is a value the caller builds for the call whether the
+    /// parameter is lent or not: the result of a fn, role or variant call,
+    /// a variant without payload, a record, list or tuple literal, a record
+    /// update, an operator, or `x.copy()`. A text literal and a constant
+    /// are not: a lent parameter reads them without an allocation.
+    fn built_for_call(&self, e: &Expr) -> bool {
+        match &e.kind {
+            ExprKind::Record { .. }
+            | ExprKind::List(_)
+            | ExprKind::Tuple(_)
+            | ExprKind::RecordUpdate { .. }
+            | ExprKind::Binary { .. }
+            | ExprKind::Unary { .. } => true,
+            ExprKind::Name(_) => matches!(self.types.callee(e), Some(Callee::Variant { .. })),
+            ExprKind::Call { .. } | ExprKind::Method { .. } => matches!(
+                self.types.callee(e),
+                Some(
+                    Callee::Fn(_)
+                        | Callee::Role { .. }
+                        | Callee::Variant { .. }
+                        | Callee::Builtin(Builtin::Copy)
+                )
+            ),
+            _ => false,
+        }
     }
 
     /// Whether an operand of the call other than `i` mentions a place
@@ -2216,7 +2716,10 @@ impl<'a> Walk<'a> {
         let e = unnamed(operand);
         let place = self.movable(e).expect("a late move is a movable place");
         let param = self.res.vars[place.var].param;
-        let own = param.is_none_or(|i| self.own.get(i).copied().unwrap_or(false));
+        // A binding of a site ([`Var::cond`]) is copied at a late move: the
+        // Rust target moves it only in place.
+        let own = self.res.vars[place.var].cond.is_none()
+            && param.is_none_or(|i| self.own.get(i).copied().unwrap_or(false));
         self.record_late(e, own);
         st.live.read(place);
         st
@@ -2224,246 +2727,7 @@ impl<'a> Walk<'a> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The join before story
-    /// `move-analysis-cost-of-fields-set-in-if-without-else`: the plain
-    /// union of both sides' entries, the reference [`Live::join`] is held
-    /// to.
-    fn union(a: &Live, b: &Live) -> Live {
-        Live {
-            all: a.all || b.all,
-            entries: a.entries.union(&b.entries).cloned().collect(),
-        }
-    }
-
-    /// A statement of a generated body, as the backward walk sees it.
-    #[derive(Debug)]
-    enum Step {
-        Read(Place),
-        Assign(Place),
-        Kill(usize),
-        Return,
-        Break,
-        If(Vec<Step>, Option<Vec<Step>>),
-        Match(Vec<Vec<Step>>),
-        While(Vec<Step>),
-    }
-
-    /// [`Walk`]'s handling of the live set over [`Step`]s, with the join
-    /// under test.
-    struct Model {
-        join: fn(&Live, &Live) -> Live,
-        /// The states after the innermost loops: (break, continue).
-        loops: Vec<(Live, Live)>,
-        /// The live set after every step, in walk order; of a loop body
-        /// only the last round's, as [`Walk::cycle`] keeps the marks of
-        /// the round walked from the settled head.
-        seen: Vec<Live>,
-    }
-
-    impl Model {
-        fn block(&mut self, steps: &[Step], mut live: Live) -> Live {
-            for step in steps.iter().rev() {
-                live = self.step(step, live);
-                self.seen.push(live.clone());
-            }
-            live
-        }
-
-        fn step(&mut self, step: &Step, mut live: Live) -> Live {
-            match step {
-                Step::Read(p) => live.read(p.clone()),
-                Step::Assign(q) => live.assign(q),
-                Step::Kill(var) => live.kill(*var),
-                Step::Return => return Live::default(),
-                Step::Break => return self.loops.last().map_or(live, |(brk, _)| brk.clone()),
-                Step::If(then, otherwise) => {
-                    let then = self.block(then, live.clone());
-                    let otherwise = match otherwise {
-                        Some(otherwise) => self.block(otherwise, live),
-                        None => live,
-                    };
-                    return (self.join)(&then, &otherwise);
-                }
-                Step::Match(arms) => {
-                    let mut joined: Option<Live> = None;
-                    for arm in arms {
-                        let before = self.block(arm, live.clone());
-                        joined = Some(match joined {
-                            None => before,
-                            Some(j) => (self.join)(&j, &before),
-                        });
-                    }
-                    return joined.unwrap_or(live);
-                }
-                Step::While(body) => return self.cycle(body, live),
-            }
-            live
-        }
-
-        /// The head of `while c { body }` as [`Walk::cycle`] finds it:
-        /// iterated from no live place until it settles, every place live
-        /// after [`ROUNDS`].
-        fn cycle(&mut self, body: &[Step], exit: Live) -> Live {
-            let mark = self.seen.len();
-            let mut head = Live::default();
-            for _ in 0..ROUNDS {
-                self.seen.truncate(mark);
-                self.loops.push((exit.clone(), head.clone()));
-                let after = self.block(body, head.clone());
-                self.loops.pop();
-                let next = (self.join)(&exit, &after);
-                if next == head {
-                    return head;
-                }
-                head = next;
-            }
-            self.seen.truncate(mark);
-            let head = Live {
-                all: true,
-                entries: BTreeSet::new(),
-            };
-            self.loops.push((exit, head.clone()));
-            self.block(body, head.clone());
-            self.loops.pop();
-            head
-        }
-    }
-
-    /// A linear congruential generator, as `ignite-io`'s text tests use.
-    struct Rng(u64);
-
-    impl Rng {
-        fn below(&mut self, count: usize) -> usize {
-            self.0 = self
-                .0
-                .wrapping_mul(6364136223846793005)
-                .wrapping_add(1442695040888963407);
-            (self.0 >> 33) as usize % count
-        }
-    }
-
-    const FIELDS: [&str; 2] = ["a", "b"];
-
-    /// Two variables, paths of up to three fields.
-    fn universe() -> Vec<Place> {
-        let mut paths: Vec<Vec<String>> = vec![Vec::new()];
-        let mut level: Vec<Vec<String>> = vec![Vec::new()];
-        for _ in 0..3 {
-            level = level
-                .iter()
-                .flat_map(|p| {
-                    FIELDS.iter().map(move |f| {
-                        let mut p = p.clone();
-                        p.push(f.to_string());
-                        p
-                    })
-                })
-                .collect();
-            paths.extend(level.iter().cloned());
-        }
-        (0..2)
-            .flat_map(|var| {
-                paths.iter().map(move |path| Place {
-                    var,
-                    path: path.clone(),
-                })
-            })
-            .collect()
-    }
-
-    fn place(rng: &mut Rng) -> Place {
-        let var = rng.below(2);
-        let depth = rng.below(4);
-        Place {
-            var,
-            path: (0..depth)
-                .map(|_| FIELDS[rng.below(2)].to_string())
-                .collect(),
-        }
-    }
-
-    fn body(rng: &mut Rng, depth: usize, in_loop: bool) -> Vec<Step> {
-        let len = rng.below(5) + usize::from(depth == 0) * 3;
-        (0..len).map(|_| step(rng, depth, in_loop)).collect()
-    }
-
-    /// Assignments to fields and sub-fields and reads weighted up; `if`
-    /// with and without `else`, `match` and loops below depth 3.
-    fn step(rng: &mut Rng, depth: usize, in_loop: bool) -> Step {
-        let kinds = if depth >= 3 { 4 } else { 9 };
-        match rng.below(kinds) {
-            0 | 1 => Step::Assign(place(rng)),
-            2 => Step::Read(place(rng)),
-            3 => match rng.below(4) {
-                0 => Step::Kill(rng.below(2)),
-                1 if rng.below(3) == 0 => Step::Return,
-                2 | 3 if in_loop => Step::Break,
-                _ => Step::Read(place(rng)),
-            },
-            4 | 5 => Step::If(body(rng, depth + 1, in_loop), None),
-            6 => Step::If(
-                body(rng, depth + 1, in_loop),
-                Some(body(rng, depth + 1, in_loop)),
-            ),
-            7 => Step::Match(
-                (0..2 + rng.below(2))
-                    .map(|_| body(rng, depth + 1, in_loop))
-                    .collect(),
-            ),
-            _ => Step::While(body(rng, depth + 1, true)),
-        }
-    }
-
-    /// On generated bodies, the reduced join and the plain union leave
-    /// live sets that answer [`Live::dead`] alike for every place of the
-    /// universe after every step, loop heads and give-ups included.
-    #[test]
-    fn the_reduced_join_answers_dead_as_the_union_does() {
-        let universe = universe();
-        let mut rng = Rng(7);
-        let (mut steps, mut answers, mut smaller) = (0usize, 0usize, 0usize);
-        for case in 0..4000 {
-            let program = body(&mut rng, 0, false);
-            let mut reduced = Model {
-                join: Live::join,
-                loops: Vec::new(),
-                seen: Vec::new(),
-            };
-            let mut plain = Model {
-                join: union,
-                loops: Vec::new(),
-                seen: Vec::new(),
-            };
-            reduced.block(&program, Live::default());
-            plain.block(&program, Live::default());
-            assert_eq!(
-                reduced.seen.len(),
-                plain.seen.len(),
-                "case {case}: {program:?}"
-            );
-            for (i, (r, p)) in reduced.seen.iter().zip(&plain.seen).enumerate() {
-                assert_eq!(r.all, p.all, "case {case}, step {i}: {program:?}");
-                for place in &universe {
-                    assert_eq!(
-                        r.dead(place),
-                        p.dead(place),
-                        "case {case}, step {i}, {place:?}: reduced {r:?}, union {p:?}, {program:?}"
-                    );
-                    answers += 1;
-                }
-                smaller += usize::from(r.entries.len() < p.entries.len());
-            }
-            steps += reduced.seen.len();
-        }
-        println!(
-            "4000 bodies, {steps} steps, {answers} answers alike, {smaller} steps with fewer entries"
-        );
-        assert!(smaller > 0, "no generated body exercised the reduction");
-    }
-}
+mod tests;
 
 /// Adversary pass on story `move-analysis-cost-of-fields-set-in-if-without-else`:
 /// cases the generator of [`tests`] does not produce (three variables,
@@ -2471,450 +2735,4 @@ mod tests {
 /// states, `kill` between joins), and the size of the live set on shapes
 /// the count test does not write.
 #[cfg(test)]
-mod adversary_tests {
-    use super::*;
-
-    /// The join before the story: the plain union.
-    fn union(a: &Live, b: &Live) -> Live {
-        Live {
-            all: a.all || b.all,
-            entries: a.entries.union(&b.entries).cloned().collect(),
-        }
-    }
-
-    fn at(var: usize, path: &str) -> Place {
-        Place {
-            var,
-            path: path
-                .split('.')
-                .filter(|s| !s.is_empty())
-                .map(str::to_string)
-                .collect(),
-        }
-    }
-
-    struct Rng(u64);
-
-    impl Rng {
-        fn below(&mut self, count: usize) -> usize {
-            self.0 = self
-                .0
-                .wrapping_mul(6364136223846793005)
-                .wrapping_add(1442695040888963407);
-            (self.0 >> 33) as usize % count
-        }
-    }
-
-    const VARS: usize = 3;
-    const FIELDS: [&str; 3] = ["a", "b", "c"];
-
-    /// Paths of up to three of `a`, `b`, `c` and of four of `a`, `b`,
-    /// rooted at each of three variables.
-    fn universe() -> Vec<Place> {
-        let mut paths: Vec<Vec<String>> = vec![Vec::new()];
-        let mut level: Vec<Vec<String>> = vec![Vec::new()];
-        for depth in 0..4 {
-            let fields: &[&str] = if depth == 3 { &FIELDS[..2] } else { &FIELDS };
-            level = level
-                .iter()
-                .flat_map(|p| {
-                    fields.iter().map(move |f| {
-                        let mut p = p.clone();
-                        p.push(f.to_string());
-                        p
-                    })
-                })
-                .collect();
-            paths.extend(level.iter().cloned());
-        }
-        (0..VARS)
-            .flat_map(|var| {
-                paths.iter().map(move |path| Place {
-                    var,
-                    path: path.clone(),
-                })
-            })
-            .collect()
-    }
-
-    fn place(rng: &mut Rng) -> Place {
-        let var = rng.below(VARS);
-        let depth = rng.below(5);
-        Place {
-            var,
-            path: (0..depth)
-                .map(|d| {
-                    let n = if d == 3 { 2 } else { 3 };
-                    FIELDS[rng.below(n)].to_string()
-                })
-                .collect(),
-        }
-    }
-
-    fn same_dead(universe: &[Place], r: &Live, p: &Live, what: &dyn Fn() -> String) {
-        assert_eq!(r.all, p.all, "all: {}", what());
-        for place in universe {
-            assert_eq!(
-                r.dead(place),
-                p.dead(place),
-                "{place:?}: reduced {r:?}, union {p:?}, {}",
-                what()
-            );
-        }
-    }
-
-    /// Every entry the reduced join dropped is covered by an entry it
-    /// kept (the claim of [`Live::join`]'s doc).
-    fn dropped_are_covered(reduced: &Live, plain: &Live) -> bool {
-        plain
-            .entries
-            .iter()
-            .all(|e| reduced.entries.contains(e) || reduced.entries.iter().any(|k| k.covers(e)))
-    }
-
-    /// A pool of states, each held twice (reduced join, plain union),
-    /// driven by the same random operations: `read`, `assign`, `kill` of
-    /// one state, and the join of two states of the pool, joined states
-    /// included. After every operation both answer `dead` alike for every
-    /// place of the universe.
-    #[test]
-    fn a_pool_of_joined_states_answers_dead_as_the_union_does() {
-        let universe = universe();
-        let mut rng = Rng(15);
-        let (mut ops, mut joins, mut smaller) = (0usize, 0usize, 0usize);
-        for case in 0..300 {
-            let mut pool: Vec<(Live, Live)> = vec![(Live::default(), Live::default())];
-            let mut log: Vec<String> = Vec::new();
-            for _ in 0..60 {
-                let i = rng.below(pool.len());
-                let (mut r, mut p) = pool[i].clone();
-                match rng.below(9) {
-                    0..=2 => {
-                        let q = place(&mut rng);
-                        log.push(format!("{i}: assign {q:?}"));
-                        r.assign(&q);
-                        p.assign(&q);
-                    }
-                    3 | 4 => {
-                        let q = place(&mut rng);
-                        log.push(format!("{i}: read {q:?}"));
-                        r.read(q.clone());
-                        p.read(q);
-                    }
-                    5 => {
-                        let var = rng.below(VARS);
-                        log.push(format!("{i}: kill {var}"));
-                        r.kill(var);
-                        p.kill(var);
-                    }
-                    _ => {
-                        let j = rng.below(pool.len());
-                        log.push(format!("join {i} {j}"));
-                        let reduced = r.join(&pool[j].0);
-                        let plain = union(&p, &pool[j].1);
-                        assert!(
-                            dropped_are_covered(&reduced, &union(&r, &pool[j].0)),
-                            "case {case}: {log:?}"
-                        );
-                        smaller += usize::from(reduced.entries.len() < plain.entries.len());
-                        joins += 1;
-                        r = reduced;
-                        p = plain;
-                    }
-                }
-                ops += 1;
-                same_dead(&universe, &r, &p, &|| format!("case {case}: {log:?}"));
-                if rng.below(2) == 0 {
-                    pool.push((r, p));
-                } else {
-                    pool[i] = (r, p);
-                }
-            }
-        }
-        println!("{ops} operations, {joins} joins, {smaller} joins with fewer entries");
-        assert!(smaller > 0, "no join was reduced");
-    }
-
-    /// A statement as the backward walk sees it; `Loop` is `loop { }`,
-    /// left by `break` only; `Or` is the right operand of `&&`, joined
-    /// with the state that skips it.
-    #[derive(Debug)]
-    enum Step {
-        Read(Place),
-        Assign(Place),
-        Kill(usize),
-        Return,
-        Break,
-        Continue,
-        If(Vec<Step>, Option<Vec<Step>>),
-        Match(Vec<Vec<Step>>),
-        While(Vec<Step>),
-        Loop(Vec<Step>),
-        Or(Vec<Step>),
-    }
-
-    struct Model {
-        join: fn(&Live, &Live) -> Live,
-        loops: Vec<(Live, Live)>,
-        seen: Vec<Live>,
-        rounds: Vec<usize>,
-    }
-
-    impl Model {
-        fn new(join: fn(&Live, &Live) -> Live) -> Model {
-            Model {
-                join,
-                loops: Vec::new(),
-                seen: Vec::new(),
-                rounds: Vec::new(),
-            }
-        }
-
-        fn block(&mut self, steps: &[Step], mut live: Live) -> Live {
-            for step in steps.iter().rev() {
-                live = self.step(step, live);
-                self.seen.push(live.clone());
-            }
-            live
-        }
-
-        fn step(&mut self, step: &Step, mut live: Live) -> Live {
-            match step {
-                Step::Read(p) => live.read(p.clone()),
-                Step::Assign(q) => live.assign(q),
-                Step::Kill(var) => live.kill(*var),
-                Step::Return => return Live::default(),
-                Step::Break => return self.loops.last().map_or(live, |(b, _)| b.clone()),
-                Step::Continue => return self.loops.last().map_or(live, |(_, c)| c.clone()),
-                Step::If(then, otherwise) => {
-                    let then = self.block(then, live.clone());
-                    let otherwise = match otherwise {
-                        Some(o) => self.block(o, live),
-                        None => live,
-                    };
-                    return (self.join)(&then, &otherwise);
-                }
-                Step::Or(right) => {
-                    let evaluated = self.block(right, live.clone());
-                    return (self.join)(&live, &evaluated);
-                }
-                Step::Match(arms) => {
-                    let mut joined: Option<Live> = None;
-                    for arm in arms {
-                        let before = self.block(arm, live.clone());
-                        joined = Some(match joined {
-                            None => before,
-                            Some(j) => (self.join)(&j, &before),
-                        });
-                    }
-                    return joined.unwrap_or(live);
-                }
-                Step::While(body) => return self.cycle(body, live, true),
-                Step::Loop(body) => return self.cycle(body, live, false),
-            }
-            live
-        }
-
-        fn cycle(&mut self, body: &[Step], exit: Live, join_exit: bool) -> Live {
-            let mark = self.seen.len();
-            let mut head = Live::default();
-            for round in 0..ROUNDS {
-                self.seen.truncate(mark);
-                self.loops.push((exit.clone(), head.clone()));
-                let after = self.block(body, head.clone());
-                self.loops.pop();
-                let next = if join_exit {
-                    (self.join)(&exit, &after)
-                } else {
-                    after
-                };
-                if next == head {
-                    self.rounds.push(round + 1);
-                    return head;
-                }
-                head = next;
-            }
-            self.rounds.push(ROUNDS + 1);
-            self.seen.truncate(mark);
-            let head = Live {
-                all: true,
-                entries: BTreeSet::new(),
-            };
-            self.loops.push((exit, head.clone()));
-            self.block(body, head.clone());
-            self.loops.pop();
-            head
-        }
-    }
-
-    fn body(rng: &mut Rng, depth: usize, in_loop: bool) -> Vec<Step> {
-        let len = rng.below(4) + usize::from(depth == 0) * 4;
-        (0..len).map(|_| step(rng, depth, in_loop)).collect()
-    }
-
-    fn step(rng: &mut Rng, depth: usize, in_loop: bool) -> Step {
-        let kinds = match depth {
-            0 | 1 => 12,
-            2 | 3 => 10,
-            _ => 5,
-        };
-        match rng.below(kinds) {
-            0 | 1 => Step::Assign(place(rng)),
-            2 | 3 => Step::Read(place(rng)),
-            4 => match rng.below(5) {
-                0 => Step::Kill(rng.below(VARS)),
-                1 if rng.below(4) == 0 => Step::Return,
-                2 if in_loop => Step::Break,
-                3 if in_loop => Step::Continue,
-                _ => Step::Assign(place(rng)),
-            },
-            5 | 6 => Step::If(body(rng, depth + 1, in_loop), None),
-            7 => Step::If(
-                body(rng, depth + 1, in_loop),
-                Some(body(rng, depth + 1, in_loop)),
-            ),
-            8 => Step::Match(
-                (0..2 + rng.below(3))
-                    .map(|_| body(rng, depth + 1, in_loop))
-                    .collect(),
-            ),
-            9 => Step::Or(body(rng, depth + 1, in_loop)),
-            10 => Step::While(body(rng, depth + 1, true)),
-            _ => Step::Loop(body(rng, depth + 1, true)),
-        }
-    }
-
-    /// Generated bodies over three variables and paths of four, with
-    /// `continue`, `loop`, `&&` and `kill`, loops nested two deep: the
-    /// reduced join and the plain union answer `dead` alike after every
-    /// step, and a loop is given up on with both or with neither.
-    #[test]
-    fn wider_bodies_answer_dead_as_the_union_does() {
-        let universe = universe();
-        let mut rng = Rng(1513);
-        let (mut steps, mut loops, mut fewer_rounds) = (0usize, 0usize, 0usize);
-        for case in 0..800 {
-            let program = body(&mut rng, 0, false);
-            let mut reduced = Model::new(Live::join);
-            let mut plain = Model::new(union);
-            reduced.block(&program, Live::default());
-            plain.block(&program, Live::default());
-            assert_eq!(
-                reduced.seen.len(),
-                plain.seen.len(),
-                "case {case}: {program:?}"
-            );
-            for (i, (r, p)) in reduced.seen.iter().zip(&plain.seen).enumerate() {
-                same_dead(&universe, r, p, &|| {
-                    format!("case {case}, step {i}: {program:?}")
-                });
-            }
-            // An inner loop is walked once per round of the loop around it,
-            // so the walks differ in number when an outer loop settles in
-            // fewer rounds; what a mark can see is a loop given up on.
-            let gave_up = |m: &Model| m.rounds.contains(&(ROUNDS + 1));
-            assert_eq!(
-                gave_up(&reduced),
-                gave_up(&plain),
-                "case {case}: a loop given up on by one join only: {program:?}"
-            );
-            let (r, p): (usize, usize) = (reduced.rounds.iter().sum(), plain.rounds.iter().sum());
-            fewer_rounds += usize::from(r < p);
-            loops += reduced.rounds.len();
-            steps += reduced.seen.len();
-        }
-        println!(
-            "{steps} steps, {loops} loop walks, {fewer_rounds} bodies settled in fewer rounds in all"
-        );
-    }
-
-    /// The live set before `n` statements `if c { <place i> = e }` whose
-    /// state after them is `after`, as the walk joins them.
-    fn ifs_without_else(mut live: Live, places: &[Place]) -> Live {
-        for q in places.iter().rev() {
-            let mut then = live.clone();
-            then.assign(q);
-            live = then.join(&live);
-        }
-        live
-    }
-
-    const N: usize = 14;
-
-    /// `if c { r.fi = i }` for i < N, then `r.z = 0` and `return r`: the
-    /// entry that covers the skipped branch's has an exception (`z`), and
-    /// the set stays linear.
-    #[test]
-    fn fields_set_in_if_without_else_before_an_assignment_stay_linear() {
-        let mut live = Live::default();
-        live.read(at(0, ""));
-        live.assign(&at(0, "z"));
-        let places: Vec<Place> = (0..N).map(|i| at(0, &format!("f{i}"))).collect();
-        let live = ifs_without_else(live, &places);
-        assert!(
-            live.entries.len() <= 2 * N + 2,
-            "{} entries for {N} fields",
-            live.entries.len()
-        );
-    }
-
-    /// `if c { r.fi = e }` then `r.fi.x = 1`, for i < N, then `return r`:
-    /// the skipped branch excepts the sub-field `fi.x`, the taken one the
-    /// field `fi`, and the first covers the second only through
-    /// `starts_with`.
-    #[test]
-    fn a_field_set_in_if_without_else_before_its_sub_field_stays_linear() {
-        let mut live = Live::default();
-        live.read(at(0, ""));
-        for i in (0..N).rev() {
-            live.assign(&at(0, &format!("f{i}.x")));
-            live = ifs_without_else(live, &[at(0, &format!("f{i}"))]);
-        }
-        assert!(
-            live.entries.len() <= 3 * N + 1,
-            "{} entries for {N} fields",
-            live.entries.len()
-        );
-    }
-
-    /// `if c { r.fi.x = e }` and `if c { s.fi = e }` alternately, then
-    /// `consume(r, s)`.
-    #[test]
-    fn sub_fields_and_two_records_set_in_if_without_else_stay_linear() {
-        let mut live = Live::default();
-        live.read(at(0, ""));
-        live.read(at(1, ""));
-        let places: Vec<Place> = (0..N)
-            .flat_map(|i| [at(0, &format!("f{i}.x")), at(1, &format!("f{i}"))])
-            .collect();
-        let live = ifs_without_else(live, &places);
-        assert!(
-            live.entries.len() <= 2 * N + 2,
-            "{} entries for {N} fields of two records",
-            live.entries.len()
-        );
-    }
-
-    /// `while c { if c { r.fi = i } … }` then `return r`: the head of the
-    /// loop, as the model walks it, stays linear.
-    #[test]
-    fn fields_set_in_if_without_else_in_a_loop_stay_linear() {
-        let body: Vec<Step> = (0..N)
-            .map(|i| Step::If(vec![Step::Assign(at(0, &format!("f{i}")))], None))
-            .collect();
-        let program = vec![Step::While(body), Step::Read(at(0, ""))];
-        let mut model = Model::new(Live::join);
-        let live = model.block(&program, Live::default());
-        let largest = model
-            .seen
-            .iter()
-            .map(|l| l.entries.len())
-            .max()
-            .unwrap_or(0);
-        assert!(
-            largest <= N + 2,
-            "{largest} entries for {N} fields in a loop ({} at its head)",
-            live.entries.len()
-        );
-    }
-}
+mod adversary_tests;
