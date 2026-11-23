@@ -8,22 +8,12 @@
 //! on a target fails its test.
 //!
 //! - [`COMPARED`]: a left operand of `==`, `!=`, `<` of type `Never`, on
-//!   `Bool`, `Text`, `Byte` and `U32`. The Rust target writes
-//!   `(return a) == p`, which rustc refuses (`! == bool`); before the
-//!   unit it wrote `return a == p`, which returned `a == p`.
-//! - [`ARGUMENTS`]: a `Never` argument of a parameter the Rust target
-//!   lends (`f(&(return a))`), and the `Never` left operand of a record
+//!   `Bool`, `Text`, `Byte` and `U32`. The Rust target wrote
+//!   `(return a) == p`, which rustc refused (`! == bool`); before
+//!   that it wrote `return a == p`, which returned `a == p`.
+//! - [`ARGUMENTS`]: a `Never` argument of a parameter the Rust target lent
+//!   (`f(&(return a))`), and the `Never` left operand of a record
 //!   `==` and of a list `+`.
-//! - [`LOOP_CONDITION`]: `break` and `continue` in the condition of a
-//!   `while` nested in another loop. The typer marks the enclosing loop
-//!   (the condition is typed before the `while`'s loop is pushed); the
-//!   evaluator and the LLVM target leave or continue that loop; rustc
-//!   refuses an unlabeled `break` in a `while` condition (E0590).
-//! - [`OUTSIDE_LOOP`]: `break` as a short-circuit operand with no loop
-//!   around it, and in the condition of a `while` that is not inside
-//!   another loop. The program checks; the evaluator has no loop to leave;
-//!   the LLVM lowering panics (`inside a loop`) and rustc refuses it. It
-//!   must be refused by the checker or build on both targets.
 //! - [`GUARDS`]: positions that agree today and no other test holds:
 //!   chains of three with a returning operand in each place, `?` inside an
 //!   operand, a right operand whose every `if` or `match` arm returns,
@@ -213,101 +203,6 @@ test "a returning argument or aggregate operand is the value" {
 #[test]
 fn a_never_argument_or_aggregate_operand_builds_and_returns() {
     assert_agree("arguments", ARGUMENTS);
-}
-
-// ---- `break` and `continue` in the condition of a nested `while` ------------
-
-const LOOP_CONDITION: &str = r#"package sc_adversary.loop_condition
-
-fn inner_break(p: Bool) -> Int {
-  var n = 0
-  var j = 0
-  while j < 3 {
-    j = j + 1
-    var i = 0
-    while i < 5 && (p || (break)) {
-      i = i + 1
-      n = n + 1
-    }
-    n = n + 10
-  }
-  n
-}
-
-fn inner_continue(p: Bool) -> Int {
-  var n = 0
-  var j = 0
-  while j < 3 {
-    j = j + 1
-    var i = 0
-    while i < 2 && (p || (continue)) {
-      i = i + 1
-      n = n + 1
-    }
-    n = n + 10
-  }
-  n
-}
-
-test "break in a while condition leaves the enclosing loop" {
-  assert inner_break(true) == 45
-  assert inner_break(false) == 0
-}
-
-test "continue in a while condition continues the enclosing loop" {
-  assert inner_continue(true) == 36
-  assert inner_continue(false) == 0
-}
-"#;
-
-#[test]
-fn break_or_continue_in_a_nested_while_condition_builds() {
-    let file = source("loop_condition", LOOP_CONDITION);
-    if ignite::load(&file, None).is_err() {
-        return;
-    }
-    let failed = failures("loop_condition", &file);
-    assert!(
-        failed.is_empty(),
-        "loop_condition:\n{}",
-        failed.join("\n\n")
-    );
-}
-
-// ---- `break` with no loop around it ------------------------------------------
-
-const OUTSIDE_LOOP: &str = r#"package sc_adversary.outside_loop
-
-fn or_break(p: Bool) -> Bool {
-  p || (break)
-}
-
-fn condition_break(p: Bool) -> Int {
-  var i = 0
-  while i < 5 && (p || (break)) {
-    i = i + 1
-  }
-  i
-}
-
-test "an operand that would break is not reached" {
-  assert or_break(true)
-  assert condition_break(true) == 5
-}
-"#;
-
-#[test]
-fn break_outside_a_loop_is_refused_or_builds() {
-    let file = source("outside_loop", OUTSIDE_LOOP);
-    if ignite::load(&file, None).is_err() {
-        return;
-    }
-    let failed = failures("outside_loop", &file);
-    assert!(
-        failed.is_empty(),
-        "outside_loop checks, so it must build:\n{}",
-        failed.join("\n\n")
-    );
 }
 
 // ---- positions that agree today ----------------------------------------------

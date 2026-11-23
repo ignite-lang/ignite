@@ -2710,7 +2710,7 @@ impl<'a> Generator<'a> {
             .zip(modified)
             .enumerate()
             .map(|(index, (arg, modified))| {
-                if self.consumes(callee, index) {
+                if self.consumes(callee, index) || self.diverges(arg) {
                     return self.value(arg);
                 }
                 if self.lends_fn(callee, index) {
@@ -2776,6 +2776,9 @@ impl<'a> Generator<'a> {
     }
 
     fn ref_arg(&mut self, arg: &Expr) -> String {
+        if self.diverges(arg) {
+            return self.value(arg);
+        }
         if let ExprKind::Name(id) = &arg.kind
             && self.is_borrowed(&id.name)
         {
@@ -2800,7 +2803,17 @@ impl<'a> Generator<'a> {
             return borrowed_text_literal(text);
         }
         let text = self.value(arg);
-        borrow(arg, text)
+        self.borrowed(arg, text)
+    }
+
+    /// `&text` ([`borrow`]), or `text` alone when `expr`
+    /// [diverges](Self::diverges).
+    fn borrowed(&self, expr: &Expr, text: String) -> String {
+        if self.diverges(expr) {
+            text
+        } else {
+            borrow(expr, text)
+        }
     }
 
     /// `&text`, the argument `expr` already written as `text`, read by
@@ -2811,7 +2824,7 @@ impl<'a> Generator<'a> {
         }
         match self.text_literal(expr) {
             Some(literal) => borrowed_text_literal(literal),
-            None => borrow(expr, text),
+            None => self.borrowed(expr, text),
         }
     }
 
@@ -3613,10 +3626,38 @@ impl<'a> Generator<'a> {
         }
     }
 
-    /// Whether `expr` has type `Never` (`Process.exit(c)`, whose Rust form
-    /// `ignite_io::exit` returns `!`), so `expr?` lowers to `expr` alone.
-    /// Without types only a `Process.exit` call is recognised.
+    /// Whether `expr` leaves before it has a value: `return`, `break`,
+    /// `continue`, an operator whose first operand leaves
+    /// ([`leaving_head`](Self::leaving_head)), or an expression of type
+    /// `Never` ([`never`](Self::never)). Rust types such an expression
+    /// `!`, which coerces to any type but has no operator, and `&!`
+    /// coerces to no other reference; so it is written on its own:
+    /// `expr?`, an operator expression, an argument
+    /// ([`borrowed`](Self::borrowed)).
     fn diverges(&self, expr: &Expr) -> bool {
+        self.leaving_head(expr).is_some() || self.never(expr)
+    }
+
+    /// The operand that leaves at the head of the first-operand spine of
+    /// `expr` (`(return a) == p`: `return a`), never itself an operator
+    /// expression; walked in a loop, as a chain of 100,000 terms is
+    /// (`docs/slice.md` section 13.1, row 14).
+    fn leaving_head<'e>(&self, expr: &'e Expr) -> Option<&'e Expr> {
+        let mut at = expr;
+        loop {
+            match &at.kind {
+                ExprKind::Return(_) | ExprKind::Break | ExprKind::Continue => return Some(at),
+                ExprKind::Binary { left, .. } => at = left,
+                ExprKind::Unary { operand, .. } => at = operand,
+                _ => return self.never(at).then_some(at),
+            }
+        }
+    }
+
+    /// Whether `expr` has type `Never` (`Process.exit(c)`, whose Rust form
+    /// `ignite_io::exit` returns `!`; a `match` whose every arm leaves).
+    /// Without types only a `Process.exit` call is recognised.
+    fn never(&self, expr: &Expr) -> bool {
         if let Some(ty) = self.type_of(expr) {
             return matches!(ty, Ty::Never);
         }
@@ -4348,6 +4389,14 @@ impl<'a> Generator<'a> {
             ExprKind::Try(inner) => format!("({})?", self.value(inner)),
             ExprKind::Await(inner) => format!("({})", self.value(inner)),
             ExprKind::Spawn(operand) => self.spawn(operand),
+            // A first operand that leaves is the whole expression: the
+            // rest is never evaluated, and `!` has no operator.
+            ExprKind::Unary { .. } | ExprKind::Binary { .. }
+                if self.leaving_head(expr).is_some() =>
+            {
+                let head = self.leaving_head(expr).expect("checked");
+                self.value(head)
+            }
             ExprKind::Unary {
                 op: UnaryOp::Neg,
                 operand,
@@ -5395,7 +5444,7 @@ impl<'a> Generator<'a> {
                 let endpoint = self.enum_name(&ignite_types::endpoint_name());
                 format!(
                     "::ignite_io::endpoint_of({}).map(|(address, port)| {endpoint} {{ address, port }})",
-                    borrow(&args[0], reference.clone())
+                    self.borrowed(&args[0], reference.clone())
                 )
             }
             (owner, _, _) if SUBSTRATE_OWNERS.contains(&owner) => {
@@ -5893,7 +5942,7 @@ impl<'a> Generator<'a> {
         let arg = |i: usize, a: &[String]| match (&literals[i], &statics[i]) {
             (Some(text), _) => format!("\"{text}\""),
             (None, Some(read)) => read.clone(),
-            (None, None) => borrow(&args[i], a[i].clone()),
+            (None, None) => self.borrowed(&args[i], a[i].clone()),
         };
         match (name.name.as_str(), a.len()) {
             ("map", 1) => format!(
@@ -5935,7 +5984,7 @@ impl<'a> Generator<'a> {
             ("to_bytes", 0) => format!("{r}.clone().into_bytes()"),
             ("to_text", 0) => format!(
                 "String::from_utf8_lossy({}).into_owned()",
-                borrow(receiver, r.clone())
+                self.borrowed(receiver, r.clone())
             ),
             ("at", 1) => format!("{r}[({}) as usize]{}", a[0], self.element_clone(expr)),
             ("slice", 2) => format!("{r}[({}) as usize..({}) as usize].to_vec()", a[0], a[1]),
