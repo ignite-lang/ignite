@@ -14,6 +14,7 @@ mod apply_way_out;
 mod binary_size;
 mod binary_size_adversary;
 mod bitwise;
+mod bindings_e108_adversary;
 mod borrowed_reads;
 mod borrowed_reads_adversary;
 mod build_cache;
