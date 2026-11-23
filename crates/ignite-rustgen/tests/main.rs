@@ -8,6 +8,7 @@ mod borrowed_reads;
 mod common;
 mod compiles;
 mod executable_names;
+mod executable_names_adversary;
 mod golden;
 mod lent_rebinding;
 mod names;
