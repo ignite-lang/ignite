@@ -64,7 +64,7 @@ Current values: run `v0.16.4` on 2026-11-13, commit `3f221dfb`.
 | 2.2 | accepted programs that fail in a backend | gate | rust | 0 | 0 | = |
 | 2.3 | soundness holes open (effects, ownership, exhaustiveness) | ratchet | | unmeasured: the planning store tags no story as a soundness hole; known open: story:map-put-handle-roots, story:immutable-binding-e006 | | |
 | 2.4 | compiler panics on any input | gate | | unmeasured: no fuzzer yet (out of scope of story:quality-ratchet) | | |
-| 2.5 | diagnostic fixtures (one diagnostic per error site, its span) | ratchet | all | 336 | 336 | = |
+| 2.5 | diagnostic fixtures (one diagnostic per error site, its span) | ratchet | all | 339 | 336 | = |
 | 2.6 | checking time stays linear (limit tests) | gate | all | 6 | 6 | = |
 
 ## 3 Generated code and runtime behaviour

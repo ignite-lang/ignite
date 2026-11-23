@@ -474,7 +474,7 @@ release.
 | 2.2 | accepted programs that fail in a backend | gate | lower | the differential runner: corpus programs that check and do not build on a target | llvm 0, rust 0 |  |
 | 2.3 | soundness holes open (effects, ownership, exhaustiveness) | ratchet | lower | count of open stories that are soundness holes | unmeasured: the planning store tags no story as a soundness hole; known open: story:map-put-handle-roots, story:immutable-binding-e006 |  |
 | 2.4 | compiler panics on any input | gate | lower | fuzz the parser and checker on a mutated corpus | unmeasured: no fuzzer yet (out of scope of story:quality-ratchet) |  |
-| 2.5 | diagnostic fixtures (one diagnostic per error site, its span) | ratchet | higher | `quality::static_metrics_hold_the_bar`: `.expected` diagnostic fixtures; each is compared by its crate's fixture test every merge | all 336 |  |
+| 2.5 | diagnostic fixtures (one diagnostic per error site, its span) | ratchet | higher | `quality::static_metrics_hold_the_bar`: `.expected` diagnostic fixtures; each is compared by its crate's fixture test every merge | all 339 |  |
 | 2.6 | checking time stays linear (limit tests) | gate | higher | `quality::static_metrics_hold_the_bar`: the `limits::` tests of `ignite-check` and `ignite-types`, each a linearity bound run every merge | all 6 |  |
 
 ### 3 Generated code and runtime behaviour
