@@ -51,7 +51,9 @@ fn a_linked_bin_directory_loses_no_file_outside_the_output_directory() {
     left.sort();
     assert_eq!(left, ["notes.txt"], "files outside the output directory");
     assert_eq!(
-        std::fs::read_to_string(outside.join("notes.txt")).ok().as_deref(),
+        std::fs::read_to_string(outside.join("notes.txt"))
+            .ok()
+            .as_deref(),
         Some("kept\n")
     );
 }

@@ -1786,19 +1786,12 @@ impl Typer<'_> {
                 ExprKind::Str(text) => Some((text.clone(), p.value.span)),
                 _ => None,
             });
-        if let Some((text, span)) = &written
-            && !crate::is_executable_name(text)
-        {
-            self.error(
-                "E020",
-                *span,
-                format!(
-                    "executable {text:?} is not one file name; use ASCII letters, digits, `.`, `-` and `_`, other than `.` and `..`"
-                ),
-            );
+        let (executable, span) =
+            written.unwrap_or_else(|| (decl.name.name.clone(), decl.name.span));
+        if !crate::is_executable_name(&executable) {
+            self.error("E020", span, crate::not_an_executable_name(&executable));
             return None;
         }
-        let executable = written.map_or_else(|| decl.name.name.clone(), |(text, _)| text);
         let mut resources: Vec<(String, Ty)> = Vec::new();
         let chain = embedded.iter().chain(std::iter::once(&decl.name.name));
         for component in chain {

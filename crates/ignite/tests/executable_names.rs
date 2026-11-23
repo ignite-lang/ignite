@@ -261,3 +261,68 @@ fn portable_names_distinct_across_systems_build_on_both_targets() {
         assert_eq!(names, expected, "{target:?}");
     }
 }
+
+/// The LLVM target writes through no symbolic link already in its output
+/// directory: `out/bin` and `out/llvm` linked to directories outside, and
+/// `out/llvm/program.ll`, `out/llvm/main_tool.o` and `out/bin/tool` linked
+/// to files outside, are replaced by the build and what they point to is
+/// left as it was.
+#[test]
+fn the_llvm_target_writes_through_no_link_in_its_output_directory() {
+    use std::os::unix::fs::symlink;
+    let dir = tmp("llvm-links");
+    let source = dir.join("program.ignite");
+    std::fs::write(
+        &source,
+        program("system S {\n  component tool: Tool {}\n}\n"),
+    )
+    .unwrap();
+    let outside = dir.join("outside");
+    std::fs::create_dir_all(&outside).unwrap();
+    std::fs::write(outside.join("notes.txt"), "kept\n").unwrap();
+    let linked_dirs = dir.join("linked-dirs");
+    std::fs::create_dir_all(&linked_dirs).unwrap();
+    symlink(&outside, linked_dirs.join("bin")).unwrap();
+    symlink(&outside, linked_dirs.join("llvm")).unwrap();
+    let linked_files = dir.join("linked-files");
+    for sub in ["bin", "llvm"] {
+        std::fs::create_dir_all(linked_files.join(sub)).unwrap();
+    }
+    for file in ["llvm/program.ll", "llvm/main_tool.o", "bin/tool"] {
+        symlink(outside.join("notes.txt"), linked_files.join(file)).unwrap();
+    }
+    for out in [&linked_dirs, &linked_files] {
+        let built = ignite::build(
+            &source,
+            &options(ignite::Target::Llvm, out, &dir.join("cargo")),
+        )
+        .unwrap_or_else(|e| panic!("{}: {e}", out.display()));
+        assert_eq!(built.executables, [out.join("bin").join("tool")]);
+        for sub in [
+            "bin",
+            "llvm",
+            "bin/tool",
+            "llvm/program.ll",
+            "llvm/main_tool.o",
+        ] {
+            let path = out.join(sub);
+            assert!(
+                !std::fs::symlink_metadata(&path).unwrap().is_symlink(),
+                "{}",
+                path.display()
+            );
+        }
+        let mut left: Vec<String> = std::fs::read_dir(&outside)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        left.sort();
+        assert_eq!(left, ["notes.txt"], "{}", out.display());
+        assert_eq!(
+            std::fs::read_to_string(outside.join("notes.txt")).unwrap(),
+            "kept\n",
+            "{}",
+            out.display()
+        );
+    }
+}

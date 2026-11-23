@@ -1512,7 +1512,8 @@ edition = \"2024\"
 /// itself. A release build that failed with the script builds the two to
 /// tell a linker that refuses the script from any other failure.
 pub fn write_layout_probe(out: &Path, layout: bool) -> io::Result<()> {
-    fs::create_dir_all(out.join("src"))?;
+    fs::create_dir_all(out)?;
+    own_dir(&out.join("src"))?;
     let manifest = if layout {
         release_manifest(PROBE_MANIFEST)
     } else {
@@ -1563,7 +1564,8 @@ fn write_with_manifest(project: &GeneratedProject, manifest: &str, out: &Path) -
             ),
         ));
     }
-    fs::create_dir_all(out.join("src"))?;
+    fs::create_dir_all(out)?;
+    own_dir(&out.join("src"))?;
     write_if_changed(out.join("Cargo.toml"), manifest)?;
     write_if_changed(out.join("src").join("lib.rs"), &project.lib_rs)?;
     let bin = out.join("src").join("bin");
@@ -1572,6 +1574,7 @@ fn write_with_manifest(project: &GeneratedProject, manifest: &str, out: &Path) -
         .iter()
         .map(|executable| format!("{}.rs", executable.name))
         .collect();
+    remove_link(&bin)?;
     if bin.is_dir() {
         for entry in fs::read_dir(&bin)? {
             let path = entry?.path();
@@ -1599,9 +1602,28 @@ fn write_with_manifest(project: &GeneratedProject, manifest: &str, out: &Path) -
     Ok(())
 }
 
-/// Write `contents` to `path` unless the file already holds it.
+/// Remove `path` when it is a symbolic link, so that what is written
+/// there next does not go through it to where it points (`docs/slice.md`
+/// 14, rule 12: no build writes outside its output directory).
+pub fn remove_link(path: &Path) -> io::Result<()> {
+    if fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
+        fs::remove_file(path)?;
+    }
+    Ok(())
+}
+
+/// `dir` as a directory of its own: a symbolic link there is replaced
+/// ([`remove_link`]), not followed.
+pub fn own_dir(dir: &Path) -> io::Result<()> {
+    remove_link(dir)?;
+    fs::create_dir_all(dir)
+}
+
+/// Write `contents` to `path` unless the file already holds it. A
+/// symbolic link at `path` is replaced by the file ([`remove_link`]).
 fn write_if_changed(path: impl AsRef<Path>, contents: &str) -> io::Result<()> {
     let path = path.as_ref();
+    remove_link(path)?;
     if fs::read(path).is_ok_and(|current| current == contents.as_bytes()) {
         return Ok(());
     }

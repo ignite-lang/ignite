@@ -1257,19 +1257,34 @@ pub struct ExecutableInfo {
     pub embedded: Vec<(String, Ty)>,
 }
 
+/// The binary names cargo refuses because they are directories of its
+/// own output directory; the Rust target cannot build an executable of
+/// one of them, so no target takes them.
+pub const CARGO_RESERVED_NAMES: [&str; 4] = ["build", "deps", "examples", "incremental"];
+
 /// Whether `name` may be an executable's name (`docs/slice.md` 14, rule
 /// 12): one portable file name, one or more of the ASCII letters, the
-/// digits, `.`, `-` and `_`, other than `.` and `..`. Such a name joined
-/// to a directory names a file in that directory; the type checker
-/// refuses any other `executable` (E020) and both writers refuse any
-/// other [`ExecutableInfo::executable`] before they touch the disk.
+/// digits, `.`, `-` and `_`, other than `.`, `..` and the names cargo
+/// keeps for its own directories ([`CARGO_RESERVED_NAMES`]). Such a name
+/// joined to a directory names a file in that directory; the type
+/// checker refuses any other `executable` (E020) and both writers refuse
+/// any other [`ExecutableInfo::executable`] before they touch the disk.
 pub fn is_executable_name(name: &str) -> bool {
     !name.is_empty()
         && name != "."
         && name != ".."
+        && !CARGO_RESERVED_NAMES.contains(&name)
         && name
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_'))
+}
+
+/// The message of E020 for an `executable` `name` that
+/// [`is_executable_name`] refuses.
+pub fn not_an_executable_name(name: &str) -> String {
+    format!(
+        "executable {name:?} is not one file name; use ASCII letters, digits, `.`, `-` and `_`, other than `.`, `..`, `build`, `deps`, `examples` and `incremental`"
+    )
 }
 
 /// The operation that failed at a [`FailureSite`] (`docs/slice.md`

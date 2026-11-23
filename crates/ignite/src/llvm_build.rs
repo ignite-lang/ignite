@@ -176,7 +176,7 @@ fn probe(
     {
         return Ok((spec, llvm_major(version)));
     }
-    std::fs::create_dir_all(ir_dir).map_err(io_error(ir_dir))?;
+    own_dir(ir_dir)?;
     let output = Command::new(&clang_path)
         .args(&args)
         .stderr(std::process::Stdio::inherit())
@@ -212,7 +212,7 @@ fn probe(
         "{key}target triple = \"{}\"\ntarget datalayout = \"{}\"\n{CLANG_VERSION}{version}\n",
         spec.triple, spec.datalayout
     );
-    std::fs::write(&stamp_path, text).map_err(io_error(&stamp_path))?;
+    write_if_changed(&stamp_path, &text)?;
     Ok((spec, llvm_major(&version)))
 }
 
@@ -516,6 +516,7 @@ fn run_stamped(
     stamp_path: &Path,
     expected: &str,
 ) -> Result<bool, Error> {
+    remove_link(output)?;
     if up_to_date(output, stamp_path, expected) {
         return Ok(false);
     }
@@ -552,8 +553,21 @@ fn runtime_identity(runtime: &Path) -> Result<String, Error> {
     ))
 }
 
-/// Write `contents` to `path` unless the file already holds it.
+/// Remove `path` when it is a symbolic link: what the build writes there
+/// next does not go through it (`docs/slice.md` 14, rule 12).
+fn remove_link(path: &Path) -> Result<(), Error> {
+    ignite_rustgen::remove_link(path).map_err(io_error(path))
+}
+
+/// `dir` as a directory of its own, a symbolic link there replaced.
+fn own_dir(dir: &Path) -> Result<(), Error> {
+    ignite_rustgen::own_dir(dir).map_err(io_error(dir))
+}
+
+/// Write `contents` to `path` unless the file already holds it; a
+/// symbolic link at `path` is replaced by the file.
 fn write_if_changed(path: &Path, contents: &str) -> Result<(), Error> {
+    remove_link(path)?;
     if std::fs::read(path).is_ok_and(|current| current == contents.as_bytes()) {
         return Ok(());
     }
@@ -634,7 +648,7 @@ pub(crate) fn link(
     check_runtime_target(&runtime, &spec.triple)?;
     let bin_dir = out.join("bin");
     for dir in [&ir_dir, &bin_dir] {
-        std::fs::create_dir_all(dir).map_err(io_error(dir))?;
+        own_dir(dir)?;
     }
     let mut units = vec![
         ("std".to_string(), &generated.std),
