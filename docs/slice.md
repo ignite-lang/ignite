@@ -3537,7 +3537,9 @@ reducer steps only; property expressions keep the default fuel (15.3).
 Paths and builds:
 
 - `<state>` defaults to `target/ignite-run/<assembly>/` under the working directory.
-- Builds with unchanged sources are a no-op in `<build>`. Tests pass one shared `--build`
+- Builds of the same entry file with unchanged sources are a no-op in `<build>`. The stamp
+  in `<build>/stamp` holds the entry file's canonical path, so another entry file of the same
+  directory run through the same `<build>` rebuilds. Tests pass one shared `--build`
   per target and never rebuild; each test has its own `--state`, because the journal lock
   (E126) admits one run per state directory (A2).
 

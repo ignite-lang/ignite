@@ -1607,14 +1607,18 @@ fn run_members(model: &ignite_eval::Model) -> (BTreeMap<String, String>, Vec<Str
 }
 
 /// A hash of everything a build of `file` reads: the target and profile,
-/// every `.ignite` file of the program's directory and the standard
-/// library, the driver's own executable and the runtime archive (LLVM) or
-/// the substrate's path (Rust). Equal
-/// stamps mean an unchanged build (16.3).
+/// the canonical path of the entry file, every `.ignite` file of the
+/// program's directory and the standard library, the driver's own
+/// executable and the runtime archive (LLVM) or the substrate's path
+/// (Rust). Equal stamps mean an unchanged build (16.3); two entry files of
+/// one directory never share one.
 fn build_stamp(file: &Path, options: &RunOptions) -> Result<u64, Error> {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::hash::DefaultHasher::new();
     format!("{:?} {}", options.target, options.release).hash(&mut hasher);
+    std::fs::canonicalize(file)
+        .map_err(io_error(file))?
+        .hash(&mut hasher);
     let mut files = Vec::new();
     if let Some(dir) = file.parent() {
         ignite_files(dir, &mut files)?;
