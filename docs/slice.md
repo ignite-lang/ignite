@@ -2470,8 +2470,9 @@ work.
   (`Deployment`). `system = Terminal` is a `SystemRef`.
 - Every `bindings` key must be a component or resource of that system, otherwise E108. This
   holds for a key written in the `bindings` literal, which the type checker reports at the
-  key, and for a key of a map a fn returns, which the resolution (15.6) reports after
-  evaluation at the `bindings` property; no key is dropped.
+  key, and for a key of a map a fn returns, which `ignite check` and `ignite plan` report
+  after evaluation at the `bindings` property, for an assembly of any kind, resolvable
+  (15.6) or not; no key is dropped.
 - `ignite build` does not read assemblies in slice 10 (O8); slice 11 resolves them.
 - `system`, `component` and `resource` are keywords already. `contract`, `policy` and
   `assembly` become keywords, which takes the keyword count from 29 to 32. Check `std/` and

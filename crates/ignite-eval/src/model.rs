@@ -21,7 +21,7 @@ use ignite_types::{
 };
 
 use crate::eval::Limit;
-use crate::resolve::binding_fns;
+use crate::resolve::{binding_fns, foreign_keys};
 use crate::{EvalError, Evaluator, Module, Modules, ResolutionEntry, Value, resolve};
 
 /// The `formatVersion` of the model (O13).
@@ -1153,6 +1153,13 @@ impl<'a, 'p> Builder<'a, 'p> {
             .iter()
             .find(|(field, _)| field == "bindings")
             .map(|(_, value)| value.clone());
+        if let (Some(system), Some(bindings)) = (system, &bindings) {
+            let foreign = foreign_keys(self.evaluator, program, system, assembly, bindings);
+            if !foreign.is_empty() {
+                self.diagnostics.extend(foreign);
+                return None;
+            }
+        }
         let resolution = match (system, bindings) {
             (Some(system), Some(bindings)) if resolvable => {
                 match resolve(self.evaluator, program, system, assembly, &bindings) {
@@ -2101,8 +2108,9 @@ fn write_string(out: &mut String, text: &str) {
 
 /// The model of the program `program` was typed from, with the assembly
 /// named by `assembly` or the program's only one (15.6); E114 when none
-/// or several are selectable, E108 and E110 to E113 from the resolution, E115,
-/// E117 and E118 from the evaluation, each at its property expression in
+/// or several are selectable, E108 for an evaluated bindings key of another
+/// system, E110 to E113 from the resolution, E115, E117 and E118 from the
+/// evaluation, each at its property expression in
 /// the program file (a defaulted property's at its declaration).
 pub fn model(
     evaluator: &mut Evaluator<'_>,

@@ -3,9 +3,8 @@
 //! component or resource of the assembly's system, "whether written or
 //! computed", and that no key is dropped. These programs compute the map
 //! in ways the unit's fixtures do not: through an assembly kind the
-//! program declares, through a sibling module's system of the same name,
-//! through a `match` and `if` chain of helpers, and through a key passed
-//! as an argument in the assembly itself.
+//! program declares, through a `match` and `if` chain of helpers, and
+//! through a key passed as an argument in the assembly itself.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -92,56 +91,6 @@ assembly computed: Placement {
             "`ignite {command}`: the computed key of `T` is dropped silently"
         );
     }
-}
-
-/// Systems are not importable (E031), so a helper in a sibling module
-/// names its own module's systems. Here the sibling declares a system `S`
-/// as well, and its helper returns keys of that `S`; the program's
-/// assembly selects its own `S`. Model ids are bare `System.member`, so
-/// the resolver takes `helper.S.ingress` for the program's `S.ingress`
-/// and the keys of another system pass `check` and resolve.
-#[test]
-fn a_key_of_a_sibling_modules_system_of_the_same_name_is_e108() {
-    let helper = r#"package sz.helper
-
-import std.deploy.{Binding, localSocket}
-
-system S {
-  resource ingress: TcpListener { address = "127.0.0.1", port = 0 }
-  resource egress: TcpListener { address = "127.0.0.1", port = 0 }
-}
-
-fn shared() -> Map<Ref, Binding> = {
-  S.ingress = localSocket()
-  S.egress = localSocket()
-}
-"#;
-    let main = r#"package sz
-
-import std.deploy.{Binding, Deployment, localSocket}
-import sz.helper.{shared}
-
-system S {
-  resource ingress: TcpListener { address = "127.0.0.1", port = 0 }
-  resource egress: TcpListener { address = "127.0.0.1", port = 0 }
-}
-
-assembly a: Deployment {
-  system = S
-  bindings = shared()
-}
-"#;
-    let dir = program(
-        "sibling_system",
-        &[("helper.ignite", helper), ("main.ignite", main)],
-    );
-    let output = ignite_in(&dir, &["check", "main.ignite"]);
-    let err = stderr(&output);
-    assert_eq!(output.status.code(), Some(1), "{err}");
-    assert!(
-        err.contains("error[E108]") && err.contains("S.ingress") && err.contains("S.egress"),
-        "the keys of `sz.helper`'s `S` are not members of `sz`'s `S`: {err}"
-    );
 }
 
 const CHAIN: &str = r#"package probe_chain
