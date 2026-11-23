@@ -68,6 +68,7 @@ mod resp;
 mod rfc;
 mod rollout_repeat;
 mod run;
+mod run_cache_adversary;
 mod rust_memory;
 mod rust_memory_adversary;
 mod shared_lists;
