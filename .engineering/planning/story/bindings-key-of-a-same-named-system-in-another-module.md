@@ -4,7 +4,7 @@ id: story:bindings-key-of-a-same-named-system-in-another-module
 kind: story
 status: draft
 title: A bindings key of a same-named system in another module
-revision: 2
+revision: 3
 ---
 # Story: a bindings key of a same-named system in another module
 
@@ -18,7 +18,7 @@ Found by the adversary pass on the unit of `story:evaluated-bindings-key-of-anot
 
 ## Acceptance
 
-- The program of the adversary case `a_key_of_a_sibling_modules_system_of_the_same_name_is_e108`, in commit `82ca50d2` of branch `wave/16-bindings-e108`, file `crates/ignite/tests/bindings_e108_adversary.rs` (removed from the tree so the count of ignored tests stays at its bar), comes back as a test: `check` and `plan` exit 1 with one E108 per key, and the message names the key's module.
+- The program of the adversary case `a_key_of_a_sibling_modules_system_of_the_same_name_is_e108`, in commit `82ca50d2` of branch `wave/16-bindings-e108`, file `crates/ignite/tests/bindings_e108_adversary.rs` (removed from the tree in `7177c54b` so the count of ignored tests stays at its bar), comes back as a test: `check` and `plan` exit 1 with one E108 per key, and the message names the key's module.
 - Control: keys of the program's own `S` resolve as before.
 
 ## Scope
