@@ -291,32 +291,59 @@ fn ignite_test_static_runs_the_inline_tests_in_static_executables() {
 
 /// D4: a musl target whose Rust target is not installed is a stated
 /// error, exit 2, naming the target and how to install it; never a
-/// dynamic build. `aarch64-unknown-linux-musl` is not installed on the
-/// hosts this suite runs on; the test says so when it is.
+/// dynamic build. The test sets the toolchain ignite sees, whatever the
+/// host has installed: `$RUSTC` is `rustc` with an empty sysroot, which
+/// holds no Rust target.
 #[test]
 fn static_without_the_musl_target_exits_2_naming_it() {
+    use std::os::unix::fs::PermissionsExt;
     const TRIPLE: &str = "aarch64-unknown-linux-musl";
-    let installed = Command::new("rustup")
-        .args(["target", "list", "--installed"])
+    let view = tmp("static-missing-toolchain");
+    let sysroot = view.join("sysroot");
+    std::fs::create_dir_all(&sysroot).unwrap();
+    let rustc = view.join("rustc");
+    std::fs::write(
+        &rustc,
+        format!(
+            "#!/bin/sh\nexec rustc --sysroot '{}' \"$@\"\n",
+            sysroot.display()
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&rustc, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let libdir = Command::new(&rustc)
+        .args(["--print", "target-libdir", "--target", TRIPLE])
         .output()
-        .is_ok_and(|output| String::from_utf8_lossy(&output.stdout).contains(TRIPLE));
+        .expect("run the rustc of the empty sysroot");
     assert!(
-        !installed,
-        "{TRIPLE} is installed: this test needs a host without it"
+        libdir.status.success(),
+        "{}",
+        String::from_utf8_lossy(&libdir.stderr)
+    );
+    let libdir = PathBuf::from(String::from_utf8_lossy(&libdir.stdout).trim());
+    assert!(
+        libdir.starts_with(&sysroot) && !libdir.exists(),
+        "{TRIPLE} is installed in the empty sysroot: {}",
+        libdir.display()
     );
     for target in ["llvm", "rust"] {
         let out = tmp(&format!("static-missing-{target}"));
-        let output = ignite(&[
-            "build",
-            "examples/todo/todo.ignite",
-            "--static",
-            "--triple",
-            TRIPLE,
-            "--target",
-            target,
-            "--out",
-            out.to_str().unwrap(),
-        ]);
+        let output = Command::new(env!("CARGO_BIN_EXE_ignite"))
+            .args([
+                "build",
+                "examples/todo/todo.ignite",
+                "--static",
+                "--triple",
+                TRIPLE,
+                "--target",
+                target,
+                "--out",
+                out.to_str().unwrap(),
+            ])
+            .env("RUSTC", &rustc)
+            .current_dir(workspace())
+            .output()
+            .expect("start ignite");
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert_eq!(output.status.code(), Some(2), "{target}: {stderr}");
         assert!(
