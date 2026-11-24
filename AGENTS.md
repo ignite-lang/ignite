@@ -140,6 +140,12 @@ Under the build pool, `task test-ignite`, `task path-cost` and `task quality` ea
 then calls cargo, and the cargo shim alone would run that inner cargo on the build node, where
 the file is missing.
 
+Every command that compiles or tests carries `slot` in front, also inside a script: `slot task
+<x>`, `slot cargo run …`, `slot npx …`. The cargo shim does not catch `cargo run`, a cargo alias,
+a `task` target or a binary that calls cargo by path; those run on the workstation. No build from
+a tree under `~/.cache`: slot runs those on the workstation; build from a managed worktree.
+`slot --here` is only for a step that needs this host's credentials, never for a compile.
+
 `task` is go-task. `strace`, with ptrace allowed on a child, is a prerequisite of `task gate`:
 `scheduler::a_connection_costs_no_more_system_calls_than_at_v0_15_0` in `crates/ignite-io`
 counts the connection path with it and fails, naming it, without it. So is `valgrind` (where it

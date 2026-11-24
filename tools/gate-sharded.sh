@@ -49,13 +49,13 @@ if [ "${IGNITE_GATE_VALGRIND:-}" = 0 ]; then
   done
 fi
 
-step check task check
-step test-other cargo test --workspace --exclude ignite --no-fail-fast
-step test-ignite-lib cargo test -p ignite --lib
-step build-main cargo test -p ignite --test main --no-run
+step check pooled task check
+step test-other pooled cargo test --workspace --exclude ignite --no-fail-fast
+step test-ignite-lib pooled cargo test -p ignite --lib
+step build-main pooled cargo test -p ignite --test main --no-run
 
 # shellcheck disable=SC2086
-cargo test -q -p ignite --test main -- --list $skips 2> /dev/null |
+pooled cargo test -q -p ignite --test main -- --list $skips 2> /dev/null |
   sed -n 's/: test$//p' | sort > "$LOG/main-list.txt"
 sed 's/::.*//' "$LOG/main-list.txt" | sort | uniq -c | sort -rn |
   awk -v n="$SHARDS" '{ best = 1; for (k = 2; k <= n; k++) if (load[k] < load[best]) best = k; load[best] += $1; print best, $2 }' \
@@ -67,7 +67,7 @@ while [ "$k" -le "$SHARDS" ]; do
   filters=$(awk -v k="$k" '$1 == k { printf " %s::", $2 }' "$LOG/main-shards.txt")
   if [ -n "$filters" ]; then
     # shellcheck disable=SC2086
-    step "test-main-$k" logged "$LOG/shard-$k.log" cargo test -p ignite --test main -- $filters $skips
+    step "test-main-$k" logged "$LOG/shard-$k.log" pooled cargo test -p ignite --test main -- $filters $skips
   fi
   k=$((k + 1))
 done
