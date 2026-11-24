@@ -334,9 +334,10 @@ pub fn test_targets(
 fn run_executables(executables: Vec<PathBuf>, runner: &[String]) -> Result<i32, Error> {
     let mut status = 0;
     for executable in executables {
-        let code = Command::new(&executable)
-            .args(runner)
-            .status()
+        let mut command = Command::new(&executable);
+        command.args(runner);
+        let code = retry_busy(&executable, || command.spawn())
+            .and_then(|mut child| child.wait())
             .map_err(io_error(&executable))?
             .code()
             .unwrap_or(1);
@@ -565,7 +566,7 @@ fn build_group(
             let built =
                 crate::cargo_output_dir(&target_dir, build.release, triple.as_deref()).join(&file);
             let executable = out.join(&file);
-            std::fs::copy(&built, &executable).map_err(io_error(&built))?;
+            copy_executable(&built, &executable)?;
             Ok(executable)
         }
         Target::Llvm => {
@@ -627,6 +628,45 @@ fn build_group(
                 })
         }
     }
+}
+
+/// Copy the test executable cargo built to `executable`.
+fn copy_executable(built: &Path, executable: &Path) -> Result<(), Error> {
+    retry_busy(executable, || std::fs::copy(built, executable)).map_err(io_error(built))?;
+    Ok(())
+}
+
+/// The tries of [`retry_busy`].
+const BUSY_TRIES: u32 = 8;
+
+/// `step`, and again after 10 ms, 20 ms, 40 ms, … while it fails with
+/// ETXTBSY ("Text file busy"): another process holds the test executable
+/// `path` for an instant, a process that still executes the copy of the run
+/// before (open for writing fails) or a fork of another thread that
+/// inherited a write descriptor of it until its exec (exec fails). Any
+/// other error returns at once; after [`BUSY_TRIES`] tries, about 1.3 s,
+/// the error names `path` and the tries.
+fn retry_busy<T>(path: &Path, mut step: impl FnMut() -> std::io::Result<T>) -> std::io::Result<T> {
+    let mut pause = std::time::Duration::from_millis(10);
+    for _ in 1..BUSY_TRIES {
+        match step() {
+            Err(error) if error.kind() == std::io::ErrorKind::ExecutableFileBusy => {
+                std::thread::sleep(pause);
+                pause *= 2;
+            }
+            result => return result,
+        }
+    }
+    step().map_err(|error| match error.kind() {
+        std::io::ErrorKind::ExecutableFileBusy => std::io::Error::new(
+            error.kind(),
+            format!(
+                "{} still busy after {BUSY_TRIES} tries: {error}",
+                path.display()
+            ),
+        ),
+        _ => error,
+    })
 }
 
 /// The symbol an LLVM test main calls, which only a runtime archive built
@@ -753,5 +793,111 @@ mod tests {
         missing.extend_from_slice(&RUNNER_SYMBOL[..RUNNER_SYMBOL.len() - 1]);
         assert!(!contains_runner(&mut missing.as_slice()).unwrap());
         assert!(!contains_runner(&mut &[][..]).unwrap());
+    }
+
+    /// A directory of this test process for `name`, empty.
+    fn busy_scratch(name: &str) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("ignite-test-busy-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    /// Start `command` with a piped standard input, which keeps `cat`
+    /// running; the returned thread closes it after 300 ms and waits for the
+    /// exit. The spawn itself retries ETXTBSY, which another test thread's
+    /// fork can cause for an instant after a copy, until a deadline of 2 s.
+    fn hold(command: &mut Command) -> std::thread::JoinHandle<()> {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        command.stdin(std::process::Stdio::piped());
+        let mut holder = loop {
+            match command.spawn() {
+                Err(error)
+                    if error.kind() == std::io::ErrorKind::ExecutableFileBusy
+                        && std::time::Instant::now() < deadline =>
+                {
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                result => break result.unwrap(),
+            }
+        };
+        let input = holder.stdin.take();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            drop(input);
+            assert!(holder.wait().unwrap().success());
+        })
+    }
+
+    /// The test executable is held open for writing by another process for
+    /// an instant, as by a fork that inherited the write descriptor of its
+    /// copy until the fork's exec: its run waits for the descriptor to
+    /// close instead of failing with "Text file busy".
+    #[test]
+    fn busy_executable_held_for_writing_runs_once_released() {
+        use std::io::Write;
+        use std::os::unix::fs::PermissionsExt;
+        let dir = busy_scratch("run");
+        let executable = dir.join("ignite-test");
+        let mut writer = std::fs::File::create(&executable).unwrap();
+        writer.write_all(b"#!/bin/sh\nexit 0\n").unwrap();
+        writer
+            .set_permissions(std::fs::Permissions::from_mode(0o755))
+            .unwrap();
+        let released = hold(Command::new("cat").stdout(writer));
+        let status = run_executables(vec![executable], &[]).map_err(|e| e.to_string());
+        released.join().unwrap();
+        assert_eq!(status, Ok(0));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A step that stays busy is tried [`BUSY_TRIES`] times and its error
+    /// names the path and the tries; any other error is not retried.
+    #[test]
+    fn busy_tries_are_bounded_and_only_for_text_file_busy() {
+        let path = Path::new("held/ignite-test");
+        let mut tries = 0;
+        let error = retry_busy(path, || -> std::io::Result<()> {
+            tries += 1;
+            Err(std::io::Error::from_raw_os_error(26))
+        })
+        .unwrap_err();
+        assert_eq!(tries, BUSY_TRIES);
+        assert_eq!(error.kind(), std::io::ErrorKind::ExecutableFileBusy);
+        assert!(
+            error
+                .to_string()
+                .starts_with("held/ignite-test still busy after 8 tries: "),
+            "{error}"
+        );
+        let mut tries = 0;
+        let error = retry_busy(path, || -> std::io::Result<()> {
+            tries += 1;
+            Err(std::io::Error::from_raw_os_error(2))
+        })
+        .unwrap_err();
+        assert_eq!((tries, error.raw_os_error()), (1, Some(2)));
+    }
+
+    /// The test executable of the previous run is still executing for an
+    /// instant: copying the new one over it waits for the exit instead of
+    /// failing with "Text file busy".
+    #[test]
+    fn busy_executable_still_running_is_replaced_once_it_exits() {
+        let dir = busy_scratch("copy");
+        let built = dir.join("built");
+        std::fs::write(&built, b"#!/bin/sh\nexit 0\n").unwrap();
+        let executable = dir.join("ignite-test");
+        std::fs::copy("/bin/cat", &executable).unwrap();
+        let released = hold(&mut Command::new(&executable));
+        let copied = copy_executable(&built, &executable).map_err(|e| e.to_string());
+        released.join().unwrap();
+        assert_eq!(copied, Ok(()));
+        assert_eq!(
+            std::fs::read(&executable).unwrap(),
+            std::fs::read(&built).unwrap()
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 }
