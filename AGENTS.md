@@ -535,9 +535,17 @@ Pace (Timo, 2026-11-11: "its not accreptable to work in that pace", "fix your pr
 was open for three days; a coordinator does this instead of what cost them:
 
 - The dedicated-host run (`task quality-remote BASE=<last release tag> HEAD=<integration head>`,
-  with a `RUN` label that is not `v*`) is started as soon as the units of a wave that move a time
+  with a `RUN` label that is not `v*`) is asked for as soon as the units of a wave that move a time
   row are merged into the integration branch. It is not left for after the last merge: waves 9
   and 10 merged without one, and 14 cells were refused together at the cut.
+- Every dedicated-host run needs the maintainer's yes for that run; there is no standing yes and
+  no run on a default (Timo, 2026-11-24: "these ignite tests, they always need an approval [...]
+  It must not happen that they keep running after the tests"). The request names the run, its
+  cost and its end. The run's instance ends itself (instance-initiated shutdown `terminate`, a
+  `shutdown -h` timer of `--max-hours` in its user-data), the mode terminates it on every exit
+  path, every resource carries the tag `ignite-quality-run=<run id>`, and the mode's read-back
+  by that tag ("confirmed: nothing tagged … is left") goes into the commit that records the run
+  and the release PR; a run that ends "NOT CLEAN" is reported before anything else.
 - Work that does not touch the same files runs at once, an accepted story of the next wave
   included. A release in recovery does not hold back unrelated accepted work.
 - One adversary pass per unit. Its introduced findings go back to the implementor once, and the

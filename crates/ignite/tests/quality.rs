@@ -2899,7 +2899,11 @@ pub fn timing_section(run: &str, host: &str, history: &[Record], values: &[Value
 /// A node's hostname for the tests, built so that no file of the tree holds
 /// one: an EC2 instance's private DNS name.
 fn a_node_hostname() -> String {
-    format!("{}.eu-west-1{}", an_ip_label(), concat!(".compute", ".internal"))
+    format!(
+        "{}.eu-west-1{}",
+        an_ip_label(),
+        concat!(".compute", ".internal")
+    )
 }
 
 /// An `ip-<n>-<n>-<n>-<n>` label, built so that no file of the tree holds one.
