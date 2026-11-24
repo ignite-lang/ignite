@@ -11,6 +11,8 @@ vars:
   TODO: examples/todo/todo.ignite
   TODO_OUT: target/ignite/todo
   TODO_OUT_LLVM: target/ignite-llvm/todo
+  VALGRIND_MODULES: borrowed_reads constants constants_adversary list_sort list_sort_adversary moves_cost moves_cost_adversary reply_cost shared_lists shared_lists_adversary text_reads value_copies
+  VALGRIND_SKIP: '{{range splitList " " .VALGRIND_MODULES}} --skip {{.}}::{{end}}'
 
 tasks:
   default:
@@ -23,10 +25,35 @@ tasks:
       - cargo build --workspace
 
   test:
-    desc: Run every unit, fixture, golden and end-to-end test, then the inline Ignite tests
+    desc: Run every unit, fixture, golden and end-to-end test, then the inline Ignite tests (IGNITE_GATE_VALGRIND=0 skips the valgrind tests, see test-valgrind)
     cmds:
-      - cargo test --workspace
+      - task: valgrind-starts
+      - cmd: cargo test --workspace
+        if: '[ "{{.IGNITE_GATE_VALGRIND}}" != 0 ]'
+      - cmd: cargo test --workspace --exclude ignite
+        if: '[ "{{.IGNITE_GATE_VALGRIND}}" = 0 ]'
+      - cmd: cargo test -p ignite --{{.VALGRIND_SKIP}}
+        if: '[ "{{.IGNITE_GATE_VALGRIND}}" = 0 ]'
       - task: test-ignite
+
+  test-valgrind:
+    desc: Run the test modules of crates/ignite that start valgrind (VALGRIND_MODULES); the CI workflow valgrind runs this, task gate skips them with IGNITE_GATE_VALGRIND=0
+    cmds:
+      - cargo test -p ignite --test main --{{range splitList " " .VALGRIND_MODULES}} {{.}}::{{end}}
+
+  valgrind-starts:
+    internal: true
+    run: once
+    silent: true
+    cmds:
+      - |
+        if [ "{{.IGNITE_GATE_VALGRIND}}" = 0 ]; then
+          echo "IGNITE_GATE_VALGRIND=0: skipping the valgrind tests ({{.VALGRIND_MODULES}}) and task path-cost; the CI workflow valgrind (task test-valgrind) judges the tests" >&2
+        elif ! valgrind -q true > /dev/null 2>&1; then
+          echo "valgrind does not start here (valgrind -q true fails), and task gate needs it for the valgrind tests ({{.VALGRIND_MODULES}}) and task path-cost." >&2
+          echo "Run with IGNITE_GATE_VALGRIND=0 to skip them; the CI workflow valgrind (task test-valgrind) judges the tests." >&2
+          exit 1
+        fi
 
   test-ignite:
     desc: Run the inline Ignite tests of std/ and examples/ on both targets (FILTER=text selects tests)
@@ -52,20 +79,34 @@ tasks:
       - cargo fmt --all
 
   gate:
-    desc: Everything a merge must pass
+    desc: Everything a merge must pass (where valgrind does not start, IGNITE_GATE_VALGRIND=0 skips the valgrind tests and path-cost)
     cmds:
+      - task: valgrind-starts
       - task: check
       - task: test
       - task: path-cost
       - task: ux
 
+  gate-sharded:
+    desc: The steps of task gate as separate build-pool jobs, the test binary of crates/ignite in SHARDS shards by module (default 8), for a gate longer than the pool's job cap (LOG=dir keeps the output)
+    env:
+      VALGRIND_MODULES: '{{.VALGRIND_MODULES}}'
+      IGNITE_GATE_VALGRIND: '{{.IGNITE_GATE_VALGRIND}}'
+      SHARDS: '{{.SHARDS | default "8"}}'
+    cmds:
+      - task: valgrind-starts
+      - tools/gate-sharded.sh {{.LOG}}
+
   path-cost:
-    desc: Count the instructions and system calls of the frozen scenarios of bench/path-cost (row 3.10 of docs/quality.md) and refuse a cell above the last release beyond the noise band (RECORD=vX.Y.Z writes the counts of a release over 5 runs)
+    desc: Count the instructions and system calls of the frozen scenarios of bench/path-cost (row 3.10 of docs/quality.md) and refuse a cell above the last release beyond the noise band (RECORD=vX.Y.Z writes the counts of a release over 5 runs; needs valgrind, IGNITE_GATE_VALGRIND=0 skips it)
     vars:
       T: '{{.CARGO_TARGET_DIR | default "target"}}'
     cmds:
-      - cargo build -q -p ignite -p ignite-perf
-      - '{{.T}}/debug/ignite-perf path-cost --cli {{.T}}/debug/ignite --work {{.T}}/path-cost --out target/quality/path-cost-metrics.json{{if .RECORD}} --record {{.RECORD}} --runs 5{{end}}'
+      - task: valgrind-starts
+      - cmd: cargo build -q -p ignite -p ignite-perf
+        if: '[ "{{.IGNITE_GATE_VALGRIND}}" != 0 ]'
+      - cmd: '{{.T}}/debug/ignite-perf path-cost --cli {{.T}}/debug/ignite --work {{.T}}/path-cost --out target/quality/path-cost-metrics.json{{if .RECORD}} --record {{.RECORD}} --runs 5{{end}}'
+        if: '[ "{{.IGNITE_GATE_VALGRIND}}" != 0 ]'
 
   quality:
     desc: Measure every instrumented metric of docs/quality.md once and append the run to quality/history.jsonl (RUN=vX.Y.Z for a release, whose rows worse than the last are printed as tracked)

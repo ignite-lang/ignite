@@ -7,15 +7,10 @@
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::Mutex;
 
 use crate::common;
 
 const TARGETS: [&str; 2] = ["rust", "llvm"];
-
-/// One `ignite test` per target at a time: the runs of a target share its
-/// output and cargo target directories.
-static LOCKS: [Mutex<()>; 2] = [Mutex::new(()), Mutex::new(())];
 
 fn fixture(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -44,13 +39,41 @@ fn ignite_test(target: &str, file: &str, filter: &str, leak: Option<&str>) -> Ru
     ignite_test_at(target, &fixture(file), filter, leak)
 }
 
+/// The output directory of the `ignite test` runs on `target`.
+fn out_dir(target: &str) -> PathBuf {
+    Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join("leak")
+        .join(target)
+}
+
+/// One `ignite test` per target at a time: the runs of a target share its
+/// output and cargo target directories, and `ignite test` copies its
+/// executable over the one in `out_dir` (`Text file busy` while another
+/// process runs it). The guard is an exclusive `flock` on
+/// [`lock_file`], held until the returned file is dropped: it keeps apart
+/// the threads of one test process (each call opens the file anew) and the
+/// test processes of one tree. Every descriptor std opens is close-on-exec,
+/// so no child keeps the lock.
+fn target_guard(target: &str) -> std::fs::File {
+    assert!(TARGETS.contains(&target), "a target: {target}");
+    let path = lock_file(target);
+    let dir = path.parent().expect("a lock directory");
+    std::fs::create_dir_all(dir).unwrap_or_else(|e| panic!("create {}: {e}", dir.display()));
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&path)
+        .unwrap_or_else(|e| panic!("open {}: {e}", path.display()));
+    file.lock()
+        .unwrap_or_else(|e| panic!("lock {}: {e}", path.display()));
+    file
+}
+
 /// `ignite test <path> <filter>` on `target` (see [`ignite_test`]).
 fn ignite_test_at(target: &str, path: &Path, filter: &str, leak: Option<&str>) -> Run {
-    let index = TARGETS.iter().position(|t| *t == target).expect("a target");
-    let _guard = LOCKS[index].lock().unwrap_or_else(|e| e.into_inner());
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
-        .join("leak")
-        .join(target);
+    let _guard = target_guard(target);
+    let dir = out_dir(target);
     let mut command = Command::new(env!("CARGO_BIN_EXE_ignite"));
     command
         .arg("test")
@@ -148,6 +171,156 @@ fn each_seeded_leak_fails_its_soak_naming_the_kind() {
             );
         }
     });
+}
+
+/// Set in the second process of
+/// [`a_run_waits_for_another_process_running_the_shared_executable`],
+/// which then holds the Rust target the way another test process does.
+const HOLDER: &str = "IGNITE_LEAK_HOLDER";
+
+const HOLDER_TEST: &str = "leak::a_run_waits_for_another_process_running_the_shared_executable";
+
+/// Two processes of this test binary share `out_dir` (the wave 17 gate
+/// failed with `Text file busy` when `ignite test` copied its executable
+/// over the one another process ran). A second process takes the Rust
+/// target's guard and keeps the shared executable running, blocked on a
+/// full stdout pipe, until told to stop; a run started meanwhile waits for
+/// it and passes.
+#[test]
+fn a_run_waits_for_another_process_running_the_shared_executable() {
+    if std::env::var_os(HOLDER).is_some() {
+        hold_the_rust_target();
+        return;
+    }
+    let filter = "a channel made and dropped";
+    let warm = ignite_test("rust", "seeded.ignite", filter, None);
+    assert_eq!(warm.status, 0, "{}", warm.output);
+    let mut holder = Command::new(std::env::current_exe().expect("test executable"))
+        .args(["--exact", HOLDER_TEST, "--nocapture", "--test-threads", "1"])
+        .env(HOLDER, "1")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("start the holder");
+    let stdout = holder.stdout.take().expect("piped stdout");
+    let (lines, holding) = std::sync::mpsc::channel();
+    let reader = std::thread::spawn(move || {
+        let mut seen = String::new();
+        for line in std::io::BufRead::lines(std::io::BufReader::new(stdout)) {
+            let Ok(line) = line else { break };
+            if line.ends_with("leak holder: holding") {
+                let _ = lines.send(());
+            }
+            seen.push_str(&line);
+            seen.push('\n');
+        }
+        seen
+    });
+    if holding
+        .recv_timeout(std::time::Duration::from_secs(300))
+        .is_err()
+    {
+        let _ = holder.kill();
+        let _ = holder.wait();
+        let seen = reader.join().unwrap_or_default();
+        let mut errors = String::new();
+        if let Some(mut stderr) = holder.stderr.take() {
+            let _ = std::io::Read::read_to_string(&mut stderr, &mut errors);
+        }
+        panic!("the holder did not hold the Rust target:\n{seen}{errors}");
+    }
+    let mut stdin = holder.stdin.take();
+    let lock = lock_file("rust");
+    let started = std::time::Instant::now();
+    let run = std::thread::scope(|scope| {
+        let run = scope.spawn(|| ignite_test("rust", "seeded.ignite", filter, None));
+        while !run.is_finished() {
+            if stdin.is_some()
+                && (waited_on(&lock) || started.elapsed() > std::time::Duration::from_secs(120))
+            {
+                stdin = None;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        run.join().expect("the run")
+    });
+    drop(stdin);
+    let status = holder.wait().expect("wait for the holder");
+    let seen = reader.join().unwrap_or_default();
+    let mut errors = String::new();
+    if let Some(mut stderr) = holder.stderr.take() {
+        let _ = std::io::Read::read_to_string(&mut stderr, &mut errors);
+    }
+    assert!(status.success(), "holder:\n{seen}{errors}");
+    assert_eq!(run.status, 0, "{}", run.output);
+    assert!(run.output.contains("1 passed; 0 failed"), "{}", run.output);
+}
+
+/// The second process's part: take the Rust target's guard, start the
+/// shared test executable with its stdout a full pipe (it blocks on its
+/// first line), say so, and let both go when stdin ends.
+fn hold_the_rust_target() {
+    use std::io::{Read, Write};
+    use std::os::fd::AsRawFd;
+    let guard = target_guard("rust");
+    let (reader, mut writer) = std::io::pipe().expect("a pipe");
+    let fd = writer.as_raw_fd();
+    // SAFETY (this and the two below): fcntl on a descriptor this function
+    // owns.
+    let flags = unsafe { nix::libc::fcntl(fd, nix::libc::F_GETFL) };
+    // SAFETY: as above.
+    unsafe { nix::libc::fcntl(fd, nix::libc::F_SETFL, flags | nix::libc::O_NONBLOCK) };
+    loop {
+        match writer.write(&[b'.'; 4096]) {
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+            Err(e) => panic!("fill the pipe: {e}"),
+        }
+    }
+    // SAFETY: as above.
+    unsafe { nix::libc::fcntl(fd, nix::libc::F_SETFL, flags) };
+    let executable = out_dir("rust").join("tests/rust/ignite-test");
+    let mut child = Command::new(&executable)
+        .arg("a channel made and dropped")
+        .stdin(Stdio::null())
+        .stdout(writer)
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap_or_else(|e| panic!("start {}: {e}", executable.display()));
+    assert!(
+        child.try_wait().expect("the shared executable").is_none(),
+        "the shared executable did not block on its stdout"
+    );
+    println!("leak holder: holding");
+    std::io::stdout().flush().expect("flush");
+    let _ = std::io::stdin().read_to_end(&mut Vec::new());
+    child.kill().expect("kill the shared executable");
+    child.wait().expect("reap the shared executable");
+    drop(reader);
+    drop(guard);
+}
+
+/// The file [`target_guard`] locks for `target`.
+fn lock_file(target: &str) -> PathBuf {
+    Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join("leak")
+        .join(format!("{target}.lock"))
+}
+
+/// Whether a process waits for a lock on `path` (`/proc/locks` lists a
+/// blocked request with `->`).
+fn waited_on(path: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let Ok(meta) = std::fs::metadata(path) else {
+        return false;
+    };
+    let inode = format!(":{}", meta.ino());
+    std::fs::read_to_string("/proc/locks").is_ok_and(|locks| {
+        locks.lines().any(|line| {
+            line.contains("->") && line.split_whitespace().any(|field| field.ends_with(&inode))
+        })
+    })
 }
 
 /// The reproducer's modes, `none` (no channel) first.

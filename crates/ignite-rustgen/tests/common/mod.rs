@@ -19,7 +19,7 @@ use ignite_rustgen::{
 };
 use ignite_syntax::SourceFile;
 use ignite_syntax::ast::Program;
-use ignite_types::{TypedModules, TypedProgram, type_module};
+use ignite_types::{TypedModules, TypedProgram, type_module, type_program};
 
 pub fn workspace() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -339,7 +339,7 @@ pub fn generate_source(
     let symbols = check_module(&program, &fixture.modules)
         .unwrap_or_else(|d| panic!("check failed:\n{}", source.render_all(&d)));
     fixture.types.as_ref().expect("the standard library types");
-    let types = type_module(&program, &symbols, &fixture.typed_modules)
+    let types = type_program(&program, &symbols, &fixture.typed_modules)
         .unwrap_or_else(|d| panic!("typing failed:\n{}", source.render_all(&d)));
     let mut sources = fixture.sources.clone();
     sources.insert(types.module.clone(), source);
@@ -383,7 +383,7 @@ fn lower_tests_with(
     let symbols = check_module(&program, &fixture.modules)
         .unwrap_or_else(|d| panic!("check failed:\n{}", source.render_all(&d)));
     fixture.types.as_ref().expect("the standard library types");
-    let types = type_module(&program, &symbols, &fixture.typed_modules)
+    let types = type_program(&program, &symbols, &fixture.typed_modules)
         .unwrap_or_else(|d| panic!("typing failed:\n{}", source.render_all(&d)));
     let mut sources = fixture.sources.clone();
     sources.insert(types.module.clone(), source.clone());
@@ -490,7 +490,7 @@ fn lower_with(
     }
     let symbols = check_module(&program, modules.as_ref())
         .unwrap_or_else(|d| panic!("check failed:\n{}", source.render_all(&d)));
-    let types = std_types.map(|_| type_module(&program, &symbols, typed_modules.as_ref()));
+    let types = std_types.map(|_| type_program(&program, &symbols, typed_modules.as_ref()));
     match (std_types, types) {
         (Some(_), Some(Ok(types))) => {
             options.sources = fixture.sources.clone();
