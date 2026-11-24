@@ -1,5 +1,6 @@
 //! `ignite-perf quality-remote` without AWS: the calls of a dry run, the spot-then-on-demand
-//! order, the cleanup on a failure after the launch, and the records it writes. A scripted
+//! order, the sweep of what earlier runs left, the cleanup on a failure after the launch, and
+//! the records it writes. A scripted
 //! shell answers every command the mode runs, so no test reaches the network.
 
 use std::path::{Path, PathBuf};
@@ -51,7 +52,11 @@ fn has(argv: &[String], word: &str) -> bool {
     argv.iter().any(|a| a == word)
 }
 
-/// The read-only answers of a region with two zones, `z-b` the cheaper spot zone.
+/// The filter of the sweep: everything any run made carries this tag.
+const PURPOSE_FILTER: &str = "Name=tag:purpose,Values=ignite-quality-timing";
+
+/// The read-only answers of a region with two zones, `z-b` the cheaper spot zone; nothing of an
+/// earlier run is left.
 fn read_only(argv: &[String]) -> Option<Ran> {
     let answer = if has(argv, "get-caller-identity") {
         r#"{"Arn": "arn:aws:sts::000000000000:assumed-role/r/x", "Account": "000000000000"}"#
@@ -69,6 +74,8 @@ fn read_only(argv: &[String]) -> Option<Ran> {
         r#"{"Parameter": {"Value": "ami-1"}}"#
     } else if has(argv, "describe-images") {
         r#"{"Images": [{"RootDeviceName": "/dev/sda1", "Name": "ubuntu-noble"}]}"#
+    } else if has(argv, PURPOSE_FILTER) {
+        r#"{"Reservations": [], "SecurityGroups": [], "KeyPairs": []}"#
     } else {
         return None;
     };
@@ -296,6 +303,208 @@ fn a_failure_after_the_launch_terminates_and_deletes_what_the_run_made() {
         last.contains("describe-") && last.contains("tag:ignite-quality-run,Values=iq-test"),
         "the run does not end with the leftover check by its tag: {last}"
     );
+}
+
+const OLD_TAGS: &str = r#"[{"Key": "ignite-quality-run", "Value": "iq-old"}, {"Key": "purpose", "Value": "ignite-quality-timing"}, {"Key": "Name", "Value": "ignite-quality-iq-old"}]"#;
+
+/// A shell over a region where earlier runs left `instances`, `groups` and `keys` (JSON items),
+/// answered to the sweep's listings whatever their filter says, so an item without the purpose
+/// tag among them stands for one a filter would let through. The first delete of a group
+/// answers `DependencyViolation`; this run's own first creating call fails, which ends it
+/// before its launch.
+fn left_behind(
+    instances: String,
+    groups: String,
+    keys: String,
+    dry_run: bool,
+) -> impl FnMut(&[String]) -> Ran {
+    let mut busy = 1;
+    move |argv: &[String]| {
+        if has(argv, PURPOSE_FILTER) {
+            let body = if has(argv, "describe-instances") {
+                format!(r#"{{"Reservations": [{{"Instances": [{instances}]}}]}}"#)
+            } else if has(argv, "describe-security-groups") {
+                format!(r#"{{"SecurityGroups": [{groups}]}}"#)
+            } else {
+                format!(r#"{{"KeyPairs": [{keys}]}}"#)
+            };
+            return ok(&body);
+        }
+        if let Some(ran) = read_only(argv) {
+            return ran;
+        }
+        if dry_run && has(argv, "--dry-run") {
+            return failed("An error occurred (DryRunOperation)");
+        }
+        if has(argv, "delete-security-group") && busy > 0 {
+            busy -= 1;
+            return failed(
+                "An error occurred (DependencyViolation) when calling the DeleteSecurityGroup operation: resource has a dependent object",
+            );
+        }
+        if has(argv, "create-security-group") {
+            return failed("An error occurred (UnauthorizedOperation): this run ends here");
+        }
+        if has(argv, "describe-instances") {
+            return ok(r#"{"Reservations": []}"#);
+        }
+        if has(argv, "describe-security-groups") || has(argv, "describe-key-pairs") {
+            return ok(r#"{"SecurityGroups": [], "KeyPairs": []}"#);
+        }
+        ok("{}")
+    }
+}
+
+fn first(calls: &[Vec<String>], word: &str) -> Option<usize> {
+    calls.iter().position(|a| has(a, word))
+}
+
+#[test]
+fn sweep_a_live_instance_of_an_earlier_run_stops_the_run_before_any_launch() {
+    let state = scratch("sweep-live");
+    let instances = format!(
+        r#"{{"InstanceId": "i-old", "State": {{"Name": "running"}}, "Tags": {OLD_TAGS}}},
+           {{"InstanceId": "i-gone", "State": {{"Name": "terminated"}}, "Tags": {OLD_TAGS}}}"#
+    );
+    let mut shell = Scripted {
+        answer: left_behind(
+            instances,
+            format!(r#"{{"GroupId": "sg-old", "Tags": {OLD_TAGS}}}"#),
+            String::new(),
+            false,
+        ),
+        calls: Vec::new(),
+        clock: 0.0,
+    };
+    let error = Remote::new(settings(&state, false), &mut shell)
+        .run()
+        .unwrap_err();
+    for wanted in ["i-old", "running", "iq-old"] {
+        assert!(error.contains(wanted), "the error lacks {wanted}: {error}");
+    }
+    assert!(!error.contains("i-gone"), "{error}");
+    let changed: Vec<&Vec<String>> = shell.calls.iter().filter(|a| mutating(a)).collect();
+    assert!(
+        changed.is_empty(),
+        "a run beside a live instance made {changed:?}"
+    );
+}
+
+#[test]
+fn sweep_deletes_the_group_and_key_pair_of_a_terminated_run_before_the_launch() {
+    let state = scratch("sweep-left");
+    let instances = format!(
+        r#"{{"InstanceId": "i-gone", "State": {{"Name": "terminated"}}, "Tags": {OLD_TAGS}}},
+           {{"InstanceId": "i-foreign", "State": {{"Name": "running"}}, "Tags": [{{"Key": "Name", "Value": "other"}}]}}"#
+    );
+    let mut shell = Scripted {
+        answer: left_behind(
+            instances,
+            format!(
+                r#"{{"GroupId": "sg-old", "Tags": {OLD_TAGS}}}, {{"GroupId": "sg-foreign", "Tags": []}}"#
+            ),
+            format!(
+                r#"{{"KeyName": "ignite-quality-iq-old", "Tags": {OLD_TAGS}}}, {{"KeyName": "someone-else"}}"#
+            ),
+            false,
+        ),
+        calls: Vec::new(),
+        clock: 0.0,
+    };
+    let error = Remote::new(settings(&state, false), &mut shell)
+        .run()
+        .unwrap_err();
+    assert!(error.contains("this run ends here"), "{error}");
+    let create = first(&shell.calls, "create-security-group").expect("the run went on");
+    let deletes: Vec<String> = shell.calls[..create]
+        .iter()
+        .filter(|a| mutating(a))
+        .map(|a| a[a.len() - 3..].join(" "))
+        .collect();
+    assert_eq!(
+        deletes,
+        [
+            "delete-key-pair --key-name ignite-quality-iq-old",
+            "delete-security-group --group-id sg-old",
+            "delete-security-group --group-id sg-old",
+        ],
+        "the group is retried after DependencyViolation; nothing without the purpose tag is touched"
+    );
+    assert!(
+        !shell
+            .calls
+            .iter()
+            .any(|a| a.join(" ").contains("foreign") || a.join(" ").contains("someone-else")),
+        "the sweep touched what has no purpose tag"
+    );
+}
+
+#[test]
+fn sweep_with_nothing_left_deletes_nothing() {
+    let state = scratch("sweep-none");
+    let mut shell = Scripted {
+        answer: left_behind(String::new(), String::new(), String::new(), false),
+        calls: Vec::new(),
+        clock: 0.0,
+    };
+    Remote::new(settings(&state, false), &mut shell)
+        .run()
+        .unwrap_err();
+    let create = first(&shell.calls, "create-security-group").expect("the run went on");
+    for listing in [
+        "describe-instances",
+        "describe-security-groups",
+        "describe-key-pairs",
+    ] {
+        assert!(
+            shell.calls[..create]
+                .iter()
+                .any(|a| has(a, listing) && has(a, PURPOSE_FILTER)),
+            "no {listing} by the purpose tag before the launch"
+        );
+    }
+    let deletes: Vec<&Vec<String>> = shell
+        .calls
+        .iter()
+        .filter(|a| a.iter().any(|w| w.starts_with("delete-")))
+        .collect();
+    assert!(deletes.is_empty(), "{deletes:?}");
+}
+
+#[test]
+fn sweep_in_a_dry_run_prints_its_deletes_and_makes_none() {
+    let state = scratch("sweep-dry");
+    let mut shell = Scripted {
+        answer: left_behind(
+            format!(
+                r#"{{"InstanceId": "i-gone", "State": {{"Name": "terminated"}}, "Tags": {OLD_TAGS}}}"#
+            ),
+            format!(r#"{{"GroupId": "sg-old", "Tags": {OLD_TAGS}}}"#),
+            format!(r#"{{"KeyName": "ignite-quality-iq-old", "Tags": {OLD_TAGS}}}"#),
+            true,
+        ),
+        calls: Vec::new(),
+        clock: 0.0,
+    };
+    let mut run = Remote::new(settings(&state, true), &mut shell);
+    run.run().unwrap();
+    let planned: Vec<String> = run.planned().iter().map(|a| a.join(" ")).collect();
+    drop(run);
+    for wanted in [
+        "delete-key-pair --key-name ignite-quality-iq-old",
+        "delete-security-group --group-id sg-old",
+    ] {
+        assert!(
+            planned.iter().any(|a| a.ends_with(wanted)),
+            "the plan lacks {wanted}: {planned:?}"
+        );
+    }
+    let deletes: Vec<&Vec<String>> = shell
+        .calls
+        .iter()
+        .filter(|a| a.iter().any(|w| w.starts_with("delete-")))
+        .collect();
+    assert!(deletes.is_empty(), "a dry run deleted: {deletes:?}");
 }
 
 #[test]

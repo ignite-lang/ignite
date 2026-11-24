@@ -211,9 +211,14 @@ Timing on the shared workstation is not comparable between runs, so the timing r
   `shutdown -h` timer with instance-initiated shutdown set to terminate). The mode terminates it
   and deletes the group and key pair on every exit path (success, failure, SIGINT, SIGTERM,
   SIGHUP), then lists by the run tag and fails when an instance, group or key pair is left.
-  `DRY_RUN=1` makes the read-only calls and every creating call with EC2's `--dry-run`;
-  `remote::` in `tools/ignite-perf/tests/` checks that plan, the spot-then-on-demand order and
-  the cleanup after a failure without AWS, in `task gate`.
+  Before it makes anything, the mode lists what is tagged `purpose=ignite-quality-timing`: while
+  an instance of an earlier run is not `terminated` it fails and names each one (id, state,
+  run), else it deletes the groups and key pairs earlier runs left (after a SIGKILL or a dead
+  workstation) and touches nothing without that tag.
+  `DRY_RUN=1` makes the read-only calls and every creating call with EC2's `--dry-run` and
+  prints the deletes of that sweep; `remote::` in `tools/ignite-perf/tests/` checks that plan,
+  the spot-then-on-demand order, the sweep and the cleanup after a failure without AWS, in
+  `task gate`.
 - **Method.** The trees of BASE and HEAD (`git archive`) and of the commit running the mode, the
   harness, are copied to the host; both compilers and runtimes are built there. The harness's
   `ignite-perf quality --timing-only` runs over each tree: one discarded warm-up of HEAD, then 5
