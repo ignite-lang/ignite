@@ -11,6 +11,13 @@
 //! admits SSH from the operator's address only and an ed25519 key pair are made for the run
 //! and deleted after it; every resource carries the tag `ignite-quality-run=<run id>`.
 //!
+//! Before it makes anything the mode sweeps what earlier runs left, listed by the tag
+//! `purpose=ignite-quality-timing` that every run's resources carry: an instance of an earlier
+//! run that is not `terminated` fails the run before its launch, named by id, state and run;
+//! else the security groups and key pairs of earlier runs (left by a SIGKILL or a dead
+//! workstation, whose instance ended by its own timer) are deleted. Nothing without that tag
+//! is touched.
+//!
 //! On the host: the trees of BASE and HEAD (`git archive`), each with its compiler and runtime
 //! built, and a third tree, the commit of the checkout running the mode, whose `ignite-perf`
 //! runs `quality --timing-only` over each tree (so BASE and HEAD may predate this mode): one
@@ -35,8 +42,8 @@
 //! held ([`judge`]); without one it is among the tracked rows.
 //!
 //! `--dry-run` makes the read-only calls, makes every call that creates with EC2's
-//! `--dry-run` (the answer `DryRunOperation` is success) and prints the rest without making
-//! them.
+//! `--dry-run` (the answer `DryRunOperation` is success) and prints the rest, the sweep's
+//! deletes among them, without making them.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -484,6 +491,20 @@ fn tag_list(run_id: &str) -> String {
     format!(
         "{{Key={RUN_TAG},Value={run_id}}},{{Key=purpose,Value={PURPOSE}}},{{Key=Name,Value=ignite-quality-{run_id}}}"
     )
+}
+
+/// The value of the tag `key` of an EC2 item (its `Tags` list).
+fn tag<'j>(item: &'j Json, key: &str) -> Option<&'j str> {
+    item.field("Tags")
+        .as_arr()
+        .iter()
+        .find(|t| t.field("Key").as_str() == Some(key))
+        .and_then(|t| t.field("Value").as_str())
+}
+
+/// Whether an EC2 item carries the tag `purpose` of these runs.
+fn ours(item: &Json) -> bool {
+    tag(item, "purpose") == Some(PURPOSE)
 }
 
 /// One EC2 call: read-only, or one that changes something (made with `--dry-run` in a dry
@@ -1210,6 +1231,98 @@ impl<'a> Remote<'a> {
         Ok(out)
     }
 
+    /// Delete a security group, retried while EC2 answers `DependencyViolation`: the group
+    /// stays in use until the instance's interface is gone.
+    fn delete_group(&mut self, group: &str) -> R<()> {
+        let mut tries = 0;
+        loop {
+            match self.aws(
+                &words(&["ec2", "delete-security-group", "--group-id", group]),
+                Kind::Change { dry_flag: false },
+            ) {
+                Ok(_) => return Ok(()),
+                Err(error) if error.contains("DependencyViolation") && tries < 20 => {
+                    tries += 1;
+                    self.shell.sleep(15);
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+
+    /// Before this run makes anything: what earlier runs left, listed by the purpose tag. An
+    /// instance not `terminated` stops the run; the groups and key pairs (left by a run killed
+    /// with SIGKILL or on a dead workstation) are deleted. Only what carries the tag
+    /// `purpose=ignite-quality-timing` is listed, and each item is checked for it again.
+    fn sweep(&mut self) -> R<()> {
+        let filter = format!("Name=tag:purpose,Values={PURPOSE}");
+        let instances = self.read(&["ec2", "describe-instances", "--filters", &filter])?;
+        let mut live = Vec::new();
+        for reservation in instances.field("Reservations").as_arr() {
+            for instance in reservation.field("Instances").as_arr() {
+                let state = instance
+                    .field("State")
+                    .field("Name")
+                    .as_str()
+                    .unwrap_or("?");
+                if ours(instance) && state != "terminated" {
+                    live.push(format!(
+                        "{} {state} ({RUN_TAG}={})",
+                        instance.field("InstanceId").as_str().unwrap_or("?"),
+                        tag(instance, RUN_TAG).unwrap_or("?")
+                    ));
+                }
+            }
+        }
+        if !live.is_empty() {
+            return Err(format!(
+                "an earlier quality run is still up, nothing launched: {}. \
+                 Terminate it or wait for its shutdown timer, then run again",
+                live.join(", ")
+            ));
+        }
+        let groups: Vec<String> = self
+            .read(&["ec2", "describe-security-groups", "--filters", &filter])?
+            .field("SecurityGroups")
+            .as_arr()
+            .iter()
+            .filter(|g| ours(g))
+            .filter_map(|g| g.field("GroupId").as_str().map(str::to_string))
+            .collect();
+        let keys: Vec<String> = self
+            .read(&["ec2", "describe-key-pairs", "--filters", &filter])?
+            .field("KeyPairs")
+            .as_arr()
+            .iter()
+            .filter(|k| ours(k))
+            .filter_map(|k| k.field("KeyName").as_str().map(str::to_string))
+            .collect();
+        for key in &keys {
+            self.aws(
+                &words(&["ec2", "delete-key-pair", "--key-name", key]),
+                Kind::Change { dry_flag: false },
+            )?;
+        }
+        for group in &groups {
+            self.delete_group(group)?;
+        }
+        let verb = if self.s.dry_run {
+            "would remove"
+        } else {
+            "removed"
+        };
+        if groups.is_empty() && keys.is_empty() {
+            self.log(&format!(
+                "sweep: nothing tagged purpose={PURPOSE} is left by earlier runs"
+            ));
+        } else {
+            self.log(&format!(
+                "sweep: {verb} what earlier runs left: security groups {groups:?}, key pairs {keys:?}"
+            ));
+        }
+        Ok(())
+    }
+
     fn cleanup(&mut self) -> R<()> {
         if self.s.dry_run {
             let id = self.instance.clone().unwrap_or_else(|| "i-dry-run".into());
@@ -1258,25 +1371,10 @@ impl<'a> Remote<'a> {
                 problems.push(error);
             }
         }
-        if let Some(group) = self.group.clone() {
-            // The group stays in use until the instance's interface is gone.
-            let mut tries = 0;
-            loop {
-                match self.aws(
-                    &words(&["ec2", "delete-security-group", "--group-id", &group]),
-                    Kind::Change { dry_flag: false },
-                ) {
-                    Ok(_) => break,
-                    Err(error) if error.contains("DependencyViolation") && tries < 20 => {
-                        tries += 1;
-                        self.shell.sleep(15);
-                    }
-                    Err(error) => {
-                        problems.push(error);
-                        break;
-                    }
-                }
-            }
+        if let Some(group) = self.group.clone()
+            && let Err(error) = self.delete_group(&group)
+        {
+            problems.push(error);
         }
         let left: Vec<String> = self
             .tagged_instances()?
@@ -1401,6 +1499,7 @@ impl<'a> Remote<'a> {
     pub fn run(&mut self) -> R<Outcome> {
         fs::create_dir_all(&self.s.state).map_err(io_err(self.s.state.display()))?;
         self.preflight()?;
+        self.sweep()?;
         let result = self.body();
         let cleaned = self.cleanup();
         self.account();

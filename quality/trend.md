@@ -17,6 +17,7 @@ dedicated host's runs have their own table below the main one.
 | v0.16.2 | 20cfcbe6 | 2026-11-12 | 2 | 5 | 5 local, not comparable | 1.2 eval 771→788; 1.2 llvm 932→949; 1.2 rust 932→949; 1.3 rust/builtins 53→54; 1.3 rust/patterns 65→68; 3.2 llvm/terminald/dev 7264456 B→7264152 B; 3.2 llvm/terminald/release 1394536 B→1394864 B; 3.2 llvm/todod/dev 7969760 B→7969480 B; 3.2 llvm/todod/release 1967944 B→1968272 B; 3.2 rust/terminald/dev 6344576 B→6349688 B; 3.2 rust/terminald/release 743384 B→744360 B; 3.2 rust/todod/dev 7586840 B→7616952 B; 3.2 rust/todod/release 1062560 B→1063856 B |
 | v0.16.3 | ed39b372 | 2026-11-13 | 2 | 6 | 5 local, not comparable | 1.2 eval 788→792; 1.2 llvm 949→953; 1.2 rust 949→953; 1.3 eval/builtins 124→126; 1.3 rust/builtins 54→56; 3.1 rust 163→156; 3.2 llvm/terminald/dev 7264152 B→7270200 B; 3.2 llvm/terminald/release 1394864 B→1394448 B; 3.2 llvm/todod/dev 7969480 B→7975704 B; 3.2 llvm/todod/release 1968272 B→1967384 B; 3.2 rust/terminald/dev 6349688 B→6355512 B; 3.2 rust/terminald/release 744360 B→744392 B; 3.2 rust/todod/dev 7616952 B→7632016 B; 3.2 rust/todod/release 1063856 B→1066480 B |
 | v0.16.4 | 3f221dfb | 2026-11-13 | 0 | 4 | 5 local, not comparable | 3.1 rust 156→155; 3.2 llvm/terminald/dev 7270200 B→7270968 B; 3.2 llvm/terminald/release 1394448 B→1394120 B; 3.2 llvm/todod/dev 7975704 B→7976544 B; 3.2 llvm/todod/release 1967384 B→1967072 B; 3.2 rust/terminald/dev 6355512 B→6354712 B; 3.2 rust/terminald/release 744392 B→744408 B; 3.2 rust/todod/dev 7632016 B→7635104 B; 3.2 rust/todod/release 1066480 B→1066544 B |
+| v0.16.5 | 55dd4cdf | 2026-11-24 | 0 | 13 | 5 local, not comparable | 1.2 eval 792→798; 1.2 llvm 953→959; 1.2 rust 953→959; 2.5 all 336→339; 3.1 rust 155→154; 3.2 llvm/terminald/dev 7270968 B→7268560 B; 3.2 llvm/terminald/release 1394120 B→1392968 B; 3.2 llvm/todod/dev 7976544 B→7971848 B; 3.2 llvm/todod/release 1967072 B→1965040 B; 3.2 rust/terminald/dev 6354712 B→6352032 B; 3.2 rust/terminald/release 744408 B→744344 B; 3.2 rust/todod/dev 7635104 B→7630864 B; 3.2 rust/todod/release 1066544 B→1065872 B |
 
 ## Timing on the dedicated host
 
@@ -36,6 +37,7 @@ against the run before on a host of the same type.
 | v0.16.2 | 20cfcbe6 | 2026-11-12 | ec2:c7i.metal-24xl | 5.3 llvm 105 ms; 6.1 all/check 199 ms; 6.1 all/plan 201 ms; 6.2 llvm 933 ms; 6.2 rust 4128 ms | 5.3 llvm 106 ms→105 ms better; 6.1 all/check 198 ms→199 ms; 6.1 all/plan 198 ms→201 ms; 6.2 llvm 934 ms→933 ms better; 6.2 rust 4118 ms→4128 ms |
 | v0.16.3 | ed39b372 | 2026-11-13 | ec2:c7i.metal-24xl | 5.3 llvm 106 ms; 6.1 all/check 197 ms; 6.1 all/plan 197 ms; 6.2 llvm 927 ms; 6.2 rust 4106 ms | 5.3 llvm 105 ms→106 ms; 6.1 all/check 199 ms→197 ms better; 6.1 all/plan 201 ms→197 ms better; 6.2 llvm 933 ms→927 ms better; 6.2 rust 4128 ms→4106 ms better |
 | v0.16.4 | 3f221dfb | 2026-11-13 | ec2:c7i.metal-24xl | 5.3 llvm 105 ms; 6.1 all/check 195 ms; 6.1 all/plan 197 ms; 6.2 llvm 929 ms; 6.2 rust 4088 ms | 5.3 llvm 106 ms→105 ms better; 6.1 all/check 197 ms→195 ms better; 6.2 llvm 927 ms→929 ms; 6.2 rust 4106 ms→4088 ms better |
+| v0.16.5 | a47d82e2 | 2026-11-24 | ec2:c7i.metal-24xl | 5.3 llvm 106 ms; 6.1 all/check 197 ms; 6.1 all/plan 197 ms; 6.2 llvm 935 ms; 6.2 rust 4090 ms | 5.3 llvm 105 ms→106 ms; 6.1 all/check 195 ms→197 ms; 6.2 llvm 929 ms→935 ms; 6.2 rust 4088 ms→4090 ms |
 
 ## Against plain Rust on the dedicated host
 
@@ -118,3 +120,11 @@ peak RSS or a larger stripped binary than plain Rust).
 | v0.16.4 | 3f221dfb | 2026-11-13 | ec2:c7i.metal-24xl | todo/get-1 | rps 1.035×, p99 0.992×, RSS 0.722× | rps 0.988×, p99 0.992×, RSS 0.748× | rps 0.737×, p99 1.555×, RSS 3.537× |
 | v0.16.4 | 3f221dfb | 2026-11-13 | ec2:c7i.metal-24xl | todo/get-64 | rps 1.322×, p99 0.484×, RSS 1.093× | rps 1.167×, p99 0.558×, RSS 0.775× | rps 0.687×, p99 3.455×, RSS 3.163× |
 | v0.16.4 | 3f221dfb | 2026-11-13 | ec2:c7i.metal-24xl | todo/patch-16 | rps 1.203×, p99 0.573×, RSS 0.789× | rps 1.198×, p99 0.794×, RSS 0.757× | rps 0.901×, p99 1.973×, RSS 3.379× |
+| v0.16.5 | a47d82e2 | 2026-11-24 | ec2:c7i.metal-24xl | terminal | size 1.315× | size 1.509× | size 4.983× |
+| v0.16.5 | a47d82e2 | 2026-11-24 | ec2:c7i.metal-24xl | terminal/connect-8 | rps 0.917×, p99 1.288×, RSS 0.947× | rps 0.965×, p99 1.191×, RSS 0.934× | rps 0.724×, p99 2.048×, RSS 3.770× |
+| v0.16.5 | a47d82e2 | 2026-11-24 | ec2:c7i.metal-24xl | terminal/rr-1 | rps 1.003×, p99 0.996×, RSS 1.071× | rps 0.979×, p99 1.000×, RSS 1.065× | rps 0.934×, p99 1.054×, RSS 3.750× |
+| v0.16.5 | a47d82e2 | 2026-11-24 | ec2:c7i.metal-24xl | terminal/rr-64 | rps 1.244×, p99 0.421×, RSS 1.175× | rps 1.228×, p99 0.423×, RSS 0.800× | rps 1.013×, p99 1.446×, RSS 2.779× |
+| v0.16.5 | a47d82e2 | 2026-11-24 | ec2:c7i.metal-24xl | todo | size 0.708× | size 0.839× | size 4.837× |
+| v0.16.5 | a47d82e2 | 2026-11-24 | ec2:c7i.metal-24xl | todo/get-1 | rps 1.038×, p99 0.973×, RSS 0.733× | rps 0.989×, p99 1.004×, RSS 0.759× | rps 0.747×, p99 1.541×, RSS 3.577× |
+| v0.16.5 | a47d82e2 | 2026-11-24 | ec2:c7i.metal-24xl | todo/get-64 | rps 1.293×, p99 0.495×, RSS 1.088× | rps 1.157×, p99 0.557×, RSS 0.774× | rps 0.679×, p99 3.582×, RSS 3.187× |
+| v0.16.5 | a47d82e2 | 2026-11-24 | ec2:c7i.metal-24xl | todo/patch-16 | rps 1.202×, p99 0.575×, RSS 0.809× | rps 1.191×, p99 0.770×, RSS 0.777× | rps 0.888×, p99 1.979×, RSS 3.428× |

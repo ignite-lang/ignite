@@ -19,7 +19,7 @@ use nix::unistd::Pid;
 
 use crate::cli::ReadinessArgs;
 use crate::json::{Json, obj};
-use crate::perf::{R, ensure, exit_code, io_err, path_str, resolve, sha256};
+use crate::perf::{R, ensure, exit_code, io_err, outside_source, path_str, resolve, sha256};
 
 pub const MS: i64 = 1_000_000;
 pub const SUPERVISOR: &str = "Terminal.server.supervisor";
@@ -980,8 +980,12 @@ pub fn verify(args: &ReadinessArgs) -> R<()> {
         *path = resolve(path);
     }
     ensure(
-        !args.work.starts_with(&args.repo),
-        "Verifier work must be outside frozen source",
+        outside_source(
+            &args.work,
+            &args.repo,
+            std::env::var_os("CARGO_TARGET_DIR").as_deref(),
+        ),
+        "Verifier work must be outside frozen source: outside the checkout, or under its Cargo target directory",
     )?;
     let report_path = args.work.join("report.json");
     ensure(

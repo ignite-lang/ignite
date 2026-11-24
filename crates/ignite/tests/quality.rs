@@ -1604,8 +1604,9 @@ pub struct Record {
     pub metric: String,
     pub target: String,
     pub value: i64,
-    /// Where the run was measured: `local` for this workstation (a timed
-    /// row then carries its 1-minute `load`), `ec2:<type>` for the
+    /// Where the run was measured: for `task quality` the machine class in
+    /// `IGNITE_QUALITY_HOST` ([`quality_host`]; a timed row then carries its
+    /// 1-minute `load`), `ec2:<type>` for the
     /// dedicated timing host (`ignite-perf quality-remote`).
     pub host: String,
     pub load: Option<String>,
@@ -2813,21 +2814,276 @@ pub fn run_records(
         .collect()
 }
 
+/// The `host` of a run of `task quality`: the machine class in
+/// `IGNITE_QUALITY_HOST` (`setting`), set by whoever runs the task
+/// (`IGNITE_QUALITY_HOST=build-node-c6id.16xlarge slot task quality`, `local`
+/// on the workstation); nothing derives it and the Taskfile sets no default.
+/// Timing rows are compared only within one value ([`timing_section`]), so
+/// it names a class that outlives a machine: unset, empty or naming a
+/// machine ([`names_a_machine`]: a build node is replaced, and its internal
+/// address does not enter the repository) it is refused with one line that
+/// says what to set.
+pub fn quality_host(setting: Option<&str>) -> Result<String, String> {
+    const SET: &str = "set it to the machine class the run measures, e.g. `IGNITE_QUALITY_HOST=build-node-c6id.16xlarge slot task quality RUN=...` (`local` on the workstation)";
+    match setting.map(str::trim) {
+        None | Some("") => Err(format!(
+            "quality::record records nothing: IGNITE_QUALITY_HOST is not set; {SET}"
+        )),
+        Some(host) if names_a_machine(host) => Err(format!(
+            "quality::record records nothing: IGNITE_QUALITY_HOST={host} names a machine, not a machine class; {SET}"
+        )),
+        Some(host) => Ok(host.to_string()),
+    }
+}
+
+/// Whether `text` holds a machine's hostname or address: an EC2 private DNS
+/// name (EC2's internal domain, an `ip-<n>-<n>-<n>-<n>` label) or an IPv4
+/// address.
+pub fn names_a_machine(text: &str) -> bool {
+    let four = |text: &str, sep: char| {
+        let parts: Vec<&str> = text.split(sep).collect();
+        parts.windows(4).any(|w| {
+            w.iter()
+                .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+        })
+    };
+    let ip_name = text.match_indices("ip-").any(|(at, _)| {
+        let rest = &text[at + 3..];
+        let end = rest
+            .find(|c: char| !(c.is_ascii_digit() || c == '-'))
+            .unwrap_or(rest.len());
+        four(&rest[..end], '-')
+    });
+    let address = text
+        .split(|c: char| !(c.is_ascii_digit() || c == '.'))
+        .any(|token| four(token, '.'));
+    text.contains(concat!(".compute", ".internal")) || ip_name || address
+}
+
+/// What [`record`] writes to stderr for the timing rows ([`TIMING`]) of the
+/// run `run` on `host`: each against the latest earlier record of the same
+/// metric and target on the same `host`, or `no baseline on host <host>` for
+/// a host's first. A timing row is never compared with a row of another
+/// host (a build node's with `local`, or the reverse), and gates nothing.
+/// Nothing when the run has no timing row.
+pub fn timing_section(run: &str, host: &str, history: &[Record], values: &[Value]) -> String {
+    let lines: Vec<String> = values
+        .iter()
+        .filter(|v| is_timing(&v.metric))
+        .map(|v| {
+            let before = history
+                .iter()
+                .rev()
+                .find(|r| r.host == host && r.metric == v.metric && r.target == v.target);
+            match before {
+                Some(then) => format!(
+                    "{} {}: {} ms at {} ({}), {} ms now",
+                    v.metric, v.target, then.value, then.run, then.date, v.value
+                ),
+                None => format!(
+                    "{} {}: {} ms, no baseline on host {host}",
+                    v.metric, v.target, v.value
+                ),
+            }
+        })
+        .collect();
+    if lines.is_empty() {
+        return String::new();
+    }
+    format!(
+        "run {run} on host {host}: timing rows against the last record on this host, recorded and not gated:\n  {}\n",
+        lines.join("\n  ")
+    )
+}
+
+/// A node's hostname for the tests, built so that no file of the tree holds
+/// one: an EC2 instance's private DNS name.
+fn a_node_hostname() -> String {
+    format!(
+        "{}.eu-west-1{}",
+        an_ip_label(),
+        concat!(".compute", ".internal")
+    )
+}
+
+/// An `ip-<n>-<n>-<n>-<n>` label, built so that no file of the tree holds one.
+fn an_ip_label() -> String {
+    format!("ip{}", "-10-0-3-7")
+}
+
+/// With `IGNITE_QUALITY_HOST` unset or empty the record step writes nothing
+/// and says which variable to set, with an example value.
+#[test]
+fn the_record_step_refuses_without_the_quality_host() {
+    for setting in [None, Some(""), Some("  ")] {
+        let refused = quality_host(setting).expect_err("an unset IGNITE_QUALITY_HOST was accepted");
+        assert!(
+            refused.contains("IGNITE_QUALITY_HOST=build-node-c6id.16xlarge"),
+            "{refused}"
+        );
+        assert!(!refused.contains('\n'), "{refused}");
+    }
+}
+
+/// A hostname or an address is not a machine class: a build node is
+/// replaced, and an internal address does not enter the repository.
+#[test]
+fn a_hostname_like_quality_host_is_refused() {
+    for setting in [
+        a_node_hostname(),
+        an_ip_label(),
+        "10.0.3.7".to_string(),
+        "node-10.0.3.7".to_string(),
+        format!("x{}", concat!(".compute", ".internal")),
+    ] {
+        let refused = quality_host(Some(&setting))
+            .expect_err(&format!("IGNITE_QUALITY_HOST={setting} was accepted"));
+        assert!(refused.contains("IGNITE_QUALITY_HOST"), "{refused}");
+        assert!(refused.contains(&setting), "{refused}");
+        assert!(!refused.contains('\n'), "{refused}");
+    }
+    for class in ["local", "build-node-c6id.16xlarge", "ec2:c7i.metal-24xl"] {
+        assert!(!names_a_machine(class), "{class}");
+    }
+}
+
+/// The value of `IGNITE_QUALITY_HOST` is the `host` of every row the run
+/// records.
+#[test]
+fn the_quality_host_labels_the_rows() {
+    let host = quality_host(Some("build-node-c6id.16xlarge")).unwrap();
+    assert_eq!(host, "build-node-c6id.16xlarge");
+    let values = [
+        Value {
+            metric: "6.2".to_string(),
+            target: "llvm".to_string(),
+            value: 2500,
+            load: Some("1.00".to_string()),
+        },
+        Value {
+            metric: "4.3".to_string(),
+            target: "llvm".to_string(),
+            value: 309,
+            load: None,
+        },
+    ];
+    let records = run_records(&values, &[], "c", "2026-11-24", "run", &host);
+    assert_eq!(records.len(), 2);
+    assert!(
+        records.iter().all(|r| r.host == "build-node-c6id.16xlarge"),
+        "{records:?}"
+    );
+}
+
+/// No file under `quality/` carries a machine's hostname or address
+/// ([`names_a_machine`]).
+#[test]
+fn no_quality_file_names_a_machine() {
+    let mut found = Vec::new();
+    for entry in std::fs::read_dir(workspace().join("quality")).unwrap() {
+        let path = entry.unwrap().path();
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        for (n, line) in text.lines().enumerate() {
+            if names_a_machine(line) {
+                found.push(format!("{}:{}", path.display(), n + 1));
+            }
+        }
+    }
+    assert!(
+        found.is_empty(),
+        "a machine's name in:\n  {}",
+        found.join("\n  ")
+    );
+}
+
+/// Timing rows are compared only with earlier rows of the same host: a run
+/// on a build node over a history holding only `local` rows passes with no
+/// baseline, and the next run on that node is compared with its row, never
+/// with the `local` one; a `local` run is still compared with `local` rows.
+#[test]
+fn timing_rows_are_compared_only_with_the_same_host() {
+    let node = "build-node-c6id.16xlarge";
+    let record = |run: &str, host: &str, value: i64| Record {
+        commit: "c".to_string(),
+        date: "2026-11-20".to_string(),
+        run: run.to_string(),
+        metric: "6.2".to_string(),
+        target: "llvm".to_string(),
+        value,
+        host: host.to_string(),
+        load: Some("2.00".to_string()),
+        base: None,
+        base_value: None,
+        machine: None,
+        decision: None,
+    };
+    let value = |metric: &str, value| Value {
+        metric: metric.to_string(),
+        target: "llvm".to_string(),
+        value,
+        load: Some("1.00".to_string()),
+    };
+    let mut timing = metric(Direction::Lower, Tolerance::Percent(10), &[("llvm", 900)]);
+    timing.source = Some("perf".to_string());
+    timing.unit = "ms".to_string();
+    let baseline = baseline_of(&[("6.2", timing)]);
+    let local_only = vec![record("v0.16.4", "local", 900)];
+    let values = [value("6.2", 2500), value("4.3", 309)];
+
+    let first = timing_section("v0.16.5", node, &local_only, &values);
+    assert_eq!(
+        first,
+        format!(
+            "run v0.16.5 on host {node}: timing rows against the last record on this host, recorded and not gated:\n  6.2 llvm: 2500 ms, no baseline on host {node}\n"
+        )
+    );
+    assert!(
+        release_refusals(&baseline, &local_only, &values[..1], Some("v0.16.4")).is_empty(),
+        "a build node's first timing row was refused against a local row"
+    );
+    assert!(check(&baseline, "perf", &one("6.2", "llvm", 2500), None).is_empty());
+
+    let mut both = local_only.clone();
+    both.push(record("v0.16.5", node, 2400));
+    both.push(record("run", "local", 950));
+    let again = timing_section("run", node, &both, &values);
+    assert!(
+        again.contains("6.2 llvm: 2400 ms at v0.16.5 (2026-11-20), 2500 ms now"),
+        "{again}"
+    );
+    assert!(!again.contains("950") && !again.contains("900"), "{again}");
+    let local = timing_section("run", "local", &both, &values);
+    assert!(
+        local.contains("6.2 llvm: 950 ms at run (2026-11-20), 2500 ms now"),
+        "{local}"
+    );
+    assert!(!local.contains("2400"), "{local}");
+    assert_eq!(timing_section("run", node, &both, &values[1..]), "");
+}
+
 /// `task quality`: read every source's measured values from
 /// `target/quality/` (the gate tests and `ignite-perf quality` wrote them),
 /// print the rows of a release (`IGNITE_QUALITY_RUN=vX.Y.Z`) that are worse
 /// than at the last ([`tracked_section`]: tracked, the release is not refused
 /// by them), print the cells of a size row a decision lets grow
 /// ([`grown_section`]), append one record per metric and target to
-/// `quality/history.jsonl` with its `host` (`IGNITE_QUALITY_HOST`, default
-/// `local`) and regenerate `quality/trend.md`, the table of
-/// `docs/quality.md` and the book page. The sizes of `ignite-perf quality`
-/// are held against their bars; its timing rows are recorded and gate
-/// nothing: on `host: local` they are not comparable. Under
-/// `IGNITE_BLESS=1` a timing row without a bar gets one as its reference.
+/// `quality/history.jsonl` with its `host` ([`quality_host`]: the machine
+/// class in `IGNITE_QUALITY_HOST`; unset, empty or naming a machine, the
+/// step refuses before it writes anything) and regenerate `quality/trend.md`, the table of `docs/quality.md`
+/// and the book page. The sizes of `ignite-perf quality` are held against
+/// their bars; its timing rows are recorded and gate nothing, each printed
+/// against the latest earlier record of the same host only
+/// ([`timing_section`]). Under `IGNITE_BLESS=1` a timing row without a bar
+/// gets one as its reference.
 #[test]
 #[ignore = "task quality runs it after the measurements"]
 fn record() {
+    let host = match quality_host(std::env::var("IGNITE_QUALITY_HOST").ok().as_deref()) {
+        Ok(host) => host,
+        Err(refused) => panic!("{refused}"),
+    };
     let dir = quality_dir();
     let mut values = Vec::new();
     // The path cost (3.10) is judged in `task gate` by `ignite-perf
@@ -2858,10 +3114,12 @@ fn record() {
         }
         save_baseline(&baseline);
     }
-    let host = std::env::var("IGNITE_QUALITY_HOST").unwrap_or_else(|_| "local".to_string());
     let mut errors = check(&baseline, "perf", &perf, None);
     let run = std::env::var("IGNITE_QUALITY_RUN").unwrap_or_else(|_| "run".to_string());
     let history = read_history();
+    std::io::stderr()
+        .write_all(timing_section(&run, &host, &history, &values).as_bytes())
+        .unwrap();
     let (
         Release {
             refused,
@@ -2921,6 +3179,37 @@ fn record() {
 }
 
 // ---- the files hold together -------------------------------------------
+
+/// `task quality` keeps the work directory of `ignite-perf quality` at a
+/// path it owns under the tree's target directory, not under `~/.cache`: the
+/// build pool keeps a command that names `~/.cache` on the workstation while
+/// the task's other steps run on the build node, so the steps read two
+/// target directories and `quality::record` found no `perf-metrics.json`
+/// (v0.16.5, exit 201).
+#[test]
+fn the_quality_task_keeps_its_work_in_the_target_dir() {
+    let taskfile = std::fs::read_to_string(workspace().join("Taskfile.yml")).unwrap();
+    let task = taskfile
+        .split("\n  quality:\n")
+        .nth(1)
+        .and_then(|rest| rest.split("\n\n").next())
+        .expect("the task `quality` in Taskfile.yml");
+    for named in [".cache", "XDG_CACHE_HOME", "IGNITE_QUALITY_WORK"] {
+        assert!(!task.contains(named), "`quality` names {named}:\n{task}");
+    }
+    assert!(
+        task.contains(r#"T: '{{.CARGO_TARGET_DIR | default "target"}}'"#),
+        "{task}"
+    );
+    let measure = task
+        .lines()
+        .find(|line| line.contains("ignite-perf quality "))
+        .expect("the `ignite-perf quality` step");
+    assert!(
+        measure.contains(" --work {{.T}}/quality/work "),
+        "{measure}"
+    );
+}
 
 #[test]
 fn the_baseline_is_well_formed() {

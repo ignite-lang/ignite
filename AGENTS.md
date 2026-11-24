@@ -118,7 +118,7 @@ Rules of the layout:
 | run the inline Ignite tests | `task test-ignite` (std/ and examples/, both targets; `FILTER=text` selects tests); one file: `target/debug/ignite test FILE [FILTER]` (LLVM, the default target, with `--runtime` a `libignite_rt.a` built with `--features runner`; `--target rust` needs none) |
 | build the website | `task site` (landing page at `target/site/index.html`, book at `target/site/book/`; needs `mdbook` 0.5.4) |
 | serve the website | `task site-serve` (`task site`, then `miniserve` on `http://127.0.0.1:8765/`) |
-| measure the quality metrics | `task quality` (`docs/quality.md`: the differential runner, the static and conformance metrics, `ignite-perf quality` for timing and sizes with their load, then `quality::record` appends to `quality/history.jsonl` and regenerates `quality/trend.md`, the table of `docs/quality.md` and the book page; `RUN=vX.Y.Z` marks a release and refuses one whose count rows are worse than the last (timing rows are recorded as `host: local` and gate nothing); `IGNITE_BLESS=1` writes improvements into `quality/baseline.json`; not in `task gate`, whose `cargo test` runs the differential runner and the ratchet) |
+| measure the quality metrics | `IGNITE_QUALITY_HOST=<machine class> slot task quality` (`build-node-c6id.16xlarge` on the build node, `local` on the workstation; required, no default, never a hostname or address: unset or naming a machine, `quality::record` records nothing and says what to set; `docs/quality.md`: the differential runner, the static and conformance metrics, `ignite-perf quality` for timing and sizes with their load, then `quality::record` appends to `quality/history.jsonl` and regenerates `quality/trend.md`, the table of `docs/quality.md` and the book page; `RUN=vX.Y.Z` marks a release and refuses one whose count rows are worse than the last (timing rows are recorded under the run's `IGNITE_QUALITY_HOST`, printed against the same host's last record only, and gate nothing); `IGNITE_BLESS=1` writes improvements into `quality/baseline.json`; not in `task gate`, whose `cargo test` runs the differential runner and the ratchet) |
 | measure the timing rows on a dedicated host | `task quality-remote BASE=REV HEAD=REV [RUN=vX.Y.Z] [MAX_HOURS=3] [DRY_RUN=1]` (`docs/quality.md` "The dedicated timing host": one spot EC2 `c7i.metal-24xl` per run, AWS profile `IGNITE_PERF_AWS_PROFILE` (required) and region `IGNITE_PERF_AWS_REGION`; BASE and HEAD interleaved, HEAD's records appended to `quality/history.jsonl` with `host: ec2:<type>` and `machine`; the instance terminates itself after `MAX_HOURS` and the mode terminates it and deletes its security group and key pair on every exit path; `DRY_RUN=1` prints the aws calls and makes the creating ones with `--dry-run`) |
 | run the website's UI loop | `task ux` (builds the site, runs the Playwright L2 and L3 specs against it on a free loopback port, then the ratchet against `ux/baseline.json`; `task gate` runs it; `IGNITE_BLESS=1` writes improved values into the baseline) |
 | write a UI round | `task ux-round ROUND=R-nn` (not in `task gate`; the gating suite, then the trial of the scenario cards at every viewport with the screen-only user as the driver, then `site::round::write` into `ux/rounds/R-nn/` and `ux/rounds/trend.md`) |
@@ -535,9 +535,17 @@ Pace (Timo, 2026-11-11: "its not accreptable to work in that pace", "fix your pr
 was open for three days; a coordinator does this instead of what cost them:
 
 - The dedicated-host run (`task quality-remote BASE=<last release tag> HEAD=<integration head>`,
-  with a `RUN` label that is not `v*`) is started as soon as the units of a wave that move a time
+  with a `RUN` label that is not `v*`) is asked for as soon as the units of a wave that move a time
   row are merged into the integration branch. It is not left for after the last merge: waves 9
   and 10 merged without one, and 14 cells were refused together at the cut.
+- Every dedicated-host run needs the maintainer's yes for that run; there is no standing yes and
+  no run on a default (Timo, 2026-11-24: "these ignite tests, they always need an approval [...]
+  It must not happen that they keep running after the tests"). The request names the run, its
+  cost and its end. The run's instance ends itself (instance-initiated shutdown `terminate`, a
+  `shutdown -h` timer of `--max-hours` in its user-data), the mode terminates it on every exit
+  path, every resource carries the tag `ignite-quality-run=<run id>`, and the mode's read-back
+  by that tag ("confirmed: nothing tagged … is left") goes into the commit that records the run
+  and the release PR; a run that ends "NOT CLEAN" is reported before anything else.
 - Work that does not touch the same files runs at once, an accepted story of the next wave
   included. A release in recovery does not hold back unrelated accepted work.
 - One adversary pass per unit. Its introduced findings go back to the implementor once, and the
@@ -598,7 +606,9 @@ was open for three days; a coordinator does this instead of what cost them:
   <gh user> --password-stdin`; the package is public), then add the reference with its
   `@sha256:` digest (`docker inspect --format '{{index .RepoDigests 0}}'`) to the release notes
   with `gh release edit`.
-- Quality gate (`docs/quality.md`): in the release commit, run `task quality RUN=vX.Y.Z`, which
+- Quality gate (`docs/quality.md`): in the release commit, run
+  `IGNITE_QUALITY_HOST=build-node-c6id.16xlarge slot task quality RUN=vX.Y.Z` (the build node is a
+  c6id.16xlarge; slot exports no `IGNITE_QUALITY_HOST`, the runner passes it), which
   appends the run to `quality/history.jsonl` and regenerates `quality/trend.md` and the book's
   quality page. No measured number refuses a release (Timo, 2026-11-11: "Let's just track the
   numbers, but let's not block the release"): the run prints what the rest of this bullet calls
@@ -616,7 +626,7 @@ was open for three days; a coordinator does this instead of what cost them:
   cell above the last release is listed when its bar carries one and refused when it does not,
   and a decision on a cell that is not above the last release is refused until it is removed
   (the binary-size bullet below). Timing values there are
-  `host: local` and refuse nothing. Pre-release tags (`v*-rc*`) are not created: the check would
+  recorded under the run's `IGNITE_QUALITY_HOST` and refuse nothing. Pre-release tags (`v*-rc*`) are not created: the check would
   take one as the last release. Then run `task quality-remote BASE=<last release tag> HEAD=<release commit>
   RUN=vX.Y.Z` with `IGNITE_PERF_AWS_PROFILE` set (spending on it is approved; one spot
   `c7i.metal-24xl`, 5 passes of each tree by default, and the cost of a run with 5 timing passes
@@ -682,7 +692,7 @@ was open for three days; a coordinator does this instead of what cost them:
   reported to Timo with the code that added the bytes before the release is cut.
 - Timing and benchmark rows (5.3, 6.1, 6.2, 3.3, 3.7, 3.8, 3.9) are judged only on the records
   of the dedicated host (`host: ec2:*` in `quality/history.jsonl`, HEAD against BASE measured in
-  the same run), never on `host: local` values (Timo, 2026-11-10: "you must check the results
+  the same run), never on the values of `task quality`, `host: local` or `build-node-c6id.16xlarge` (Timo, 2026-11-10: "you must check the results
   which were run on the remote EC2 - not local").
 - EC2 runs (`task quality-remote`: timing and native benchmarks) happen only when a release is
   about to be cut (Timo, 2026-11-08); merges run the local gate only.

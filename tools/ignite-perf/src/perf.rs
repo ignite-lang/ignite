@@ -80,6 +80,28 @@ pub fn resolve(path: &Path) -> PathBuf {
     out
 }
 
+/// Whether `work`, a directory a mode owns and writes, is outside the sources of the checkout
+/// `repo`: outside `repo`, or under its Cargo target directory (`cargo_target_dir`, relative to
+/// `repo` when relative, else `<repo>/target`), which holds build output only. `task quality`
+/// keeps its work there (`<target>/quality/work`), so every step of the task reads one target
+/// directory wherever the build pool runs it. A target directory that is `repo` or holds it
+/// admits nothing inside `repo`.
+pub fn outside_source(
+    work: &Path,
+    repo: &Path,
+    cargo_target_dir: Option<&std::ffi::OsStr>,
+) -> bool {
+    let (work, repo) = (resolve(work), resolve(repo));
+    let target = resolve(
+        &repo.join(
+            cargo_target_dir
+                .filter(|dir| !dir.is_empty())
+                .unwrap_or("target".as_ref()),
+        ),
+    );
+    !work.starts_with(&repo) || (work.starts_with(&target) && !repo.starts_with(&target))
+}
+
 pub fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }

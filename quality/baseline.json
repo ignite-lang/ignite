@@ -550,13 +550,13 @@
           "value": 7264152
         },
         "llvm/terminald/release": {
-          "value": 1394120
+          "value": 1392968
         },
         "llvm/todod/dev": {
           "value": 7969480
         },
         "llvm/todod/release": {
-          "value": 1967072
+          "value": 1965040
         },
         "rust/terminald/dev": {
           "value": 6344576
