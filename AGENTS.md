@@ -103,6 +103,8 @@ Rules of the layout:
 | all tests | `task test` |
 | format and lint | `task check` |
 | merge gate | `task gate` |
+| merge gate as separate build-pool jobs | `task gate-sharded [LOG=DIR] [SHARDS=N]` (`tools/gate-sharded.sh`: when the gate as one job runs longer than the pool's job cap (30 min); check, the other crates' tests, ignite's library tests, the test binary of `crates/ignite` in N shards by module (default 8, each its own `cargo test`), a check that every test of its `--list` passed or was ignored, then `test-ignite`, `path-cost` and `ux` as one `slot --timeout 30m task` job each; runs every step, ends with `gate exit 0\|1`; honours `IGNITE_GATE_VALGRIND`) |
+| the valgrind tests | `task test-valgrind` (the modules `VALGRIND_MODULES` of `Taskfile.yml`, the ones of `crates/ignite/tests` that run `valgrind`; the CI workflow `valgrind` runs it) |
 | pack the release binary | `task dist` (release `ignite` for Linux x86_64, glibc linked statically, with `std/` and the substrate as `target/dist/ignite-VERSION-x86_64-linux.tar.gz` and its `.sha256`: `bin/ignite`, `share/ignite/std`, `share/ignite/substrate` (`crates/ignite-io`, a workspace manifest of that one member written for the archive and the repository's lock trimmed to it, `dist::the_substrate_packs_into_a_workspace_of_its_own` with `IGNITE_DIST_SHARE`); a driver at `<prefix>/bin/ignite` reads `<prefix>/share/ignite/std` and `<prefix>/share/ignite/substrate/crates/ignite-io` first when they exist, and holds no path of the tree that built it (`IGNITE_SOURCE_ROOT` of `crates/ignite/build.rs` is empty under `IGNITE_RELEASE_COMMIT`) nor of the cargo home, toolchain or home directory (remapped; ring's C source names in the bitcode runtime excepted); checks the `.sha256` it wrote; fails unless the driver prints the bare `ignite VERSION`, a clean build of the tag `vVERSION`, which must exist, and unless `dist::the_archive_builds_and_tests_on_the_rust_target_without_the_repository` passes on the archive (`IGNITE_DIST_ARCHIVE`); both tests run in `task gate` on a layout of their own) |
 | build and check the toolchain image | `task image VERSION=X.Y.Z` (`dist/toolchain/Dockerfile`, tags `ghcr.io/ignite-lang/ignite-toolchain:X.Y.Z` from release vX.Y.Z's archive and the tag's source), `task image-check VERSION=X.Y.Z [IMAGE=REF]` (`image::` in `crates/ignite/tests/image.rs`, ignored elsewhere: needs docker) |
 | compile the example | `task compile` (`ignite build --target rust`; writes `target/ignite/terminal/`, prints `built …/terminald` and `built …/tn`) |
@@ -133,9 +135,15 @@ Rules of the layout:
 | check a catalogue against its source | `target/debug/ignite rfc check CATALOGUE [SOURCE]` (exit 0 silent when the digests match, 1 when they differ; without SOURCE prints `<CATALOGUE>: unchecked`) |
 | print a conformance matrix | `target/debug/ignite conformance FILE [--target llvm\|rust] [the build flags of ignite test]` (`docs/slice.md` 19.10: runs FILE's tests once, one block per protocol and spec, a claim line each; exit 0 every claim holds, 1 one does not, 2 a diagnostic or no conforming protocol, 3 a test build or run failure) |
 
+Under the build pool, `task test-ignite`, `task path-cost` and `task quality` each run as one
+`slot` job (`slot task <name>`): each runs a binary of the tree that writes under `target/` and
+then calls cargo, and the cargo shim alone would run that inner cargo on the build node, where
+the file is missing.
+
 `task` is go-task. `strace`, with ptrace allowed on a child, is a prerequisite of `task gate`:
 `scheduler::a_connection_costs_no_more_system_calls_than_at_v0_15_0` in `crates/ignite-io`
-counts the connection path with it and fails, naming it, without it. So is `valgrind`:
+counts the connection path with it and fails, naming it, without it. So is `valgrind` (where it
+cannot start, see the switch below):
 `reply_cost::a_get_reply_allocates_no_more_than_at_v0_15_0` in `crates/ignite` counts the
 allocations of an HTTP reply with it, and `task path-cost`, a step of `task gate`, counts the
 instructions of the frozen scenarios with its callgrind and `vgdb` (`ignite-perf path-cost`,
@@ -149,21 +157,20 @@ invocation in automation sets `CARGO_INCREMENTAL=0`. `task test-ignite` honours
 
 On a machine where valgrind cannot start (`valgrind -q true` fails: a stripped loader whose
 debug file the distribution no longer serves, so the `memcmp` redirection in
-`ld-linux-x86-64.so.2` cannot be set up), the valgrind parts of `task gate` run in a container
-instead, as for v0.16.5: the image `ghcr.io/ignite-lang/ignite-toolchain:<release>` with
-`apt-get install valgrind strace git libc6-dbg`, run with the user's uid, `--network host`, the
-tree mounted, `CARGO_TARGET_DIR` outside the tree and the main repository's `.git` mounted at
-its own path for a `--shared` clone. Path cost compares two commits under one loader, never a
-container's counts with a machine's: in the container, `ignite-perf path-cost --record <last
-release> --runs 5` on a clone of the last release's tag, then the clone of the candidate with
-those count files copied into `bench/path-cost/counts/` (not committed) and `ignite-perf
-path-cost` judging it; a cell above its band refuses the merge as on the machine. The
-valgrind tests (`cargo test -p ignite --test main --` with the modules of
-`crates/ignite/tests` that run `valgrind`) run in the same container; `static_link::` needs
-the musl targets the image does not have, so its cases run on the machine. A release cut
-this way keeps the counts of the last release in `bench/path-cost/counts/` and does not
-record its own: they are recorded on the machine once valgrind starts there
-(`story:path-cost-counts-recorded-where-valgrind-starts`).
+`ld-linux-x86-64.so.2` cannot be set up), `task gate` fails at its first step and names the
+switch `IGNITE_GATE_VALGRIND=0`. With it (`IGNITE_GATE_VALGRIND=0 task gate` or
+`task gate IGNITE_GATE_VALGRIND=0`; `task test`, `task path-cost` and `task gate-sharded`
+honour it too) the gate skips the valgrind tests, the modules `VALGRIND_MODULES` of
+`Taskfile.yml`, with cargo test's `--skip`, and skips `task path-cost`; it prints what it
+skipped. The valgrind tests are judged by the CI workflow `valgrind`
+(`.github/workflows/valgrind.yml`): `task test-valgrind` in the toolchain image pinned by
+digest, with valgrind at a pinned version and `libc6-dbg`, on every pull request to `main` and
+every push to `main` and `wave/**`. `VALGRIND_MODULES` is the one list of them;
+`quality::the_valgrind_tests_are_one_list_for_the_gate_and_ci` holds it equal to the modules
+of `crates/ignite/tests` that run `valgrind`. Path cost is not in CI: it compares two commits
+under one loader, never one machine's counts with another's, so it is recorded and judged on a
+machine where valgrind starts (`story:path-cost-counts-recorded-where-valgrind-starts`); until
+then a release keeps the counts of the last release in `bench/path-cost/counts/`.
 
 ## Gate time
 
