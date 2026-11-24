@@ -72,7 +72,7 @@ while [ "$k" -le "$SHARDS" ]; do
   k=$((k + 1))
 done
 
-cat "$LOG"/shard-*.log 2> /dev/null | grep -E '^test [^ ]* \.\.\. (ok|ignored.*)$' |
+cat "$LOG"/shard-*.log 2> /dev/null | grep -E '^test [^ ]*( - should panic)? \.\.\. (ok|ignored.*)$' |
   awk '{ print $2 }' | sort -u > "$LOG/main-passed.txt"
 comm -23 "$LOG/main-list.txt" "$LOG/main-passed.txt" > "$LOG/main-missing.txt"
 missing=$(wc -l < "$LOG/main-missing.txt")
