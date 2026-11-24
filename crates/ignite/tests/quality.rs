@@ -3066,6 +3066,99 @@ fn recorded_path_costs() -> Result<BTreeMap<String, i64>, String> {
     Ok(cells)
 }
 
+/// The test modules that start valgrind are one list, `VALGRIND_MODULES` of
+/// `Taskfile.yml`: `task test-valgrind` (the CI workflow `valgrind`) runs
+/// those modules and `task test` with `IGNITE_GATE_VALGRIND=0` skips them,
+/// both from that list, and the list is every module of `crates/ignite/tests`
+/// that runs `valgrind`.
+#[test]
+fn the_valgrind_tests_are_one_list_for_the_gate_and_ci() {
+    let root = workspace();
+    let taskfile = std::fs::read_to_string(root.join("Taskfile.yml")).unwrap();
+    let listed: BTreeSet<String> = taskfile
+        .lines()
+        .find_map(|line| line.strip_prefix("  VALGRIND_MODULES: "))
+        .expect("VALGRIND_MODULES in the vars of Taskfile.yml")
+        .split_whitespace()
+        .map(str::to_string)
+        .collect();
+
+    let tests = root.join("crates/ignite/tests");
+    let runs_valgrind = concat!("Command::new(\"", "valgrind", "\")");
+    let main = std::fs::read_to_string(tests.join("main.rs")).unwrap();
+    let mut starting = BTreeSet::new();
+    for module in main
+        .lines()
+        .filter_map(|line| line.strip_prefix("mod ")?.strip_suffix(';'))
+    {
+        let mut files = vec![tests.join(format!("{module}.rs"))];
+        let mut dirs = vec![tests.join(module)];
+        while let Some(dir) = dirs.pop() {
+            for entry in std::fs::read_dir(&dir).into_iter().flatten() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    dirs.push(path);
+                } else if path.extension().is_some_and(|e| e == "rs") {
+                    files.push(path);
+                }
+            }
+        }
+        if files.iter().any(|file| {
+            std::fs::read_to_string(file).is_ok_and(|text| text.contains(runs_valgrind))
+        }) {
+            starting.insert(module.to_string());
+        }
+    }
+    assert_eq!(
+        listed, starting,
+        "VALGRIND_MODULES of Taskfile.yml against the modules of crates/ignite/tests that run valgrind"
+    );
+
+    let task = |name: &str| {
+        taskfile
+            .split(&format!("\n  {name}:\n"))
+            .nth(1)
+            .and_then(|rest| rest.split("\n\n").next())
+            .unwrap_or_else(|| panic!("the task `{name}` in Taskfile.yml"))
+            .to_string()
+    };
+    let skip =
+        r#"  VALGRIND_SKIP: '{{range splitList " " .VALGRIND_MODULES}} --skip {{.}}::{{end}}'"#;
+    assert!(taskfile.lines().any(|line| line == skip), "{skip}");
+    let test = task("test");
+    assert!(
+        test.contains("cargo test -p ignite --{{.VALGRIND_SKIP}}"),
+        "{test}"
+    );
+    let run = task("test-valgrind");
+    let modules = r#"{{range splitList " " .VALGRIND_MODULES}} {{.}}::{{end}}"#;
+    assert!(
+        run.contains(&format!("cargo test -p ignite --test main --{modules}")),
+        "{run}"
+    );
+    let sharded = task("gate-sharded");
+    assert!(
+        sharded.contains("VALGRIND_MODULES: '{{.VALGRIND_MODULES}}'"),
+        "{sharded}"
+    );
+
+    let workflow = std::fs::read_to_string(root.join(".github/workflows/valgrind.yml")).unwrap();
+    assert!(
+        workflow
+            .lines()
+            .any(|line| line.trim() == "run: task test-valgrind"),
+        "{workflow}"
+    );
+    let script = std::fs::read_to_string(root.join("tools/gate-sharded.sh")).unwrap();
+    for text in [&workflow, &script] {
+        let mut words = text.split(|c: char| !c.is_alphanumeric() && c != '_');
+        assert!(
+            !words.any(|word| listed.contains(word)),
+            "a module of VALGRIND_MODULES is named outside Taskfile.yml:\n{text}"
+        );
+    }
+}
+
 /// Row 3.10's bars are the counts `bench/path-cost/counts/` records, cell
 /// for cell, so the table of `docs/quality.md` shows what a merge is
 /// judged against. `IGNITE_BLESS=1` writes them into the baseline (after
