@@ -152,3 +152,40 @@ fn quality_reads_the_restart_of_a_refusal_outside_the_bound() {
         None
     );
 }
+
+/// The work of `ignite-perf quality` and of the readiness verifier is
+/// outside the checkout's sources: outside the checkout, or under its Cargo
+/// target directory, where `task quality` keeps it (`<target>/quality/work`).
+#[test]
+fn work_under_the_target_dir_is_outside_the_source() {
+    use ignite_perf::perf::outside_source;
+    use std::ffi::OsStr;
+    let repo = std::path::Path::new("/w/repo");
+    let work = |path: &str| PathBuf::from(path);
+    assert!(outside_source(&work("/w/elsewhere"), repo, None));
+    assert!(outside_source(
+        &work("/w/repo/target/quality/work"),
+        repo,
+        None
+    ));
+    assert!(!outside_source(&work("/w/repo/examples/work"), repo, None));
+    assert!(!outside_source(&work("/w/repo"), repo, None));
+    let custom = Some(OsStr::new("out"));
+    assert!(outside_source(
+        &work("/w/repo/out/quality/work"),
+        repo,
+        custom
+    ));
+    assert!(!outside_source(
+        &work("/w/repo/target/quality/work"),
+        repo,
+        custom
+    ));
+    let absolute = Some(OsStr::new("/t"));
+    assert!(outside_source(&work("/t/quality/work"), repo, absolute));
+    assert!(!outside_source(&work("/w/repo/target/q"), repo, absolute));
+    for holding in [".", "..", "/w"] {
+        let holding = Some(OsStr::new(holding));
+        assert!(!outside_source(&work("/w/repo/src"), repo, holding));
+    }
+}

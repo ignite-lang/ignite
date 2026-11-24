@@ -21,7 +21,7 @@ use clap::Args;
 
 use crate::cli::{ReadinessArgs, default_repo};
 use crate::json::{Json, obj};
-use crate::perf::{R, ensure, io_err, loadavg, path_str, sha256};
+use crate::perf::{R, ensure, io_err, loadavg, outside_source, path_str, sha256};
 
 #[derive(Args, Debug, Clone)]
 pub struct QualityArgs {
@@ -34,7 +34,9 @@ pub struct QualityArgs {
     /// The runtime archive with the test runner the LLVM builds and `ignite run` link.
     #[arg(long)]
     pub runtime: PathBuf,
-    /// A directory outside the checkout this mode owns: build outputs, readiness state.
+    /// A directory this mode owns, outside the checkout's sources: outside the checkout, or
+    /// under its Cargo target directory (`task quality`: `<target>/quality/work`). Build
+    /// outputs, readiness state.
     #[arg(long)]
     pub work: PathBuf,
     /// The file the values are written to.
@@ -301,8 +303,12 @@ fn readiness_row(args: &QualityArgs, out: &mut Vec<Measured>) -> R<()> {
 /// Measure every row and write them to `args.out`.
 pub fn measure(args: &QualityArgs) -> R<()> {
     ensure(
-        !args.work.starts_with(&args.repo),
-        "--work must be outside the checkout",
+        outside_source(
+            &args.work,
+            &args.repo,
+            std::env::var_os("CARGO_TARGET_DIR").as_deref(),
+        ),
+        "--work must be outside the checkout's sources: outside it, or under its Cargo target directory",
     )?;
     fs::create_dir_all(&args.work).map_err(io_err(args.work.display()))?;
     let mut rows = Vec::new();
